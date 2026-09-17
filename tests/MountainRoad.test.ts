@@ -50,7 +50,7 @@ describe('mountain roads', () => {
   });
 
   it('couples both legs of a reversing road and preserves local subsets', () => {
-    const point = (x: number, y: number, z: number) => ({ x, y, z, nx: 0, ny: 1, nz: 0 });
+    const point = (x: number, y: number, z: number) => ({ x, y, z, nx: 0, ny: 1, nz: 0, ground: 1 });
     const a = point(10, 200, 500), b = point(10, 200, -500);
     const c = point(100, 220, -500), d = point(100, 220, 500);
     const corridor = new RoadCorridor([{ a, b }, { a: b, b: c }, { a: c, b: d }]);

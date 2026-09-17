@@ -31,7 +31,7 @@ export class Game {
     this.scene.add(sun);
     this.world = new World(this.scene, DEFAULT_SEED);
     this.world.resetCamera(this.camera);
-    element('phase-label').textContent = '/ 05';
+    element('phase-label').textContent = '/ 06';
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     this.resize();
@@ -70,6 +70,11 @@ export class Game {
     }, { signal: this.events.signal });
     element('hairpin-view').addEventListener('click', () => {
       const view = this.world.inspectHairpin(this.camera);
+      if (view) { this.flight.reset(view.heading, view.pitch); this.input.clear(); this.paused = false; }
+      this.canvas.focus();
+    }, { signal: this.events.signal });
+    element('bridge-view').addEventListener('click', () => {
+      const view = this.world.inspectBridge(this.camera);
       if (view) { this.flight.reset(view.heading, view.pitch); this.input.clear(); this.paused = false; }
       this.canvas.focus();
     }, { signal: this.events.signal });
@@ -124,9 +129,11 @@ export class Game {
       this.hudTime = 0;
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
-      element('notice').textContent = this.paused ? '已暂停 · 按 P 继续' : stats.queued > 0 ? `山地生成中 · ${stats.active} / 289 分块` : '拖动视角 · 双击锁定鼠标 · Esc 释放';
-      element<HTMLButtonElement>('road-view').disabled = !this.world.roadSample;
+      element('notice').textContent = this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
+        : stats.queued > 0 ? `山地生成中 · ${stats.active} / 289 分块` : '拖动视角 · 双击锁定鼠标 · Esc 释放';
+      element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
+      element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
     }
     this.debug.update({
       Coordinates: `${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`,
@@ -139,6 +146,7 @@ export class Game {
       'Origin rebases': origin.count, 'Flight speed': `${this.flight.speed} m/s`, Seed: this.world.seed,
       'Road segments': this.world.road.segments.length, 'Road ready': this.world.roadReady ? 'yes' : 'generating',
       'Hairpins': this.world.road.segments.filter((segment) => segment.kind === 'hairpin').length,
+      'Bridges': this.world.bridges.length, 'Bridge piers': this.world.bridgeMesh.pierCount,
       'Road distance': this.world.roadSample ? `${(this.world.roadSample.distance / 1000).toFixed(2)} km` : '—',
       'Road grade': this.world.roadSample ? `${(this.world.roadSample.grade * 100).toFixed(2)}%` : '—',
       'Road curvature': this.world.roadSample?.curvature.toFixed(5) ?? '—',

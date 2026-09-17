@@ -31,6 +31,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   page.on('pageerror', (error) => errors.push(error.message));
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/');
+  await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   await expect(metric('Active chunks')).toHaveText('289');
   const originalAltitude = await page.locator('#altitude').textContent();
@@ -62,6 +63,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   await page.getByRole('button', { name: '加载种子' }).click();
   await expect(metric('Seed')).toHaveText('CLOUD-ROAD-001');
   await expect(page.locator('#altitude')).toHaveText(originalAltitude!);
+  await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   expect(Number(await metric('Allocated meshes').textContent())).toBe(289);
   expect(errors).toEqual([]);

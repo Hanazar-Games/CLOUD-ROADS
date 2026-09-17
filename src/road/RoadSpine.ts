@@ -2,9 +2,8 @@ import { RoadGenerator } from './RoadGenerator';
 import { ROAD_SAMPLES, type RoadSample, type RoadSegment } from './RoadSegment';
 import { RoadIndex } from './RoadIndex';
 
-export const MAX_ROAD_SEGMENTS = 160;
-const AHEAD = 2600;
-const BEHIND = 2600;
+export const MAX_ROAD_SEGMENTS = 256;
+export const ROAD_HALO = 4000;
 
 export class RoadSpine {
   readonly generator: RoadGenerator;
@@ -34,25 +33,25 @@ export class RoadSpine {
   update(z: number, budget = 4): boolean {
     z = Math.min(z, this.generator.start.position.z);
     if (this.segments.length && this.segments[0].start.distance > 0
-      && this.segments[0].start.position.z < Math.min(this.generator.start.position.z, z + BEHIND) - 0.001) {
+      && this.segments[0].start.position.z < Math.min(this.generator.start.position.z, z + ROAD_HALO) - 0.001) {
       this.segments.length = 0;
       this.version++;
     }
     const deadline = performance.now() + 2;
     for (let i = 0; i < budget; i++) {
       const end = this.segments.at(-1)?.end ?? this.generator.start;
-      if (end.position.z <= z - AHEAD) break;
+      if (end.position.z <= z - ROAD_HALO) break;
       if (i > 0 && performance.now() >= deadline) break;
       this.segments.push(this.generator.next(end));
       this.generated++;
       this.version++;
       if (this.segments.length > MAX_ROAD_SEGMENTS) this.segments.shift();
     }
-    while (this.segments.length > 1 && this.segments[0].end.position.z > z + BEHIND) {
+    while (this.segments.length > 1 && this.segments[0].end.position.z > z + ROAD_HALO) {
       this.segments.shift();
       this.version++;
     }
-    return (this.segments.at(-1)?.end.position.z ?? Infinity) <= z - AHEAD;
+    return (this.segments.at(-1)?.end.position.z ?? Infinity) <= z - ROAD_HALO;
   }
 
   nearest(x: number, z: number): RoadSample | undefined {

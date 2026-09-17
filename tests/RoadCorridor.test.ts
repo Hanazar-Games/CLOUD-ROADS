@@ -10,8 +10,8 @@ import { MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
 describe('RoadCorridor', () => {
   it('cuts and fills a banked roadbed, blends slopes and preserves distant terrain', () => {
     const corridor = new RoadCorridor([{
-      a: { x: 0, y: 200, z: 300, nx: -0.02, ny: 1, nz: 0 },
-      b: { x: 0, y: 200, z: -300, nx: -0.02, ny: 1, nz: 0 },
+      a: { x: 0, y: 200, z: 300, nx: -0.02, ny: 1, nz: 0, ground: 1 },
+      b: { x: 0, y: 200, z: -300, nx: -0.02, ny: 1, nz: 0, ground: 1 },
     }]);
     for (const natural of [50, 500]) {
       expect(corridor.height(0, 0, natural)).toBeCloseTo(199.92, 5);

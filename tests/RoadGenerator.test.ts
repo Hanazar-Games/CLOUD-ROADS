@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RoadGenerator } from '../src/road/RoadGenerator';
-import { MAX_ROAD_SEGMENTS, RoadSpine } from '../src/road/RoadSpine';
+import { MAX_ROAD_SEGMENTS, ROAD_HALO, RoadSpine } from '../src/road/RoadSpine';
 
 describe('RoadGenerator', () => {
   it('reproduces a route independently of generation batch size', () => {
@@ -62,8 +62,8 @@ describe('RoadGenerator', () => {
       const nearest = spine.nearest(sample.position.x, sample.position.z);
       expect(nearest).toBeDefined();
       expect(nearest!.position.z).toBeCloseTo(sample.position.z, 3);
-      expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(Math.min(128, z + 2600));
-      expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - 2600);
+      expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(Math.min(128, z + ROAD_HALO));
+      expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - ROAD_HALO);
     }
     expect(spine.segments[0].start.distance).toBeGreaterThan(90_000);
     while (!spine.update(128, 8)) { /* Replay from the deterministic start. */ }
@@ -76,7 +76,7 @@ describe('RoadGenerator', () => {
     const z = -10_000;
     expect(spine.segments[0].start.position.z).toBeGreaterThan(z);
     while (!spine.update(z, 8)) { /* Rebuild the missing northern halo. */ }
-    expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(z + 2600);
-    expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - 2600);
+    expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(z + ROAD_HALO);
+    expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - ROAD_HALO);
   });
 });
