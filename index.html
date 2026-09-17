@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#14232a" />
+    <meta name="description" content="CLOUD ROADS — 原创无限山地世界，开发者飞行探索。" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2314232a'/%3E%3Cpath d='M8 46 27 17 38 33 44 25 58 46' fill='none' stroke='%23d5eac9' stroke-width='4'/%3E%3C/svg%3E" />
+    <title>CLOUD ROADS · Infinite Mountains</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
+      <header class="masthead">
+        <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
+        <span class="phase"><i></i> WORLD LAB <span id="phase-label">/ 00</span></span>
+      </header>
+      <section class="explorer" aria-label="探索控制">
+        <p class="eyebrow">无尽山野，自由探索</p>
+        <h1>向群山深处。</h1>
+        <p class="intro">一颗种子，一片没有边界的世界。</p>
+        <form id="seed-form">
+          <label for="seed">世界种子 <span>WORLD SEED</span></label>
+          <div class="seed-entry"><input id="seed" value="CLOUD-ROAD-001" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
+        </form>
+        <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
+        <input id="speed" type="range" min="20" max="1200" step="20" value="120" />
+        <div class="actions"><button id="home" type="button">返回起点</button><button id="wireframe" type="button" aria-pressed="false">地形线框</button></div>
+        <div class="actions road-actions"><button id="road-view" type="button">道路视角</button><button id="road-debug" type="button" aria-pressed="true">路线骨架</button></div>
+      </section>
+      <div class="crosshair" aria-hidden="true">+</div>
+      <div id="notice" role="status">拖动视角，开始探索</div>
+      <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <span>F3</span></h2><dl id="debug-values"></dl></section>
+      <footer>
+        <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
+        <div class="controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
+      </footer>
+      <div id="error" role="alert" hidden></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
