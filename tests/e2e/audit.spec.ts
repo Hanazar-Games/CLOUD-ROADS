@@ -88,7 +88,10 @@ test('restores rendering after context loss and clears held flight keys', async 
     setTimeout(() => extension.restoreContext(), 1000);
   });
   await expect(page.locator('#error')).toBeVisible();
+  await expect(page.locator('#explorer')).toHaveAttribute('inert', '');
+  await expect(page.locator('#controls-toggle')).toBeDisabled();
   await expect(page.locator('#error')).toBeHidden();
+  await expect(page.locator('#explorer')).not.toHaveAttribute('inert', '');
   await page.waitForTimeout(350);
   const position = await page.locator('#position').textContent();
   await page.waitForTimeout(450);
@@ -103,12 +106,13 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.3');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('落日与山影');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.4');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('探索交互与故障恢复');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.2');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.3');
   const position = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(450);
@@ -123,6 +127,8 @@ test('retains release access and a reload action when WebGL cannot start', async
   await page.addInitScript(() => Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { value: () => null }));
   await page.goto('/');
   await expect(page.locator('#error')).toContainText('无法启动 3D 世界');
+  await expect(page.locator('#explorer')).toHaveAttribute('inert', '');
+  await expect(page.locator('#controls-toggle')).toBeDisabled();
   await expect(page.getByRole('button', { name: '重新加载页面' })).toBeVisible();
   await page.getByRole('button', { name: '版本公告' }).click();
   await expect(page.getByRole('dialog', { name: '版本公告' })).toBeVisible();

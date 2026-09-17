@@ -48,9 +48,14 @@ export class Game {
       if (code === 'F3') this.debug.toggle();
       if (code === 'KeyP') this.setPaused(!this.paused);
     };
+    element('debug-close').addEventListener('click', () => {
+      this.debug.hide();
+      if (this.input.enabled) this.canvas.focus();
+    }, { signal: this.events.signal });
     element<HTMLInputElement>('speed').addEventListener('input', (event) => {
       this.flight.speed = Number((event.target as HTMLInputElement).value);
       element('speed-value').textContent = `${this.flight.speed} m/s`;
+      element('speed').setAttribute('aria-valuetext', `每秒 ${this.flight.speed} 米`);
     }, { signal: this.events.signal });
     element<HTMLInputElement>('daylight').addEventListener('input', (event) => {
       this.sky.sun.setTime(Number((event.target as HTMLInputElement).value) / 100);
@@ -60,7 +65,6 @@ export class Game {
     element('sun-view').addEventListener('click', () => {
       const direction = this.sky.sun.direction;
       this.flight.reset(Math.atan2(direction.x, -direction.z), Math.asin(direction.y));
-      this.input.clear();
       this.setPaused(false);
       this.canvas.focus();
     }, { signal: this.events.signal });
@@ -78,7 +82,6 @@ export class Game {
     element('retry-world').addEventListener('click', () => this.loadSeed(this.world.seed), { signal: this.events.signal });
     element('pause').addEventListener('click', () => {
       this.setPaused(!this.paused);
-      this.input.clear();
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('controls-toggle').addEventListener('click', () => {
@@ -90,7 +93,7 @@ export class Game {
     element('home').addEventListener('click', () => this.resetCamera(), { signal: this.events.signal });
     element('road-view').addEventListener('click', () => {
       const heading = this.world.inspectRoad(this.camera);
-      if (heading !== undefined) { this.flight.reset(heading, -0.18); this.input.clear(); this.setPaused(false); }
+      if (heading !== undefined) { this.flight.reset(heading, -0.18); this.setPaused(false); }
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('road-debug').addEventListener('click', () => {
@@ -100,12 +103,12 @@ export class Game {
     }, { signal: this.events.signal });
     element('hairpin-view').addEventListener('click', () => {
       const view = this.world.inspectHairpin(this.camera);
-      if (view) { this.flight.reset(view.heading, view.pitch); this.input.clear(); this.setPaused(false); }
+      if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('bridge-view').addEventListener('click', () => {
       const view = this.world.inspectBridge(this.camera);
-      if (view) { this.flight.reset(view.heading, view.pitch); this.input.clear(); this.setPaused(false); }
+      if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('cloud-view').addEventListener('click', () => {
@@ -113,7 +116,6 @@ export class Game {
       if (view) {
         this.setClouds(true);
         this.flight.reset(view.heading, view.pitch);
-        this.input.clear();
         this.setPaused(false);
         element('cloud-help').textContent = 'Space 上升穿云，Shift 下降；穿出后拖动视角俯瞰云海。';
       } else {
@@ -134,19 +136,15 @@ export class Game {
     this.canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       this.contextLost = true;
-      this.input.enabled = false;
-      this.input.clear();
-      if (document.pointerLockElement === this.canvas) document.exitPointerLock();
       element<HTMLButtonElement>('retry-world').disabled = true;
       this.loop.stop();
-      this.showError('图形上下文暂时丢失，正在等待浏览器恢复。');
+      this.setError('图形上下文暂时丢失，正在等待浏览器恢复。');
     }, { signal: this.events.signal });
     this.canvas.addEventListener('webglcontextrestored', () => {
       this.contextLost = false;
-      this.input.enabled = true;
-      this.input.clear();
       element<HTMLButtonElement>('retry-world').disabled = false;
-      element('error').hidden = true;
+      this.setError(this.world.chunks.error ? `地形生成失败，请重试当前世界。${this.world.chunks.error}` : null);
+      if (this.input.enabled && !this.releaseNotes.open) this.canvas.focus();
       this.loop.start();
     }, { signal: this.events.signal });
     this.loop.start();
@@ -162,15 +160,16 @@ export class Game {
       this.world.chunks.setWireframe(this.wireframe);
       this.world.roadDebug.enabled = element('road-debug').getAttribute('aria-pressed') === 'true';
       element<HTMLInputElement>('seed').value = seed;
+      this.setError(null);
       this.resetCamera();
-      element('error').hidden = true;
     } catch (error) {
-      this.showError(`无法加载世界，请重试。${error instanceof Error ? error.message : String(error)}`);
+      this.setError(`无法加载世界，请重试。${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   private setPaused(paused: boolean): void {
     this.paused = paused;
+    this.input.clear();
     element('pause').setAttribute('aria-pressed', String(paused));
     element('pause').textContent = paused ? '继续探索' : '暂停探索';
   }
@@ -184,15 +183,23 @@ export class Game {
   private resetCamera(): void {
     this.world.resetCamera(this.camera);
     this.flight.reset();
-    this.input.clear();
     this.setPaused(false);
     this.setClouds(this.clouds.enabled);
     this.canvas.focus();
   }
 
-  private showError(message: string): void {
-    element('error').hidden = false;
-    element('error-message').textContent = message;
+  private setError(message: string | null): void {
+    const panel = element('error');
+    panel.hidden = message === null;
+    element('error-message').textContent = message ?? '';
+    this.input.enabled = message === null;
+    this.input.clear();
+    this.canvas.inert = element('explorer').inert = message !== null;
+    element<HTMLButtonElement>('controls-toggle').disabled = message !== null;
+    if (message !== null) {
+      if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+      if (!this.releaseNotes.open) panel.focus();
+    }
   }
 
   private readonly resize = (): void => {
@@ -204,10 +211,12 @@ export class Game {
   };
 
   private update(dt: number): void {
-    this.flight.update(dt, this.paused || this.releaseNotes.open);
+    if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
+    const frozen = this.paused || this.releaseNotes.open || !this.input.enabled;
+    this.flight.update(dt, frozen);
     this.world.update(this.camera);
     this.sky.update(this.camera, this.world.origin);
-    this.clouds.update(this.paused || this.releaseNotes.open ? 0 : dt, this.camera, this.world.origin);
+    this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin);
     this.renderer.info.reset();
     this.clouds.render(this.renderer, this.scene, this.camera);
     const { origin, chunks } = this.world;
@@ -219,7 +228,7 @@ export class Game {
       this.hudTime = 0;
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
-      element('notice').textContent = this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
+      element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
         : stats.queued > 0 ? `山地生成中 · ${stats.active} / 289 分块`
         : this.input.pointerLockFailed ? '鼠标锁定不可用 · 请拖动观察' : '拖动视角 · 双击锁定鼠标 · Esc 释放';
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
@@ -261,7 +270,6 @@ export class Game {
         'Road curvature': this.world.roadSample?.curvature.toFixed(5) ?? '—',
       };
     });
-    if (chunks.error && element('error').hidden) this.showError(`地形生成失败，请重试当前世界。${chunks.error}`);
   }
 
   dispose(): void {

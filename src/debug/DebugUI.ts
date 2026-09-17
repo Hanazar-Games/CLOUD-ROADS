@@ -14,6 +14,7 @@ export class DebugUI {
   fps = 0;
 
   toggle(): void { this.panel.hidden = !this.panel.hidden; }
+  hide(): void { this.panel.hidden = true; }
 
   update(sample: () => Record<string, string | number>): void {
     this.frames++;

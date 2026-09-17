@@ -24,7 +24,7 @@
           <div class="seed-entry"><input id="seed" value="CLOUD-ROAD-001" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
         </form>
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
-        <input id="speed" type="range" min="20" max="1200" step="20" value="120" />
+        <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
         <label class="speed-label" for="daylight">光照时刻 <output id="daylight-value">金色时刻</output></label>
         <input id="daylight" type="range" min="0" max="100" step="1" value="70" aria-valuetext="金色时刻，太阳高度 11.4 度" />
         <div class="actions atmosphere-actions"><button id="sun-view" type="button">望向太阳</button><button id="shadows" type="button" aria-pressed="true">山体投影</button></div>
@@ -37,12 +37,12 @@
       </section>
       <div class="crosshair" aria-hidden="true">+</div>
       <div id="notice" role="status">拖动视角，开始探索</div>
-      <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <span>F3</span></h2><dl id="debug-values"></dl></section>
+      <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
         <div class="controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
       </footer>
-      <div id="error" role="alert" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
+      <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
       <dialog id="release-notes" aria-labelledby="release-title">
         <header><h2 id="release-title">版本公告</h2><form method="dialog"><button aria-label="关闭公告" autofocus>关闭</button></form></header>
         <section id="release-current" data-release="current" aria-label="当前公告"></section>
