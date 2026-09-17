@@ -10,6 +10,13 @@ import { RoadMesh } from '../road/RoadMesh';
 import { RoadCorridor } from '../road/RoadCorridor';
 import { BridgeDetector, type BridgeSpan } from '../bridge/BridgeDetector';
 import { BridgeMesh } from '../bridge/BridgeMesh';
+import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
+
+export interface GroundSample {
+  height: number;
+  normalY: number;
+  biome: BiomeSample;
+}
 
 export class World {
   readonly origin = new FloatingOrigin();
@@ -21,6 +28,7 @@ export class World {
   readonly bridgeMesh: BridgeMesh;
   bridges: readonly BridgeSpan[] = [];
   private readonly bridgeDetector: BridgeDetector;
+  private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
   roadReady = false;
   private readonly forward = new Vector3();
@@ -29,6 +37,7 @@ export class World {
 
   constructor(scene: Scene, readonly seed: string) {
     this.height = new HeightFunction(seed);
+    this.biomes = new BiomeSystem(seed);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers());
     this.road = new RoadSpine(seed);
     this.roadDebug = new RoadDebug(scene);
@@ -59,6 +68,13 @@ export class World {
     this.roadDebug.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.roadMesh.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.bridgeMesh.update(this.bridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
+  }
+
+  sampleGround(x: number, z: number): GroundSample {
+    const height = (px: number, pz: number) => this.corridor.height(px, pz, this.height.sample(px, pz));
+    const y = height(x, z);
+    const normalY = 4 / Math.hypot(height(x - 2, z) - height(x + 2, z), 4, height(x, z - 2) - height(x, z + 2));
+    return { height: y, normalY, biome: this.biomes.sample(x, z, y, normalY) };
   }
 
   inspectRoad(camera: PerspectiveCamera): number | undefined {

@@ -3,6 +3,8 @@ import { createRng, hashSeed } from '../src/world/WorldSeed';
 import { HeightFunction } from '../src/terrain/HeightFunction';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { createTerrainLayout } from '../src/terrain/TerrainTopology';
+import { BiomeSystem } from '../src/biome/BiomeSystem';
+import { RoadCorridor } from '../src/road/RoadCorridor';
 
 describe('seeded terrain', () => {
   it('reproduces PRNG streams and separates seeds', () => {
@@ -64,6 +66,25 @@ describe('seeded terrain', () => {
       const ai = edge(a, 256), bi = edge(b, 0);
       expect(a.positions[ai + 1]).toBe(b.positions[bi + 1]);
       expect(a.normals.slice(ai, ai + 3)).toEqual(b.normals.slice(bi, bi + 3));
+      expect(a.colors.slice(ai, ai + 3)).toEqual(b.colors.slice(bi, bi + 3));
+    }
+  });
+
+  it('colors the final road-coupled ground using logical coordinates at every LOD', () => {
+    const terrain = new TerrainGenerator('CLOUD-ROAD-001');
+    const biomes = new BiomeSystem('CLOUD-ROAD-001');
+    const road = [{ a: { x: -128, y: 3200, z: -512, nx: 0, ny: 1, nz: 0, ground: 1 }, b: { x: -128, y: 3200, z: 512, nx: 0, ny: 1, nz: 0, ground: 1 } }];
+    const corridor = new RoadCorridor(road);
+    const height = (x: number, z: number) => corridor.height(x, z, terrain.height.sample(x, z));
+    for (const cells of [8, 16, 64] as const) {
+      const data = terrain.generate(-1, 0, cells, road);
+      expect(Array.from(data.colors).every((value) => value >= 0 && value <= 1)).toBe(true);
+      for (let i = 0; i < data.positions.length; i += 3) {
+        const x = data.positions[i] - 256, z = data.positions[i + 2];
+        const normalY = 4 / Math.hypot(height(x - 2, z) - height(x + 2, z), 4, height(x, z - 2) - height(x, z + 2));
+        const expected = biomes.sample(x, z, height(x, z), normalY).color;
+        expect(data.colors.slice(i, i + 3)).toEqual(new Float32Array(expected));
+      }
     }
   });
 

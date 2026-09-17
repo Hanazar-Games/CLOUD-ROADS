@@ -1,5 +1,33 @@
 import { expect, test } from '@playwright/test';
 
+test('reports ground biomes independently of flight altitude and reproduces them after seed reload', async ({ page }) => {
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  const names = ['Ground biome', 'Ground altitude', 'Ground slope', 'Snow cover', 'Snow line', 'Temperature', 'Humidity'];
+  const values = () => Promise.all(names.map((name) => metric(name).textContent()));
+  await page.goto('/');
+  await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
+  await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
+  await expect(metric('Ground biome')).toHaveText(/^(山谷|森林|岩石|高山|雪区)$/);
+  const original = await values();
+  const altitude = Number((await metric('Coordinates').textContent())!.split(',')[1]);
+  await page.locator('#world').focus();
+  await page.keyboard.down('Space');
+  await expect.poll(async () => Number((await metric('Coordinates').textContent())!.split(',')[1])).toBeGreaterThan(altitude + 80);
+  await page.keyboard.up('Space');
+  expect(await values()).toEqual(original);
+  await page.locator('#seed').fill('A-SECOND-MOUNTAIN');
+  await page.getByRole('button', { name: '加载种子' }).click();
+  await expect(metric('Seed')).toHaveText('A-SECOND-MOUNTAIN');
+  await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
+  await expect(metric('Snow line')).not.toHaveText(original[4]!);
+  await page.locator('#seed').fill('CLOUD-ROAD-001');
+  await page.getByRole('button', { name: '加载种子' }).click();
+  await expect(metric('Seed')).toHaveText('CLOUD-ROAD-001');
+  await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
+  await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
+  expect(await values()).toEqual(original);
+});
+
 test('renders WebGL, resizes, flies, pauses and exposes debug telemetry', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

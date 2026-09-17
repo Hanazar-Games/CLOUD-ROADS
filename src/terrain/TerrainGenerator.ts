@@ -2,6 +2,7 @@ import { CHUNK_SIZE, type TerrainCells } from '../world/ChunkPlanner';
 import { HeightFunction } from './HeightFunction';
 import { createTerrainLayout } from './TerrainTopology';
 import { RoadCorridor, type CorridorEdge } from '../road/RoadCorridor';
+import { BiomeSystem, createBiomeSample } from '../biome/BiomeSystem';
 
 export interface TerrainData {
   positions: Float32Array<ArrayBuffer>;
@@ -13,8 +14,12 @@ const layouts = { 8: createTerrainLayout(8), 16: createTerrainLayout(16), 64: cr
 
 export class TerrainGenerator {
   readonly height: HeightFunction;
+  private readonly biomes: BiomeSystem;
 
-  constructor(seed: string) { this.height = new HeightFunction(seed); }
+  constructor(seed: string) {
+    this.height = new HeightFunction(seed);
+    this.biomes = new BiomeSystem(seed);
+  }
 
   generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = []): TerrainData {
     const coordinates = layouts[cells].coordinates;
@@ -23,6 +28,7 @@ export class TerrainGenerator {
     const normals = new Float32Array(length);
     const colors = new Float32Array(length);
     const corridor = new RoadCorridor(road);
+    const biome = createBiomeSample();
     const height = (x: number, z: number) => corridor.height(x, z, this.height.sample(x, z));
     for (let i = 0; i < coordinates.length / 2; i++) {
       const x = cx * CHUNK_SIZE + coordinates[i * 2];
@@ -38,11 +44,8 @@ export class TerrainGenerator {
       normals[offset] = nx / magnitude;
       normals[offset + 1] = 4 / magnitude;
       normals[offset + 2] = nz / magnitude;
-      const rock = Math.min(1, Math.max(0, (1 - 4 / magnitude) * 1.8 + (y - 1900) / 1800));
-      const high = Math.min(1, Math.max(0, (y - 3100) / 750));
-      colors[offset] = (0.105 + rock * 0.18) * (1 - high) + 0.66 * high;
-      colors[offset + 1] = (0.17 + rock * 0.12) * (1 - high) + 0.71 * high;
-      colors[offset + 2] = (0.115 + rock * 0.16) * (1 - high) + 0.72 * high;
+      this.biomes.sample(x, z, y, 4 / magnitude, biome);
+      colors.set(biome.color, offset);
     }
     return { positions, normals, colors };
   }

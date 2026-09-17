@@ -3,9 +3,11 @@ import { FreeCamera } from '../camera/FreeCamera';
 import { DebugUI, element } from '../debug/DebugUI';
 import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
-import { World } from '../world/World';
+import { World, type GroundSample } from '../world/World';
 import { DEFAULT_SEED } from '../world/WorldSeed';
 import { CHUNK_SIZE } from '../world/ChunkPlanner';
+
+const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区' };
 
 export class Game {
   private readonly canvas = element<HTMLCanvasElement>('world');
@@ -21,6 +23,7 @@ export class Game {
   private paused = false;
   private wireframe = false;
   private hudTime = 0;
+  private ground: GroundSample | undefined;
 
   constructor() {
     this.scene.background = new Color(0xa5bec9);
@@ -31,7 +34,7 @@ export class Game {
     this.scene.add(sun);
     this.world = new World(this.scene, DEFAULT_SEED);
     this.world.resetCamera(this.camera);
-    element('phase-label').textContent = '/ 06';
+    element('phase-label').textContent = '/ 07';
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     this.resize();
@@ -97,6 +100,7 @@ export class Game {
   }
 
   private resetCamera(): void {
+    this.ground = undefined;
     this.world.resetCamera(this.camera);
     this.flight.reset();
     this.input.clear();
@@ -127,6 +131,7 @@ export class Game {
     this.hudTime += dt;
     if (this.hudTime >= 0.15) {
       this.hudTime = 0;
+      this.ground = this.world.roadReady ? this.world.sampleGround(x, z) : undefined;
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
       element('notice').textContent = this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
@@ -135,6 +140,7 @@ export class Game {
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
       element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
     }
+    const ground = this.world.roadReady ? this.ground : undefined;
     this.debug.update({
       Coordinates: `${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`,
       'Local X / Z': `${this.camera.position.x.toFixed(1)} / ${this.camera.position.z.toFixed(1)}`,
@@ -144,6 +150,13 @@ export class Game {
       'Pending / queued': `${stats.pending} / ${stats.queued}`, 'Generated chunks': stats.completed,
       Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
       'Origin rebases': origin.count, 'Flight speed': `${this.flight.speed} m/s`, Seed: this.world.seed,
+      'Ground biome': ground ? biomeNames[ground.biome.kind] : '—',
+      'Ground altitude': ground ? `${ground.height.toFixed(0)} m` : '—',
+      'Ground slope': ground ? `${(Math.acos(ground.normalY) * 180 / Math.PI).toFixed(1)}°` : '—',
+      'Snow cover': ground ? `${(ground.biome.weights.snow * 100).toFixed(0)}%` : '—',
+      'Snow line': ground ? `${ground.biome.snowLine.toFixed(0)} m` : '—',
+      Temperature: ground ? `${ground.biome.temperature.toFixed(1)} °C` : '—',
+      Humidity: ground ? `${(ground.biome.humidity * 100).toFixed(0)}%` : '—',
       'Road segments': this.world.road.segments.length, 'Road ready': this.world.roadReady ? 'yes' : 'generating',
       'Hairpins': this.world.road.segments.filter((segment) => segment.kind === 'hairpin').length,
       'Bridges': this.world.bridges.length, 'Bridge piers': this.world.bridgeMesh.pierCount,

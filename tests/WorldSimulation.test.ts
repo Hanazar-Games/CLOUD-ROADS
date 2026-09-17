@@ -34,6 +34,7 @@ describe('WorldSimulationTest', () => {
       lastKey = plan[0].key;
       const data = terrain.generate(plan[0].x, plan[0].z, 8);
       expect(Array.from(data.positions).every(Number.isFinite)).toBe(true);
+      expect(Array.from(data.colors).every((value) => value >= 0 && value <= 1)).toBe(true);
     }
     expect(rebases).toBeGreaterThan(0);
   });
