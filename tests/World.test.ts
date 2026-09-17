@@ -67,7 +67,13 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
   world.update(camera);
   expect(world.bridgeMesh.deck.visible).toBe(true);
   expect(world.bridgeMesh.deck.instanceMatrix.array).toEqual(matrix);
+  const position = camera.position.clone();
+  expect(world.inspectRoad(camera)).toBeUndefined();
+  expect(world.inspectHairpin(camera)).toBeUndefined();
+  expect(world.inspectBridge(camera)).toBeUndefined();
+  expect(camera.position).toEqual(position);
   generating.mockRestore();
+  world.update(camera);
   const view = world.inspectBridge(camera)!;
   const corridor = RoadCorridor.fromSamples(world.road.samples, world.bridges);
   const { x, y, z } = camera.position;

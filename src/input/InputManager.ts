@@ -5,33 +5,48 @@ export class InputManager {
   private dx = 0;
   private dy = 0;
   onAction: (code: string) => void = () => {};
+  enabled = true;
+  pointerLockFailed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const options = { signal: this.events.signal };
     window.addEventListener('keydown', (event) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) return;
-      if (['Space', 'F3'].includes(event.code)) event.preventDefault();
+      if (!this.enabled || event.isComposing || event.metaKey || event.altKey || event.defaultPrevented
+        || event.target !== canvas && event.target !== document.body) return;
+      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'KeyP', 'F3'].includes(event.code)) return;
+      event.preventDefault();
       this.keys.add(event.code);
       if (!event.repeat) this.onAction(event.code);
     }, options);
     window.addEventListener('keyup', (event) => this.keys.delete(event.code), options);
     window.addEventListener('blur', () => this.clear(), options);
+    document.addEventListener('focusin', (event) => { if (event.target !== canvas) this.clear(); }, options);
+    document.addEventListener('pointerlockchange', () => {
+      this.clear();
+      if (document.pointerLockElement === canvas) this.pointerLockFailed = false;
+    }, options);
+    document.addEventListener('pointerlockerror', () => { this.pointerLockFailed = true; }, options);
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.clear(); }, options);
     canvas.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
+      if (!this.enabled || event.button !== 0) return;
       canvas.focus();
       this.dragging = true;
       canvas.setPointerCapture(event.pointerId);
     }, options);
     canvas.addEventListener('pointerup', () => { this.dragging = false; }, options);
+    canvas.addEventListener('pointercancel', () => this.clear(), options);
     canvas.addEventListener('lostpointercapture', () => { this.dragging = false; }, options);
     canvas.addEventListener('pointermove', (event) => {
-      if (this.dragging || document.pointerLockElement === canvas) {
+      if (this.enabled && (this.dragging || document.pointerLockElement === canvas)) {
         this.dx += event.movementX;
         this.dy += event.movementY;
       }
     }, options);
-    canvas.addEventListener('dblclick', () => { void canvas.requestPointerLock()?.catch(() => {}); }, options);
+    canvas.addEventListener('dblclick', () => {
+      if (!this.enabled) return;
+      try { void canvas.requestPointerLock()?.catch(() => { this.pointerLockFailed = true; }); }
+      catch { this.pointerLockFailed = true; }
+    }, options);
   }
 
   down(code: string): boolean { return this.keys.has(code); }

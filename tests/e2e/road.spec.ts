@@ -17,12 +17,12 @@ test('shows a streamed road spine, inspects it and preserves display settings ac
   await expect(page.locator('#altitude')).not.toHaveText(before!);
   await expect(page.locator('[data-metric="Road grade"]')).toContainText('%');
   await page.getByRole('button', { name: '路线骨架' }).click();
-  await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#seed').fill('ROAD-TEST-002');
   await page.getByRole('button', { name: '加载种子' }).click();
   await expect(page.locator('[data-metric="Seed"]')).toHaveText('ROAD-TEST-002');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes');
-  await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);
 });

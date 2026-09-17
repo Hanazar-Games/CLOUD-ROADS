@@ -78,6 +78,7 @@ export class World {
   }
 
   inspectRoad(camera: PerspectiveCamera): number | undefined {
+    if (!this.roadReady) return undefined;
     const sample = this.roadSample;
     if (!sample) return undefined;
     camera.position.set(sample.position.x - this.origin.x, sample.position.y + 25, sample.position.z - this.origin.z);
@@ -85,6 +86,7 @@ export class World {
   }
 
   inspectHairpin(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    if (!this.roadReady) return undefined;
     const turns = this.road.segments.filter((segment) => segment.kind === 'hairpin');
     const turn = turns.find((segment) => segment.start.distance > (this.roadSample?.distance ?? 0) + 100) ?? turns[0];
     if (!turn) return undefined;
@@ -97,6 +99,7 @@ export class World {
   }
 
   inspectBridge(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    if (!this.roadReady) return undefined;
     const span = this.bridges.find((bridge) => bridge.end.distance > (this.roadSample?.distance ?? 0) + 100) ?? this.bridges[0];
     if (!span) return undefined;
     const sample = span.samples[Math.floor(span.samples.length / 2)];

@@ -15,7 +15,7 @@ export class DebugUI {
 
   toggle(): void { this.panel.hidden = !this.panel.hidden; }
 
-  update(data: Record<string, string | number>): void {
+  update(sample: () => Record<string, string | number>): void {
     this.frames++;
     const now = performance.now();
     this.elapsed = now - this.lastUpdate;
@@ -24,7 +24,7 @@ export class DebugUI {
     this.frames = 0;
     this.lastUpdate = now;
     element('fps').textContent = String(this.fps);
-    for (const [key, value] of Object.entries({ FPS: this.fps, ...data })) {
+    for (const [key, value] of Object.entries({ FPS: this.fps, ...sample() })) {
       let field = this.fields.get(key);
       if (!field) {
         const label = document.createElement('dt');

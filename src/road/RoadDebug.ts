@@ -9,7 +9,7 @@ export class RoadDebug {
   private version = -1;
   private anchorX = 0;
   private anchorZ = 0;
-  enabled = true;
+  enabled = false;
 
   constructor(scene: Scene) {
     this.line.geometry.setAttribute('position', new BufferAttribute(new Float32Array((MAX_ROAD_SEGMENTS * ROAD_SAMPLES + 1) * 3), 3).setUsage(DynamicDrawUsage));
