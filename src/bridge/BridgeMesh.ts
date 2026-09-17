@@ -22,6 +22,7 @@ export class BridgeMesh {
     for (const mesh of [this.deck, this.piers]) {
       mesh.count = 0;
       mesh.visible = false;
+      mesh.castShadow = mesh.receiveShadow = true;
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
       scene.add(mesh);
     }

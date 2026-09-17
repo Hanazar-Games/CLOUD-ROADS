@@ -20,6 +20,7 @@ export class RoadMesh {
     this.mesh.geometry.setIndex(new BufferAttribute(indices, 1));
     this.mesh.geometry.setDrawRange(0, 0);
     this.mesh.visible = false;
+    this.mesh.castShadow = this.mesh.receiveShadow = true;
     scene.add(this.mesh);
   }
 

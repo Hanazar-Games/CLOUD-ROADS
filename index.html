@@ -13,7 +13,7 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> WORLD LAB <span id="phase-label">/ 08</span></span><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> WORLD LAB <span id="phase-label">/ 09</span></span><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
       <section id="explorer" class="explorer" aria-label="探索控制">
         <p class="eyebrow">无尽山野，自由探索</p>
@@ -25,6 +25,9 @@
         </form>
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
         <input id="speed" type="range" min="20" max="1200" step="20" value="120" />
+        <label class="speed-label" for="daylight">光照时刻 <output id="daylight-value">金色时刻</output></label>
+        <input id="daylight" type="range" min="0" max="100" step="1" value="70" aria-valuetext="金色时刻，太阳高度 11.4 度" />
+        <div class="actions atmosphere-actions"><button id="sun-view" type="button">望向太阳</button><button id="shadows" type="button" aria-pressed="true">山体投影</button></div>
         <div class="actions"><button id="home" type="button">返回起点</button><button id="wireframe" type="button" aria-pressed="false">地形线框</button></div>
         <div class="actions road-actions"><button id="road-view" type="button" disabled>道路视角</button><button id="road-debug" type="button" aria-pressed="false">路线骨架</button></div>
         <div class="actions road-actions"><button id="hairpin-view" type="button" disabled>发卡弯视角</button><button id="bridge-view" type="button" disabled>桥梁视角</button></div>

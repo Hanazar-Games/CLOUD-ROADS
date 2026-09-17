@@ -1,25 +1,25 @@
-import { Color, DataTexture, DepthTexture, Fog, HalfFloatType, LinearFilter, Mesh, OrthographicCamera, PlaneGeometry, RepeatWrapping, Scene, UnsignedByteType, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { DataTexture, DepthTexture, HalfFloatType, LinearFilter, Mesh, OrthographicCamera, PlaneGeometry, RepeatWrapping, Scene, UnsignedByteType, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import { CLOUD_RESOLUTION, CloudField, wrapCloudCoordinate } from './CloudField';
 import { CloudMaterial } from './CloudMaterial';
+import type { SunSystem } from './SunSystem';
 
 export class CloudSystem {
-  readonly background = new Color(0xa5bec9);
-  readonly fog = new Fog(this.background, 1000, 1950);
+  readonly fog = { near: 1000, far: 1950 };
   readonly texture: DataTexture;
   readonly target: WebGLRenderTarget;
-  readonly material = new CloudMaterial();
-  readonly quad = new Mesh(new PlaneGeometry(2, 2), this.material);
+  readonly material: CloudMaterial;
+  readonly quad: Mesh<PlaneGeometry, CloudMaterial>;
   private readonly scene = new Scene();
   private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  private readonly clearColor = new Color(0xa5bec9);
-  private readonly mistColor = new Color(0xc2cdd0);
   private field: CloudField;
   private driftX = 0;
   private driftZ = 0;
   enabled = true;
   sample: ReturnType<CloudField['sample']>;
 
-  constructor(seed: string, hdr = true) {
+  constructor(seed: string, sun: SunSystem, hdr = true) {
+    this.material = new CloudMaterial(sun);
+    this.quad = new Mesh(new PlaneGeometry(2, 2), this.material);
     this.field = new CloudField(seed);
     this.sample = this.field.sample(0, 0, 0);
     this.texture = new DataTexture(this.field.data, CLOUD_RESOLUTION, CLOUD_RESOLUTION);
@@ -51,8 +51,6 @@ export class CloudSystem {
     const z = wrapCloudCoordinate(camera.position.z + origin.z + this.driftZ);
     this.sample = this.field.sample(x, camera.position.y, z);
     const density = this.enabled ? this.sample.density : 0;
-    this.background.copy(this.clearColor).lerp(this.mistColor, density);
-    this.fog.color.copy(this.background);
     this.fog.near = this.enabled ? this.sample.fogNear : 1000;
     this.fog.far = this.enabled ? this.sample.fogFar : 1950;
     camera.updateMatrixWorld();
@@ -63,7 +61,7 @@ export class CloudSystem {
     uniforms.cameraWorld.value.copy(camera.matrixWorld);
     uniforms.nearFar.value.set(camera.near, camera.far);
     uniforms.fogRange.value.set(this.fog.near, this.fog.far);
-    uniforms.haze.value.copy(this.background);
+    uniforms.immersion.value = Math.min(1, density / 0.75);
     uniforms.cloudsEnabled.value = this.enabled;
   }
 

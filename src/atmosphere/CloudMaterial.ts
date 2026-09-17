@@ -1,8 +1,10 @@
-import { Color, Matrix4, ShaderMaterial, Vector2 } from 'three';
+import { Matrix4, ShaderMaterial, Vector2 } from 'three';
 import { CLOUD_BASE, CLOUD_RELIEF, CLOUD_TILE, CLOUD_TOP } from './CloudField';
+import type { SunSystem } from './SunSystem';
+import { skyShader } from './SkyShader';
 
 export class CloudMaterial extends ShaderMaterial {
-  constructor() {
+  constructor(sun: SunSystem) {
     super({
       name: 'CloudSea', depthTest: false, depthWrite: false,
       uniforms: {
@@ -10,7 +12,10 @@ export class CloudMaterial extends ShaderMaterial {
         inverseProjection: { value: new Matrix4() }, cameraWorld: { value: new Matrix4() },
         phase: { value: new Vector2() }, altitude: { value: 0 },
         nearFar: { value: new Vector2(0.5, 7000) }, fogRange: { value: new Vector2(1000, 1950) },
-        haze: { value: new Color() }, cloudsEnabled: { value: true },
+        cloudsEnabled: { value: true }, immersion: { value: 0 },
+        sunDirection: { value: sun.direction }, sunColor: { value: sun.sunColor }, solar: { value: sun.light },
+        zenithColor: { value: sun.zenith }, horizonColor: { value: sun.horizon },
+        hazeColor: { value: sun.haze }, ambientColor: { value: sun.ambient },
       },
       vertexShader: /* glsl */`
         varying vec2 vUv;
@@ -26,8 +31,8 @@ export class CloudMaterial extends ShaderMaterial {
         uniform mat4 inverseProjection, cameraWorld;
         uniform vec2 phase, nearFar, fogRange;
         uniform float altitude;
-        uniform vec3 haze;
         uniform bool cloudsEnabled;
+        ${skyShader}
         const float cloudBase = ${CLOUD_BASE.toFixed(1)};
         const float cloudTop = ${CLOUD_TOP.toFixed(1)};
         const float cloudTile = ${CLOUD_TILE.toFixed(1)};
@@ -43,6 +48,9 @@ export class CloudMaterial extends ShaderMaterial {
           float depth = texture2D(sceneDepth, vUv).x;
           float distanceToScene = depth < 1.0
             ? -perspectiveDepthToViewZ(depth, nearFar.x, nearFar.y) / -direction.z : 1e8;
+          vec3 haze = airColor(ray);
+          scene = depth >= 1.0 ? skyColor(ray)
+            : mix(scene, haze, smoothstep(fogRange.x, fogRange.y, distanceToScene * -direction.z));
           vec4 clouds = vec4(0.0);
           if (cloudsEnabled && abs(ray.y) > 0.0001) {
             for (int i = 0; i < 8; i++) {
@@ -63,13 +71,15 @@ export class CloudMaterial extends ShaderMaterial {
                 * (1.0 - smoothstep(4000.0, 6500.0, t));
               float slopeX = (fieldAt(point + vec2(64.0, 0.0)).g - fieldAt(point - vec2(64.0, 0.0)).g) * cloudRelief / 128.0;
               float slopeZ = (fieldAt(point + vec2(0.0, 64.0)).g - fieldAt(point - vec2(0.0, 64.0)).g) * cloudRelief / 128.0;
-              float light = max(0.0, dot(normalize(vec3(-slopeX, 1.0, -slopeZ)), normalize(vec3(-1.0, 1.4, -1.0))));
-              float shade = clamp(light * 0.7 + field.g * 0.35 + (detail - 0.5) * 0.4, 0.0, 1.0);
-              vec3 color = mix(vec3(0.24, 0.32, 0.41), vec3(1.05, 1.08, 1.1), shade);
-              color *= mix(0.62, 1.0, layer);
+              float light = max(0.0, dot(normalize(vec3(-slopeX, 1.0, -slopeZ)), sunDirection));
+              float shade = clamp(field.g * 0.6 + detail * 0.4, 0.0, 1.0);
+              float silver = pow(max(dot(ray, sunDirection), 0.0), 16.0) * 0.16;
+              vec3 color = ambientColor * mix(0.3, 0.7, shade)
+                + sunColor * (light * 0.55 + silver) * solar.x;
+              color *= mix(0.65, 1.0, layer);
               // Nearby layers fade into the same fog as the terrain when crossing a cloud.
               float mist = smoothstep(fogRange.x, fogRange.y, t * -direction.z);
-              color = mix(color, haze, mist);
+              color = mix(color, haze, max(mist, immersion));
               clouds.rgb += (1.0 - clouds.a) * opacity * color;
               clouds.a += (1.0 - clouds.a) * opacity;
             }

@@ -1,9 +1,10 @@
 import { PerspectiveCamera } from 'three';
 import { expect, it, vi } from 'vitest';
 import { CloudSystem } from '../src/atmosphere/CloudSystem';
+import { SunSystem } from '../src/atmosphere/SunSystem';
 
 it('keeps cloud phase and fog unchanged when the render origin moves', () => {
-  const clouds = new CloudSystem('CLOUD-ROAD-001'), camera = new PerspectiveCamera();
+  const clouds = new CloudSystem('CLOUD-ROAD-001', new SunSystem()), camera = new PerspectiveCamera();
   camera.position.set(10128, 2050, -20000);
   clouds.update(0, camera, { x: 0, z: 0 });
   const sample = { ...clouds.sample }, phase = clouds.material.uniforms.phase.value.clone();
@@ -17,7 +18,7 @@ it('keeps cloud phase and fog unchanged when the render origin moves', () => {
 });
 
 it('freezes drift at zero delta, resets a seed and restores clear air when disabled', () => {
-  const clouds = new CloudSystem('CLOUD-ROAD-001'), camera = new PerspectiveCamera();
+  const clouds = new CloudSystem('CLOUD-ROAD-001', new SunSystem()), camera = new PerspectiveCamera();
   camera.position.set(100, 2050, 200);
   clouds.update(0, camera, { x: 0, z: 0 });
   const sample = { ...clouds.sample }, phase = clouds.material.uniforms.phase.value.clone();
@@ -42,7 +43,7 @@ it('freezes drift at zero delta, resets a seed and restores clear air when disab
 });
 
 it('resizes the reusable render target and releases every GPU resource', () => {
-  const clouds = new CloudSystem('CLOUD-ROAD-001');
+  const clouds = new CloudSystem('CLOUD-ROAD-001', new SunSystem());
   const target = clouds.target, texture = clouds.texture, material = clouds.material;
   clouds.resize(1920, 1080);
   expect([target.width, target.height]).toEqual([1920, 1080]);

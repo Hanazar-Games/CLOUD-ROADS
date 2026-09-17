@@ -1,6 +1,7 @@
-import { ACESFilmicToneMapping, DirectionalLight, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { CLOUD_BASE } from '../atmosphere/CloudField';
 import { CloudSystem } from '../atmosphere/CloudSystem';
+import { SkySystem } from '../atmosphere/SkySystem';
 import { FreeCamera } from '../camera/FreeCamera';
 import { DebugUI, element } from '../debug/DebugUI';
 import { InputManager } from '../input/InputManager';
@@ -16,7 +17,8 @@ export class Game {
   private readonly canvas = element<HTMLCanvasElement>('world');
   private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
-  private readonly clouds = new CloudSystem(DEFAULT_SEED, this.renderer.extensions.has('EXT_color_buffer_float'));
+  private readonly sky = new SkySystem(this.scene);
+  private readonly clouds = new CloudSystem(DEFAULT_SEED, this.sky.sun, this.renderer.extensions.has('EXT_color_buffer_float'));
   private readonly camera = new PerspectiveCamera(65, 1, 0.5, 7000);
   private readonly input = new InputManager(this.canvas);
   private readonly flight = new FreeCamera(this.camera, this.input);
@@ -31,18 +33,15 @@ export class Game {
   private contextLost = false;
 
   constructor() {
-    this.scene.background = this.clouds.background;
-    this.scene.fog = this.clouds.fog;
-    this.scene.add(new HemisphereLight(0xe4f1ff, 0x475346, 2.2));
-    const sun = new DirectionalLight(0xffefd3, 2.4);
-    sun.position.set(-1800, 2600, -1600);
-    this.scene.add(sun);
+    this.scene.background = this.sky.sun.haze;
     this.world = new World(this.scene, DEFAULT_SEED);
     this.world.resetCamera(this.camera);
-    element('phase-label').textContent = '/ 08';
+    element('phase-label').textContent = '/ 09';
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     this.renderer.info.autoReset = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFShadowMap;
     this.resize();
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
     this.input.onAction = (code) => {
@@ -52,6 +51,23 @@ export class Game {
     element<HTMLInputElement>('speed').addEventListener('input', (event) => {
       this.flight.speed = Number((event.target as HTMLInputElement).value);
       element('speed-value').textContent = `${this.flight.speed} m/s`;
+    }, { signal: this.events.signal });
+    element<HTMLInputElement>('daylight').addEventListener('input', (event) => {
+      this.sky.sun.setTime(Number((event.target as HTMLInputElement).value) / 100);
+      element('daylight-value').textContent = this.sky.sun.label;
+      element('daylight').setAttribute('aria-valuetext', `${this.sky.sun.label}，太阳高度 ${this.sky.sun.elevation.toFixed(1)} 度`);
+    }, { signal: this.events.signal });
+    element('sun-view').addEventListener('click', () => {
+      const direction = this.sky.sun.direction;
+      this.flight.reset(Math.atan2(direction.x, -direction.z), Math.asin(direction.y));
+      this.input.clear();
+      this.setPaused(false);
+      this.canvas.focus();
+    }, { signal: this.events.signal });
+    element('shadows').addEventListener('click', () => {
+      this.sky.light.castShadow = !this.sky.light.castShadow;
+      element('shadows').setAttribute('aria-pressed', String(this.sky.light.castShadow));
+      this.canvas.focus();
     }, { signal: this.events.signal });
     element('seed-form').addEventListener('submit', (event) => {
       event.preventDefault();
@@ -190,6 +206,7 @@ export class Game {
   private update(dt: number): void {
     this.flight.update(dt, this.paused || this.releaseNotes.open);
     this.world.update(this.camera);
+    this.sky.update(this.camera, this.world.origin);
     this.clouds.update(this.paused || this.releaseNotes.open ? 0 : dt, this.camera, this.world.origin);
     this.renderer.info.reset();
     this.clouds.render(this.renderer, this.scene, this.camera);
@@ -222,6 +239,8 @@ export class Game {
         'Pending / queued': `${stats.pending} / ${stats.queued}`, 'Generated chunks': stats.completed,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
+        'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
+        'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',
         'Origin rebases': origin.count, 'Flight speed': `${this.flight.speed} m/s`, Seed: this.world.seed,
         'Cloud region': this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '关闭',
         'Cloud base / top': `${this.clouds.sample.base.toFixed(0)} / ${this.clouds.sample.top.toFixed(0)} m`,
@@ -251,6 +270,7 @@ export class Game {
     this.input.dispose();
     this.world.dispose();
     this.clouds.dispose();
+    this.sky.dispose();
     this.renderer.dispose();
   }
 }

@@ -46,7 +46,7 @@ test('keeps ground readings aligned with the displayed coordinates during fast f
 test('keeps all controls reachable in a short desktop window', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
   await page.goto('/');
-  for (const id of ['bridge-view', 'cloud-view', 'cloud-toggle', 'pause']) {
+  for (const id of ['sun-view', 'shadows', 'bridge-view', 'cloud-view', 'cloud-toggle', 'pause']) {
     const button = page.locator(`#${id}`);
     await expect(button).toBeEnabled({ timeout: 20_000 });
     await button.scrollIntoViewIfNeeded();
@@ -103,11 +103,12 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.2');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('穿云与云海');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.3');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('落日与山影');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.2');
   const position = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(450);
@@ -154,7 +155,7 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   expect(Number(await page.locator('[data-metric="Allocated meshes"]').textContent())).toBe(289);
-  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('4');
+  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('6');
   expect(errors).toEqual([]);
 });
 

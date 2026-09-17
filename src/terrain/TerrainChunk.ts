@@ -17,6 +17,8 @@ export class TerrainChunk {
     }
     geometry.setIndex(new BufferAttribute(layout.indices, 1));
     this.mesh = new Mesh(geometry, material);
+    this.mesh.castShadow = cells !== 8;
+    this.mesh.receiveShadow = true;
     this.mesh.visible = false;
   }
 
