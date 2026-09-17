@@ -11,7 +11,7 @@ test('shows a streamed road spine, inspects it and preserves display settings ac
   expect(highDetail).toBeGreaterThan(25);
   const count = Number(await page.locator('[data-metric="Road segments"]').textContent());
   expect(count).toBeGreaterThan(20);
-  expect(count).toBeLessThanOrEqual(96);
+  expect(count).toBeLessThanOrEqual(160);
   const before = await page.locator('#altitude').textContent();
   await page.getByRole('button', { name: '道路视角' }).click();
   await expect(page.locator('#altitude')).not.toHaveText(before!);
@@ -47,12 +47,30 @@ test('extends the road during 30 km of northbound flight and replays it on retur
   await page.keyboard.up('ControlLeft');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   expect(parseFloat((await metric('Road distance').textContent())!)).toBeGreaterThan(30);
-  expect(Number(await metric('Road segments').textContent())).toBeLessThanOrEqual(96);
+  expect(Number(await metric('Road segments').textContent())).toBeLessThanOrEqual(160);
   expect(Number(await metric('Origin rebases').textContent())).toBeGreaterThanOrEqual(5);
   await page.getByRole('button', { name: '道路视角' }).click();
   await expect(page.locator('#notice')).not.toContainText('已暂停');
   await page.getByRole('button', { name: '返回起点' }).click();
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Road distance')).toHaveText('0.00 km');
+  expect(errors).toEqual([]);
+});
+
+test('inspects generated hairpins and continues streaming the coupled terrain', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.goto('/');
+  const button = page.getByRole('button', { name: '发卡弯视角' });
+  await expect(button).toBeEnabled({ timeout: 20_000 });
+  expect(Number(await page.locator('[data-metric="Hairpins"]').textContent())).toBeGreaterThanOrEqual(2);
+  const before = await page.locator('#position').textContent();
+  await button.click();
+  await expect(page.locator('#position')).not.toHaveText(before!);
+  await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
+  await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('289');
+  await expect(page.locator('#phase-label')).toHaveText('/ 05');
+  await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);
 });

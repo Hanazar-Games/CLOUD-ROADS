@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RoadGenerator } from '../src/road/RoadGenerator';
-import { RoadSpine } from '../src/road/RoadSpine';
+import { MAX_ROAD_SEGMENTS, RoadSpine } from '../src/road/RoadSpine';
 
 describe('RoadGenerator', () => {
   it('reproduces a route independently of generation batch size', () => {
@@ -27,9 +27,9 @@ describe('RoadGenerator', () => {
         const sample = segment.sample(i / 48);
         expect(Object.values(sample.position).every(Number.isFinite)).toBe(true);
         expect(Math.abs(sample.grade)).toBeLessThanOrEqual(0.1);
-        expect(Math.abs(sample.curvature)).toBeLessThanOrEqual(1 / 100);
+        expect(Math.abs(sample.curvature)).toBeLessThanOrEqual(segment.kind === 'hairpin' ? 1 / 30 : 1 / 100);
         expect(Math.abs(sample.heading - lastHeading)).toBeLessThan(0.1);
-        expect(sample.tangent.z).toBeLessThan(-0.5);
+        expect(sample.tangent.z).toBeLessThan(-0.25);
         expect(sample.width).toBe(8);
         expect(Math.abs(sample.bank)).toBeLessThanOrEqual(Math.PI / 30);
         lastHeading = sample.heading;
@@ -56,14 +56,27 @@ describe('RoadGenerator', () => {
     while (!spine.update(128, 8)) { /* Wait for initial coverage. */ }
     const original = spine.segments.slice(0, 5).map((segment) => segment.end);
     for (let z = 0; z >= -100_000; z -= 1000) {
-      while (!spine.update(z, 8)) expect(spine.segments.length).toBeLessThanOrEqual(96);
-      expect(spine.segments.length).toBeLessThanOrEqual(96);
-      const nearest = spine.nearZ(z);
+      while (!spine.update(z, 8)) expect(spine.segments.length).toBeLessThanOrEqual(MAX_ROAD_SEGMENTS);
+      expect(spine.segments.length).toBeLessThanOrEqual(MAX_ROAD_SEGMENTS);
+      const sample = spine.segments[Math.floor(spine.segments.length / 2)].sample(0.5);
+      const nearest = spine.nearest(sample.position.x, sample.position.z);
       expect(nearest).toBeDefined();
-      expect(nearest!.position.z).toBeCloseTo(z, 3);
+      expect(nearest!.position.z).toBeCloseTo(sample.position.z, 3);
+      expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(Math.min(128, z + 2600));
+      expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - 2600);
     }
     expect(spine.segments[0].start.distance).toBeGreaterThan(90_000);
     while (!spine.update(128, 8)) { /* Replay from the deterministic start. */ }
     expect(spine.segments.slice(0, 5).map((segment) => segment.end)).toEqual(original);
+  });
+
+  it('restores the full terrain halo when moving backward before leaving the retained road', () => {
+    const spine = new RoadSpine('CLOUD-ROAD-001');
+    while (!spine.update(-12_000, 8)) { /* Move forward. */ }
+    const z = -10_000;
+    expect(spine.segments[0].start.position.z).toBeGreaterThan(z);
+    while (!spine.update(z, 8)) { /* Rebuild the missing northern halo. */ }
+    expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(z + 2600);
+    expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - 2600);
   });
 });

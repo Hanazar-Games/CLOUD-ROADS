@@ -1,7 +1,7 @@
 import { HeightFunction } from '../terrain/HeightFunction';
 import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
-import { RoadSegment, type RoadControlPoint } from './RoadSegment';
+import { RoadSegment, type MountainPlan, type RoadControlPoint } from './RoadSegment';
 
 export interface RoadTerrain { sample(x: number, z: number): number }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -12,17 +12,22 @@ export class RoadGenerator {
 
   constructor(seed: string, private readonly terrain: RoadTerrain = new HeightFunction(seed)) {
     this.noise = new Noise(hashSeed(`${seed}:road`));
-    this.start = { position: { x: 128, y: terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: 8, bank: 0 };
+    this.start = { position: { x: 128, y: terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: 8, bank: 0, nextMountain: 600 };
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    let mountain = start.mountain;
+    if (!mountain && start.distance >= start.nextMountain) {
+      const gap = this.terrain.sample(start.position.x, start.position.z - 500) - start.position.y;
+      if (Math.abs(gap) > 80) mountain = { stage: 0, side: this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1, grade: Math.sign(gap) * 0.06 };
+    }
+    if (mountain) return this.mountainSegment(start, mountain);
     const desiredHeading = this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
     const grades = new Set([-0.06, -0.03, 0, 0.03, 0.06].map((grade) => start.grade + clamp(grade - start.grade, 0.02)));
     for (const turn of [-18, -12, -6, 0, 6, 12, 18]) {
       const heading = start.heading + turn * Math.PI / 180;
-      // A forward-only corridor prevents intersections before switchback planning is introduced.
       if (Math.abs(heading) > 1) continue;
       for (const grade of grades) {
         const segment = new RoadSegment(start, heading, grade);
@@ -43,5 +48,19 @@ export class RoadGenerator {
     }
     if (!best) throw new Error('No valid road candidate');
     return best;
+  }
+
+  private mountainSegment(start: RoadControlPoint, plan: MountainPlan): RoadSegment {
+    const angle = plan.side * Math.PI * 5 / 12;
+    const target = plan.stage === 13 ? 0 : plan.stage >= 5 && plan.stage < 10 ? -angle : angle;
+    const hairpin = plan.stage === 5 || plan.stage === 10;
+    const heading = hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10);
+    const grade = start.grade + clamp(plan.grade - start.grade, 0.02);
+    const segment = new RoadSegment(start, heading, grade, hairpin ? 144 : 96, hairpin ? 'hairpin' : 'traverse');
+    const aligned = Math.abs(target - heading) < 1e-8;
+    const stage = (plan.stage === 0 || plan.stage === 13) && !aligned ? plan.stage : plan.stage + 1;
+    segment.end.mountain = stage <= 13 ? { ...plan, stage } : undefined;
+    if (stage > 13) segment.end.nextMountain = segment.end.distance + 4000;
+    return segment;
   }
 }

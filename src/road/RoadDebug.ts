@@ -1,5 +1,6 @@
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Group, Line, LineBasicMaterial, Points, PointsMaterial, type Scene } from 'three';
 import { MAX_ROAD_SEGMENTS, type RoadSpine } from './RoadSpine';
+import { ROAD_SAMPLES } from './RoadSegment';
 
 export class RoadDebug {
   readonly group = new Group();
@@ -11,7 +12,7 @@ export class RoadDebug {
   enabled = true;
 
   constructor(scene: Scene) {
-    this.line.geometry.setAttribute('position', new BufferAttribute(new Float32Array((MAX_ROAD_SEGMENTS * 24 + 1) * 3), 3).setUsage(DynamicDrawUsage));
+    this.line.geometry.setAttribute('position', new BufferAttribute(new Float32Array((MAX_ROAD_SEGMENTS * ROAD_SAMPLES + 1) * 3), 3).setUsage(DynamicDrawUsage));
     this.points.geometry.setAttribute('position', new BufferAttribute(new Float32Array((MAX_ROAD_SEGMENTS + 1) * 3), 3).setUsage(DynamicDrawUsage));
     this.line.geometry.setDrawRange(0, 0);
     this.points.geometry.setDrawRange(0, 0);

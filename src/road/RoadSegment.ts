@@ -1,5 +1,7 @@
 export const ROAD_STEP = 96;
+export const ROAD_SAMPLES = 48;
 export interface RoadVector { x: number; y: number; z: number }
+export interface MountainPlan { stage: number; side: number; grade: number }
 export interface RoadControlPoint {
   position: RoadVector;
   heading: number;
@@ -7,6 +9,8 @@ export interface RoadControlPoint {
   distance: number;
   width: number;
   bank: number;
+  nextMountain: number;
+  mountain?: MountainPlan;
 }
 export interface RoadSample extends RoadControlPoint {
   tangent: RoadVector;
@@ -14,58 +18,74 @@ export interface RoadSample extends RoadControlPoint {
 }
 
 const ARC_STEPS = 24;
-function hermite(a: number, b: number, m0: number, m1: number, t: number): [number, number, number] {
-  const delta = b - a;
-  const c2 = 3 * delta - 2 * m0 - m1, c3 = -2 * delta + m0 + m1;
-  return [t === 1 ? b : a + t * (m0 + t * (c2 + t * c3)), m0 + t * (2 * c2 + t * 3 * c3), 2 * c2 + 6 * c3 * t];
-}
+// Smooth heading and grade give both ends zero curvature and vertical acceleration.
+const smooth = (t: number) => t * t * (3 - 2 * t);
 
 export class RoadSegment {
   readonly end: RoadControlPoint;
   private readonly arc = new Float64Array(ARC_STEPS + 1);
-  private readonly startDerivative: RoadVector;
-  private readonly endDerivative: RoadVector;
+  private readonly xs = new Float64Array(ARC_STEPS + 1);
+  private readonly zs = new Float64Array(ARC_STEPS + 1);
 
-  constructor(readonly start: RoadControlPoint, heading: number, grade: number) {
-    const middle = (start.heading + heading) / 2;
-    this.end = {
-      position: { x: start.position.x + Math.sin(middle) * ROAD_STEP, y: start.position.y + (start.grade + grade) * ROAD_STEP / 2, z: start.position.z - Math.cos(middle) * ROAD_STEP },
-      heading, grade, distance: start.distance, width: 8, bank: (start.heading - heading) * 0.08,
-    };
-    this.startDerivative = { x: Math.sin(start.heading) * ROAD_STEP, y: start.grade * ROAD_STEP, z: -Math.cos(start.heading) * ROAD_STEP };
-    this.endDerivative = { x: Math.sin(heading) * ROAD_STEP, y: grade * ROAD_STEP, z: -Math.cos(heading) * ROAD_STEP };
-    let previous = start.position;
+  constructor(readonly start: RoadControlPoint, private readonly heading: number, private readonly grade: number,
+    readonly length = ROAD_STEP, readonly kind: 'cruise' | 'traverse' | 'hairpin' = 'cruise') {
     for (let i = 1; i <= ARC_STEPS; i++) {
-      const [x, y, z] = this.evaluate(i / ARC_STEPS);
-      this.arc[i] = this.arc[i - 1] + Math.hypot(x[0] - previous.x, y[0] - previous.y, z[0] - previous.z);
-      previous = { x: x[0], y: y[0], z: z[0] };
+      const [x, z, distance] = this.integrate((i - 1) / ARC_STEPS, i / ARC_STEPS);
+      this.xs[i] = this.xs[i - 1] + x;
+      this.zs[i] = this.zs[i - 1] + z;
+      this.arc[i] = this.arc[i - 1] + distance;
     }
-    this.end.distance += this.arc[ARC_STEPS];
+    this.end = { ...start,
+      position: { x: start.position.x + this.xs[ARC_STEPS], y: start.position.y + length * (start.grade + grade) / 2, z: start.position.z + this.zs[ARC_STEPS] },
+      heading, grade, distance: start.distance + this.arc[ARC_STEPS], bank: 0,
+    };
   }
 
-  private evaluate(t: number) {
-    return (['x', 'y', 'z'] as const).map((axis) => hermite(this.start.position[axis], this.end.position[axis], this.startDerivative[axis], this.endDerivative[axis], t));
+  private integrate(a: number, b: number): [number, number, number] {
+    const weights = [1, 4, 1];
+    let x = 0, z = 0, distance = 0;
+    for (let i = 0; i < 3; i++) {
+      const t = a + (b - a) * i / 2, blend = smooth(t);
+      const heading = this.start.heading + (this.heading - this.start.heading) * blend;
+      const grade = this.start.grade + (this.grade - this.start.grade) * blend;
+      x += weights[i] * Math.sin(heading);
+      z -= weights[i] * Math.cos(heading);
+      distance += weights[i] * Math.hypot(1, grade);
+    }
+    const scale = this.length * (b - a) / 6;
+    return [x * scale, z * scale, distance * scale];
   }
 
   sample(t: number): RoadSample {
     t = Math.max(0, Math.min(1, t));
-    const [x, y, z] = this.evaluate(t);
-    const horizontal = Math.hypot(x[1], z[1]), speed = Math.hypot(horizontal, y[1]);
     const index = Math.min(ARC_STEPS - 1, Math.floor(t * ARC_STEPS));
+    const [dx, dz, distance] = this.integrate(index / ARC_STEPS, t);
+    const heading = this.start.heading + (this.heading - this.start.heading) * smooth(t);
+    const grade = this.start.grade + (this.grade - this.start.grade) * smooth(t);
+    const speed = Math.hypot(1, grade);
+    const curvature = (this.heading - this.start.heading) * 6 * t * (1 - t) / this.length;
     return {
-      position: { x: x[0], y: y[0], z: z[0] },
-      tangent: { x: x[1] / speed, y: y[1] / speed, z: z[1] / speed },
-      heading: Math.atan2(x[1], -z[1]), grade: y[1] / horizontal,
-      curvature: (x[1] * z[2] - z[1] * x[2]) / horizontal ** 3,
-      distance: this.start.distance + this.arc[index] + (this.arc[index + 1] - this.arc[index]) * (t * ARC_STEPS - index),
-      width: 8, bank: this.start.bank + (this.end.bank - this.start.bank) * t,
+      ...this.start,
+      position: t === 1 ? { ...this.end.position } : {
+        x: this.start.position.x + this.xs[index] + dx,
+        y: this.start.position.y + this.length * (this.start.grade * t + (this.grade - this.start.grade) * (t ** 3 - t ** 4 / 2)),
+        z: this.start.position.z + this.zs[index] + dz,
+      },
+      tangent: { x: Math.sin(heading) / speed, y: grade / speed, z: -Math.cos(heading) / speed },
+      heading, grade, curvature,
+      distance: this.start.distance + this.arc[index] + distance,
+      bank: -Math.max(-Math.PI / 30, Math.min(Math.PI / 30, Math.atan(curvature * 6))),
     };
   }
 
   atDistance(distance: number): RoadSample {
     const local = Math.max(0, Math.min(this.arc[ARC_STEPS], distance - this.start.distance));
-    let index = 0;
-    while (index < ARC_STEPS - 1 && this.arc[index + 1] < local) index++;
-    return this.sample((index + (local - this.arc[index]) / (this.arc[index + 1] - this.arc[index])) / ARC_STEPS);
+    let low = 0, high = 1;
+    for (let i = 0; i < 28; i++) {
+      const t = (low + high) / 2;
+      if (this.sample(t).distance - this.start.distance < local) low = t;
+      else high = t;
+    }
+    return this.sample((low + high) / 2);
   }
 }

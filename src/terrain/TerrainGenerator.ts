@@ -1,7 +1,7 @@
 import { CHUNK_SIZE, type TerrainCells } from '../world/ChunkPlanner';
 import { HeightFunction } from './HeightFunction';
 import { createTerrainLayout } from './TerrainTopology';
-import { RoadCorridor, type CorridorPoint } from '../road/RoadCorridor';
+import { RoadCorridor, type CorridorEdge } from '../road/RoadCorridor';
 
 export interface TerrainData {
   positions: Float32Array<ArrayBuffer>;
@@ -16,7 +16,7 @@ export class TerrainGenerator {
 
   constructor(seed: string) { this.height = new HeightFunction(seed); }
 
-  generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorPoint[] = []): TerrainData {
+  generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = []): TerrainData {
     const coordinates = layouts[cells].coordinates;
     const length = coordinates.length / 2 * 3;
     const positions = new Float32Array(length);

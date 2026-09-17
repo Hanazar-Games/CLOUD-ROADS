@@ -9,10 +9,10 @@ import { MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
 
 describe('RoadCorridor', () => {
   it('cuts and fills a banked roadbed, blends slopes and preserves distant terrain', () => {
-    const corridor = new RoadCorridor([
-      { x: 0, y: 200, z: 300, nx: -0.02, ny: 1, nz: 0 },
-      { x: 0, y: 200, z: -300, nx: -0.02, ny: 1, nz: 0 },
-    ]);
+    const corridor = new RoadCorridor([{
+      a: { x: 0, y: 200, z: 300, nx: -0.02, ny: 1, nz: 0 },
+      b: { x: 0, y: 200, z: -300, nx: -0.02, ny: 1, nz: 0 },
+    }]);
     for (const natural of [50, 500]) {
       expect(corridor.height(0, 0, natural)).toBeCloseTo(199.92, 5);
       expect(corridor.height(5, 0, natural)).toBeCloseTo(200.02, 5);
@@ -53,7 +53,7 @@ describe('RoadCorridor', () => {
     const material = new MeshStandardMaterial();
     const chunks = new Map<string, TerrainChunk>();
     const ray = new Raycaster();
-    for (let i = 13; i < 400; i += 13) {
+    for (let i = 13; i < spine.samples.length - 1; i += 13) {
       const sample = spine.samples[i], { right } = roadFrame(sample);
       for (const offset of [-5, 0, 5]) {
         const x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;

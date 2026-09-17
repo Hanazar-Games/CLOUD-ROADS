@@ -2,6 +2,7 @@ import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Mesh, type Scene } f
 import { createRoadMaterial } from './RoadMaterial';
 import { MAX_ROAD_SEGMENTS, type RoadSpine } from './RoadSpine';
 import { roadFrame } from './RoadFrame';
+import { ROAD_SAMPLES } from './RoadSegment';
 
 export class RoadMesh {
   readonly mesh = new Mesh(new BufferGeometry(), createRoadMaterial());
@@ -10,7 +11,7 @@ export class RoadMesh {
   private anchorZ = 0;
 
   constructor(scene: Scene) {
-    const rows = MAX_ROAD_SEGMENTS * 24 + 1;
+    const rows = MAX_ROAD_SEGMENTS * ROAD_SAMPLES + 1;
     for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2]] as const) {
       this.mesh.geometry.setAttribute(name, new BufferAttribute(new Float32Array(rows * 2 * size), size).setUsage(DynamicDrawUsage));
     }

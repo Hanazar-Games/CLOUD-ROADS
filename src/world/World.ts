@@ -46,8 +46,8 @@ export class World {
       this.corridorVersion = this.road.version;
     }
     this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
-    this.roadSample = this.road.nearZ(Math.min(128, z));
-    const nearRoute = !!this.roadSample && Math.abs(this.roadSample.position.x - x) < 3500;
+    this.roadSample = this.road.nearest(x, z);
+    const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < 3500;
     this.roadDebug.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.roadMesh.update(this.road, this.origin.x, this.origin.z, nearRoute);
   }
@@ -57,6 +57,18 @@ export class World {
     if (!sample) return undefined;
     camera.position.set(sample.position.x - this.origin.x, sample.position.y + 25, sample.position.z - this.origin.z);
     return sample.heading;
+  }
+
+  inspectHairpin(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    const turns = this.road.segments.filter((segment) => segment.kind === 'hairpin');
+    const turn = turns.find((segment) => segment.start.distance > (this.roadSample?.distance ?? 0) + 100) ?? turns[0];
+    if (!turn) return undefined;
+    const sample = turn.sample(0.5);
+    const x = sample.position.x - Math.sin(sample.heading) * 140, z = sample.position.z + Math.cos(sample.heading) * 140;
+    const ground = this.corridor.height(x, z, this.height.sample(x, z));
+    const y = Math.max(sample.position.y + 140, ground + 80);
+    camera.position.set(x - this.origin.x, y, z - this.origin.z);
+    return { heading: sample.heading, pitch: -Math.atan2(y - sample.position.y, 140) };
   }
 
   dispose(): void { this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); }

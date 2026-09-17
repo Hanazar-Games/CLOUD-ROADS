@@ -2,7 +2,7 @@ import { Scene } from 'three';
 import { describe, expect, it } from 'vitest';
 import { RoadMesh } from '../src/road/RoadMesh';
 import { RoadSpine } from '../src/road/RoadSpine';
-import { RoadSegment } from '../src/road/RoadSegment';
+import { ROAD_SAMPLES, RoadSegment } from '../src/road/RoadSegment';
 
 describe('RoadMesh', () => {
   it('raises the outside shoulder on a right-hand curve', () => {
@@ -11,8 +11,8 @@ describe('RoadMesh', () => {
     const road = new RoadMesh(new Scene());
     road.update(spine, 0, 0, true);
     const positions = road.mesh.geometry.getAttribute('position');
-    const lastLeft = 24 * 2;
-    expect(positions.getY(lastLeft)).toBeGreaterThan(positions.getY(lastLeft + 1));
+    const middleLeft = ROAD_SAMPLES;
+    expect(positions.getY(middleLeft)).toBeGreaterThan(positions.getY(middleLeft + 1));
     road.dispose();
   });
 
@@ -26,7 +26,7 @@ describe('RoadMesh', () => {
     const positions = geometry.getAttribute('position');
     const normals = geometry.getAttribute('normal');
     const uv = geometry.getAttribute('uv');
-    const count = spine.segments.length * 24 + 1;
+    const count = spine.samples.length;
     expect(geometry.drawRange.count).toBe((count - 1) * 6);
     for (let i = 0; i < count; i++) {
       const a = i * 2, b = a + 1;

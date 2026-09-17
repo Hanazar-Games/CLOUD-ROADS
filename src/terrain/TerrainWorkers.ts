@@ -1,13 +1,13 @@
 import type { ChunkRequest } from '../world/ChunkPlanner';
 import type { TerrainData } from './TerrainGenerator';
-import type { CorridorPoint } from '../road/RoadCorridor';
+import type { CorridorEdge } from '../road/RoadCorridor';
 
 export interface TerrainBackend {
   readonly capacity: number;
-  generate(request: ChunkRequest, seed: string, road: readonly CorridorPoint[]): Promise<TerrainData>;
+  generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[]): Promise<TerrainData>;
   dispose(): void;
 }
-export interface TerrainJob { id: number; seed: string; request: ChunkRequest; road: readonly CorridorPoint[] }
+export interface TerrainJob { id: number; seed: string; request: ChunkRequest; road: readonly CorridorEdge[] }
 export type TerrainReply = { id: number; data: TerrainData } | { id: number; error: string };
 interface PendingJob {
   id: number;
@@ -40,7 +40,7 @@ export class TerrainWorkers implements TerrainBackend {
     }
   }
 
-  generate(request: ChunkRequest, seed: string, road: readonly CorridorPoint[]): Promise<TerrainData> {
+  generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[]): Promise<TerrainData> {
     const slot = this.slots.find((candidate) => !candidate.pending);
     if (!slot) return Promise.reject(new Error('Terrain worker capacity exceeded'));
     return new Promise((resolve, reject) => {
