@@ -1,4 +1,6 @@
-import { ACESFilmicToneMapping, Color, DirectionalLight, Fog, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, DirectionalLight, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { CLOUD_BASE } from '../atmosphere/CloudField';
+import { CloudSystem } from '../atmosphere/CloudSystem';
 import { FreeCamera } from '../camera/FreeCamera';
 import { DebugUI, element } from '../debug/DebugUI';
 import { InputManager } from '../input/InputManager';
@@ -8,11 +10,13 @@ import { DEFAULT_SEED } from '../world/WorldSeed';
 import { CHUNK_SIZE } from '../world/ChunkPlanner';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区' };
+const cloudNames = { below: '云下', inside: '云中', above: '云上' };
 
 export class Game {
   private readonly canvas = element<HTMLCanvasElement>('world');
   private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
+  private readonly clouds = new CloudSystem(DEFAULT_SEED, this.renderer.extensions.has('EXT_color_buffer_float'));
   private readonly camera = new PerspectiveCamera(65, 1, 0.5, 7000);
   private readonly input = new InputManager(this.canvas);
   private readonly flight = new FreeCamera(this.camera, this.input);
@@ -27,17 +31,18 @@ export class Game {
   private contextLost = false;
 
   constructor() {
-    this.scene.background = new Color(0xa5bec9);
-    this.scene.fog = new Fog(0xa5bec9, 1000, 1950);
+    this.scene.background = this.clouds.background;
+    this.scene.fog = this.clouds.fog;
     this.scene.add(new HemisphereLight(0xe4f1ff, 0x475346, 2.2));
     const sun = new DirectionalLight(0xffefd3, 2.4);
     sun.position.set(-1800, 2600, -1600);
     this.scene.add(sun);
     this.world = new World(this.scene, DEFAULT_SEED);
     this.world.resetCamera(this.camera);
-    element('phase-label').textContent = '/ 07';
+    element('phase-label').textContent = '/ 08';
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
+    this.renderer.info.autoReset = false;
     this.resize();
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
     this.input.onAction = (code) => {
@@ -87,6 +92,23 @@ export class Game {
       if (view) { this.flight.reset(view.heading, view.pitch); this.input.clear(); this.setPaused(false); }
       this.canvas.focus();
     }, { signal: this.events.signal });
+    element('cloud-view').addEventListener('click', () => {
+      const view = this.world.inspectValley(this.camera, CLOUD_BASE - 80);
+      if (view) {
+        this.setClouds(true);
+        this.flight.reset(view.heading, view.pitch);
+        this.input.clear();
+        this.setPaused(false);
+        element('cloud-help').textContent = 'Space 上升穿云，Shift 下降；穿出后拖动视角俯瞰云海。';
+      } else {
+        element('cloud-help').textContent = this.world.roadReady ? '附近没有安全的云下低谷，请移动后重试。' : '路线生成中，请稍候再试。';
+      }
+      this.canvas.focus();
+    }, { signal: this.events.signal });
+    element('cloud-toggle').addEventListener('click', () => {
+      this.setClouds(!this.clouds.enabled);
+      this.canvas.focus();
+    }, { signal: this.events.signal });
     element('wireframe').addEventListener('click', () => {
       this.wireframe = !this.wireframe;
       this.world.chunks.setWireframe(this.wireframe);
@@ -120,6 +142,7 @@ export class Game {
       const world = new World(this.scene, seed);
       this.world.dispose();
       this.world = world;
+      this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
       this.world.roadDebug.enabled = element('road-debug').getAttribute('aria-pressed') === 'true';
       element<HTMLInputElement>('seed').value = seed;
@@ -136,11 +159,18 @@ export class Game {
     element('pause').textContent = paused ? '继续探索' : '暂停探索';
   }
 
+  private setClouds(enabled: boolean): void {
+    this.clouds.enabled = enabled;
+    element('cloud-toggle').setAttribute('aria-pressed', String(enabled));
+    element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留基础远景雾。';
+  }
+
   private resetCamera(): void {
     this.world.resetCamera(this.camera);
     this.flight.reset();
     this.input.clear();
     this.setPaused(false);
+    this.setClouds(this.clouds.enabled);
     this.canvas.focus();
   }
 
@@ -154,12 +184,15 @@ export class Game {
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    this.clouds.resize(this.canvas.width, this.canvas.height);
   };
 
   private update(dt: number): void {
     this.flight.update(dt, this.paused || this.releaseNotes.open);
     this.world.update(this.camera);
-    this.renderer.render(this.scene, this.camera);
+    this.clouds.update(this.paused || this.releaseNotes.open ? 0 : dt, this.camera, this.world.origin);
+    this.renderer.info.reset();
+    this.clouds.render(this.renderer, this.scene, this.camera);
     const { origin, chunks } = this.world;
     const x = this.camera.position.x + origin.x, z = this.camera.position.z + origin.z;
     const y = this.camera.position.y;
@@ -175,6 +208,8 @@ export class Game {
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
       element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
+      element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;
+      element('cloud-region').textContent = this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '云层关闭';
     }
     this.debug.update(() => {
       const ground = this.world.roadReady ? this.world.sampleGround(x, z) : undefined;
@@ -186,7 +221,12 @@ export class Game {
         'Pooled meshes': stats.pooled, 'Allocated meshes': stats.allocated,
         'Pending / queued': `${stats.pending} / ${stats.queued}`, 'Generated chunks': stats.completed,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
+        'GPU textures': this.renderer.info.memory.textures,
         'Origin rebases': origin.count, 'Flight speed': `${this.flight.speed} m/s`, Seed: this.world.seed,
+        'Cloud region': this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '关闭',
+        'Cloud base / top': `${this.clouds.sample.base.toFixed(0)} / ${this.clouds.sample.top.toFixed(0)} m`,
+        'Cloud density': `${((this.clouds.enabled ? this.clouds.sample.density : 0) * 100).toFixed(0)}%`,
+        'Fog near / far': `${this.clouds.fog.near.toFixed(0)} / ${this.clouds.fog.far.toFixed(0)} m`,
         'Ground biome': ground ? biomeNames[ground.biome.kind] : '—',
         'Ground altitude': ground ? `${ground.height.toFixed(0)} m` : '—',
         'Ground slope': ground ? `${(Math.acos(ground.normalY) * 180 / Math.PI).toFixed(1)}°` : '—',
@@ -210,6 +250,7 @@ export class Game {
     this.events.abort();
     this.input.dispose();
     this.world.dispose();
+    this.clouds.dispose();
     this.renderer.dispose();
   }
 }

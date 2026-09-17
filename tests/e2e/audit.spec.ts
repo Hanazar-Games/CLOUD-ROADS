@@ -46,11 +46,14 @@ test('keeps ground readings aligned with the displayed coordinates during fast f
 test('keeps all controls reachable in a short desktop window', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
   await page.goto('/');
-  await expect(page.locator('#bridge-view')).toBeEnabled({ timeout: 20_000 });
-  await page.locator('#bridge-view').scrollIntoViewIfNeeded();
-  const bounds = await page.locator('#bridge-view').boundingBox();
-  expect(bounds!.y + bounds!.height).toBeLessThan(450);
-  await page.locator('#bridge-view').click({ timeout: 3000 });
+  for (const id of ['bridge-view', 'cloud-view', 'cloud-toggle', 'pause']) {
+    const button = page.locator(`#${id}`);
+    await expect(button).toBeEnabled({ timeout: 20_000 });
+    await button.scrollIntoViewIfNeeded();
+    const bounds = await button.boundingBox();
+    expect(bounds!.y + bounds!.height).toBeLessThan(450);
+    await button.click({ timeout: 3000 });
+  }
 });
 
 test('recovers from a failed terrain worker without reloading the page', async ({ page }) => {
@@ -100,9 +103,11 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.1');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.2');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('穿云与云海');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');
   const position = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(450);
@@ -149,6 +154,7 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   expect(Number(await page.locator('[data-metric="Allocated meshes"]').textContent())).toBe(289);
+  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('4');
   expect(errors).toEqual([]);
 });
 

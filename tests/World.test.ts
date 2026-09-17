@@ -71,6 +71,7 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
   expect(world.inspectRoad(camera)).toBeUndefined();
   expect(world.inspectHairpin(camera)).toBeUndefined();
   expect(world.inspectBridge(camera)).toBeUndefined();
+  expect(world.inspectValley(camera, 1720)).toBeUndefined();
   expect(camera.position).toEqual(position);
   generating.mockRestore();
   world.update(camera);
@@ -82,4 +83,28 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
   expect(view.pitch).toBeLessThan(0);
   world.dispose();
   expect(scene.children).toHaveLength(0);
+});
+
+it('finds a safe cloud approach above coupled valley terrain, including after a rebase', () => {
+  const world = new World(new Scene(), 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
+  world.resetCamera(camera);
+  while (!world.road.update(128, 8)) { /* Load the valley corridor. */ }
+  world.update(camera);
+  const view = world.inspectValley(camera, 1720);
+  expect(view).toBeDefined();
+  expect(camera.position.y).toBe(1720);
+  expect(camera.position.y - world.sampleGround(camera.position.x, camera.position.z).height).toBeGreaterThanOrEqual(80);
+  const position = camera.position.clone();
+  world.origin.x = 10240;
+  world.origin.z = -10240;
+  camera.position.x -= world.origin.x;
+  camera.position.z -= world.origin.z;
+  expect(world.inspectValley(camera, 1720)).toBeDefined();
+  expect(camera.position.x + world.origin.x).toBe(position.x);
+  expect(camera.position.z + world.origin.z).toBe(position.z);
+  const local = camera.position.clone();
+  vi.spyOn(world.height, 'sample').mockReturnValue(4000);
+  expect(world.inspectValley(camera, 1720)).toBeUndefined();
+  expect(camera.position).toEqual(local);
+  world.dispose();
 });

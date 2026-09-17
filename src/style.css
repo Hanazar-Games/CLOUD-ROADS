@@ -34,6 +34,8 @@ input[type=range] { width: 100%; height: 3px; accent-color: #d6e6c1; margin: 17p
 .actions button { min-height: 32px; padding: 8px 10px; font-size: 11px; color: #e2e9e2; background: #ffffff08; border: 1px solid #ffffff30; border-radius: 2px; }
 .actions button:hover, .actions button[aria-pressed=true] { background: #d6e6c12b; border-color: #d6e6c1; }
 .actions button:disabled { opacity: .4; cursor: default; }
+#cloud-region { align-self: center; font-size: 10px; color: #d6e6c1; }
+#cloud-help { margin: 10px 0 12px; font-size: 10px; line-height: 1.7; color: #d0d9d8; }
 .crosshair { position: absolute; top: 50%; left: 50%; font: 19px monospace; opacity: .45; transform: translate(-50%, -50%); pointer-events: none; }
 #notice { position: absolute; bottom: 124px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 1px; padding: 10px 18px; background: #14232a80; border: 1px solid #ffffff24; border-radius: 30px; pointer-events: none; white-space: nowrap; }
 footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 25px 36px; display: flex; justify-content: space-between; align-items: end; background: linear-gradient(transparent, #101f2ac4); pointer-events: none; }

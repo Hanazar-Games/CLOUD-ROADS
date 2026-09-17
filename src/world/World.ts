@@ -85,6 +85,29 @@ export class World {
     return sample.heading;
   }
 
+  inspectValley(camera: PerspectiveCamera, altitude: number): { heading: number; pitch: number } | undefined {
+    if (!this.roadReady) return undefined;
+    const startX = camera.position.x + this.origin.x, startZ = camera.position.z + this.origin.z;
+    for (let radius = 0; radius <= 24; radius++) {
+      for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
+        const x = startX + dx * 128, z = startZ + dz * 128;
+        const ground = this.corridor.height(x, z, this.height.sample(x, z));
+        if (ground > altitude - 80) continue;
+        camera.position.set(x - this.origin.x, altitude, z - this.origin.z);
+        let heading = 0, lowest = Infinity;
+        for (let direction = 0; direction < 8; direction++) {
+          const angle = direction * Math.PI / 4;
+          const px = x + Math.sin(angle) * 400, pz = z - Math.cos(angle) * 400;
+          const ahead = this.corridor.height(px, pz, this.height.sample(px, pz));
+          if (ahead < lowest) { lowest = ahead; heading = angle; }
+        }
+        return { heading, pitch: 0.08 };
+      }
+    }
+    return undefined;
+  }
+
   inspectHairpin(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     if (!this.roadReady) return undefined;
     const turns = this.road.segments.filter((segment) => segment.kind === 'hairpin');
