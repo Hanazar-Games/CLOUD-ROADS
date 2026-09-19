@@ -45,17 +45,18 @@ export class CloudSystem {
     this.driftX = this.driftZ = 0;
   }
 
-  update(dt: number, camera: PerspectiveCamera, origin: { x: number; z: number }, weather: Readonly<WeatherProfile> = weatherProfiles.clear, shelter = 0): void {
+  update(dt: number, camera: PerspectiveCamera, origin: { x: number; z: number }, weather: Readonly<WeatherProfile> = weatherProfiles.clear, shelter = 0, distance = 2048): void {
     this.driftX = wrapCloudCoordinate(this.driftX + dt * 4);
     this.driftZ = wrapCloudCoordinate(this.driftZ + dt * 1.5);
     const x = wrapCloudCoordinate(camera.position.x + origin.x + this.driftX);
     const z = wrapCloudCoordinate(camera.position.z + origin.z + this.driftZ);
     this.sample = this.field.sample(x, camera.position.y, z);
     const density = this.enabled ? this.sample.density : 0;
-    this.fog.near = Math.min(this.enabled ? this.sample.fogNear : 1000, weather.near);
-    this.fog.far = Math.min(this.enabled ? this.sample.fogFar : 1950, weather.far);
-    this.fog.near += (1000 - this.fog.near) * shelter;
-    this.fog.far += (1950 - this.fog.far) * shelter;
+    const near = 1000 * distance / 2048, far = 1950 * distance / 2048;
+    this.fog.near = Math.min(near + (12 - near) * density, weather === weatherProfiles.clear ? near : weather.near);
+    this.fog.far = Math.min(far + (110 - far) * density, weather === weatherProfiles.clear ? far : weather.far);
+    this.fog.near += (near - this.fog.near) * shelter;
+    this.fog.far += (far - this.fog.far) * shelter;
     camera.updateMatrixWorld();
     const uniforms = this.material.uniforms;
     uniforms.phase.value.set(x, z);

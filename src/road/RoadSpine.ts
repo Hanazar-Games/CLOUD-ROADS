@@ -34,28 +34,28 @@ export class RoadSpine {
     return this.sampleCache;
   }
 
-  update(z: number, budget = 4): boolean {
+  update(z: number, budget = 4, halo = ROAD_HALO): boolean {
     z = Math.min(z, this.generator.start.position.z);
     if (this.segments.length && this.segments[0].start.distance > 0
-      && this.segments[0].start.position.z < Math.min(this.generator.start.position.z, z + ROAD_HALO) - 0.001) {
+      && this.segments[0].start.position.z < Math.min(this.generator.start.position.z, z + halo) - 0.001) {
       this.segments.length = 0;
       this.version++;
     }
     const deadline = performance.now() + 2;
     for (let i = 0; i < budget; i++) {
       const end = this.segments.at(-1)?.end ?? this.generator.start;
-      if (end.position.z <= z - ROAD_HALO) break;
+      if (end.position.z <= z - halo) break;
       if (i > 0 && performance.now() >= deadline) break;
       this.segments.push(this.generator.next(end));
       this.generated++;
       this.version++;
       if (this.segments.length > MAX_ROAD_SEGMENTS) this.segments.shift();
     }
-    while (this.segments.length > 1 && this.segments[0].end.position.z > z + ROAD_HALO) {
+    while (this.segments.length > 1 && this.segments[0].end.position.z > z + halo) {
       this.segments.shift();
       this.version++;
     }
-    return (this.segments.at(-1)?.end.position.z ?? Infinity) <= z - ROAD_HALO;
+    return (this.segments.at(-1)?.end.position.z ?? Infinity) <= z - halo;
   }
 
   nearest(x: number, z: number): RoadSample | undefined {

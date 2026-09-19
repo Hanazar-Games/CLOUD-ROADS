@@ -1,11 +1,15 @@
 import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
 import type { TerrainKind } from '../world/WorldOptions';
+import { MountainRanges } from './MountainRanges';
 
 export class HeightFunction {
   readonly noise: Noise;
+  readonly ranges: MountainRanges;
 
-  constructor(seed: string, readonly terrain: TerrainKind = 'alpine') { this.noise = new Noise(hashSeed(seed)); }
+  constructor(seed: string, readonly terrain: TerrainKind = 'alpine') { this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed); }
+
+  route(z: number) { return this.terrain === 'alpine' ? this.ranges.sample(z) : undefined; }
 
   sample(x: number, z: number): number {
     const warpX = this.noise.fractal(x / 4200, z / 4200, 2) * 650;
@@ -26,6 +30,11 @@ export class HeightFunction {
       const dunes = Math.sin(wx / 115 + this.noise.sample(wx / 700, wz / 700) * 3 + wz / 330) * 22;
       return 220 + macro * 0.24 + t * t * (3 - 2 * t) * 1050 + medium * 0.2 + dunes * (1 - t) + detail * 0.15;
     }
-    return 140 + macro + ranges + medium + detail;
+    const guide = this.ranges.sample(z), lateral = Math.abs(x - guide.x);
+    const flank = Math.max(0, Math.min(1, (lateral - 350 + guide.level * 150) / 1400));
+    const relief = flank * flank * (3 - 2 * flank);
+    const saddle = Math.min(1, Math.abs(z - this.ranges.passZ(guide.id)) / 1600);
+    return guide.height + relief * (180 + ranges * (0.12 + guide.level * 0.78) + macro * 0.12)
+      + medium * (0.1 + saddle * 0.3) + detail * 0.3;
   }
 }

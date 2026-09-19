@@ -69,7 +69,9 @@ it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real c
     for (const center of profile.centers) for (const offset of [-5, 0, 5]) {
       const start = point(a, center + offset), finish = point(b, center + offset), direction = finish.clone().sub(start);
       ray.far = direction.length(); ray.set(start, direction.normalize());
-      expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals, mesh.equipment, mesh.fans])).toHaveLength(0);
+      const objects = [mesh.lining, mesh.cover, mesh.portals, mesh.equipment, mesh.fans];
+      const hits = ray.intersectObjects(objects).map(hit => ({ part: objects.indexOf(hit.object as typeof mesh.lining), point: hit.point.toArray(), distance: a.distance }));
+      expect(hits, JSON.stringify({ hits, span: [span.start.distance, span.end.distance], start: start.toArray(), finish: finish.toArray() })).toHaveLength(0);
     }
   }
   mesh.dispose();
@@ -94,11 +96,14 @@ it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof a
   expect(ray.intersectObject(mesh.cover)[0]).toBeDefined();
   expect(mesh.lights.count).toBeGreaterThan(0);
   expect(mesh.equipment.count).toBeGreaterThan(mesh.lights.count);
+  const geometry = mesh.cover.geometry;
+  mesh.update(spans, corridor, hill, 2, 0, 0, true);
+  expect(mesh.cover.geometry).toBe(geometry);
   const before = mesh.lining.geometry.getAttribute('position').array.slice();
-  mesh.update(spans, corridor, hill, 1, 5120, -5120, true);
+  mesh.update(spans, corridor, hill, 2, 5120, -5120, true);
   expect(mesh.lining.geometry.getAttribute('position').array).toEqual(before);
   expect(mesh.lining.position.x).toBe(-5120);
-  mesh.update([], corridor, hill, 2, 5120, -5120, true);
+  mesh.update([], corridor, hill, 3, 5120, -5120, true);
   expect(mesh.lining.visible).toBe(false);
   mesh.dispose();
   expect(scene.children).toHaveLength(0);

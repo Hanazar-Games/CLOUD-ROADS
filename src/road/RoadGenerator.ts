@@ -3,8 +3,9 @@ import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
 import { RoadSegment, type MountainPlan, type RoadControlPoint } from './RoadSegment';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import type { MountainGuide } from '../terrain/MountainRanges';
 
-export interface RoadTerrain { sample(x: number, z: number): number }
+export interface RoadTerrain { sample(x: number, z: number): number; route?(z: number): MountainGuide | undefined }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
 
 export class RoadGenerator {
@@ -17,13 +18,17 @@ export class RoadGenerator {
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    const guide = this.terrain.route?.(start.position.z - 900);
     let mountain = start.mountain;
     if (this.options.roadType === 'mountain' && !mountain && start.distance >= start.nextMountain) {
       const gap = this.terrain.sample(start.position.x, start.position.z - 500) - start.position.y;
-      if (Math.abs(gap) > 80) mountain = { stage: 0, side: this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1, grade: Math.sign(gap) * 0.06 };
+      if (Math.abs(gap) > 80 || guide && Math.abs(guide.grade) > 0.023) mountain = {
+        stage: 0, side: guide ? guide.x > start.position.x ? 1 : -1 : this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1,
+        grade: guide ? clamp((guide.height - start.position.y) / 1800, 0.06) : Math.sign(gap) * 0.06 };
     }
     if (mountain) return this.mountainSegment(start, mountain);
-    const desiredHeading = this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
+    const desiredHeading = guide ? clamp(Math.atan2(guide.x - start.position.x, 900) + this.noise.sample(start.distance / 1300, 17) * 0.16, 0.85)
+      : this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
     const gradeLimit = this.options.roadType === 'highway' ? 0.04 : 0.06;
@@ -44,7 +49,8 @@ export class RoadGenerator {
         const curvatureCost = (turn / 18) ** 2 * 0.25;
         const slopeCost = (grade / 0.06) ** 2 * 0.025;
         const repetitionCost = (heading - desiredHeading) ** 2 * 0.8;
-        const score = terrainCost + cliffCost + curvatureCost + slopeCost + repetitionCost - scenicReward;
+        const routeCost = guide ? Math.abs(segment.end.position.y - guide.height) / 150 + Math.abs(segment.end.position.x - guide.x) / 1500 : 0;
+        const score = terrainCost + cliffCost + curvatureCost + slopeCost + repetitionCost + routeCost - scenicReward;
         if (score < bestScore) { bestScore = score; best = segment; }
       }
     }

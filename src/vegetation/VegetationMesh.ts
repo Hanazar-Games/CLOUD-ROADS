@@ -56,6 +56,8 @@ export class VegetationMesh {
   private dirty = false;
   private anchorX = 0;
   private anchorZ = 0;
+  private centerX = 0;
+  private centerZ = 0;
   enabled = true;
 
   constructor(scene: Scene) {
@@ -79,6 +81,10 @@ export class VegetationMesh {
 
   removeChunk(key: string): void { if (this.chunks.delete(key)) this.dirty = true; }
 
+  setViewCenter(x: number, z: number): void {
+    if (x !== this.centerX || z !== this.centerZ) { this.centerX = x; this.centerZ = z; this.dirty = true; }
+  }
+
   update(originX: number, originZ: number): void {
     if (this.dirty) {
       this.dirty = false;
@@ -86,6 +92,7 @@ export class VegetationMesh {
       this.anchorZ = originZ;
       for (const mesh of this.meshes) mesh.count = 0;
       for (const { x, z, plants } of this.chunks.values()) for (let i = 0; i < plants.length; i += 7) {
+        if (Math.abs(x - this.centerX) > VIEW_RADIUS || Math.abs(z - this.centerZ) > VIEW_RADIUS) break;
         const kind = plants[i + 5], mesh = kind === 0 ? this.trees : kind === 1 ? this.cacti : kind === 2 ? this.broadleaf : this.shrubs;
         if (mesh.count >= CAPACITY) throw new Error('Vegetation instance capacity exceeded');
         const scale = plants[i + 3], angle = plants[i + 4], cos = Math.cos(angle) * scale, sin = Math.sin(angle) * scale;

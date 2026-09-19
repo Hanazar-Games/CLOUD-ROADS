@@ -83,6 +83,8 @@ test('renders viaducts, inspects a bridge and rebuilds the same bridges after ch
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/');
+  await page.locator('#terrain-kind').selectOption('forest');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
   const button = page.getByRole('button', { name: '桥梁视角' });
   await expect(button).toBeEnabled({ timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });

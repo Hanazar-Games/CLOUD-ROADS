@@ -42,14 +42,14 @@ export class World {
   readonly signs: RoadSigns;
   services: readonly ServiceArea[] = [];
   serviceView: { heading: number; pitch: number } | undefined;
-  serviceSearchProgress: number | null = null;
+  passes: readonly RoadSample[] = [];
   tunnels: readonly TunnelSpan[] = [];
   shelter = 0;
   bridges: readonly BridgeSpan[] = [];
   private readonly bridgeDetector: BridgeDetector;
   private readonly tunnelDetector: TunnelDetector;
   private readonly servicePlanner: ServicePlanner;
-  private serviceScout: { road: RoadSpine; id: number } | undefined;
+  private scout: { road: RoadSpine; kind: 'service' | 'pass'; id: number; progress: number } | undefined;
   private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
   roadReady = false;
@@ -75,7 +75,7 @@ export class World {
   }
 
   resetCamera(camera: PerspectiveCamera): void {
-    this.serviceScout = undefined; this.serviceSearchProgress = null; this.serviceView = undefined;
+    this.scout = undefined; this.serviceView = undefined;
     this.origin.reset();
     this.chunks.setOrigin(0, 0);
     camera.position.set(128, this.height.sample(128, 128) + 450, 128);
@@ -85,41 +85,82 @@ export class World {
     if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
-    this.roadReady = this.road.update(z);
+    this.roadReady = this.road.update(z, 4, Math.max(4000, (this.chunks.viewRadius + 1) * 256 + 1600));
     if (this.roadReady && this.corridorVersion !== this.road.version) {
       this.services = this.servicePlanner.detect(this.road.samples);
       const clear = (span: { start: RoadSample; end: RoadSample }) => !this.services.some(site => site.start < span.end.distance && site.end > span.start.distance);
       this.bridges = this.bridgeDetector.detect(this.road.samples).filter(clear);
       this.tunnels = this.tunnelDetector.detect(this.road.samples, this.bridges).filter(clear);
+      const passes: RoadSample[] = [], samples = this.road.samples;
+      if (this.options.terrain === 'alpine') {
+        const first = this.height.ranges.sample(samples[0].position.z).id, last = this.height.ranges.sample(samples.at(-1)!.position.z).id;
+        for (let id = first; id <= last; id++) {
+          const z = this.height.ranges.passZ(id);
+          if (samples[0].position.z < z + 600 || samples.at(-1)!.position.z > z - 600) continue;
+          const nearby = samples.filter(sample => Math.abs(sample.position.z - z) < 500);
+          if (nearby.length) passes.push(nearby.reduce((best, sample) => sample.position.y > best.position.y ? sample : best));
+        }
+      }
+      this.passes = passes;
       this.corridor = RoadCorridor.fromSamples(this.road.samples, this.bridges, this.options, this.tunnels, this.services.map(site => site.ground));
       this.corridorVersion = this.road.version;
     }
     this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
     this.roadSample = this.road.nearest(x, z);
-    const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < 3500;
+    const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < this.chunks.viewRadius * 256 + 1500;
     this.roadDebug.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.roadMesh.update(this.road, this.origin.x, this.origin.z, nearRoute, this.services);
     this.bridgeMesh.update(this.bridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.tunnelMesh.update(this.tunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.road.samples, this.tunnels, this.bridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.services);
     this.serviceMesh.update(this.services, this.corridorVersion, this.origin.x, this.origin.z);
-    this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z);
+    this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes);
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
-    if (explore && this.serviceScout) this.advanceServiceView(camera);
+    if (explore && this.scout) this.advanceServiceView(camera);
+  }
+
+  get searching(): boolean { return !!this.scout; }
+  get serviceSearchProgress(): number | null { return this.scout?.kind === 'service' ? this.scout.progress : null; }
+  get passSearchProgress(): number | null { return this.scout?.kind === 'pass' ? this.scout.progress : null; }
+  get routeStage(): string {
+    const stage = this.height.route(this.roadSample?.position.z ?? 128)?.stage;
+    return stage ? { valley: '山谷', climb: '上山', pass: '垭口', descent: '下山' }[stage] : '自由路线';
+  }
+
+  requestPassView(): void {
+    if (this.scout || this.options.terrain !== 'alpine') return;
+    const z = this.roadSample?.position.z ?? 128;
+    let id = this.height.ranges.sample(z).id;
+    while (this.height.ranges.passZ(id) > z - 1000) id++;
+    this.scout = { road: new RoadSpine(this.seed, this.height, this.options), kind: 'pass', id, progress: 0 };
   }
 
   requestServiceView(): void {
-    if (this.serviceScout) return;
+    if (this.scout) return;
     let id = Math.max(1, Math.floor((this.roadSample?.distance ?? 0) / 15000));
     while (serviceTarget(this.seed, id) < (this.roadSample?.distance ?? 0) + 1000) id++;
-    this.serviceScout = { road: new RoadSpine(this.seed, this.height, this.options), id };
-    this.serviceSearchProgress = 0;
+    this.scout = { road: new RoadSpine(this.seed, this.height, this.options), kind: 'service', id, progress: 0 };
   }
 
   private advanceServiceView(camera: PerspectiveCamera): void {
-    const scout = this.serviceScout!, target = serviceTarget(this.seed, scout.id) + SERVICE_SEARCH_RADIUS + 4;
+    const scout = this.scout!;
+    if (scout.kind === 'pass') {
+      const z = this.height.ranges.passZ(scout.id), ready = scout.road.update(z, 4, 1000);
+      scout.progress = Math.min(1, (128 - (scout.road.segments.at(-1)?.end.position.z ?? 128)) / (1128 - z));
+      if (!ready) return;
+      const sample = scout.road.samples.filter(point => Math.abs(point.position.z - z) < 500)
+        .reduce((best, point) => point.position.y > best.position.y ? point : best);
+      const x = sample.position.x + Math.cos(sample.heading) * 100 - Math.sin(sample.heading) * 140;
+      const pz = sample.position.z + Math.sin(sample.heading) * 100 + Math.cos(sample.heading) * 140;
+      const y = Math.max(sample.position.y + 85, this.height.sample(x, pz) + 35);
+      camera.position.set(x - this.origin.x, y, pz - this.origin.z);
+      this.serviceView = { heading: Math.atan2(sample.position.x - x, pz - sample.position.z), pitch: -Math.atan2(y - sample.position.y, Math.hypot(x - sample.position.x, pz - sample.position.z)) };
+      this.scout = undefined;
+      return;
+    }
+    const target = serviceTarget(this.seed, scout.id) + SERVICE_SEARCH_RADIUS + 4;
     const ready = scout.road.advanceToDistance(target);
-    this.serviceSearchProgress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / target);
+    scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / target);
     if (!ready) return;
     const site = this.servicePlanner.detect(scout.road.samples).find(site => site.id === scout.id);
     if (!site) throw new Error('Service area search did not produce a complete site');
@@ -128,7 +169,7 @@ export class World {
     point.y = Math.max(point.y, ground + 35);
     camera.position.set(point.x - this.origin.x, point.y, point.z - this.origin.z);
     this.serviceView = { heading: Math.atan2(pad.x - point.x, point.z - pad.z), pitch: -Math.atan2(point.y - pad.y, Math.hypot(pad.x - point.x, pad.z - point.z)) };
-    this.serviceScout = undefined; this.serviceSearchProgress = null;
+    this.scout = undefined;
   }
 
   private tunnelShelter(x: number, y: number, z: number): number {
@@ -233,7 +274,7 @@ export class World {
   dispose(): void {
     this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
     this.tunnelMesh.dispose(); this.furniture.dispose();
-    this.serviceMesh.dispose(); this.serviceScout = undefined;
+    this.serviceMesh.dispose(); this.scout = undefined;
     this.signs.dispose();
   }
 }

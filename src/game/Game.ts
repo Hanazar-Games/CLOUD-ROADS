@@ -9,7 +9,7 @@ import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
 import { DEFAULT_SEED } from '../world/WorldSeed';
-import { CHUNK_SIZE } from '../world/ChunkPlanner';
+import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
@@ -34,6 +34,7 @@ export class Game {
   private wireframe = false;
   private hudTime = 0;
   private contextLost = false;
+  private viewRadius = VIEW_RADIUS;
 
   constructor() {
     this.scene.background = this.sky.sun.haze;
@@ -104,6 +105,14 @@ export class Game {
       element('vegetation-toggle').setAttribute('aria-pressed', String(vegetation.enabled));
       this.canvas.focus();
     }, { signal: this.events.signal });
+    element('view-distance').addEventListener('change', () => {
+      const radius = Number(element<HTMLSelectElement>('view-distance').value);
+      if (!VIEW_RADII.some(value => value === radius)) return;
+      this.viewRadius = radius;
+      this.world.chunks.setViewRadius(radius);
+      this.camera.far = Math.max(7000, radius * CHUNK_SIZE * 2);
+      this.camera.updateProjectionMatrix();
+    }, { signal: this.events.signal });
     element('pause').addEventListener('click', () => {
       this.setPaused(!this.paused);
       this.canvas.focus();
@@ -152,6 +161,11 @@ export class Game {
       this.setPaused(false);
       this.canvas.focus();
     }, { signal: this.events.signal });
+    element('pass-view').addEventListener('click', () => {
+      this.world.requestPassView();
+      this.setPaused(false);
+      this.canvas.focus();
+    }, { signal: this.events.signal });
     element('cloud-view').addEventListener('click', () => {
       const view = this.world.inspectValley(this.camera, CLOUD_BASE - 80);
       if (view) {
@@ -197,6 +211,7 @@ export class Game {
       const world = new World(this.scene, seed, options);
       this.world.dispose();
       this.world = world;
+      this.world.chunks.setViewRadius(this.viewRadius);
       this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
       this.world.chunks.vegetation.enabled = element('vegetation-toggle').getAttribute('aria-pressed') === 'true';
@@ -279,7 +294,7 @@ export class Game {
     }
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter);
-    this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter);
+    this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
     this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
     this.world.serviceMesh.windows.material.emissiveIntensity = this.sky.sun.night * 0.35;
     this.world.roadMesh.mesh.material.roughness = this.weather.profile.rain ? 0.34 : 0.95;
@@ -296,7 +311,7 @@ export class Game {
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
       element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
-        : stats.queued > 0 ? `山地生成中 · ${stats.active} / 289 分块`
+        : stats.queued > 0 ? `山地生成中 · ${stats.active} / ${stats.target} 分块`
         : this.input.pointerLockFailed ? '鼠标锁定不可用 · 请拖动观察' : '拖动视角 · 双击锁定鼠标 · Esc 释放';
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
@@ -304,8 +319,12 @@ export class Game {
       element<HTMLButtonElement>('tunnel-view').disabled = !this.world.roadReady || !this.world.tunnels.length;
       element<HTMLButtonElement>('lights-view').disabled = !this.world.roadReady || !this.world.furniture.lampPositions.length;
       const searching = this.world.serviceSearchProgress;
-      element<HTMLButtonElement>('service-view').disabled = searching !== null;
+      element<HTMLButtonElement>('service-view').disabled = this.world.searching;
       element('service-view').textContent = searching === null ? '下一服务区' : `定位中 · ${Math.round(searching * 100)}%`;
+      const passSearch = this.world.passSearchProgress;
+      element<HTMLButtonElement>('pass-view').disabled = this.world.searching || this.world.options.terrain !== 'alpine';
+      element('pass-view').textContent = passSearch === null ? '下一垭口' : `定位中 · ${Math.round(passSearch * 100)}%`;
+      element('route-stage').textContent = this.world.routeStage;
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;
@@ -318,6 +337,8 @@ export class Game {
         'Local X / Z': `${this.camera.position.x.toFixed(1)} / ${this.camera.position.z.toFixed(1)}`,
         Chunk: `${Math.floor(x / CHUNK_SIZE)}, ${Math.floor(z / CHUNK_SIZE)}`,
         'Active chunks': stats.active, 'LOD 0 / 1 / 2': `${stats.high} / ${stats.medium} / ${stats.low}`,
+        'View distance': `${(this.viewRadius * CHUNK_SIZE / 1000).toFixed(2)} km`, 'Target chunks': stats.target,
+        'Mountain stage': this.world.routeStage, 'Mountain passes': this.world.passes.length,
         'Pooled meshes': stats.pooled, 'Allocated meshes': stats.allocated,
         'Pending / queued': `${stats.pending} / ${stats.queued}`, 'Generated chunks': stats.completed,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,

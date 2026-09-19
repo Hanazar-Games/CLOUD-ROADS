@@ -72,6 +72,7 @@ test('keeps cloud preferences across seed changes and freezes the image while pa
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   const clip = { x: 500, y: 200, width: 400, height: 400 };
   const before = await page.screenshot({ clip });
+  const textures = await metric('GPU textures').textContent();
   await page.waitForTimeout(500);
   expect(await page.screenshot({ clip })).toEqual(before);
   await page.locator('#world').evaluate((canvas) => {
@@ -81,7 +82,7 @@ test('keeps cloud preferences across seed changes and freezes the image while pa
   });
   await expect(page.locator('#error')).toBeVisible();
   await expect(page.locator('#error')).toBeHidden();
-  await expect(metric('GPU textures')).toHaveText('6');
+  await expect(metric('GPU textures')).toHaveText(textures!);
   expect(await page.screenshot({ clip })).toEqual(before);
   await page.locator('#cloud-toggle').click();
   await expect(metric('Cloud region')).toHaveText('关闭');

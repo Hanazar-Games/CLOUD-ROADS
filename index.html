@@ -40,6 +40,12 @@
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
         <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
         <details class="world-options" open>
+          <summary>渲染距离</summary>
+          <label for="view-distance">周围地形范围</label>
+          <select id="view-distance" aria-describedby="view-distance-help"><option value="6">约 1.5 公里 · 轻量</option><option value="8" selected>约 2 公里 · 标准</option><option value="12">约 3 公里 · 开阔</option><option value="16">约 4 公里 · 远景</option></select>
+          <p class="panel-help" id="view-distance-help">即时切换，保留当前位置。更远的视距需要更多显存与加载时间；植被细节集中在附近，云雾仍会影响能见度。</p>
+        </details>
+        <details class="world-options" open>
           <summary>天气与时间</summary>
           <label for="weather-kind">天气</label>
           <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="rain">雨天</option><option value="fog">浓雾</option></select>
@@ -56,6 +62,8 @@
         <div class="actions road-actions"><button id="tunnel-view" type="button" disabled>隧道入口</button><button id="lights-view" type="button" disabled>灯光路段</button></div>
         <div class="actions road-actions"><button id="lights-toggle" type="button" aria-pressed="true">路灯</button></div>
         <div class="actions road-actions"><button id="service-view" type="button">下一服务区</button></div>
+        <div class="actions road-actions"><button id="pass-view" type="button">下一垭口</button><span id="route-stage">山谷</span></div>
+        <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>
         <p class="panel-help">服务区按道路里程约 10–20 公里一处。点击可前往下一处，定位期间可继续探索，返回起点可取消。</p>
         <p class="panel-help" id="structure-help">路灯分段出现，入夜点亮；隧道在有山体覆盖的路段生成。</p>
         <div class="actions road-actions"><button id="cloud-view" type="button" disabled>穿云起点</button><button id="cloud-toggle" type="button" aria-pressed="true">云层</button><span id="cloud-region">云上</span></div>

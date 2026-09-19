@@ -36,7 +36,7 @@ export class RoadSigns {
     scene.add(this.boards, this.posts);
   }
 
-  update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], services: readonly ServiceArea[], version: number, originX: number, originZ: number): void {
+  update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], services: readonly ServiceArea[], version: number, originX: number, originZ: number, passes: readonly RoadSample[] = []): void {
     if (version !== this.version) {
       this.version = version; this.anchorX = samples[0]?.position.x ?? 0; this.anchorZ = samples[0]?.position.z ?? 0;
       this.boards.count = this.posts.count = 0;
@@ -60,6 +60,11 @@ export class RoadSigns {
         p.x += sample.tangent.x * sign * 2.7; p.z += sample.tangent.z * sign * 2.7;
         this.add(p, sample.heading + (flip ? Math.PI : 0), 6, 0.55, 5);
       }
+      for (const span of tunnels) for (let i = 1; i < span.samples.length; i++) {
+        const sample = span.samples[i];
+        if (Math.floor(sample.distance / 96) === Math.floor(span.samples[i - 1].distance / 96)) continue;
+        for (const center of this.profile.centers) this.add(this.position(sample, center - this.profile.halfWidth - 0.41, 2.2), sample.heading - Math.PI / 2, 1.2, 0.4, 11);
+      }
       for (const site of services) {
         for (const pad of site.ground.pads) {
           const side = pad.side, heading = pad.heading + (side < 0 ? Math.PI : 0);
@@ -67,10 +72,18 @@ export class RoadSigns {
           this.add(padPoint(pad, -side * 10, -12, 2.2), heading, 1.2, 1.2, 2, 2.4);
           this.add(padPoint(pad, side * 14, -49.6, 5.62), pad.heading, 3.5, 0.5, 3);
           this.add(padPoint(pad, side * 2.9, 28, 3.8), pad.heading + side * Math.PI / 2, 2, 0.6, 4);
+          this.add(padPoint(pad, side * 3.8, 28, 4.65), pad.heading + side * Math.PI / 2, 5, 0.65, 23);
           const target = site.sample.distance - side * 720;
           const sample = samples.reduce((best, point) => Math.abs(point.distance - target) < Math.abs(best.distance - target) ? point : best);
           if (Math.abs(sample.distance - target) < 5) this.add(this.position(sample, side * (this.profile.outerHalfWidth + 3), 4.5), sample.heading + (side < 0 ? Math.PI : 0), 4, 2.2, 0, 4.7);
         }
+      }
+      for (const sample of passes) for (const side of [-1, 1]) {
+        const point = this.position(sample, side * (this.profile.outerHalfWidth + 2.5), 3.5), heading = sample.heading + (side < 0 ? Math.PI : 0);
+        this.add(point, heading, 2.5, 1.1, 22, 3.7);
+        const digits = String(Math.round(sample.position.y));
+        [...digits].forEach((digit, i) => this.add({ x: point.x + Math.cos(heading) * (i - (digits.length - 1) / 2) * 0.42,
+          y: point.y - 0.85, z: point.z + Math.sin(heading) * (i - (digits.length - 1) / 2) * 0.42 }, heading, 0.43, 0.52, 12 + Number(digit)));
       }
       this.tiles.needsUpdate = true;
       for (const mesh of [this.boards, this.posts]) {

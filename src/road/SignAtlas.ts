@@ -1,6 +1,6 @@
 import { DataTexture, LinearFilter, LinearMipmapLinearFilter, SRGBColorSpace } from 'three';
 
-export const signLabels = ['SERVICE\n500 M', 'SERVICE\nEXIT', 'P', 'FUEL', 'WC', 'TUNNEL', '40', '80', 'KM', '<', '>', 'EXIT >', ...'0123456789'];
+export const signLabels = ['SERVICE\n500 M', 'SERVICE\nEXIT', 'P', 'FUEL', 'WC', 'TUNNEL', '40', '80', 'KM', '<', '>', 'EXIT >', ...'0123456789', 'PASS', 'REST'];
 const glyphs: Record<string, number[]> = {
   A: [14,17,17,31,17,17,17], C: [14,17,16,16,16,17,14], E: [31,16,16,30,16,16,31], F: [31,16,16,30,16,16,16],
   I: [14,4,4,4,4,4,14], K: [17,18,20,24,20,18,17], L: [16,16,16,16,16,16,31], M: [17,27,21,21,17,17,17],
@@ -27,7 +27,7 @@ export function createSignAtlas(): DataTexture {
       const border = x < 5 || x > 250 || y < 5 || y > 122;
       pixel(x, y, border ? speed ? [188, 46, 39] : ink : background);
     }
-    const aspect = [4 / 2.2, 2, 1, 7, 2 / 0.6, 6 / 0.55, 1.2 / 1.1, 1.2 / 1.1, 1.35 / 0.6, 1.6 / 0.85, 1.6 / 0.85, 2][tile] ?? 0.43 / 0.52;
+    const aspect = tile === 22 ? 2.5 / 1.1 : tile === 23 ? 5 / 0.65 : [4 / 2.2, 2, 1, 7, 2 / 0.6, 6 / 0.55, 1.2 / 1.1, 1.2 / 1.1, 1.35 / 0.6, 1.6 / 0.85, 1.6 / 0.85, 3][tile] ?? 0.43 / 0.52;
     const lines = label.split('\n'), scaleY = Math.min(100 / (lines.length * 9), 224 * aspect / (Math.max(...lines.map(line => line.length)) * 12));
     const scaleX = scaleY * 2 / aspect;
     lines.forEach((line, row) => {

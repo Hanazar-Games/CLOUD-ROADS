@@ -2,7 +2,7 @@ import { MeshStandardMaterial, type Scene } from 'three';
 import { TerrainChunk } from '../terrain/TerrainChunk';
 import type { TerrainData } from '../terrain/TerrainGenerator';
 import type { TerrainBackend } from '../terrain/TerrainWorkers';
-import { CHUNK_SIZE, planChunks, type ChunkRequest, type TerrainCells } from './ChunkPlanner';
+import { CHUNK_SIZE, planChunks, VIEW_RADII, VIEW_RADIUS, type ChunkRequest, type TerrainCells } from './ChunkPlanner';
 import type { RoadCorridor } from '../road/RoadCorridor';
 import { VegetationMesh } from '../vegetation/VegetationMesh';
 
@@ -22,12 +22,15 @@ export class ChunkManager {
   private originZ = 0;
   private disposed = false;
   private completed = 0;
+  private radius = VIEW_RADIUS;
   error = '';
   readonly vegetation: VegetationMesh;
 
   constructor(private readonly scene: Scene, private readonly seed: string, private readonly backend: TerrainBackend) {
     this.vegetation = new VegetationMesh(scene);
   }
+
+  get viewRadius(): number { return this.radius; }
 
   get stats() {
     let high = 0, medium = 0, low = 0;
@@ -36,7 +39,7 @@ export class ChunkManager {
       else if (chunk.cells === 16) medium++;
       else low++;
     }
-    return { active: this.active.size, allocated: this.allocated.size, pooled: this.allocated.size - this.active.size,
+    return { active: this.active.size, target: (this.viewRadius * 2 + 1) ** 2, allocated: this.allocated.size, pooled: this.allocated.size - this.active.size,
       pending: this.pending.size + this.ready.length, queued: this.plan.filter((request) => this.active.get(request.key)?.cells !== request.cells).length,
       completed: this.completed, high, medium, low };
   }
@@ -46,7 +49,7 @@ export class ChunkManager {
     const center = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
     if (corridor && center !== this.center) {
       this.center = center;
-      this.plan = planChunks(x, z, forward);
+      this.plan = planChunks(x, z, forward, this.viewRadius);
       for (const request of this.plan) if (corridor.needsDetail(request.x, request.z)) request.cells = 64;
       this.desired = new Map(this.plan.map((request) => [request.key, request]));
       for (const [key, chunk] of this.active) {
@@ -67,6 +70,7 @@ export class ChunkManager {
       this.completed++;
       uploaded++;
     }
+    this.vegetation.setViewCenter(Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
     this.vegetation.update(this.originX, this.originZ);
     if (this.error || !corridor) return;
     for (const request of this.plan) {
@@ -90,6 +94,11 @@ export class ChunkManager {
     this.allocated.add(chunk);
     this.scene.add(chunk.mesh);
     return chunk;
+  }
+
+  setViewRadius(radius: number): void {
+    if (!VIEW_RADII.some(value => value === radius)) throw new Error('Invalid view distance');
+    if (this.radius !== radius) { this.radius = radius; this.center = ''; }
   }
 
   private release(chunk: TerrainChunk): void {

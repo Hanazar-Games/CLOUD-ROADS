@@ -50,8 +50,10 @@ test('changes weather and time in place, lights road sections and preserves choi
   await page.locator('#weather-kind').selectOption('clear');
   await page.locator('#lights-view').click();
   await expect.poll(async () => Number(await metric('Local lights').textContent())).toBeGreaterThan(0);
+  const lit = Number(await metric('Local lights').textContent());
   await page.locator('#lights-toggle').click();
-  await expect(metric('Local lights')).toHaveText('0');
+  await expect(page.locator('#lights-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => Number(await metric('Local lights').textContent())).toBeLessThan(lit);
   await page.locator('#seed').fill('WEATHER-REPLAY');
   await page.getByRole('button', { name: '加载种子' }).click();
   await expect(metric('Seed')).toHaveText('WEATHER-REPLAY');

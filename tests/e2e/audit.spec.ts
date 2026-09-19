@@ -46,6 +46,8 @@ test('keeps ground readings aligned with the displayed coordinates during fast f
 test('keeps all controls reachable in a short desktop window', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
   await page.goto('/');
+  await page.locator('#terrain-kind').selectOption('forest');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
   for (const id of ['sun-view', 'shadows', 'bridge-view', 'cloud-view', 'cloud-toggle', 'pause']) {
     const button = page.locator(`#${id}`);
     await expect(button).toBeEnabled({ timeout: 20_000 });
@@ -106,8 +108,8 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.7');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('隧道细节、道路标识与山间服务区');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.8');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('起伏山路、垭口与可选视距');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');
@@ -116,6 +118,7 @@ test('shows the current release, archives the previous baseline and isolates dia
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.4');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.5');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.6');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.7');
   const position = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(450);
