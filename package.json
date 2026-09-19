@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "benchmark": "node tools/benchmark.mjs",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "test:pages": "npm run build && playwright test --config playwright.pages.config.ts"
   },
   "dependencies": {
     "three": "0.186.0"
