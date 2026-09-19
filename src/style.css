@@ -69,7 +69,26 @@ dt { opacity: .55; } dd { margin: 0; text-align: right; overflow-wrap: anywhere;
 #release-notes li + li { margin-top: 8px; }
 #release-notes details { border-top: 1px solid #ffffff30; padding-top: 16px; margin-top: 24px; }
 #release-notes summary { cursor: pointer; padding: 8px 0; font-size: 14px; }
+#drive-toggle { color: #14232a; background: #d6e6c1; border-color: #d6e6c1; font-weight: 600; }
+#drive-hud { position: absolute; left: 50%; bottom: 65px; transform: translateX(-50%); width: 286px; padding: 18px 20px 10px; border-radius: 8px; background: linear-gradient(transparent, #102029b8); pointer-events: none; text-shadow: 0 2px 12px #14232a; }
+.speed-track { height: 2px; background: #ffffff35; }
+#speed-line { display: block; height: 100%; background: #d6e6c1; transform: scaleX(0); transform-origin: left; transition: transform .1s linear; }
+.drive-reading { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+#vehicle-speed { min-width: 88px; text-align: right; font-size: 60px; font-weight: 300; letter-spacing: -3px; line-height: 1.2; }
+#vehicle-gear { font-size: 18px; color: #d6e6c1; min-width: 15px; }
+.speed-unit { font-size: 10px; opacity: .7; }
+.trip-reading { margin-left: auto; white-space: nowrap; font-size: 9px; }
+.trip-reading small { display: block; font-size: 8px; letter-spacing: 2px; opacity: .65; margin-bottom: 4px; }
+.trip-reading b { font-size: 14px; font-weight: 400; }
+#vehicle-status { text-align: center; font-size: 10px; letter-spacing: 1px; margin: 8px 0 0; min-height: 14px; color: #e1e9df; }
+.braking #speed-line { background: #efb594; }
+.driving .crosshair, .driving footer .telemetry { display: none; }
+.driving footer { justify-content: center; }
+.driving #notice { display: none; }
+.driving .explorer { max-height: calc(100dvh - 310px); }
 @media (max-width: 900px) { .controls { max-width: 300px; } .masthead { inset: 22px 22px auto; } .explorer { left: 22px; top: 108px; } footer { padding: 22px; } #debug { right: 22px; } }
 @media (max-width: 1100px) { .phase { display: none; } }
 @media (max-height: 650px) { .masthead { top: 16px; } .explorer { top: 80px; max-height: calc(100dvh - 190px); } #debug { top: 80px; max-height: calc(100dvh - 190px); } #notice { right: 22px; left: auto; bottom: 105px; transform: none; max-width: calc(100vw - 330px); white-space: normal; } }
 @media (max-width: 620px) { .masthead { gap: 12px; align-items: flex-start; } .brand { font-size: 12px; letter-spacing: 1px; gap: 7px; } .brand svg { width: 28px; } .brand small { letter-spacing: 1px; font-size: 7px; } .header-actions { flex-direction: column; gap: 6px; align-items: flex-end; } .header-actions button { min-width: 90px; } .explorer { width: 230px; padding: 18px; } .controls { display: none; } .telemetry { gap: 16px; } .telemetry b { font-size: 14px; } .telemetry small { font-size: 7px; } #notice { right: 16px; left: 16px; bottom: 90px; max-width: none; transform: none; white-space: normal; text-align: center; } #debug { top: 105px; z-index: 1; max-width: calc(100vw - 44px); } }
+@media (max-width: 620px) { .explorer { top: 148px; max-height: calc(100dvh - 290px); } .driving .explorer { max-height: calc(100dvh - 360px); } #drive-hud { bottom: 26px; } }
+@media (max-height: 650px) and (min-width: 621px) { .driving #drive-hud { left: auto; right: 26px; bottom: 70px; transform: none; } .driving .explorer { max-height: calc(100dvh - 175px); } }

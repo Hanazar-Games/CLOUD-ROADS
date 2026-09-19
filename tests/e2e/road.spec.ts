@@ -72,7 +72,7 @@ test('inspects generated hairpins and continues streaming the coupled terrain', 
   await expect(page.locator('#position')).not.toHaveText(before!);
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('289');
-  await expect(page.locator('#phase-label')).toHaveText('/ 09');
+  await expect(page.locator('#phase-label')).toHaveText('/ DRIVE');
   await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);
 });

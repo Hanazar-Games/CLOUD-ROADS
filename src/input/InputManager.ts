@@ -15,7 +15,7 @@ export class InputManager {
       const action = event.code === 'KeyP' || event.code === 'F3';
       if (event.target !== canvas && event.target !== document.body
         && (!action || !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable], dialog'))) return;
-      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'KeyP', 'F3'].includes(event.code)) return;
+      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'KeyP', 'F3'].includes(event.code)) return;
       event.preventDefault();
       if (event.repeat && !this.keys.has(event.code)) return;
       this.keys.add(event.code);

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#14232a" />
-    <meta name="description" content="CLOUD ROADS — 原创无限山地世界，开发者飞行探索。" />
+    <meta name="description" content="CLOUD ROADS — 驾驶原创敞篷车，探索无限生成的山路与云海。" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2314232a'/%3E%3Cpath d='M8 46 27 17 38 33 44 25 58 46' fill='none' stroke='%23d5eac9' stroke-width='4'/%3E%3C/svg%3E" />
     <title>CLOUD ROADS · Infinite Mountains</title>
   </head>
@@ -13,12 +13,25 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> WORLD LAB <span id="phase-label">/ 09</span></span><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
       <section id="explorer" class="explorer" aria-label="探索控制">
         <p class="eyebrow">无尽山野，自由探索</p>
         <h1>向群山深处。</h1>
-        <p class="intro">一颗种子，一片没有边界的世界。<br />自由飞行 · 暂无驾驶与声音</p>
+        <p class="intro">一颗种子，一片没有边界的世界。<br />点右上角「开始驾驶」，沿山路出发。</p>
+        <details class="world-options" open>
+          <summary>驾驶与视角</summary>
+          <label for="driving-view">驾驶视角 · C 切换</label>
+          <select id="driving-view"><option value="chase">跟车</option><option value="cockpit">驾驶舱</option><option value="hood">引擎盖</option></select>
+          <label class="speed-label" for="driving-fov">视野角度 <output id="driving-fov-value">65°</output></label>
+          <input id="driving-fov" type="range" min="50" max="90" value="65" />
+          <label class="speed-label" for="camera-distance">跟车距离 <output id="camera-distance-value">7 m</output></label>
+          <input id="camera-distance" type="range" min="5" max="11" step="0.5" value="7" />
+          <label for="suspension">悬挂调校</label>
+          <select id="suspension"><option value="soft">柔软 · 起伏更明显</option><option value="balanced" selected>标准 · 均衡舒适</option><option value="firm">运动 · 更紧致</option></select>
+          <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
+          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。调整设置时车辆暂停，点击画面继续。当前支持键盘驾驶。</p>
+        </details>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
           <div class="seed-entry"><input id="seed" value="CLOUD-ROAD-001" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
@@ -72,10 +85,16 @@
       </section>
       <div class="crosshair" aria-hidden="true">+</div>
       <div id="notice" role="status">拖动视角，开始探索</div>
+      <section id="drive-hud" aria-label="驾驶仪表" hidden>
+        <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
+        <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
+        <p id="vehicle-status">W 起步 · S 倒车</p>
+      </section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
-        <div class="controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
       </footer>
       <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
       <dialog id="release-notes" aria-labelledby="release-title">

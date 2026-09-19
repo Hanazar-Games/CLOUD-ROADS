@@ -5,9 +5,16 @@ const browser = await chromium.launch({
 });
 try {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-  await page.goto(process.argv[2] || 'http://127.0.0.1:5173');
+  const driving = process.argv.includes('--drive');
+  await page.goto(process.argv.slice(2).find(arg => /^https?:/.test(arg)) || 'http://127.0.0.1:5173');
+  if (process.argv.includes('--far')) await page.locator('#view-distance').selectOption('16');
   await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
   await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
+  if (driving) {
+    await page.locator('#drive-toggle').click();
+    await page.waitForTimeout(500);
+    await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
+  }
   await page.locator('#world').focus();
   await page.keyboard.down('KeyW');
   const result = await page.evaluate(async () => {
@@ -40,7 +47,7 @@ try {
     };
   });
   await page.keyboard.up('KeyW');
-  console.log(JSON.stringify(result, null, 2));
+  console.log(JSON.stringify({ mode: driving ? 'driving' : 'flight', ...result }, null, 2));
 } finally {
   await browser.close();
 }
