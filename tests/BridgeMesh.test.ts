@@ -74,8 +74,8 @@ describe('BridgeMesh', () => {
 
   it.each<[string, Readonly<WorldOptions>]>([
     ['CLOUD-ROAD-001', DEFAULT_OPTIONS], ['ROAD-TEST-002', DEFAULT_OPTIONS],
-    ['CLOUD-ROAD-001', { terrain: 'desert', roadType: 'highway', roadWidth: 10 }],
-    ['CLOUD-ROAD-001', { terrain: 'forest', roadType: 'highway', roadWidth: 6 }],
+    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'desert', roadType: 'highway', roadWidth: 10 }],
+    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest', roadType: 'highway', roadWidth: 6 }],
   ])('keeps real curved decks below asphalt and above the natural valley (%s, %j)', (seed, options) => {
     const terrain = new TerrainGenerator(seed, options), spine = new RoadSpine(seed, terrain.height, options);
     const detector = new BridgeDetector(terrain.height, options);

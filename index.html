@@ -43,11 +43,14 @@
             <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option></select>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
+            <label for="route-style">路线风格</label>
+            <select id="route-style" aria-describedby="route-style-help"><option value="natural">自然山路 · 起伏与缓弯</option><option value="winding">蜿蜒盘山路 · 连续折返</option><option value="cliff">峡谷挂壁公路 · 山腰临崖</option></select>
+            <p id="route-style-help">路线风格影响沿途生成；挂壁路线会塑造连续峡谷。高速保留缓弯，不生成急折返。</p>
             <label for="road-width">车行道宽度</label>
             <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>
             <div class="actions"><button type="submit">应用并返回起点</button><button id="vegetation-toggle" type="button" aria-pressed="true">植被</button></div>
-            <p id="settings-status" role="status">当前：高山雪岭 · 山路 · 8 米</p>
+            <p id="settings-status" role="status">当前：高山雪岭 · 自然山路 · 山路 · 8 米</p>
           </form>
         </details>
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>

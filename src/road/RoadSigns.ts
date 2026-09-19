@@ -43,7 +43,7 @@ export class RoadSigns {
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1];
         if (tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) || services.some(site => sample.distance >= site.start && sample.distance <= site.end)) continue;
-        for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
+        for (const side of [-1, 1]) {
           const point = this.position(sample, side * (this.profile.outerHalfWidth + 2), 2.4), heading = sample.heading + (side < 0 ? Math.PI : 0);
           if (Math.floor(sample.distance / 1000) !== Math.floor(previous.distance / 1000)) {
             this.add(point, heading, 1.35, 0.6, 8, 2.6);
@@ -52,7 +52,7 @@ export class RoadSigns {
               y: point.y - 0.55, z: point.z + Math.sin(heading) * (j - (digits.length - 1) / 2) * 0.42 }, heading, 0.43, 0.52, 12 + Number(digit)));
           }
           if (Math.floor(sample.distance / 2000) !== Math.floor(previous.distance / 2000)) this.add({ ...point, y: point.y + 1.2 }, heading, 1.2, 1.1, this.profile.centers.length === 2 ? 7 : 6);
-          if (Math.abs(sample.curvature) > 0.004 && Math.floor(sample.distance / 48) !== Math.floor(previous.distance / 48)) this.add(point, heading, 1.6, 0.85, sample.curvature > 0 ? 10 : 9, 2.6);
+          if (Math.abs(sample.curvature) > 0.004 && Math.floor(sample.distance / 48) !== Math.floor(previous.distance / 48)) this.add(point, heading, 1.6, 0.85, sample.curvature * side > 0 ? 10 : 9, 2.6);
         }
       }
       for (const span of tunnels) for (const [sample, flip] of [[span.start, false], [span.end, true]] as const) for (const center of this.profile.centers) {

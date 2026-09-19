@@ -58,7 +58,7 @@ export class World {
   private corridorVersion = -1;
 
   constructor(scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.height = new HeightFunction(seed, options.terrain);
+    this.height = new HeightFunction(seed, options.terrain, options.routeStyle);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
     this.road = new RoadSpine(seed, this.height, options);
@@ -132,14 +132,14 @@ export class World {
     const z = this.roadSample?.position.z ?? 128;
     let id = this.height.ranges.sample(z).id;
     while (this.height.ranges.passZ(id) > z - 1000) id++;
-    this.scout = { road: new RoadSpine(this.seed, this.height, this.options), kind: 'pass', id, progress: 0 };
+    this.scout = { road: this.road.fork(), kind: 'pass', id, progress: 0 };
   }
 
   requestServiceView(): void {
     if (this.scout) return;
     let id = Math.max(1, Math.floor((this.roadSample?.distance ?? 0) / 15000));
     while (serviceTarget(this.seed, id) < (this.roadSample?.distance ?? 0) + 1000) id++;
-    this.scout = { road: new RoadSpine(this.seed, this.height, this.options), kind: 'service', id, progress: 0 };
+    this.scout = { road: this.road.fork(), kind: 'service', id, progress: 0 };
   }
 
   private advanceServiceView(camera: PerspectiveCamera): void {

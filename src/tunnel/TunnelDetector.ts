@@ -11,7 +11,7 @@ export class TunnelDetector {
   private readonly covered = new Map<number, boolean>();
   private readonly profile;
 
-  constructor(private readonly terrain: RoadTerrain, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(private readonly terrain: RoadTerrain, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
   }
 
@@ -25,7 +25,7 @@ export class TunnelDetector {
       let covered = this.covered.get(sample.distance);
       if (covered === undefined) {
         const { right } = roadFrame(sample), { x, y, z } = sample.position;
-        covered = Math.abs(sample.curvature) < 0.0035 && [-this.profile.outerHalfWidth, 0, this.profile.outerHalfWidth]
+        covered = !(this.options.routeStyle === 'winding' && sample.mountain) && Math.abs(sample.curvature) < 0.0035 && [-this.profile.outerHalfWidth, 0, this.profile.outerHalfWidth]
           .every(offset => this.terrain.sample(x + right.x * offset, z + right.z * offset) > y + right.y * offset + 11);
         this.covered.set(sample.distance, covered);
       }

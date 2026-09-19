@@ -103,7 +103,7 @@ describe('landscape and road choices', () => {
   });
 
   it.each(['forest', 'desert', 'dunes'] as const)('keeps highway grades and curves bounded over 100 km of %s terrain', terrain => {
-    const options = { terrain, roadType: 'highway' as const, roadWidth: 10 };
+    const options = { ...DEFAULT_OPTIONS, terrain, roadType: 'highway' as const, roadWidth: 10 };
     const generator = new RoadGenerator('HIGHWAY-100KM', new HeightFunction('HIGHWAY-100KM', terrain), options);
     let point = generator.start;
     while (point.distance < 100_000) {

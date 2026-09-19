@@ -1,17 +1,23 @@
 import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
-import type { TerrainKind } from '../world/WorldOptions';
+import type { RouteStyle, TerrainKind } from '../world/WorldOptions';
 import { MountainRanges } from './MountainRanges';
+import { CliffLandscape } from './CliffLandscape';
 
 export class HeightFunction {
   readonly noise: Noise;
   readonly ranges: MountainRanges;
+  private readonly cliffs;
 
-  constructor(seed: string, readonly terrain: TerrainKind = 'alpine') { this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed); }
+  constructor(seed: string, readonly terrain: TerrainKind = 'alpine', routeStyle: RouteStyle = 'natural') {
+    this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed);
+    this.cliffs = routeStyle === 'cliff' ? new CliffLandscape(seed, this.ranges) : undefined;
+  }
 
-  route(z: number) { return this.terrain === 'alpine' ? this.ranges.sample(z) : undefined; }
+  route(z: number) { return this.cliffs ? this.cliffs.route(z) : this.terrain === 'alpine' ? this.ranges.sample(z) : undefined; }
 
   sample(x: number, z: number): number {
+    if (this.cliffs) return this.cliffs.sample(x, z);
     const warpX = this.noise.fractal(x / 4200, z / 4200, 2) * 650;
     const warpZ = this.noise.fractal(x / 4200 + 73, z / 4200 - 29, 2) * 650;
     const wx = x + warpX, wz = z + warpZ;

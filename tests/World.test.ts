@@ -45,7 +45,7 @@ it('pauses and cancels service searches, visits consecutive sites and replays th
 });
 
 it('reports the rendered ground biome through road coupling, bridges and origin rebases', () => {
-  const world = new World(new Scene(), 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8 });
+  const world = new World(new Scene(), 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8, routeStyle: 'natural' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
   while (!world.road.update(128, 8)) { /* Load terrain coupling. */ }
@@ -110,7 +110,7 @@ it('places the hairpin overview above terrain and aims at the turn', () => {
 });
 
 it('frames a detected bridge above terrain and releases its meshes with the world', () => {
-  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8 });
+  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8, routeStyle: 'natural' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
   while (!world.road.update(128, 8)) { /* Load bridge anchors. */ }

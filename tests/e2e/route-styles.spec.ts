@@ -1,0 +1,56 @@
+import { expect, test } from '@playwright/test';
+
+test('applies winding and cliff routes, drives them and preserves choices during far streaming and recovery', async ({ page }) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  const ready = async () => {
+    await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
+    await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
+  };
+  await page.goto('/'); await ready();
+  await page.locator('#terrain-kind').selectOption('forest');
+  await page.locator('#route-style').selectOption('winding');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Route style')).toHaveText('蜿蜒盘山路'); await ready();
+  expect(Number(await metric('Hairpins').textContent())).toBeGreaterThanOrEqual(2);
+  const home = await metric('Coordinates').textContent();
+  await page.locator('#hairpin-view').click();
+  await expect(metric('Coordinates')).not.toHaveText(home!); await ready();
+  await page.locator('#view-distance').selectOption('16');
+  await expect(metric('Target chunks')).toHaveText('1089'); await ready();
+  await expect(metric('Active chunks')).toHaveText('1089');
+  await page.locator('#terrain-kind').selectOption('desert');
+  await page.locator('#route-style').selectOption('cliff');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Route style')).toHaveText('峡谷挂壁公路'); await ready();
+  await expect(page.locator('#view-distance')).toHaveValue('16');
+  await page.locator('#drive-toggle').click();
+  await expect(metric('Travel mode')).toHaveText('driving');
+  await page.locator('#world').focus(); await page.keyboard.down('KeyW');
+  await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(20);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.press('KeyP');
+  await page.locator('#world').evaluate(canvas => {
+    const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
+    extension.loseContext(); setTimeout(() => extension.restoreContext(), 1000);
+  });
+  await expect(page.locator('#error')).toBeVisible(); await expect(page.locator('#error')).toBeHidden();
+  await expect(page.locator('#route-style')).toHaveValue('cliff');
+  await page.locator('#controls-toggle').click();
+  await page.locator('#road-type').selectOption('highway');
+  await page.locator('#road-width').selectOption('10');
+  await page.getByRole('button', { name: '应用并返回起点' }).click(); await ready();
+  await expect(metric('Road layout')).toHaveText('双向四车道');
+  await expect(metric('Route style')).toHaveText('峡谷挂壁公路');
+  await expect(metric('Hairpins')).toHaveText('0');
+  await page.locator('#service-view').click();
+  await expect(metric('Service areas')).toHaveText('1', { timeout: 30000 }); await ready();
+  await page.locator('#seed').fill('CLIFF-REPLAY');
+  await page.getByRole('button', { name: '加载种子' }).click();
+  await expect(metric('Seed')).toHaveText('CLIFF-REPLAY'); await ready();
+  await expect(page.locator('#route-style')).toHaveValue('cliff');
+  expect(errors).toEqual([]);
+});

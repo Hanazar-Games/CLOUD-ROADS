@@ -1,7 +1,7 @@
 import { RoadGenerator, type RoadTerrain } from './RoadGenerator';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { HeightFunction } from '../terrain/HeightFunction';
-import { ROAD_SAMPLES, type RoadSample, type RoadSegment } from './RoadSegment';
+import { ROAD_SAMPLES, type RoadControlPoint, type RoadSample, type RoadSegment } from './RoadSegment';
 import { RoadIndex } from './RoadIndex';
 
 export const MAX_ROAD_SEGMENTS = 256;
@@ -15,9 +15,38 @@ export class RoadSpine {
   private sampleVersion = -1;
   private readonly sampleCache: RoadSample[] = [];
   private index = new RoadIndex([]);
+  private readonly checkpoints = new Map<number, RoadControlPoint>();
+  private resume: RoadControlPoint;
+  private readonly terrain;
 
-  constructor(seed: string, terrain: RoadTerrain = new HeightFunction(seed), options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.generator = new RoadGenerator(seed, terrain, options);
+  constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.routeStyle);
+    this.generator = new RoadGenerator(seed, this.terrain, options);
+    this.resume = this.generator.start;
+  }
+
+  get checkpointCount(): number { return this.checkpoints.size; }
+
+  fork(): RoadSpine {
+    const road = new RoadSpine(this.seed, this.terrain, this.options);
+    for (const [key, point] of this.checkpoints) road.checkpoints.set(key, point);
+    return road;
+  }
+
+  private checkpoint(before: (point: RoadControlPoint) => boolean): RoadControlPoint {
+    let best = this.generator.start;
+    for (const point of this.checkpoints.values()) if (before(point) && point.distance > best.distance) best = point;
+    return best;
+  }
+
+  private append(end: RoadControlPoint): void {
+    const segment = this.generator.next(end), key = Math.floor(segment.end.distance / 2048);
+    this.segments.push(segment); this.generated++; this.version++;
+    if (Math.floor(end.distance / 2048) !== key && !this.checkpoints.has(key)) {
+      if (this.checkpoints.size >= 64) this.checkpoints.delete(this.checkpoints.keys().next().value!);
+      this.checkpoints.set(key, segment.end);
+    }
+    if (this.segments.length > MAX_ROAD_SEGMENTS) this.segments.shift();
   }
 
   get samples(): readonly RoadSample[] {
@@ -36,20 +65,18 @@ export class RoadSpine {
 
   update(z: number, budget = 4, halo = ROAD_HALO): boolean {
     z = Math.min(z, this.generator.start.position.z);
-    if (this.segments.length && this.segments[0].start.distance > 0
+    if (!this.segments.length || this.segments[0].start.distance > 0
       && this.segments[0].start.position.z < Math.min(this.generator.start.position.z, z + halo) - 0.001) {
       this.segments.length = 0;
+      this.resume = this.checkpoint(point => point.position.z >= z + halo);
       this.version++;
     }
     const deadline = performance.now() + 2;
     for (let i = 0; i < budget; i++) {
-      const end = this.segments.at(-1)?.end ?? this.generator.start;
+      const end = this.segments.at(-1)?.end ?? this.resume;
       if (end.position.z <= z - halo) break;
       if (i > 0 && performance.now() >= deadline) break;
-      this.segments.push(this.generator.next(end));
-      this.generated++;
-      this.version++;
-      if (this.segments.length > MAX_ROAD_SEGMENTS) this.segments.shift();
+      this.append(end);
     }
     while (this.segments.length > 1 && this.segments[0].end.position.z > z + halo) {
       this.segments.shift();
@@ -65,14 +92,13 @@ export class RoadSpine {
   }
 
   advanceToDistance(distance: number): boolean {
+    if (!this.segments.length) this.resume = this.checkpoint(point => point.distance <= distance - ROAD_HALO);
     const deadline = performance.now() + 2;
     for (let i = 0; i < 4; i++) {
-      const end = this.segments.at(-1)?.end ?? this.generator.start;
+      const end = this.segments.at(-1)?.end ?? this.resume;
       if (end.distance >= distance) return true;
       if (i > 0 && performance.now() >= deadline) break;
-      this.segments.push(this.generator.next(end));
-      this.generated++; this.version++;
-      if (this.segments.length > MAX_ROAD_SEGMENTS) this.segments.shift();
+      this.append(end);
     }
     return (this.segments.at(-1)?.end.distance ?? 0) >= distance;
   }

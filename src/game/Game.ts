@@ -10,7 +10,7 @@ import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
 import { DEFAULT_SEED } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
-import { terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
+import { routeNames, terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
@@ -108,8 +108,9 @@ export class Game {
       const terrain = element<HTMLSelectElement>('terrain-kind').value as TerrainKind;
       const roadType = element<HTMLSelectElement>('road-type').value as WorldOptions['roadType'];
       const roadWidth = Number(element<HTMLSelectElement>('road-width').value);
-      if (!(terrain in terrainNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)) return;
-      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth });
+      const routeStyle = element<HTMLSelectElement>('route-style').value as WorldOptions['routeStyle'];
+      if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)) return;
+      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle });
     }, { signal: this.events.signal });
     element('vegetation-toggle').addEventListener('click', () => {
       const vegetation = this.world.chunks.vegetation;
@@ -234,7 +235,8 @@ export class Game {
       element<HTMLSelectElement>('terrain-kind').value = options.terrain;
       element<HTMLSelectElement>('road-type').value = options.roadType;
       element<HTMLSelectElement>('road-width').value = String(options.roadWidth);
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米`;
+      element<HTMLSelectElement>('route-style').value = options.routeStyle;
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米`;
       this.setError(null);
       this.resetCamera();
     } catch (error) {
@@ -379,6 +381,7 @@ export class Game {
         Landscape: terrainNames[this.world.options.terrain],
         'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
         'Carriageway width': `${this.world.options.roadWidth} m`,
+        'Route style': routeNames[this.world.options.routeStyle], 'Route checkpoints': this.world.road.checkpointCount,
         'Vegetation instances': chunks.vegetation.enabled ? chunks.vegetation.count : 0,
         'Tree canopies': chunks.vegetation.enabled ? chunks.vegetation.canopyCount : 0,
         'Distant canopies': chunks.vegetation.enabled ? chunks.vegetation.distantCount : 0,

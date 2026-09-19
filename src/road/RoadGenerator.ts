@@ -18,17 +18,18 @@ export class RoadGenerator {
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    const winding = this.options.routeStyle === 'winding', cliff = this.options.routeStyle === 'cliff';
     const guide = this.terrain.route?.(start.position.z - 900);
     let mountain = start.mountain;
-    if (this.options.roadType === 'mountain' && !mountain && start.distance >= start.nextMountain) {
+    if (this.options.roadType === 'mountain' && !cliff && !mountain && start.distance >= start.nextMountain) {
       const gap = this.terrain.sample(start.position.x, start.position.z - 500) - start.position.y;
-      if (Math.abs(gap) > 80 || guide && Math.abs(guide.grade) > 0.023) mountain = {
+      if (winding || Math.abs(gap) > 80 || guide && Math.abs(guide.grade) > 0.023) mountain = {
         stage: 0, side: guide ? guide.x > start.position.x ? 1 : -1 : this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1,
-        grade: guide ? clamp((guide.height - start.position.y) / 1800, 0.06) : Math.sign(gap) * 0.06 };
+        grade: guide ? clamp((guide.height - start.position.y) / 1800, 0.06) : clamp(gap / 900, 0.06) };
     }
     if (mountain) return this.mountainSegment(start, mountain);
     const desiredHeading = guide ? clamp(Math.atan2(guide.x - start.position.x, 900) + this.noise.sample(start.distance / 1300, 17) * 0.16, 0.85)
-      : this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
+      : this.noise.fractal(start.distance / (winding ? 900 : 2400), 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
     const gradeLimit = this.options.roadType === 'highway' ? 0.04 : 0.06;
@@ -49,7 +50,9 @@ export class RoadGenerator {
         const curvatureCost = (turn / 18) ** 2 * 0.25;
         const slopeCost = (grade / 0.06) ** 2 * 0.025;
         const repetitionCost = (heading - desiredHeading) ** 2 * 0.8;
-        const routeCost = guide ? Math.abs(segment.end.position.y - guide.height) / 150 + Math.abs(segment.end.position.x - guide.x) / 1500 : 0;
+        const target = cliff ? this.terrain.route?.(segment.end.position.z) : guide;
+        const routeCost = target ? Math.abs(segment.end.position.y - target.height) / (cliff ? 40 : 150)
+          + Math.abs(segment.end.position.x - target.x) / (cliff ? 30 : 1500) : 0;
         const score = terrainCost + cliffCost + curvatureCost + slopeCost + repetitionCost + routeCost - scenicReward;
         if (score < bestScore) { bestScore = score; best = segment; }
       }
@@ -68,7 +71,7 @@ export class RoadGenerator {
     const aligned = Math.abs(target - heading) < 1e-8;
     const stage = (plan.stage === 0 || plan.stage === 13) && !aligned ? plan.stage : plan.stage + 1;
     segment.end.mountain = stage <= 13 ? { ...plan, stage } : undefined;
-    if (stage > 13) segment.end.nextMountain = segment.end.distance + 4000;
+    if (stage > 13) segment.end.nextMountain = segment.end.distance + (this.options.routeStyle === 'winding' ? 1200 + (this.noise.sample(start.distance / 600, 83) + 1) * 450 : 4000);
     return segment;
   }
 }

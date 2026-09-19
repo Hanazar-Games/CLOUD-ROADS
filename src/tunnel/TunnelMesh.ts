@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferGeometry, Color, CylinderGeometry, DoubleSide, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, RingGeometry, type Scene } from 'three';
+import { BoxGeometry, BufferGeometry, Color, CylinderGeometry, DoubleSide, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, RingGeometry, Vector2, type Scene } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BiomeSystem } from '../biome/BiomeSystem';
 import type { RoadCorridor } from '../road/RoadCorridor';
@@ -8,6 +8,7 @@ import { roadProfile } from '../road/RoadProfile';
 import type { RoadSample } from '../road/RoadSegment';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { TunnelSpan } from './TunnelDetector';
+import { createTerrainMaterial } from '../terrain/TerrainMaterial';
 
 type Point = [number, number, number];
 export interface TunnelLamp { x: number; y: number; z: number }
@@ -33,9 +34,11 @@ function fanGeometry(): BufferGeometry {
 }
 
 export class TunnelMesh {
+  private readonly terrainOrigin = new Vector2();
   readonly lining = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x939b9c, roughness: 0.91, side: DoubleSide }));
-  readonly cover = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ vertexColors: true, roughness: 1, side: DoubleSide }));
+  readonly cover = new Mesh(new BufferGeometry(), createTerrainMaterial(this.terrainOrigin));
   readonly portals = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0xbcb8a8, roughness: 0.85, side: DoubleSide }));
+  readonly ribs = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x64777b, roughness: 0.82, side: DoubleSide }));
   readonly lights = new InstancedMesh(new BoxGeometry(0.7, 0.12, 1.8),
     new MeshStandardMaterial({ color: 0xffdeb4, emissive: 0xffc982, emissiveIntensity: 2 }), 2048);
   readonly equipment = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.72 }), 50000);
@@ -53,6 +56,7 @@ export class TunnelMesh {
   constructor(scene: Scene, seed: string, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
     this.biomes = new BiomeSystem(seed, options.terrain);
+    this.cover.material.side = DoubleSide;
     this.lining.material.onBeforeCompile = shader => {
       shader.vertexShader = `varying vec2 vTunnelUv;\n${shader.vertexShader}`.replace('#include <uv_vertex>', '#include <uv_vertex>\nvTunnelUv = uv;');
       shader.fragmentShader = `varying vec2 vTunnelUv;\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
@@ -70,7 +74,7 @@ export class TunnelMesh {
     };
     this.lights.count = 0;
     this.equipment.count = this.fans.count = 0;
-    for (const mesh of [this.lining, this.cover, this.portals, this.lights, this.equipment, this.fans]) {
+    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.equipment, this.fans]) {
       mesh.visible = false;
       mesh.receiveShadow = true;
       mesh.castShadow = mesh !== this.lights;
@@ -86,7 +90,7 @@ export class TunnelMesh {
       this.spanKey = spanKey;
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
-      const lining: number[] = [], cover: number[] = [], portals: number[] = [];
+      const lining: number[] = [], cover: number[] = [], portals: number[] = [], ribs: number[] = [];
       const coverIndices: number[] = [], coverVertices = new Map<Point, number>();
       const coverQuad = (a: Point, b: Point, c: Point, d: Point) => {
         const indices = [a, b, c, d].map(point => {
@@ -126,12 +130,14 @@ export class TunnelMesh {
         const top = (sample: RoadSample, offset: number): { point: Point; raised: boolean } => {
           const extent = extents.get(sample)![offset < 0 ? 0 : 1];
           offset = coverOffset(sample, offset);
-          const p = this.point(sample, offset, 0);
+          const blend = Math.max(0, 1 - Math.max(0, Math.abs(offset) - edge) / Math.max(1, extent - edge));
+          const setback = 12 * blend * (Math.max(0, 1 - (sample.distance - span.start.distance) / 80) ** 2
+            - Math.max(0, 1 - (span.end.distance - sample.distance) / 80) ** 2);
+          const p = this.point(sample, offset, 0, setback);
           const natural = terrain.sample(p[0] + this.anchorX, p[2] + this.anchorZ);
           const ground = corridor.height(p[0] + this.anchorX, p[2] + this.anchorZ, natural);
-          const blend = Math.max(0, 1 - Math.max(0, Math.abs(offset) - edge) / Math.max(1, extent - edge));
           const approach = Math.min(1, (sample.distance - span.start.distance) / 80, (span.end.distance - sample.distance) / 80);
-          const entrance = Math.max(ground, sample.position.y + 9.5);
+          const entrance = Math.max(ground, p[1] + 9.5);
           const roof = entrance + (Math.max(natural, entrance) - entrance) * approach * approach * (3 - 2 * approach);
           p[1] = ground + (roof - ground) * blend - 0.3 * (1 - blend);
           return { point: p, raised: p[1] > ground + 0.1 };
@@ -147,6 +153,15 @@ export class TunnelMesh {
             for (const center of this.profile.centers) for (const side of [-1, 1]) {
               this.box(middle, center + side * (half - 0.35), 0.12, 0.7, 0.24, length, 0x92958d);
               this.box(middle, center + side * (half - 0.11), 3.45, 0.14, 0.14, length, 0x39474f);
+              const a = center + side * (half - 0.6), b = center + side * (half - 0.46);
+              quad(ribs, this.point(previous, a, 0.245), this.point(previous, b, 0.245), this.point(sample, a, 0.245), this.point(sample, b, 0.245));
+            }
+            if (Math.floor(sample.distance / 12) !== Math.floor(previous.distance / 12)) {
+              for (const center of this.profile.centers) for (let j = 1; j < arch.length; j++) {
+                const [ax, ay] = arch[j - 1], [bx, by] = arch[j];
+                quad(ribs, this.point(sample, center + ax * 0.99, ay - 0.035, -0.15), this.point(sample, center + bx * 0.99, by - 0.035, -0.15),
+                  this.point(sample, center + ax * 0.99, ay - 0.035, 0.15), this.point(sample, center + bx * 0.99, by - 0.035, 0.15));
+              }
             }
             for (const center of this.profile.centers) for (let j = 1; j < arch.length; j++) {
               const [ax, ay] = arch[j - 1], [bx, by] = arch[j];
@@ -222,11 +237,16 @@ export class TunnelMesh {
               const wing = { ...sample, position: { x: sample.position.x + sample.tangent.x * end * 4,
                 y: sample.position.y + sample.tangent.y * end * 4, z: sample.position.z + sample.tangent.z * end * 4 } };
               this.box(wing, center + side * (half + 0.55), 1.05, 0.6, 2.1, 8, 0xa7a697);
+              for (let stripe = 0; stripe < 6; stripe++) {
+                const marker = { ...sample, position: { x: sample.position.x + sample.tangent.x * end * 2.72,
+                  y: sample.position.y + sample.tangent.y * end * 2.72, z: sample.position.z + sample.tangent.z * end * 2.72 } };
+                this.box(marker, center + side * (half + 0.25), 0.35 + stripe * 0.34, 0.42, 0.29, 0.05, stripe % 2 ? 0xeac365 : 0x29373c);
+              }
             }
           }
         }
       }
-      for (const [mesh, data] of [[this.lining, lining], [this.cover, cover], [this.portals, portals]] as const) {
+      for (const [mesh, data] of [[this.lining, lining], [this.cover, cover], [this.portals, portals], [this.ribs, ribs]] as const) {
         const geometry = new BufferGeometry();
         geometry.setAttribute('position', new Float32BufferAttribute(data, 3));
         if (mesh === this.cover) geometry.setIndex(coverIndices);
@@ -250,7 +270,8 @@ export class TunnelMesh {
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
-    for (const mesh of [this.lining, this.cover, this.portals, this.lights, this.equipment, this.fans]) {
+    this.terrainOrigin.set(originX, originZ);
+    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.equipment, this.fans]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = nearRoute && spans.length > 0;
     }
@@ -273,7 +294,7 @@ export class TunnelMesh {
   }
 
   dispose(): void {
-    for (const mesh of [this.lining, this.cover, this.portals, this.lights, this.equipment, this.fans]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
+    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.equipment, this.fans]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
     this.lights.dispose(); this.equipment.dispose(); this.fans.dispose();
   }
 }

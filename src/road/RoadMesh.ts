@@ -52,7 +52,7 @@ export class RoadMesh {
       const positions = this.mesh.geometry.getAttribute('position') as BufferAttribute;
       const normals = this.mesh.geometry.getAttribute('normal') as BufferAttribute;
       const uv = this.mesh.geometry.getAttribute('uv') as BufferAttribute;
-      const cycleStart = Math.floor(first.distance / 1560) * 1560; // Shared period of 12 m dashes, 120 m arrows and 1.3 m grooves.
+      const cycleStart = Math.floor(first.distance / 1560) * 1560; // Shared period of 12 m dashes, 60 m arrows and 1.3 m grooves.
       this.access.forEach((range, i) => {
         const distance = services[i]?.sample.distance;
         if (distance === undefined) range.set(-1, -1, -1, -1);

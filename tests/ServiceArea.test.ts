@@ -73,10 +73,12 @@ it('builds parking, buildings and access pavement, then rebases and releases eve
   expect(scene.children).toHaveLength(0);
 });
 
-it.each((['alpine', 'forest', 'desert', 'dunes'] as const).flatMap(terrain =>
-  (['mountain', 'highway'] as const).flatMap(roadType => [6, 8, 10].map(roadWidth => ({ terrain, roadType, roadWidth })))))(
-  'keeps real $terrain $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
-  const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain);
+it.each([
+  ...(['alpine', 'forest', 'desert', 'dunes'] as const).map(terrain => ({ terrain, routeStyle: 'natural' as const })),
+  { terrain: 'forest' as const, routeStyle: 'winding' as const }, { terrain: 'desert' as const, routeStyle: 'cliff' as const },
+].flatMap(style => (['mountain', 'highway'] as const).flatMap(roadType => [6, 8, 10].map(roadWidth => ({ ...style, roadType, roadWidth })))))(
+  'keeps real $terrain $routeStyle $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
+  const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.routeStyle);
   const spine = new RoadSpine(seed, terrain, options);
   while (!spine.advanceToDistance(serviceTarget(seed, 1) + 1000)) { /* Complete the service window. */ }
   const sites = new ServicePlanner(seed, terrain, options).detect(spine.samples), site = sites[0];

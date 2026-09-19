@@ -13,7 +13,7 @@ describe('RoadMesh', () => {
     spine.segments.shift(); spine.version++;
     road.update(spine, 0, 0, true);
     const after = road.mesh.geometry.getAttribute('uv').getY(0);
-    for (const period of [12, 120, 1.3]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
+    for (const period of [12, 60, 1.3]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
     road.dispose();
   });
 

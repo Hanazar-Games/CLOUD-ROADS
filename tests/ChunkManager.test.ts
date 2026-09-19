@@ -25,6 +25,19 @@ class DeferredTerrain implements TerrainBackend {
 }
 
 describe('ChunkManager lifecycle', () => {
+  it('discards old results during road replay and reprioritizes newly faced terrain', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.update(0, 0, { x: 0, z: -1 }, emptyCorridor);
+    await backend.complete();
+    manager.update(100000, 100000, { x: 0, z: -1 }, null);
+    expect(manager.stats.active).toBe(0);
+    manager.update(100000, 100000, { x: 0, z: -1 }, emptyCorridor);
+    expect(backend.jobs.every(job => job.request.x > 380 && job.request.z > 380)).toBe(true);
+    await backend.complete();
+    manager.update(100000, 100000, { x: 0, z: 1 }, emptyCorridor);
+    expect(backend.jobs.some(job => job.request.x === 390 && job.request.z === 391)).toBe(true);
+    manager.dispose();
+  });
   it('waits for complete road coverage before issuing terrain jobs', () => {
     const backend = new DeferredTerrain();
     const manager = new ChunkManager(new Scene(), 'test', backend);

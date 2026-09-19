@@ -21,7 +21,7 @@ export class TerrainGenerator {
   private readonly biomes: BiomeSystem;
 
   constructor(private readonly seed: string, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.height = new HeightFunction(seed, options.terrain);
+    this.height = new HeightFunction(seed, options.terrain, options.routeStyle);
     this.biomes = new BiomeSystem(seed, options.terrain);
   }
 

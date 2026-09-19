@@ -10,6 +10,15 @@ try {
   if (process.argv.includes('--far')) await page.locator('#view-distance').selectOption('16');
   await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
   await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
+  const route = process.argv.find(arg => arg.startsWith('--route='))?.slice(8);
+  if (route) {
+    await page.locator('#route-style').selectOption(route);
+    await page.getByRole('button', { name: '应用并返回起点' }).click();
+    await page.waitForFunction(style => document.querySelector('[data-metric="Route style"]')?.textContent === style,
+      { natural: '自然山路', winding: '蜿蜒盘山路', cliff: '峡谷挂壁公路' }[route]);
+    await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
+    await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
+  }
   if (driving) {
     await page.locator('#drive-toggle').click();
     await page.waitForTimeout(500);

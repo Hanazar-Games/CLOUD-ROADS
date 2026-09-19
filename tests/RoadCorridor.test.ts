@@ -48,8 +48,8 @@ describe('RoadCorridor', () => {
   it.each<[string, Readonly<WorldOptions>]>([
     ['CLOUD-ROAD-001', DEFAULT_OPTIONS], ['ROAD-TEST-002', DEFAULT_OPTIONS],
     ['NARROW', { ...DEFAULT_OPTIONS, roadWidth: 6 }], ['WIDE', { ...DEFAULT_OPTIONS, roadWidth: 10 }],
-    ['HIGHWAY', { terrain: 'forest', roadType: 'highway', roadWidth: 10 }],
-    ['DESERT', { terrain: 'desert', roadType: 'highway', roadWidth: 6 }],
+    ['HIGHWAY', { ...DEFAULT_OPTIONS, terrain: 'forest', roadType: 'highway', roadWidth: 10 }],
+    ['DESERT', { ...DEFAULT_OPTIONS, terrain: 'desert', roadType: 'highway', roadWidth: 6 }],
   ])('supports the actual road triangles and shoulders for %s', (seed, options) => {
     const spine = new RoadSpine(seed, new HeightFunction(seed, options.terrain), options);
     while (!spine.update(-800, 8)) { /* Load enough road to test both sides of chunk seams. */ }

@@ -20,6 +20,8 @@ export class ChunkManager {
   private desired = new Map<string, ChunkRequest>();
   private plan: ChunkRequest[] = [];
   private center = '';
+  private plannedRoad = false;
+  private direction = NaN;
   private originX = 0;
   private originZ = 0;
   private disposed = false;
@@ -49,14 +51,20 @@ export class ChunkManager {
   update(x: number, z: number, forward: { x: number; z: number }, corridor: RoadCorridor | null): void {
     if (this.disposed) return;
     const center = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
-    if (corridor && center !== this.center) {
+    const direction = Math.round(Math.atan2(forward.x, -forward.z) * 4 / Math.PI);
+    if (center !== this.center || corridor && !this.plannedRoad) {
       this.center = center;
+      this.direction = direction; this.plannedRoad = !!corridor;
       this.plan = planChunks(x, z, forward, this.viewRadius);
-      for (const request of this.plan) if (corridor.needsDetail(request.x, request.z)) request.cells = 64;
+      if (corridor) for (const request of this.plan) if (corridor.needsDetail(request.x, request.z)) request.cells = 64;
       this.desired = new Map(this.plan.map((request) => [request.key, request]));
+      for (let i = this.ready.length - 1; i >= 0; i--) if (this.desired.get(this.ready[i].request.key)?.cells !== this.ready[i].request.cells) this.ready.splice(i, 1);
       for (const [key, chunk] of this.active) {
         if (!this.desired.has(key)) { this.active.delete(key); this.vegetation.removeChunk(key); this.release(chunk); }
       }
+    } else if (direction !== this.direction) {
+      this.direction = direction;
+      this.plan = planChunks(x, z, forward, this.viewRadius).map(request => this.desired.get(request.key)!);
     }
     const started = performance.now();
     let uploaded = 0;
