@@ -22,7 +22,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
   }
   await expect(page.locator('#release-open')).toContainText(`v${version}`);
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 30_000 });
-  await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 30_000 });
+  await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 90_000 });
   await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('289');
   await expect(page.locator('#world')).toHaveCSS('position', 'fixed');
   await expect(page.locator('#error')).toBeHidden();

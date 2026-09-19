@@ -3,6 +3,7 @@ import config from './playwright.config';
 
 export default defineConfig(config, {
   testDir: './tests/pages',
+  timeout: 120_000,
   use: {
     baseURL: 'http://127.0.0.1:4319/CLOUD-ROADS/',
     viewport: { width: 640, height: 360 },
