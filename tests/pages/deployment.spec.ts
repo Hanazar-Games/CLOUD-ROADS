@@ -12,6 +12,8 @@ test('loads built scripts, styles, workers and the world under the Pages project
     if (/\.(js|css)(\?|$)/.test(response.url())) assets.push(new URL(response.url()).pathname);
   });
   await page.goto('./');
+  // Software rendering on CI cannot budget a 2048px shadow map every frame.
+  if (process.env.CI) await page.locator('#shadows').click();
   const resources = await page.locator('script[src], link[rel="stylesheet"]').evaluateAll(nodes =>
     nodes.map(node => node.getAttribute('src') ?? node.getAttribute('href')));
   expect(resources.length).toBeGreaterThanOrEqual(2);
