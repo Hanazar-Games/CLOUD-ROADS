@@ -12,8 +12,11 @@ test('loads built scripts, styles, workers and the world under the Pages project
     if (/\.(js|css)(\?|$)/.test(response.url())) assets.push(new URL(response.url()).pathname);
   });
   await page.goto('./');
-  // Software rendering on CI cannot budget a 2048px shadow map every frame.
-  if (process.env.CI) await page.locator('#shadows').click();
+  // Let software CI stream terrain before drawing the full forest.
+  if (process.env.CI) {
+    await page.locator('#shadows').click();
+    await page.locator('#vegetation-toggle').click();
+  }
   const resources = await page.locator('script[src], link[rel="stylesheet"]').evaluateAll(nodes =>
     nodes.map(node => node.getAttribute('src') ?? node.getAttribute('href')));
   expect(resources.length).toBeGreaterThanOrEqual(2);
@@ -24,6 +27,11 @@ test('loads built scripts, styles, workers and the world under the Pages project
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 30_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 90_000 });
   await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('289');
+  if (process.env.CI) {
+    await page.locator('#vegetation-toggle').click();
+    await expect.poll(async () => Number(await page.locator('[data-metric="Tree canopies"]').textContent()), { timeout: 15_000 }).toBeGreaterThan(2000);
+    await page.screenshot();
+  }
   await expect(page.locator('#world')).toHaveCSS('position', 'fixed');
   await expect(page.locator('#error')).toBeHidden();
   expect(Number(await page.locator('[data-metric="Draw calls"]').textContent())).toBeGreaterThan(10);
