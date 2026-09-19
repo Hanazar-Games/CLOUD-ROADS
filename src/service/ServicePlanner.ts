@@ -2,6 +2,7 @@ import type { RoadTerrain } from '../road/RoadGenerator';
 import type { RoadSample } from '../road/RoadSegment';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
+import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { hashSeed } from '../world/WorldSeed';
 import { padPoint, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
@@ -18,21 +19,53 @@ export class ServicePlanner {
     this.profile = roadProfile(options);
   }
 
+  private pad(sample: RoadSample, side: number): ServicePad {
+    const offset = side * (this.profile.outerHalfWidth + 50);
+    return { x: sample.position.x + Math.cos(sample.heading) * offset, y: sample.position.y,
+      z: sample.position.z + Math.sin(sample.heading) * offset, heading: sample.heading,
+      grade: Math.max(-0.02, Math.min(0.02, sample.grade)), side, halfWidth: 33, halfLength: 75 };
+  }
+
+  private clear(pad: ServicePad, index: RoadIndex, edges: RoadEdge[]): boolean {
+    const width = pad.halfWidth + this.profile.outerHalfWidth + 10, length = pad.halfLength + this.profile.outerHalfWidth + 10;
+    const radius = Math.hypot(width, length), cos = Math.cos(pad.heading), sin = Math.sin(pad.heading);
+    for (const i of index.within(pad.x - radius, pad.z - radius, pad.x + radius, pad.z + radius)) {
+      const { a, b } = edges[i], ax = a.x - pad.x, az = a.z - pad.z, dx = b.x - a.x, dz = b.z - a.z;
+      let enter = 0, leave = 1;
+      for (const [start, delta, extent] of [[ax * cos + az * sin, dx * cos + dz * sin, width], [ax * sin - az * cos, dx * sin - dz * cos, length]]) {
+        if (Math.abs(delta) < 1e-9) { if (Math.abs(start) > extent) { enter = Infinity; break; } }
+        else {
+          const lo = (-extent - start) / delta, hi = (extent - start) / delta;
+          enter = Math.max(enter, Math.min(lo, hi)); leave = Math.min(leave, Math.max(lo, hi));
+        }
+      }
+      if (enter <= leave) return false;
+    }
+    return true;
+  }
+
   detect(samples: readonly RoadSample[]): ServiceArea[] {
     if (!samples.length) return [];
     const first = samples[0].distance, last = samples.at(-1)!.distance, sites: ServiceArea[] = [];
+    let roadIndex: RoadIndex | undefined;
+    const edges: RoadEdge[] = [];
     for (const id of this.cache.keys()) if (serviceTarget(this.seed, id) < first - 2000 || serviceTarget(this.seed, id) > last + 2000) this.cache.delete(id);
     for (let id = Math.max(1, Math.floor(first / 15000)); id <= Math.ceil(last / 15000); id++) {
       const target = serviceTarget(this.seed, id);
       if (target - SERVICE_SEARCH_RADIUS < first || target + SERVICE_SEARCH_RADIUS > last) continue;
       let site = this.cache.get(id);
       if (!site) {
+        if (!roadIndex) {
+          for (let i = 1; i < samples.length; i++) edges.push({ a: samples[i - 1].position, b: samples[i].position });
+          roadIndex = new RoadIndex(edges);
+        }
         let chosen: RoadSample | undefined, score = Infinity, bucket = -1;
         for (const sample of samples) {
           if (Math.abs(sample.distance - target) > 600 || Math.floor(sample.distance / 24) === bucket) continue;
           bucket = Math.floor(sample.distance / 24);
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;
           for (const side of this.options.roadType === 'highway' ? [-1, 1] : [1]) {
+            if (!this.clear(this.pad(sample, side), roadIndex, edges)) { cost = Infinity; break; }
             const offset = side * (this.profile.outerHalfWidth + 50);
             for (const along of [-75, 0, 75]) {
               const x = sample.position.x + Math.cos(sample.heading) * offset + Math.sin(sample.heading) * along;
@@ -45,10 +78,7 @@ export class ServicePlanner {
         if (!chosen) continue;
         const sample = chosen, pads: ServicePad[] = [], access: ServiceGround['access'] = [];
         for (const side of this.options.roadType === 'highway' ? [-1, 1] : [1]) {
-          const offset = side * (this.profile.outerHalfWidth + 50);
-          const pad: ServicePad = { x: sample.position.x + Math.cos(sample.heading) * offset, y: sample.position.y,
-            z: sample.position.z + Math.sin(sample.heading) * offset, heading: sample.heading,
-            grade: Math.max(-0.02, Math.min(0.02, sample.grade)), side, halfWidth: 33, halfLength: 75 };
+          const pad = this.pad(sample, side);
           pads.push(pad);
           const points: ServiceAccessPoint[] = [];
           for (let i = 0; i < samples.length; i++) {

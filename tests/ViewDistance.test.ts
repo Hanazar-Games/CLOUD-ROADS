@@ -64,12 +64,16 @@ it('releases distant chunks after shrinking and keeps nearby vegetation within i
   expect(manager.stats.allocated).toBeLessThanOrEqual(169 + 289);
   manager.dispose(); expect(scene.children).toHaveLength(0);
 
-  const vegetation = new VegetationMesh(scene), plants = new Float32Array(196 * 7);
-  for (let i = 0; i < plants.length; i += 7) { plants[i + 3] = 1; plants[i + 6] = 1; }
+  const vegetation = new VegetationMesh(scene), plants = new Float32Array(400 * 7);
+  for (let i = 0; i < 400; i++) plants.set([(i % 20 + 0.5) * 12.8, 100, (Math.floor(i / 20) + 0.5) * 12.8, 1, 0, 0, 1], i * 7);
   for (let x = -16; x <= 16; x++) for (let z = -16; z <= 16; z++) vegetation.setChunk(`${x},${z}`, x, z, plants);
   vegetation.update(0, 0);
-  expect(vegetation.trees.count).toBe(289 * 196);
-  vegetation.setViewCenter(12, 12); vegetation.update(0, 0);
-  expect(vegetation.trees.count).toBe(13 * 13 * 196);
+  expect(vegetation.trees.count).toBe(81 * 400);
+  expect(vegetation.count).toBe(81 * 400 + (1089 - 81) * 100);
+  for (const center of [12, -12, 0]) {
+    vegetation.setViewCenter(center, center); vegetation.update(0, 0);
+    expect(vegetation.trees.count).toBe(81 * 400);
+    expect(vegetation.count).toBe(81 * 400 + ((33 - Math.abs(center)) ** 2 - 81) * 100);
+  }
   vegetation.dispose(); expect(scene.children).toHaveLength(0);
 });

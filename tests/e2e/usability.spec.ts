@@ -56,7 +56,7 @@ test('blocks exploration during a terrain failure and restores controls and pref
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
-        if (Reflect.get(window, 'failTerrain')) {
+        if (Reflect.get(window, 'failTerrain') && (message as { seed?: string })?.seed === 'AUDIT-RECOVERY') {
           Reflect.set(window, 'failTerrain', false);
           throw new Error('Injected audit failure');
         }
@@ -66,6 +66,7 @@ test('blocks exploration during a terrain failure and restores controls and pref
     };
   });
   await page.goto('/');
+  await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   await page.locator('#daylight').fill('90');
   await page.locator('#shadows').click();

@@ -1,125 +1,128 @@
-import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DynamicDrawUsage, IcosahedronGeometry, InstancedMesh, Matrix4, MeshStandardMaterial, type Scene } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { CHUNK_SIZE, VIEW_RADIUS } from '../world/ChunkPlanner';
+import { Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshStandardMaterial, type Scene } from 'three';
+import { CHUNK_SIZE, VIEW_RADII } from '../world/ChunkPlanner';
+import { plantGeometry } from './PlantGeometry';
+import { distantPlant, GROUND_DETAIL_RADIUS, PLANT_GRID, TREE_DETAIL_RADIUS } from './VegetationConfig';
 
-const CAPACITY = (VIEW_RADIUS * 2 + 1) ** 2 * 14 ** 2;
-
-function colored(geometry: BufferGeometry, color: string): BufferGeometry {
-  const rgb = new Color(color), colors = new Float32Array(geometry.getAttribute('position').count * 3);
-  for (let i = 0; i < colors.length; i += 3) rgb.toArray(colors, i);
-  geometry.setAttribute('color', new BufferAttribute(colors, 3));
-  return geometry;
-}
-
-function plantGeometry(kind: 'pine' | 'cactus' | 'broadleaf' | 'shrub'): BufferGeometry {
-  const pieces = kind === 'shrub' ? [
-    colored(new IcosahedronGeometry(1.2, 0).scale(1, 0.7, 1).translate(0, 0.7, 0), '#ffffff'),
-    colored(new IcosahedronGeometry(0.85, 0).scale(1, 0.8, 1).translate(0.8, 0.5, 0.4), '#d4dfbd'),
-    colored(new IcosahedronGeometry(0.8, 0).scale(1, 0.75, 1).translate(-0.6, 0.5, -0.6), '#c0cda9'),
-  ] : kind === 'broadleaf' ? [
-    colored(new CylinderGeometry(0.24, 0.55, 8, 7).translate(0, 4, 0), '#655744'),
-    colored(new CylinderGeometry(0.12, 0.26, 4, 5).rotateZ(-0.7).translate(1.1, 6.3, 0), '#78634b'),
-    colored(new IcosahedronGeometry(3.5, 0).scale(1, 1.1, 0.9).translate(0, 9, 0), '#667c42'),
-    colored(new IcosahedronGeometry(2.6, 0).translate(2.1, 7.4, 0.3), '#728a4b'),
-    colored(new IcosahedronGeometry(2.5, 0).translate(-2, 7.7, 0.7), '#58713d'),
-    colored(new IcosahedronGeometry(2.2, 0).translate(0.5, 7.4, -2), '#71864a'),
-  ] : kind === 'cactus' ? [
-    colored(new CylinderGeometry(0.4, 0.55, 6, 7).translate(0, 3, 0), '#6e8050'),
-    colored(new CylinderGeometry(0.3, 0.34, 1.8, 6).rotateZ(Math.PI / 2).translate(0.8, 2.6, 0), '#7c8c58'),
-    colored(new CylinderGeometry(0.27, 0.34, 2.3, 6).translate(1.6, 3.6, 0), '#7c8c58'),
-    colored(new CylinderGeometry(0.27, 0.32, 1.5, 6).rotateZ(Math.PI / 2).translate(-0.7, 3.7, 0), '#64784b'),
-    colored(new CylinderGeometry(0.24, 0.3, 1.7, 6).translate(-1.35, 4.4, 0), '#64784b'),
-  ] : [
-    colored(new CylinderGeometry(0.28, 0.65, 7, 5).translate(0, 3.5, 0), '#5c4933'),
-    colored(new ConeGeometry(3.8, 8.5, 9).rotateY(0.2).translate(0.15, 7.1, -0.2), '#38573a'),
-    colored(new ConeGeometry(3.1, 7.4, 8).rotateY(0.6).translate(-0.35, 10.6, 0.3), '#456345'),
-    colored(new ConeGeometry(2, 6.3, 7).translate(0.2, 13.8, 0), '#5c7752'),
-    colored(new ConeGeometry(1.4, 3.5, 6).translate(1.65, 5.4, -0.6), '#3c603d'),
-  ];
-  const normalized = pieces.map(piece => piece.index ? piece.toNonIndexed() : piece);
-  const geometry = mergeGeometries(normalized)!;
-  for (let i = 0; i < pieces.length; i++) if (normalized[i] !== pieces[i]) normalized[i].dispose();
-  for (const piece of pieces) piece.dispose();
-  return geometry;
-}
+interface PlantChunk { x: number; z: number; plants: Float32Array; entries: PlantInstance[]; ring: number }
+interface PlantInstance { chunk: PlantChunk; offset: number; batch: number; index: number }
+const TREE_CAPACITY = (TREE_DETAIL_RADIUS * 2 + 1) ** 2 * PLANT_GRID ** 2;
+const GROUND_CAPACITY = (GROUND_DETAIL_RADIUS * 2 + 1) ** 2 * PLANT_GRID ** 2;
+const FAR_CAPACITY = (VIEW_RADII.at(-1)! * 2 + 1) ** 2 * PLANT_GRID ** 2 / 4;
 
 export class VegetationMesh {
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
-  readonly trees = new InstancedMesh(plantGeometry('pine'), this.material, CAPACITY);
-  readonly cacti = new InstancedMesh(plantGeometry('cactus'), this.material, CAPACITY);
-  readonly broadleaf = new InstancedMesh(plantGeometry('broadleaf'), this.material, CAPACITY);
-  readonly shrubs = new InstancedMesh(plantGeometry('shrub'), this.material, CAPACITY);
-  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs];
-  private readonly chunks = new Map<string, { x: number; z: number; plants: Float32Array }>();
+  readonly trees = new InstancedMesh(plantGeometry('pine'), this.material, TREE_CAPACITY);
+  readonly cacti = new InstancedMesh(plantGeometry('cactus'), this.material, TREE_CAPACITY);
+  readonly broadleaf = new InstancedMesh(plantGeometry('broadleaf'), this.material, TREE_CAPACITY);
+  readonly shrubs = new InstancedMesh(plantGeometry('shrub'), this.material, GROUND_CAPACITY);
+  readonly rocks = new InstancedMesh(plantGeometry('rock'), this.material, GROUND_CAPACITY);
+  readonly grass = new InstancedMesh(plantGeometry('grass'), this.material, GROUND_CAPACITY);
+  readonly distant = ['pine', 'cactus', 'broadleaf'].map(kind => new InstancedMesh(plantGeometry(kind as 'pine' | 'cactus' | 'broadleaf', true), this.material, FAR_CAPACITY));
+  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant];
+  private readonly entries: PlantInstance[][] = this.meshes.map(() => []);
+  private readonly changed = this.meshes.map(() => ({ min: Infinity, max: -1 }));
+  private readonly chunks = new Map<string, PlantChunk>();
+  private readonly dirty = new Set<PlantChunk>();
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
-  private dirty = false;
-  private anchorX = 0;
-  private anchorZ = 0;
-  private centerX = 0;
-  private centerZ = 0;
+  private anchorX = 0; private anchorZ = 0;
+  private centerX = 0; private centerZ = 0;
   enabled = true;
 
   constructor(scene: Scene) {
-    for (const mesh of this.meshes) {
-      mesh.count = 0;
-      mesh.visible = false;
-      mesh.castShadow = mesh.receiveShadow = true;
+    for (const [i, mesh] of this.meshes.entries()) {
+      mesh.count = 0; mesh.visible = false; mesh.frustumCulled = false;
+      mesh.castShadow = i < 5; mesh.receiveShadow = i < 6;
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-      mesh.setColorAt(0, this.color);
-      mesh.instanceColor!.setUsage(DynamicDrawUsage);
+      mesh.setColorAt(0, this.color); mesh.instanceColor!.setUsage(DynamicDrawUsage);
       scene.add(mesh);
     }
   }
 
   get count(): number { return this.meshes.reduce((sum, mesh) => sum + mesh.count, 0); }
+  get distantCount(): number { return this.distant.reduce((sum, mesh) => sum + mesh.count, 0); }
+  get canopyCount(): number { return this.trees.count + this.broadleaf.count + this.cacti.count + this.distantCount; }
+  get groundCount(): number { return this.shrubs.count + this.rocks.count + this.grass.count; }
 
   setChunk(key: string, x: number, z: number, plants: Float32Array): void {
-    this.chunks.set(key, { x, z, plants });
-    this.dirty = true;
+    this.removeChunk(key);
+    const chunk: PlantChunk = { x, z, plants, entries: [], ring: -1 };
+    this.chunks.set(key, chunk); this.dirty.add(chunk);
   }
 
-  removeChunk(key: string): void { if (this.chunks.delete(key)) this.dirty = true; }
+  removeChunk(key: string): void {
+    const chunk = this.chunks.get(key);
+    if (!chunk) return;
+    this.removeInstances(chunk); this.dirty.delete(chunk); this.chunks.delete(key);
+  }
 
   setViewCenter(x: number, z: number): void {
-    if (x !== this.centerX || z !== this.centerZ) { this.centerX = x; this.centerZ = z; this.dirty = true; }
+    if (x === this.centerX && z === this.centerZ) return;
+    this.centerX = x; this.centerZ = z;
+    for (const chunk of this.chunks.values()) if (this.detail(chunk) !== chunk.ring) this.dirty.add(chunk);
+  }
+
+  private detail(chunk: PlantChunk): number {
+    const distance = Math.max(Math.abs(chunk.x - this.centerX), Math.abs(chunk.z - this.centerZ));
+    return distance <= GROUND_DETAIL_RADIUS ? 0 : distance <= TREE_DETAIL_RADIUS ? 1 : distance <= VIEW_RADII.at(-1)! ? 2 : 3;
+  }
+
+  private removeInstances(chunk: PlantChunk): void {
+    for (const entry of chunk.entries) {
+      const entries = this.entries[entry.batch], last = entries.pop()!;
+      if (last !== entry) { entries[entry.index] = last; last.index = entry.index; this.write(last); }
+      this.meshes[entry.batch].count = entries.length;
+    }
+    chunk.entries.length = 0;
+  }
+
+  private write(entry: PlantInstance): void {
+    const { chunk, offset: i, batch, index } = entry, p = chunk.plants, scale = p[i + 3], angle = p[i + 4];
+    const cos = Math.cos(angle) * scale, sin = Math.sin(angle) * scale;
+    this.matrix.set(cos, 0, sin, chunk.x * CHUNK_SIZE + p[i] - this.anchorX,
+      0, scale * (0.9 + (angle / (Math.PI * 2)) * 0.22), 0, p[i + 1], -sin, 0, cos, chunk.z * CHUNK_SIZE + p[i + 2] - this.anchorZ, 0, 0, 0, 1);
+    const mesh = this.meshes[batch], kind = p[i + 5];
+    mesh.setMatrixAt(index, this.matrix);
+    this.color.setHex(kind === 3 ? 0x83944d : kind === 4 ? 0xbda575 : kind === 6 ? 0x8c9b50 : 0xffffff).multiplyScalar(p[i + 6]);
+    mesh.setColorAt(index, this.color);
+    const changed = this.changed[batch]; changed.min = Math.min(changed.min, index); changed.max = Math.max(changed.max, index);
   }
 
   update(originX: number, originZ: number): void {
-    if (this.dirty) {
-      this.dirty = false;
-      this.anchorX = originX;
-      this.anchorZ = originZ;
-      for (const mesh of this.meshes) mesh.count = 0;
-      for (const { x, z, plants } of this.chunks.values()) for (let i = 0; i < plants.length; i += 7) {
-        if (Math.abs(x - this.centerX) > VIEW_RADIUS || Math.abs(z - this.centerZ) > VIEW_RADIUS) break;
-        const kind = plants[i + 5], mesh = kind === 0 ? this.trees : kind === 1 ? this.cacti : kind === 2 ? this.broadleaf : this.shrubs;
-        if (mesh.count >= CAPACITY) throw new Error('Vegetation instance capacity exceeded');
-        const scale = plants[i + 3], angle = plants[i + 4], cos = Math.cos(angle) * scale, sin = Math.sin(angle) * scale;
-        this.matrix.set(cos, 0, sin, x * CHUNK_SIZE + plants[i] - this.anchorX,
-          0, scale, 0, plants[i + 1], -sin, 0, cos, z * CHUNK_SIZE + plants[i + 2] - this.anchorZ, 0, 0, 0, 1);
-        mesh.setMatrixAt(mesh.count, this.matrix);
-        this.color.setHex(kind === 3 ? 0x708745 : kind === 4 ? 0xbda575 : 0xffffff).multiplyScalar(plants[i + 6]);
-        mesh.setColorAt(mesh.count++, this.color);
-      }
-      for (const mesh of this.meshes) {
-        mesh.instanceMatrix.clearUpdateRanges();
-        mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
-        mesh.instanceMatrix.needsUpdate = true;
-        mesh.instanceColor!.clearUpdateRanges();
-        mesh.instanceColor!.addUpdateRange(0, mesh.count * 3);
-        mesh.instanceColor!.needsUpdate = true;
-        if (mesh.count) mesh.computeBoundingSphere();
+    if (Math.abs(originX - this.anchorX) > 16384 || Math.abs(originZ - this.anchorZ) > 16384) {
+      this.anchorX = originX; this.anchorZ = originZ;
+      for (const entries of this.entries) for (const entry of entries) this.write(entry);
+    }
+    for (const chunk of this.dirty) this.removeInstances(chunk);
+    for (const chunk of this.dirty) {
+      chunk.ring = this.detail(chunk);
+      if (chunk.ring === 3) continue;
+      for (let i = 0; i < chunk.plants.length; i += 7) {
+        const kind = chunk.plants[i + 5], far = chunk.ring === 2;
+        if ((chunk.ring > 0 && kind >= 3) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
+        const batch = far ? 6 + kind : kind <= 2 ? kind : kind <= 4 ? 3 : kind - 1;
+        const entries = this.entries[batch], mesh = this.meshes[batch];
+        if (entries.length >= mesh.instanceMatrix.count) throw new Error('Vegetation instance capacity exceeded');
+        const entry = { chunk, offset: i, batch, index: entries.length };
+        entries.push(entry); chunk.entries.push(entry); mesh.count = entries.length; this.write(entry);
       }
     }
-    for (const mesh of this.meshes) {
-      mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
-      mesh.visible = this.enabled && mesh.count > 0;
+    this.dirty.clear();
+    for (const [i, mesh] of this.meshes.entries()) {
+      const changed = this.changed[i];
+      if (changed.max >= changed.min && mesh.count) {
+        for (const range of mesh.instanceMatrix.updateRanges) { changed.min = Math.min(changed.min, range.start / 16); changed.max = Math.max(changed.max, (range.start + range.count) / 16 - 1); }
+        mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceColor!.clearUpdateRanges();
+        mesh.instanceMatrix.addUpdateRange(changed.min * 16, (changed.max - changed.min + 1) * 16); mesh.instanceMatrix.needsUpdate = true;
+        mesh.instanceColor!.addUpdateRange(changed.min * 3, (changed.max - changed.min + 1) * 3); mesh.instanceColor!.needsUpdate = true;
+      }
+      changed.min = Infinity; changed.max = -1;
+      mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ); mesh.visible = this.enabled && mesh.count > 0;
     }
   }
 
   dispose(): void {
-    this.chunks.clear();
+    this.chunks.clear(); this.dirty.clear(); this.entries.forEach(entries => { entries.length = 0; });
     for (const mesh of this.meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
     this.material.dispose();
   }

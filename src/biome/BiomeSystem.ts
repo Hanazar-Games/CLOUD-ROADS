@@ -26,7 +26,7 @@ const smooth = (min: number, max: number, value: number): number => {
 
 // Linear RGB for the shared terrain material.
 const palette: Record<Biome, readonly [number, number, number]> = {
-  valley: [0.075, 0.14, 0.045], forest: [0.032, 0.075, 0.038],
+  valley: [0.09, 0.16, 0.049], forest: [0.042, 0.087, 0.039],
   rock: [0.23, 0.21, 0.185], alpine: [0.24, 0.28, 0.22], snow: [0.76, 0.84, 0.88],
   desert: [0.58, 0.32, 0.13],
 };
@@ -65,6 +65,7 @@ export class BiomeSystem {
       weights.rock = (1 - snow) * cliff * 0.35;
     }
     const shade = 0.94 + variation * 0.06;
+    const meadow = this.noise.sample(x / 85 + 11, z / 85 - 9);
     target.color.fill(0);
     target.kind = 'valley';
     for (const kind of kinds) {
@@ -73,6 +74,10 @@ export class BiomeSystem {
     }
     const strata = 1 + Math.sin(height / 18 + this.noise.sample(x / 800, z / 800) * 2) * (this.terrain === 'desert' ? 0.08 : 0.035) * (weights.rock + weights.desert);
     for (let channel = 0; channel < 3; channel++) target.color[channel] *= strata;
+    const soilCover = weights.valley + weights.forest + weights.alpine;
+    target.color[0] += meadow * 0.017 * soilCover;
+    target.color[1] += meadow * 0.018 * soilCover;
+    target.color[2] += meadow * 0.009 * soilCover;
     if (this.terrain === 'dunes') {
       target.color[1] += palette.desert[1] * weights.desert * shade * strata * 0.18;
       target.color[2] += palette.desert[2] * weights.desert * shade * strata * 0.35;

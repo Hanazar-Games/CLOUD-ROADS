@@ -97,7 +97,9 @@ it.each((['alpine', 'forest', 'desert', 'dunes'] as const).flatMap(terrain =>
   for (const pad of site.ground.pads) {
     for (const x of [-30, 0, 30]) for (const along of [-72, 0, 72]) {
       const p = padPoint(pad, x, along);
-      expect(p.y - ground(p.x, p.z)).toBeGreaterThan(0.02);
+      expect(corridor.distance(p.x, p.z, 100)).toBeGreaterThan(corridor.roadHalfWidth + 10);
+      expect(p.y - ground(p.x, p.z), JSON.stringify({ x, along, point: p,
+        exactGap: p.y - corridor.height(p.x, p.z, terrain.sample(p.x, p.z)), roadDistance: corridor.distance(p.x, p.z, 100) })).toBeGreaterThan(0.02);
     }
     for (const offset of [-2.8, 0, 2.8]) {
       const a = padPoint(pad, -pad.side * 27 + offset, -72, 1), b = padPoint(pad, -pad.side * 27 + offset, 72, 1);

@@ -108,8 +108,8 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.9');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('上车出发 · 悬挂、驾驶视角与仪表');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.10');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('山野成林 · 山坡细节与远景植被');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');
@@ -120,6 +120,7 @@ test('shows the current release, archives the previous baseline and isolates dia
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.6');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.7');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.8');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.9');
   const position = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(450);

@@ -1,5 +1,45 @@
 import { expect, test } from '@playwright/test';
 
+test('streams distant forest and undergrowth, restores visibility and releases far canopies', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  const count = async (name: string) => Number(await metric(name).textContent({ timeout: 5000 }));
+  const ready = async () => {
+    await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
+    await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
+  };
+  await page.goto('/');
+  await page.locator('#terrain-kind').selectOption('forest');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Landscape')).toHaveText('森林山谷'); await ready();
+  expect(await count('Tree canopies')).toBeGreaterThan(2000);
+  expect(await count('Ground cover')).toBeGreaterThan(1000);
+  const initial = await count('Distant canopies');
+  expect(initial).toBeGreaterThan(100);
+  await page.locator('#view-distance').selectOption('16');
+  await expect(metric('Target chunks')).toHaveText('1089'); await ready();
+  await expect(metric('Active chunks')).toHaveText('1089');
+  const far = await count('Distant canopies'), total = await count('Vegetation instances');
+  expect(far).toBeGreaterThan(initial);
+  expect(await count('Tree canopies') + await count('Ground cover')).toBe(total);
+  await page.locator('#pause').click(); await page.locator('#cloud-toggle').click();
+  const clip = { x: 420, y: 300, width: 500, height: 400 }, forest = await page.screenshot({ clip });
+  await page.locator('#vegetation-toggle').click();
+  await expect(metric('Tree canopies')).toHaveText('0'); await expect(metric('Ground cover')).toHaveText('0');
+  expect(await page.screenshot({ clip })).not.toEqual(forest);
+  await page.locator('#vegetation-toggle').click();
+  await expect(metric('Vegetation instances')).toHaveText(String(total));
+  expect(await page.screenshot({ clip })).toEqual(forest);
+  await page.locator('#view-distance').selectOption('6');
+  await expect(metric('Target chunks')).toHaveText('169'); await ready();
+  await expect(metric('Active chunks')).toHaveText('169');
+  expect(await count('Distant canopies')).toBeLessThan(initial);
+  expect(errors).toEqual([]);
+});
+
 test('switches landscape, width and divided highway, preserving lighting and vegetation preferences', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));

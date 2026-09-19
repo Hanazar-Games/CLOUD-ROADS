@@ -1,15 +1,17 @@
-import { MeshStandardMaterial, type Scene } from 'three';
+import { Vector2, type Scene } from 'three';
 import { TerrainChunk } from '../terrain/TerrainChunk';
 import type { TerrainData } from '../terrain/TerrainGenerator';
 import type { TerrainBackend } from '../terrain/TerrainWorkers';
 import { CHUNK_SIZE, planChunks, VIEW_RADII, VIEW_RADIUS, type ChunkRequest, type TerrainCells } from './ChunkPlanner';
 import type { RoadCorridor } from '../road/RoadCorridor';
 import { VegetationMesh } from '../vegetation/VegetationMesh';
+import { createTerrainMaterial } from '../terrain/TerrainMaterial';
 
 const POOL_LIMITS: Record<TerrainCells, number> = { 64: 25, 16: 56, 8: 208 };
 
 export class ChunkManager {
-  private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  private readonly terrainOrigin = new Vector2();
+  private readonly material = createTerrainMaterial(this.terrainOrigin);
   private readonly active = new Map<string, TerrainChunk>();
   private readonly pooled: Record<TerrainCells, TerrainChunk[]> = { 8: [], 16: [], 64: [] };
   private readonly allocated = new Set<TerrainChunk>();
@@ -110,6 +112,7 @@ export class ChunkManager {
   setOrigin(x: number, z: number): void {
     this.originX = x;
     this.originZ = z;
+    this.terrainOrigin.set(x % 4096, z % 4096);
     for (const chunk of this.active.values()) chunk.setOrigin(x, z);
     this.vegetation.update(x, z);
   }
