@@ -44,7 +44,7 @@ it('forms a continuous canyon with a road ledge, an open drop and an uphill wall
 it.each((['winding', 'cliff'] as const).flatMap(routeStyle => (['mountain', 'highway'] as const).map(roadType => ({ routeStyle, roadType }))))(
   'streams 100 km of $routeStyle $roadType with safe grades, continuous joins and cliff exposure', options => {
   const seed = 'CLOUD-ROAD-001', config = { ...DEFAULT_OPTIONS, ...options };
-  const terrain = new HeightFunction(seed, config.terrain, config.routeStyle), generator = new RoadGenerator(seed, terrain, config);
+  const terrain = new HeightFunction(seed, config.terrain, config.routeStyle, config.roadType), generator = new RoadGenerator(seed, terrain, config);
   let point = generator.start, exposed = 0, total = 0;
   while (point.distance < 100000) {
     const segment = generator.next(point);
@@ -52,7 +52,7 @@ it.each((['winding', 'cliff'] as const).flatMap(routeStyle => (['mountain', 'hig
     for (const t of [0, 0.25, 0.5, 0.75, 1]) {
       const sample = segment.sample(t);
       expect(Object.values(sample.position).every(Number.isFinite)).toBe(true);
-      expect(Math.abs(sample.grade)).toBeLessThanOrEqual(options.roadType === 'highway' ? 0.040001 : 0.060001);
+      expect(Math.abs(sample.grade)).toBeLessThanOrEqual(options.roadType === 'highway' ? 0.030001 : 0.060001);
       expect(Math.abs(sample.curvature)).toBeLessThanOrEqual(segment.kind === 'hairpin' ? 1 / 30 : 1 / 100);
       expect(sample.tangent.z).toBeLessThan(-0.25);
     }

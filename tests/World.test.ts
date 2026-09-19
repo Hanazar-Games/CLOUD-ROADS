@@ -25,11 +25,16 @@ it('pauses and cancels service searches, visits consecutive sites and replays th
   world.resetCamera(camera);
   expect(world.serviceSearchProgress).toBeNull();
   const visit = () => {
-    world.requestServiceView();
     let frames = 0;
+    while (!world.roadReady && frames++ < 2000) world.update(camera);
+    expect(world.roadReady).toBe(true);
+    world.requestServiceView();
     while (world.serviceSearchProgress !== null && frames++ < 2000) world.update(camera);
     expect(world.serviceSearchProgress).toBeNull();
     expect(world.serviceView).toBeDefined();
+    expect(world.roadReady).toBe(false);
+    world.requestServiceView();
+    expect(world.serviceSearchProgress).toBeNull();
     do { world.update(camera); } while (!world.roadReady && frames++ < 4000);
     expect(world.services).toHaveLength(1);
     return world.services[0];
@@ -38,7 +43,9 @@ it('pauses and cancels service searches, visits consecutive sites and replays th
   const second = visit();
   expect(second.sample.distance - first.sample.distance).toBeGreaterThanOrEqual(10000);
   expect(second.sample.distance - first.sample.distance).toBeLessThanOrEqual(20000);
-  world.resetCamera(camera); world.update(camera);
+  world.resetCamera(camera);
+  expect(world.roadReady).toBe(false);
+  world.update(camera);
   expect(visit()).toEqual(first);
   expect(camera.position.clone().add({ x: world.origin.x, y: 0, z: world.origin.z })).toEqual(firstPosition);
   world.dispose(); expect(scene.children).toHaveLength(0);
@@ -170,6 +177,10 @@ it('pauses pass searches, visits consecutive saddles and deterministically retur
   const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
   world.resetCamera(camera);
   world.requestPassView();
+  expect(world.searching).toBe(false);
+  while (!world.road.update(128, 8)) { /* Prepare the initial view before requesting a destination. */ }
+  world.update(camera);
+  world.requestPassView();
   const home = camera.position.clone();
   world.update(camera, false);
   expect(world.passSearchProgress).toBe(0);
@@ -177,11 +188,16 @@ it('pauses pass searches, visits consecutive saddles and deterministically retur
   world.resetCamera(camera);
   expect(world.searching).toBe(false);
   const visit = () => {
-    world.requestPassView();
     let frames = 0;
+    while (!world.roadReady && frames++ < 3000) world.update(camera);
+    expect(world.roadReady).toBe(true);
+    world.requestPassView();
     while (world.searching && frames++ < 3000) world.update(camera);
     expect(world.searching).toBe(false);
     expect(world.serviceView).toBeDefined();
+    expect(world.roadReady).toBe(false);
+    world.requestPassView();
+    expect(world.searching).toBe(false);
     do { world.update(camera); } while (!world.roadReady && frames++ < 6000);
     expect(world.roadReady).toBe(true);
     expect(world.routeStage).toBe('垭口');

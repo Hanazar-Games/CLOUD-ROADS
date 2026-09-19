@@ -20,7 +20,7 @@ export class RoadSpine {
   private readonly terrain;
 
   constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.routeStyle);
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
     this.generator = new RoadGenerator(seed, this.terrain, options);
     this.resume = this.generator.start;
   }
@@ -65,11 +65,15 @@ export class RoadSpine {
 
   update(z: number, budget = 4, halo = ROAD_HALO): boolean {
     z = Math.min(z, this.generator.start.position.z);
-    if (!this.segments.length || this.segments[0].start.distance > 0
-      && this.segments[0].start.position.z < Math.min(this.generator.start.position.z, z + halo) - 0.001) {
-      this.segments.length = 0;
-      this.resume = this.checkpoint(point => point.position.z >= z + halo);
-      this.version++;
+    const first = this.segments[0]?.start, last = this.segments.at(-1)?.end;
+    const missingBehind = first && first.distance > 0 && first.position.z < Math.min(this.generator.start.position.z, z + halo) - 0.001;
+    if (!last || missingBehind || last.position.z > z + halo) {
+      const resume = this.checkpoint(point => point.position.z >= z + halo);
+      if (!last || missingBehind || resume.distance > last.distance) {
+        this.segments.length = 0;
+        this.resume = resume;
+        this.version++;
+      }
     }
     const deadline = performance.now() + 2;
     for (let i = 0; i < budget; i++) {

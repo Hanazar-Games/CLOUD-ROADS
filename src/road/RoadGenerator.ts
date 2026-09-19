@@ -11,17 +11,20 @@ const clamp = (value: number, limit: number): number => Math.max(-limit, Math.mi
 export class RoadGenerator {
   readonly start: RoadControlPoint;
   private readonly noise: Noise;
+  private readonly terrain: RoadTerrain;
 
-  constructor(seed: string, private readonly terrain: RoadTerrain = new HeightFunction(seed), private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
     this.noise = new Noise(hashSeed(`${seed}:road`));
-    this.start = { position: { x: 128, y: terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
+    this.start = { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    if (this.options.roadType === 'highway') return this.highwaySegment(start);
     const winding = this.options.routeStyle === 'winding', cliff = this.options.routeStyle === 'cliff';
     const guide = this.terrain.route?.(start.position.z - 900);
     let mountain = start.mountain;
-    if (this.options.roadType === 'mountain' && !cliff && !mountain && start.distance >= start.nextMountain) {
+    if (!cliff && !mountain && start.distance >= start.nextMountain) {
       const gap = this.terrain.sample(start.position.x, start.position.z - 500) - start.position.y;
       if (winding || Math.abs(gap) > 80 || guide && Math.abs(guide.grade) > 0.023) mountain = {
         stage: 0, side: guide ? guide.x > start.position.x ? 1 : -1 : this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1,
@@ -32,9 +35,9 @@ export class RoadGenerator {
       : this.noise.fractal(start.distance / (winding ? 900 : 2400), 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
-    const gradeLimit = this.options.roadType === 'highway' ? 0.04 : 0.06;
+    const gradeLimit = 0.06;
     const grades = new Set([-1, -0.5, 0, 0.5, 1].map((grade) => start.grade + clamp(grade * gradeLimit - start.grade, 0.02)));
-    for (const turn of this.options.roadType === 'highway' ? [-12, -6, 0, 6, 12] : [-18, -12, -6, 0, 6, 12, 18]) {
+    for (const turn of [-18, -12, -6, 0, 6, 12, 18]) {
       const heading = start.heading + turn * Math.PI / 180;
       if (Math.abs(heading) > 1) continue;
       for (const grade of grades) {
@@ -59,6 +62,22 @@ export class RoadGenerator {
     }
     if (!best) throw new Error('No valid road candidate');
     return best;
+  }
+
+  private highwaySegment(start: RoadControlPoint): RoadSegment {
+    const { x, y, z } = start.position;
+    const cliff = this.options.routeStyle === 'cliff';
+    const guide = this.terrain.route?.(z - 700), behind = this.terrain.route?.(z + 700);
+    const direction = guide && behind ? Math.atan2(guide.x - behind.x, 1400) : this.noise.fractal(start.distance / 12000, 17, 2) * 0.28;
+    const desired = clamp(guide ? cliff ? Math.atan2(guide.x - x, 700) : direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
+    const heading = start.heading + clamp((desired - start.heading) * (cliff ? 0.35 : 0.16), Math.PI / 60);
+    let targetHeight = guide?.height;
+    if (targetHeight === undefined) {
+      targetHeight = 0;
+      for (const distance of [400, 1000, 1800]) targetHeight += this.terrain.sample(x + Math.sin(heading) * distance, z - Math.cos(heading) * distance) / 3;
+    }
+    const grade = start.grade + clamp(clamp((targetHeight - y) / (cliff ? 700 : 1600), 0.03) - start.grade, 0.002);
+    return new RoadSegment(start, heading, grade);
   }
 
   private mountainSegment(start: RoadControlPoint, plan: MountainPlan): RoadSegment {

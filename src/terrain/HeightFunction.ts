@@ -1,6 +1,6 @@
 import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
-import type { RouteStyle, TerrainKind } from '../world/WorldOptions';
+import type { RouteStyle, TerrainKind, WorldOptions } from '../world/WorldOptions';
 import { MountainRanges } from './MountainRanges';
 import { CliffLandscape } from './CliffLandscape';
 
@@ -9,8 +9,8 @@ export class HeightFunction {
   readonly ranges: MountainRanges;
   private readonly cliffs;
 
-  constructor(seed: string, readonly terrain: TerrainKind = 'alpine', routeStyle: RouteStyle = 'natural') {
-    this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed);
+  constructor(seed: string, readonly terrain: TerrainKind = 'alpine', routeStyle: RouteStyle = 'natural', roadType: WorldOptions['roadType'] = 'mountain') {
+    this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed, roadType === 'highway' ? 64000 : 32000);
     this.cliffs = routeStyle === 'cliff' ? new CliffLandscape(seed, this.ranges) : undefined;
   }
 

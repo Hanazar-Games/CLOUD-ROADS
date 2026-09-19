@@ -58,7 +58,7 @@ export class World {
   private corridorVersion = -1;
 
   constructor(scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.height = new HeightFunction(seed, options.terrain, options.routeStyle);
+    this.height = new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
     this.road = new RoadSpine(seed, this.height, options);
@@ -76,6 +76,7 @@ export class World {
 
   resetCamera(camera: PerspectiveCamera): void {
     this.scout = undefined; this.serviceView = undefined;
+    this.roadReady = false;
     this.origin.reset();
     this.chunks.setOrigin(0, 0);
     camera.position.set(128, this.height.sample(128, 128) + 450, 128);
@@ -128,7 +129,7 @@ export class World {
   }
 
   requestPassView(): void {
-    if (this.scout || this.options.terrain !== 'alpine') return;
+    if (this.scout || !this.roadReady || this.options.terrain !== 'alpine') return;
     const z = this.roadSample?.position.z ?? 128;
     let id = this.height.ranges.sample(z).id;
     while (this.height.ranges.passZ(id) > z - 1000) id++;
@@ -136,7 +137,7 @@ export class World {
   }
 
   requestServiceView(): void {
-    if (this.scout) return;
+    if (this.scout || !this.roadReady) return;
     let id = Math.max(1, Math.floor((this.roadSample?.distance ?? 0) / 15000));
     while (serviceTarget(this.seed, id) < (this.roadSample?.distance ?? 0) + 1000) id++;
     this.scout = { road: this.road.fork(), kind: 'service', id, progress: 0 };
@@ -154,6 +155,7 @@ export class World {
       const pz = sample.position.z + Math.sin(sample.heading) * 100 + Math.cos(sample.heading) * 140;
       const y = Math.max(sample.position.y + 85, this.height.sample(x, pz) + 35);
       camera.position.set(x - this.origin.x, y, pz - this.origin.z);
+      this.roadReady = false;
       this.serviceView = { heading: Math.atan2(sample.position.x - x, pz - sample.position.z), pitch: -Math.atan2(y - sample.position.y, Math.hypot(x - sample.position.x, pz - sample.position.z)) };
       this.scout = undefined;
       return;
@@ -168,6 +170,7 @@ export class World {
     const ground = this.height.sample(point.x, point.z);
     point.y = Math.max(point.y, ground + 35);
     camera.position.set(point.x - this.origin.x, point.y, point.z - this.origin.z);
+    this.roadReady = false;
     this.serviceView = { heading: Math.atan2(pad.x - point.x, point.z - pad.z), pitch: -Math.atan2(point.y - pad.y, Math.hypot(pad.x - point.x, pad.z - point.z)) };
     this.scout = undefined;
   }

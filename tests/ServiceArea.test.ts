@@ -78,7 +78,7 @@ it.each([
   { terrain: 'forest' as const, routeStyle: 'winding' as const }, { terrain: 'desert' as const, routeStyle: 'cliff' as const },
 ].flatMap(style => (['mountain', 'highway'] as const).flatMap(roadType => [6, 8, 10].map(roadWidth => ({ ...style, roadType, roadWidth })))))(
   'keeps real $terrain $routeStyle $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
-  const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.routeStyle);
+  const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.routeStyle, choice.roadType);
   const spine = new RoadSpine(seed, terrain, options);
   while (!spine.advanceToDistance(serviceTarget(seed, 1) + 1000)) { /* Complete the service window. */ }
   const sites = new ServicePlanner(seed, terrain, options).detect(spine.samples), site = sites[0];

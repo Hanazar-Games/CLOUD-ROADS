@@ -1,0 +1,45 @@
+import { expect, test } from '@playwright/test';
+
+test('drives gentle highways, preserves the route choice and streams a distant saddle', async ({ page }) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  const ready = async () => {
+    await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
+    await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
+  };
+  await page.goto('/'); await ready();
+  await page.locator('#road-type').selectOption('highway');
+  await page.locator('#route-style').selectOption('winding');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Road layout')).toHaveText('双向四车道'); await ready();
+  await expect(metric('Hairpins')).toHaveText('0');
+  await page.locator('#drive-toggle').click();
+  await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
+  await page.locator('#world').focus(); await page.keyboard.down('KeyW');
+  await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(65);
+  await page.keyboard.up('KeyW'); await page.keyboard.press('KeyP');
+  expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBeLessThanOrEqual(3);
+  expect(Math.abs(parseFloat((await metric('Road curvature').textContent())!))).toBeLessThanOrEqual(0.00084);
+  await page.locator('#controls-toggle').click();
+  await page.locator('#route-style').selectOption('cliff');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Route style')).toHaveText('峡谷挂壁公路'); await ready();
+  await page.locator('#view-distance').selectOption('16');
+  await expect(metric('Target chunks')).toHaveText('1089'); await ready();
+  const before = await metric('Coordinates').textContent();
+  await page.locator('#pass-view').click();
+  await expect(metric('Coordinates')).not.toHaveText(before!, { timeout: 30000 }); await ready();
+  await expect(metric('Mountain stage')).toHaveText('垭口');
+  await expect(metric('Hairpins')).toHaveText('0');
+  expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBeLessThanOrEqual(3);
+  await page.locator('#drive-toggle').click();
+  await expect(metric('Travel mode')).toHaveText('driving');
+  await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
+  await page.locator('#world').focus(); await page.keyboard.down('KeyW');
+  await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(20);
+  await page.keyboard.up('KeyW');
+  expect(errors).toEqual([]);
+});

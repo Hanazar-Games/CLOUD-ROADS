@@ -60,7 +60,7 @@ it('keeps winding traverses open and reserves tunnels for the connecting cruise 
 
 it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real curved %s tunnels', roadType => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 };
-  const terrain = new HeightFunction(seed), spine = new RoadSpine(seed, terrain, options);
+  const terrain = new HeightFunction(seed, options.terrain, options.routeStyle, roadType), spine = new RoadSpine(seed, terrain, options);
   while (!spine.update(128, 8)) { /* Complete the initial route window. */ }
   const bridges = new BridgeDetector(terrain, options).detect(spine.samples);
   const spans = new TunnelDetector(terrain, options).detect(spine.samples, bridges);

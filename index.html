@@ -45,7 +45,7 @@
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">路线风格</label>
             <select id="route-style" aria-describedby="route-style-help"><option value="natural">自然山路 · 起伏与缓弯</option><option value="winding">蜿蜒盘山路 · 连续折返</option><option value="cliff">峡谷挂壁公路 · 山腰临崖</option></select>
-            <p id="route-style-help">路线风格影响沿途生成；挂壁路线会塑造连续峡谷。高速保留缓弯，不生成急折返。</p>
+            <p id="route-style-help">挂壁路线会塑造连续峡谷。高速始终优先长直道与大半径缓弯，坡度不超过 3%；盘山折返只在山路生成。</p>
             <label for="road-width">车行道宽度</label>
             <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>

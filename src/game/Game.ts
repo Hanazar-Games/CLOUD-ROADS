@@ -345,10 +345,10 @@ export class Game {
       element<HTMLButtonElement>('tunnel-view').disabled = !this.world.roadReady || !this.world.tunnels.length;
       element<HTMLButtonElement>('lights-view').disabled = !this.world.roadReady || !this.world.furniture.lampPositions.length;
       const searching = this.world.serviceSearchProgress;
-      element<HTMLButtonElement>('service-view').disabled = this.world.searching;
+      element<HTMLButtonElement>('service-view').disabled = this.world.searching || !this.world.roadReady;
       element('service-view').textContent = searching === null ? '下一服务区' : `定位中 · ${Math.round(searching * 100)}%`;
       const passSearch = this.world.passSearchProgress;
-      element<HTMLButtonElement>('pass-view').disabled = this.world.searching || this.world.options.terrain !== 'alpine';
+      element<HTMLButtonElement>('pass-view').disabled = this.world.searching || !this.world.roadReady || this.world.options.terrain !== 'alpine';
       element('pass-view').textContent = passSearch === null ? '下一垭口' : `定位中 · ${Math.round(passSearch * 100)}%`;
       element('route-stage').textContent = this.world.routeStage;
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
