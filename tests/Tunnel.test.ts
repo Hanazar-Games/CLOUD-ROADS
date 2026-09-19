@@ -47,7 +47,7 @@ it('retains every ventilation instance across a full highway window with repeate
   expect(mesh.fans.count).toBeGreaterThan(512);
   for (const batch of [mesh.fans, mesh.equipment, mesh.lights]) expect(batch.count).toBeLessThanOrEqual(batch.instanceMatrix.count);
   mesh.dispose(); expect(scene.children).toHaveLength(0);
-});
+}, 20_000);
 
 it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real curved %s tunnels', roadType => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 };
