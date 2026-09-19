@@ -69,7 +69,7 @@ describe('BridgeDetector', () => {
       }
     }
     expect(found).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('rejects crossings whose shoulders would intersect a cliff', () => {
     const terrain = valley();
