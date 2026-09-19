@@ -3,11 +3,14 @@ import { HeightFunction } from './HeightFunction';
 import { createTerrainLayout } from './TerrainTopology';
 import { RoadCorridor, type CorridorEdge } from '../road/RoadCorridor';
 import { BiomeSystem, createBiomeSample } from '../biome/BiomeSystem';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { generateVegetation } from '../vegetation/VegetationGenerator';
 
 export interface TerrainData {
   positions: Float32Array<ArrayBuffer>;
   normals: Float32Array<ArrayBuffer>;
   colors: Float32Array<ArrayBuffer>;
+  vegetation: Float32Array<ArrayBuffer>;
 }
 
 const layouts = { 8: createTerrainLayout(8), 16: createTerrainLayout(16), 64: createTerrainLayout(64) };
@@ -16,9 +19,9 @@ export class TerrainGenerator {
   readonly height: HeightFunction;
   private readonly biomes: BiomeSystem;
 
-  constructor(seed: string) {
-    this.height = new HeightFunction(seed);
-    this.biomes = new BiomeSystem(seed);
+  constructor(private readonly seed: string, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.height = new HeightFunction(seed, options.terrain);
+    this.biomes = new BiomeSystem(seed, options.terrain);
   }
 
   generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = []): TerrainData {
@@ -27,7 +30,7 @@ export class TerrainGenerator {
     const positions = new Float32Array(length);
     const normals = new Float32Array(length);
     const colors = new Float32Array(length);
-    const corridor = new RoadCorridor(road);
+    const corridor = new RoadCorridor(road, this.options);
     const biome = createBiomeSample();
     const height = (x: number, z: number) => corridor.height(x, z, this.height.sample(x, z));
     for (let i = 0; i < coordinates.length / 2; i++) {
@@ -47,6 +50,6 @@ export class TerrainGenerator {
       this.biomes.sample(x, z, y, 4 / magnitude, biome);
       colors.set(biome.color, offset);
     }
-    return { positions, normals, colors };
+    return { positions, normals, colors, vegetation: generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes) };
   }
 }

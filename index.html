@@ -23,6 +23,20 @@
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
           <div class="seed-entry"><input id="seed" value="CLOUD-ROAD-001" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
         </form>
+        <details class="world-options" open>
+          <summary>地貌与道路</summary>
+          <form id="world-options">
+            <label for="terrain-kind">地貌</label>
+            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option></select>
+            <label for="road-type">道路类型</label>
+            <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
+            <label for="road-width">车行道宽度</label>
+            <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
+            <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>
+            <div class="actions"><button type="submit">应用并返回起点</button><button id="vegetation-toggle" type="button" aria-pressed="true">植被</button></div>
+            <p id="settings-status" role="status">当前：高山雪岭 · 山路 · 8 米</p>
+          </form>
+        </details>
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
         <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
         <label class="speed-label" for="daylight">光照时刻 <output id="daylight-value">金色时刻</output></label>

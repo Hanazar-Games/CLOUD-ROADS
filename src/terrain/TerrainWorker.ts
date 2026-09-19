@@ -6,15 +6,16 @@ const scope = self as unknown as {
   postMessage: (message: TerrainReply, transfer: Transferable[]) => void;
 };
 let generator: TerrainGenerator;
-let seed: string;
-scope.onmessage = ({ data: { id, seed: requestedSeed, request, road } }) => {
+let key: string;
+scope.onmessage = ({ data: { id, seed, request, road, options } }) => {
   try {
-    if (!generator || seed !== requestedSeed) {
-      seed = requestedSeed;
-      generator = new TerrainGenerator(seed);
+    const requestedKey = JSON.stringify([seed, options]);
+    if (!generator || key !== requestedKey) {
+      key = requestedKey;
+      generator = new TerrainGenerator(seed, options);
     }
     const data = generator.generate(request.x, request.z, request.cells, road);
-    scope.postMessage({ id, data }, [data.positions.buffer, data.normals.buffer, data.colors.buffer]);
+    scope.postMessage({ id, data }, [data.positions.buffer, data.normals.buffer, data.colors.buffer, data.vegetation.buffer]);
   } catch (error) {
     scope.postMessage({ id, error: error instanceof Error ? error.message : String(error) }, []);
   }

@@ -1,4 +1,6 @@
-import { RoadGenerator } from './RoadGenerator';
+import { RoadGenerator, type RoadTerrain } from './RoadGenerator';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { HeightFunction } from '../terrain/HeightFunction';
 import { ROAD_SAMPLES, type RoadSample, type RoadSegment } from './RoadSegment';
 import { RoadIndex } from './RoadIndex';
 
@@ -14,7 +16,9 @@ export class RoadSpine {
   private readonly sampleCache: RoadSample[] = [];
   private index = new RoadIndex([]);
 
-  constructor(seed: string) { this.generator = new RoadGenerator(seed); }
+  constructor(seed: string, terrain: RoadTerrain = new HeightFunction(seed), options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.generator = new RoadGenerator(seed, terrain, options);
+  }
 
   get samples(): readonly RoadSample[] {
     if (this.sampleVersion !== this.version) {

@@ -52,7 +52,7 @@ test('extends the road during 30 km of northbound flight and replays it on retur
   expect(Number(await metric('Origin rebases').textContent())).toBeGreaterThanOrEqual(5);
   await page.getByRole('button', { name: '道路视角' }).click();
   await expect(page.locator('#notice')).not.toContainText('已暂停');
-  await page.getByRole('button', { name: '返回起点' }).click();
+  await page.getByRole('button', { name: '返回起点', exact: true }).click();
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Road distance')).toHaveText('0.00 km');
   await expect(metric('Bridges')).toHaveText(initialBridges!);

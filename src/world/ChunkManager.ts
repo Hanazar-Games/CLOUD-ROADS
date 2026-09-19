@@ -4,6 +4,7 @@ import type { TerrainData } from '../terrain/TerrainGenerator';
 import type { TerrainBackend } from '../terrain/TerrainWorkers';
 import { CHUNK_SIZE, planChunks, type ChunkRequest, type TerrainCells } from './ChunkPlanner';
 import type { RoadCorridor } from '../road/RoadCorridor';
+import { VegetationMesh } from '../vegetation/VegetationMesh';
 
 const POOL_LIMITS: Record<TerrainCells, number> = { 64: 25, 16: 56, 8: 208 };
 
@@ -22,8 +23,11 @@ export class ChunkManager {
   private disposed = false;
   private completed = 0;
   error = '';
+  readonly vegetation: VegetationMesh;
 
-  constructor(private readonly scene: Scene, private readonly seed: string, private readonly backend: TerrainBackend) {}
+  constructor(private readonly scene: Scene, private readonly seed: string, private readonly backend: TerrainBackend) {
+    this.vegetation = new VegetationMesh(scene);
+  }
 
   get stats() {
     let high = 0, medium = 0, low = 0;
@@ -46,7 +50,7 @@ export class ChunkManager {
       for (const request of this.plan) if (corridor.needsDetail(request.x, request.z)) request.cells = 64;
       this.desired = new Map(this.plan.map((request) => [request.key, request]));
       for (const [key, chunk] of this.active) {
-        if (!this.desired.has(key)) { this.active.delete(key); this.release(chunk); }
+        if (!this.desired.has(key)) { this.active.delete(key); this.vegetation.removeChunk(key); this.release(chunk); }
       }
     }
     const started = performance.now();
@@ -59,9 +63,11 @@ export class ChunkManager {
       const chunk = this.acquire(result.request.cells);
       chunk.apply(result.request, result.data, this.originX, this.originZ);
       this.active.set(result.request.key, chunk);
+      this.vegetation.setChunk(result.request.key, result.request.x, result.request.z, result.data.vegetation);
       this.completed++;
       uploaded++;
     }
+    this.vegetation.update(this.originX, this.originZ);
     if (this.error || !corridor) return;
     for (const request of this.plan) {
       if (this.pending.size + this.ready.length >= this.backend.capacity) break;
@@ -96,6 +102,7 @@ export class ChunkManager {
     this.originX = x;
     this.originZ = z;
     for (const chunk of this.active.values()) chunk.setOrigin(x, z);
+    this.vegetation.update(x, z);
   }
 
   setWireframe(enabled: boolean): void { this.material.wireframe = enabled; }
@@ -103,6 +110,7 @@ export class ChunkManager {
   dispose(): void {
     this.disposed = true;
     this.backend.dispose();
+    this.vegetation.dispose();
     for (const chunk of this.allocated) chunk.dispose();
     this.active.clear();
     this.allocated.clear();

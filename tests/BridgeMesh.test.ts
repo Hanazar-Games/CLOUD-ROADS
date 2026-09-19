@@ -10,6 +10,8 @@ import { RoadMesh } from '../src/road/RoadMesh';
 import { roadFrame } from '../src/road/RoadFrame';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { TerrainChunk } from '../src/terrain/TerrainChunk';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../src/world/WorldOptions';
+import { roadProfile } from '../src/road/RoadProfile';
 
 const fixture = () => {
   const terrain = { sample: (_x: number, z: number) => 200 - 120 * Math.sin(Math.PI * Math.max(0, Math.min(1, (-z - 100) / 600))) ** 2 };
@@ -69,17 +71,21 @@ describe('BridgeMesh', () => {
     expect(scene.children).toHaveLength(0);
   });
 
-  it.each(['CLOUD-ROAD-001', 'ROAD-TEST-002'])('keeps real curved decks below asphalt and above the natural valley (%s)', (seed) => {
-    const spine = new RoadSpine(seed), terrain = new TerrainGenerator(seed);
-    const detector = new BridgeDetector(terrain.height);
+  it.each<[string, Readonly<WorldOptions>]>([
+    ['CLOUD-ROAD-001', DEFAULT_OPTIONS], ['ROAD-TEST-002', DEFAULT_OPTIONS],
+    ['CLOUD-ROAD-001', { terrain: 'desert', roadType: 'highway', roadWidth: 10 }],
+    ['CLOUD-ROAD-001', { terrain: 'forest', roadType: 'highway', roadWidth: 6 }],
+  ])('keeps real curved decks below asphalt and above the natural valley (%s, %j)', (seed, options) => {
+    const terrain = new TerrainGenerator(seed, options), spine = new RoadSpine(seed, terrain.height, options);
+    const detector = new BridgeDetector(terrain.height, options);
     let spans: BridgeSpan[] = [];
     for (let z = -1000; z >= -30_000 && !spans.length; z -= 2000) {
       while (!spine.update(z, 8)) { /* Explore until this seed reaches a complete crossing. */ }
       spans = detector.detect(spine.samples);
     }
     expect(spans.length).toBeGreaterThan(0);
-    const scene = new Scene(), bridge = new BridgeMesh(scene), road = new RoadMesh(scene);
-    const corridor = RoadCorridor.fromSamples(spine.samples, spans);
+    const scene = new Scene(), bridge = new BridgeMesh(scene, options), road = new RoadMesh(scene, options);
+    const corridor = RoadCorridor.fromSamples(spine.samples, spans, options);
     bridge.update(spans, corridor, terrain.height, spine.version, 0, 0, true);
     road.update(spine, 0, 0, true);
     scene.updateMatrixWorld(true);
@@ -88,7 +94,8 @@ describe('BridgeMesh', () => {
     for (const span of spans) for (let i = 12; i < span.samples.length - 12; i += 24) {
       const sample = span.samples[i], { right } = roadFrame(sample);
       if (sample.distance - span.start.distance < 40 || span.end.distance - sample.distance < 40) continue;
-      for (const offset of [-4, 0, 4]) {
+      const profile = roadProfile(options);
+      for (const offset of profile.centers.flatMap(center => [center - profile.width / 2, center, center + profile.width / 2])) {
         const x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;
         const cx = Math.floor(x / 256), cz = Math.floor(z / 256), key = `${cx},${cz}`;
         let chunk = chunks.get(key);
@@ -109,5 +116,5 @@ describe('BridgeMesh', () => {
     }
     for (const chunk of chunks.values()) chunk.dispose();
     material.dispose(); road.dispose(); bridge.dispose();
-  });
+  }, 30_000);
 });

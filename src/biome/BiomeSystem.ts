@@ -1,7 +1,8 @@
 import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
+import type { TerrainKind } from '../world/WorldOptions';
 
-export type Biome = 'valley' | 'forest' | 'rock' | 'alpine' | 'snow';
+export type Biome = 'valley' | 'forest' | 'rock' | 'alpine' | 'snow' | 'desert';
 
 export interface BiomeSample {
   kind: Biome;
@@ -13,7 +14,7 @@ export interface BiomeSample {
 }
 
 export const createBiomeSample = (): BiomeSample => ({
-  kind: 'valley', weights: { valley: 1, forest: 0, rock: 0, alpine: 0, snow: 0 },
+  kind: 'valley', weights: { valley: 1, forest: 0, rock: 0, alpine: 0, snow: 0, desert: 0 },
   color: [0, 0, 0], temperature: 0, humidity: 0, snowLine: 3000,
 });
 
@@ -27,21 +28,24 @@ const smooth = (min: number, max: number, value: number): number => {
 const palette: Record<Biome, readonly [number, number, number]> = {
   valley: [0.075, 0.14, 0.045], forest: [0.032, 0.075, 0.038],
   rock: [0.23, 0.21, 0.185], alpine: [0.24, 0.28, 0.22], snow: [0.76, 0.84, 0.88],
+  desert: [0.58, 0.32, 0.13],
 };
-const kinds: readonly Biome[] = ['valley', 'forest', 'rock', 'alpine', 'snow'];
+const kinds: readonly Biome[] = ['valley', 'forest', 'rock', 'alpine', 'snow', 'desert'];
 
 export class BiomeSystem {
   private readonly noise: Noise;
 
-  constructor(seed: string) { this.noise = new Noise(hashSeed(`${seed}:biomes`)); }
+  constructor(seed: string, private readonly terrain: TerrainKind = 'alpine') { this.noise = new Noise(hashSeed(`${seed}:biomes`)); }
 
   sample(x: number, z: number, height: number, normalY: number, target = createBiomeSample()): BiomeSample {
+    const arid = this.terrain === 'desert' || this.terrain === 'dunes';
     const climate = this.noise.fractal(x / 5000, z / 5000, 2);
-    const humidity = clamp(0.5 + this.noise.fractal(x / 2100 + 31, z / 2100 - 47, 2) * 0.45);
+    const humidity = clamp((arid ? 0.12 : this.terrain === 'forest' ? 0.72 : 0.5)
+      + this.noise.fractal(x / 2100 + 31, z / 2100 - 47, 2) * (arid ? 0.12 : 0.45));
     const variation = this.noise.sample(x / 310 - 19, z / 310 + 53);
-    target.temperature = 18 + climate * 1.6 - height * 0.006;
+    target.temperature = (arid ? 32 : 18) + climate * 1.6 - height * 0.006;
     target.humidity = humidity;
-    target.snowLine = 3000 + climate * (1.6 / 0.006) + variation * 100 - (humidity - 0.5) * 120;
+    target.snowLine = (arid ? 32 : 18) / 0.006 + climate * (1.6 / 0.006) + variation * 100 - (humidity - 0.5) * 120;
     const altitude = (18 - target.temperature) / 0.006 - (humidity - 0.5) * 220;
     const forest = smooth(450, 950, altitude);
     const treeline = smooth(1450, 2250, altitude);
@@ -55,12 +59,23 @@ export class BiomeSystem {
     weights.rock = treeline * (1 - alpine) * soil + cliff * (1 - snow);
     weights.alpine = treeline * alpine * soil;
     weights.snow = snow;
+    weights.desert = arid ? (1 - snow) * (1 - cliff * 0.35) : 0;
+    if (arid) {
+      weights.valley = weights.forest = weights.alpine = 0;
+      weights.rock = (1 - snow) * cliff * 0.35;
+    }
     const shade = 0.94 + variation * 0.06;
     target.color.fill(0);
     target.kind = 'valley';
     for (const kind of kinds) {
       if (weights[kind] > weights[target.kind]) target.kind = kind;
       for (let channel = 0; channel < 3; channel++) target.color[channel] += palette[kind][channel] * weights[kind] * shade;
+    }
+    const strata = 1 + Math.sin(height / 18 + this.noise.sample(x / 800, z / 800) * 2) * (this.terrain === 'desert' ? 0.08 : 0.035) * (weights.rock + weights.desert);
+    for (let channel = 0; channel < 3; channel++) target.color[channel] *= strata;
+    if (this.terrain === 'dunes') {
+      target.color[1] += palette.desert[1] * weights.desert * shade * strata * 0.18;
+      target.color[2] += palette.desert[2] * weights.desert * shade * strata * 0.35;
     }
     return target;
   }

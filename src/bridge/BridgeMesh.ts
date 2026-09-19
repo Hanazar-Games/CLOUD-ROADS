@@ -5,20 +5,26 @@ import { roadFrame } from '../road/RoadFrame';
 import type { RoadCorridor } from '../road/RoadCorridor';
 import type { RoadTerrain } from '../road/RoadGenerator';
 import type { BridgeSpan } from './BridgeDetector';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { roadProfile } from '../road/RoadProfile';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
 
 export class BridgeMesh {
   private readonly geometry = new BoxGeometry();
   private readonly material = new MeshStandardMaterial({ color: 0xa8a99c, roughness: 0.92 });
-  readonly deck = new InstancedMesh(this.geometry, this.material, CAPACITY * 3);
-  readonly piers = new InstancedMesh(this.geometry, this.material, CAPACITY);
+  readonly deck: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  readonly piers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  private readonly profile;
   private readonly matrix = new Matrix4();
   private version = -1;
   private anchorX = 0;
   private anchorZ = 0;
 
-  constructor(scene: Scene) {
+  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.profile = roadProfile(options);
+    this.deck = new InstancedMesh(this.geometry, this.material, CAPACITY * (this.profile.centers.length === 1 ? 3 : 4));
+    this.piers = new InstancedMesh(this.geometry, this.material, CAPACITY * this.profile.centers.length);
     for (const mesh of [this.deck, this.piers]) {
       mesh.count = 0;
       mesh.visible = false;
@@ -37,15 +43,21 @@ export class BridgeMesh {
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
       this.deck.count = this.piers.count = 0;
+      const deckWidth = this.profile.halfWidth * 2 + 0.8;
       for (const span of spans) {
         for (let i = 1; i < span.samples.length; i++) {
           const a = span.samples[i - 1], b = span.samples[i], sample = this.between(a, b, 0.5);
           const { right, normal } = roadFrame(sample), { x, y, z } = sample.position;
           const length = Math.hypot(b.position.x - a.position.x, b.position.y - a.position.y, b.position.z - a.position.z)
-            + 11.4 * Math.sin(Math.abs(b.heading - a.heading) / 2) + 0.03;
-          this.box(this.deck, x - normal.x * 1.04, y - normal.y * 1.04, z - normal.z * 1.04, 11.2, 2, length, sample);
-          for (const side of [-5.45, 5.45]) this.box(this.deck, x + right.x * side + normal.x * 0.45,
-            y + right.y * side + normal.y * 0.45, z + right.z * side + normal.z * 0.45, 0.35, 0.8, length, sample);
+            + (this.profile.outerHalfWidth * 2 + 1) * Math.sin(Math.abs(b.heading - a.heading) / 2) + 0.03;
+          for (const center of this.profile.centers) {
+            this.box(this.deck, x + right.x * center - normal.x * 1.04, y + right.y * center - normal.y * 1.04,
+              z + right.z * center - normal.z * 1.04, deckWidth, 2, length, sample);
+            const sides = this.profile.centers.length === 1 ? [-deckWidth / 2 + 0.15, deckWidth / 2 - 0.15]
+              : [center + Math.sign(center) * (deckWidth / 2 - 0.15)];
+            for (const side of sides) this.box(this.deck, x + right.x * side + normal.x * 0.45,
+              y + right.y * side + normal.y * 0.45, z + right.z * side + normal.z * 0.45, 0.35, 0.8, length, sample);
+          }
         }
         this.support(span.start, true, corridor, terrain);
         let index = 1;
@@ -77,12 +89,20 @@ export class BridgeMesh {
   }
 
   private support(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain): void {
+    const { right } = roadFrame(sample);
+    for (const offset of this.profile.centers) this.supportCarriageway({ ...sample, position: {
+      x: sample.position.x + right.x * offset, y: sample.position.y + right.y * offset, z: sample.position.z + right.z * offset,
+    } }, abutment, corridor, terrain);
+  }
+
+  private supportCarriageway(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain): void {
     const { x, y, z } = sample.position;
     const ground = (px: number, pz: number) => {
       const natural = terrain.sample(px, pz);
       return Math.min(natural, corridor.height(px, pz, natural));
     };
-    const width = abutment ? 11.2 : Math.min(6, Math.max(3.2, (y - ground(x, z)) * 0.012));
+    const deckWidth = this.profile.halfWidth * 2 + 0.8;
+    const width = abutment ? deckWidth : Math.min(6, Math.max(3.2, (y - ground(x, z)) * 0.012));
     const footing = width + 2;
     let bottom = Math.min(ground(x, z), y - 5);
     for (const dx of [-footing / 2, footing / 2]) for (const dz of [-footing / 2, footing / 2]) bottom = Math.min(bottom, ground(x + dx, z + dz));
@@ -91,7 +111,7 @@ export class BridgeMesh {
     this.box(this.piers, x, bottom + 1.5, z, footing, 3, footing);
     this.box(this.piers, x, (base + top) / 2, z, width, top - base, abutment ? 4 : width);
     const { normal } = roadFrame(sample);
-    this.box(this.piers, x - normal.x * 2.64, y - normal.y * 2.64, z - normal.z * 2.64, 11.2, 1.2, 4, sample);
+    this.box(this.piers, x - normal.x * 2.64, y - normal.y * 2.64, z - normal.z * 2.64, deckWidth, 1.2, 4, sample);
   }
 
   private box(mesh: InstancedMesh, x: number, y: number, z: number, width: number, height: number, length: number, sample?: RoadSample): void {

@@ -11,6 +11,9 @@ import { RoadCorridor } from '../road/RoadCorridor';
 import { BridgeDetector, type BridgeSpan } from '../bridge/BridgeDetector';
 import { BridgeMesh } from '../bridge/BridgeMesh';
 import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
+import { DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
+import { roadProfile } from '../road/RoadProfile';
+import { roadFrame } from '../road/RoadFrame';
 
 export interface GroundSample {
   height: number;
@@ -35,15 +38,15 @@ export class World {
   private corridor = new RoadCorridor([]);
   private corridorVersion = -1;
 
-  constructor(scene: Scene, readonly seed: string) {
-    this.height = new HeightFunction(seed);
-    this.biomes = new BiomeSystem(seed);
-    this.chunks = new ChunkManager(scene, seed, new TerrainWorkers());
-    this.road = new RoadSpine(seed);
+  constructor(scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.height = new HeightFunction(seed, options.terrain);
+    this.biomes = new BiomeSystem(seed, options.terrain);
+    this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
+    this.road = new RoadSpine(seed, this.height, options);
     this.roadDebug = new RoadDebug(scene);
-    this.roadMesh = new RoadMesh(scene);
-    this.bridgeDetector = new BridgeDetector(this.height);
-    this.bridgeMesh = new BridgeMesh(scene);
+    this.roadMesh = new RoadMesh(scene, options);
+    this.bridgeDetector = new BridgeDetector(this.height, options);
+    this.bridgeMesh = new BridgeMesh(scene, options);
   }
 
   resetCamera(camera: PerspectiveCamera): void {
@@ -59,7 +62,7 @@ export class World {
     this.roadReady = this.road.update(z);
     if (this.roadReady && this.corridorVersion !== this.road.version) {
       this.bridges = this.bridgeDetector.detect(this.road.samples);
-      this.corridor = RoadCorridor.fromSamples(this.road.samples, this.bridges);
+      this.corridor = RoadCorridor.fromSamples(this.road.samples, this.bridges, this.options);
       this.corridorVersion = this.road.version;
     }
     this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
@@ -81,7 +84,9 @@ export class World {
     if (!this.roadReady) return undefined;
     const sample = this.roadSample;
     if (!sample) return undefined;
-    camera.position.set(sample.position.x - this.origin.x, sample.position.y + 25, sample.position.z - this.origin.z);
+    const offset = roadProfile(this.options).centers.at(-1)!, { right } = roadFrame(sample);
+    camera.position.set(sample.position.x + right.x * offset - this.origin.x, sample.position.y + right.y * offset + 25,
+      sample.position.z + right.z * offset - this.origin.z);
     return sample.heading;
   }
 

@@ -78,7 +78,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   expect(Number(await metric('Allocated meshes').textContent())).toBeLessThanOrEqual(578);
   const local = (await metric('Local X / Z').textContent())!.split('/').map(Number);
   expect(Math.hypot(...local)).toBeLessThan(5000);
-  await page.getByRole('button', { name: '返回起点' }).click();
+  await page.getByRole('button', { name: '返回起点', exact: true }).click();
   await expect(page.locator('#position')).toHaveText('128 / 128');
   await expect(page.locator('#altitude')).toHaveText(originalAltitude!);
   await page.getByRole('button', { name: '地形线框' }).click();

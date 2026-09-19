@@ -6,6 +6,9 @@ import { TerrainChunk } from '../src/terrain/TerrainChunk';
 import { RoadMesh } from '../src/road/RoadMesh';
 import { roadFrame } from '../src/road/RoadFrame';
 import { MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../src/world/WorldOptions';
+import { HeightFunction } from '../src/terrain/HeightFunction';
+import { roadProfile } from '../src/road/RoadProfile';
 
 describe('RoadCorridor', () => {
   it('cuts and fills a banked roadbed, blends slopes and preserves distant terrain', () => {
@@ -42,12 +45,17 @@ describe('RoadCorridor', () => {
     expect(corridor.forChunk(1000, 1000)).toEqual([]);
   });
 
-  it.each(['CLOUD-ROAD-001', 'ROAD-TEST-002'])('supports the actual road triangles and shoulders for seed %s', (seed) => {
-    const spine = new RoadSpine(seed);
+  it.each<[string, Readonly<WorldOptions>]>([
+    ['CLOUD-ROAD-001', DEFAULT_OPTIONS], ['ROAD-TEST-002', DEFAULT_OPTIONS],
+    ['NARROW', { ...DEFAULT_OPTIONS, roadWidth: 6 }], ['WIDE', { ...DEFAULT_OPTIONS, roadWidth: 10 }],
+    ['HIGHWAY', { terrain: 'forest', roadType: 'highway', roadWidth: 10 }],
+    ['DESERT', { terrain: 'desert', roadType: 'highway', roadWidth: 6 }],
+  ])('supports the actual road triangles and shoulders for %s', (seed, options) => {
+    const spine = new RoadSpine(seed, new HeightFunction(seed, options.terrain), options);
     while (!spine.update(-800, 8)) { /* Load enough road to test both sides of chunk seams. */ }
-    const corridor = RoadCorridor.fromSamples(spine.samples);
-    const generator = new TerrainGenerator(seed);
-    const road = new RoadMesh(new Scene());
+    const corridor = RoadCorridor.fromSamples(spine.samples, [], options);
+    const generator = new TerrainGenerator(seed, options);
+    const road = new RoadMesh(new Scene(), options);
     road.update(spine, 0, 0, true);
     road.mesh.updateMatrixWorld(true);
     const material = new MeshStandardMaterial();
@@ -55,7 +63,8 @@ describe('RoadCorridor', () => {
     const ray = new Raycaster();
     for (let i = 13; i < spine.samples.length - 1; i += 13) {
       const sample = spine.samples[i], { right } = roadFrame(sample);
-      for (const offset of [-5, 0, 5]) {
+      const profile = roadProfile(options);
+      for (const offset of profile.centers.flatMap(center => [center - profile.halfWidth + 0.2, center, center + profile.halfWidth - 0.2])) {
         const x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;
         const cx = Math.floor(x / 256), cz = Math.floor(z / 256), key = `${cx},${cz}`;
         let chunk = chunks.get(key);
@@ -77,5 +86,5 @@ describe('RoadCorridor', () => {
     for (const chunk of chunks.values()) chunk.dispose();
     road.dispose();
     material.dispose();
-  });
+  }, 30_000);
 });

@@ -1,0 +1,112 @@
+import { expect, test } from '@playwright/test';
+
+test('switches landscape, width and divided highway, preserving lighting and vegetation preferences', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  const ready = async () => {
+    await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
+    await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
+  };
+  await page.goto('/');
+  await ready();
+  await page.locator('#daylight').fill('90');
+  await page.locator('#terrain-kind').selectOption('forest');
+  await page.locator('#road-type').selectOption('highway');
+  await page.locator('#road-width').selectOption('10');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Landscape')).toHaveText('森林山谷');
+  await ready();
+  await expect(metric('Road layout')).toHaveText('双向四车道');
+  await expect(metric('Carriageway width')).toHaveText('10 m');
+  await expect(metric('Hairpins')).toHaveText('0');
+  await expect(page.locator('#hairpin-view')).toBeDisabled();
+  expect(Number(await metric('Vegetation instances').textContent())).toBeGreaterThan(500);
+  await expect(page.locator('#daylight')).toHaveValue('90');
+  await page.locator('#road-view').click();
+  await expect(page.locator('#world')).toBeFocused();
+  await ready();
+  await page.locator('#pause').click();
+  await page.locator('#cloud-toggle').click();
+  const clip = { x: 420, y: 300, width: 500, height: 400 };
+  const forest = await page.screenshot({ clip });
+  await page.locator('#vegetation-toggle').click();
+  await expect(metric('Vegetation instances')).toHaveText('0');
+  expect(await page.screenshot({ clip })).not.toEqual(forest);
+  await page.locator('#terrain-kind').selectOption('desert');
+  await page.locator('#road-width').selectOption('6');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric('Landscape')).toHaveText('沙漠峡谷');
+  await ready();
+  await expect(metric('Vegetation instances')).toHaveText('0');
+  await expect(metric('Carriageway width')).toHaveText('6 m');
+  await page.locator('#vegetation-toggle').click();
+  await expect.poll(async () => Number(await metric('Vegetation instances').textContent())).toBeGreaterThan(0);
+  await page.locator('#seed').fill('LANDSCAPE-REPLAY');
+  await page.getByRole('button', { name: '加载种子' }).click();
+  await expect(metric('Seed')).toHaveText('LANDSCAPE-REPLAY');
+  await ready();
+  await expect(metric('Landscape')).toHaveText('沙漠峡谷');
+  await expect(page.locator('#terrain-kind')).toHaveValue('desert');
+  await expect(page.locator('#road-type')).toHaveValue('highway');
+  await expect(page.locator('#daylight')).toHaveValue('90');
+  await expect(page.locator('#cloud-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#error')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('applies world choices in a narrow window without leaking movement from selectors', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.locator('#terrain-kind').selectOption('desert');
+  await page.locator('#road-type').selectOption('highway');
+  await page.locator('#road-width').selectOption('8');
+  const apply = page.getByRole('button', { name: '应用并返回起点' });
+  await apply.scrollIntoViewIfNeeded();
+  await expect(apply).toBeInViewport();
+  await apply.click();
+  await expect(page.locator('[data-metric="Landscape"]')).toHaveText('沙漠峡谷');
+  await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 30_000 });
+  await page.locator('#terrain-kind').focus();
+  const coordinates = await page.locator('[data-metric="Coordinates"]').textContent();
+  await page.keyboard.press('KeyP');
+  await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(250);
+  await page.keyboard.up('KeyW');
+  await expect(page.locator('[data-metric="Coordinates"]')).toHaveText(coordinates!);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('replaces in-flight worlds and restores dunes and highway geometry after context loss', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  await page.goto('/');
+  for (const terrain of ['forest', 'desert', 'dunes']) {
+    await page.locator('#terrain-kind').selectOption(terrain);
+    await page.locator('#road-type').selectOption('highway');
+    await page.getByRole('button', { name: '应用并返回起点' }).click();
+  }
+  await expect(metric('Landscape')).toHaveText('沙丘旷野');
+  await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
+  await expect(metric('Active chunks')).toHaveText('289');
+  const count = await metric('Vegetation instances').textContent();
+  expect(Number(count)).toBeGreaterThan(0);
+  await page.locator('#pause').click();
+  const clip = { x: 400, y: 200, width: 700, height: 500 };
+  const before = await page.screenshot({ clip });
+  await page.locator('#world').evaluate(canvas => {
+    const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
+    extension.loseContext();
+    setTimeout(() => extension.restoreContext(), 1000);
+  });
+  await expect(page.locator('#error')).toBeVisible();
+  await expect(page.locator('#error')).toBeHidden();
+  await expect(metric('Vegetation instances')).toHaveText(count!);
+  expect(await page.screenshot({ clip })).toEqual(before);
+  await expect(page.locator('#terrain-kind')).toHaveValue('dunes');
+  expect(errors).toEqual([]);
+});

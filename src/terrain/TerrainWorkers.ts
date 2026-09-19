@@ -1,13 +1,14 @@
 import type { ChunkRequest } from '../world/ChunkPlanner';
 import type { TerrainData } from './TerrainGenerator';
 import type { CorridorEdge } from '../road/RoadCorridor';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 
 export interface TerrainBackend {
   readonly capacity: number;
   generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[]): Promise<TerrainData>;
   dispose(): void;
 }
-export interface TerrainJob { id: number; seed: string; request: ChunkRequest; road: readonly CorridorEdge[] }
+export interface TerrainJob { id: number; seed: string; request: ChunkRequest; road: readonly CorridorEdge[]; options: Readonly<WorldOptions> }
 export type TerrainReply = { id: number; data: TerrainData } | { id: number; error: string };
 interface PendingJob {
   id: number;
@@ -23,7 +24,7 @@ export class TerrainWorkers implements TerrainBackend {
   private nextId = 0;
   private error: Error | undefined;
 
-  constructor() {
+  constructor(private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     try {
       for (let i = 0; i < this.capacity; i++) {
         const worker = new Worker(new URL('./TerrainWorker.ts', import.meta.url), { type: 'module' });
@@ -54,7 +55,7 @@ export class TerrainWorkers implements TerrainBackend {
       const id = this.nextId++;
       const timeout = setTimeout(() => this.fail(new Error('Terrain worker timed out')), 15_000);
       slot.pending = { id, resolve, reject, timeout };
-      try { slot.worker.postMessage({ id, seed, request, road } satisfies TerrainJob); }
+      try { slot.worker.postMessage({ id, seed, request, road, options: this.options } satisfies TerrainJob); }
       catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))); }
     });
   }

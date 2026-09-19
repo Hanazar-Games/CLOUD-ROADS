@@ -2,8 +2,8 @@ import { Color, Vector2, Vector3 } from 'three';
 
 const palettes = [
   { sun: new Color('#fff0d5'), zenith: new Color('#639ac5'), horizon: new Color('#c9d9de'), haze: new Color('#b7c8ce'), ambient: new Color('#b1c9e7') },
-  { sun: new Color('#ffcf91'), zenith: new Color('#607eaa'), horizon: new Color('#f5b27d'), haze: new Color('#bba6a0'), ambient: new Color('#b6bbd7') },
-  { sun: new Color('#ff7c4d'), zenith: new Color('#3b456b'), horizon: new Color('#d88b79'), haze: new Color('#8b829b'), ambient: new Color('#a19fbf') },
+  { sun: new Color('#ffc477'), zenith: new Color('#607eaa'), horizon: new Color('#ffad5e'), haze: new Color('#d4aa82'), ambient: new Color('#b6bbd7') },
+  { sun: new Color('#ff873e'), zenith: new Color('#45466c'), horizon: new Color('#f48943'), haze: new Color('#bd815c'), ambient: new Color('#aba0b5') },
 ];
 
 export class SunSystem {

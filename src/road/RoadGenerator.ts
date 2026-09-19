@@ -2,6 +2,7 @@ import { HeightFunction } from '../terrain/HeightFunction';
 import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
 import { RoadSegment, type MountainPlan, type RoadControlPoint } from './RoadSegment';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 
 export interface RoadTerrain { sample(x: number, z: number): number }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -10,14 +11,14 @@ export class RoadGenerator {
   readonly start: RoadControlPoint;
   private readonly noise: Noise;
 
-  constructor(seed: string, private readonly terrain: RoadTerrain = new HeightFunction(seed)) {
+  constructor(seed: string, private readonly terrain: RoadTerrain = new HeightFunction(seed), private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.noise = new Noise(hashSeed(`${seed}:road`));
-    this.start = { position: { x: 128, y: terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: 8, bank: 0, nextMountain: 600 };
+    this.start = { position: { x: 128, y: terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
   }
 
   next(start: RoadControlPoint): RoadSegment {
     let mountain = start.mountain;
-    if (!mountain && start.distance >= start.nextMountain) {
+    if (this.options.roadType === 'mountain' && !mountain && start.distance >= start.nextMountain) {
       const gap = this.terrain.sample(start.position.x, start.position.z - 500) - start.position.y;
       if (Math.abs(gap) > 80) mountain = { stage: 0, side: this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1, grade: Math.sign(gap) * 0.06 };
     }
@@ -25,8 +26,9 @@ export class RoadGenerator {
     const desiredHeading = this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
-    const grades = new Set([-0.06, -0.03, 0, 0.03, 0.06].map((grade) => start.grade + clamp(grade - start.grade, 0.02)));
-    for (const turn of [-18, -12, -6, 0, 6, 12, 18]) {
+    const gradeLimit = this.options.roadType === 'highway' ? 0.04 : 0.06;
+    const grades = new Set([-1, -0.5, 0, 0.5, 1].map((grade) => start.grade + clamp(grade * gradeLimit - start.grade, 0.02)));
+    for (const turn of this.options.roadType === 'highway' ? [-12, -6, 0, 6, 12] : [-18, -12, -6, 0, 6, 12, 18]) {
       const heading = start.heading + turn * Math.PI / 180;
       if (Math.abs(heading) > 1) continue;
       for (const grade of grades) {

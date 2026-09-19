@@ -1,6 +1,8 @@
 import type { RoadTerrain } from '../road/RoadGenerator';
 import type { RoadSample } from '../road/RoadSegment';
 import { roadFrame } from '../road/RoadFrame';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { roadProfile } from '../road/RoadProfile';
 
 export const MAX_BRIDGE_LENGTH = 1400;
 export const BRIDGE_APPROACH = 32;
@@ -14,7 +16,12 @@ export interface BridgeSpan {
 export class BridgeDetector {
   private readonly clearance = new Map<number, { center: number; minimum: number }>();
 
-  constructor(private readonly terrain: RoadTerrain) {}
+  private readonly offsets: number[];
+
+  constructor(private readonly terrain: RoadTerrain, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    const profile = roadProfile(options);
+    this.offsets = profile.centers.flatMap(center => [center - profile.halfWidth - 0.4, center, center + profile.halfWidth + 0.4]);
+  }
 
   get cachedSamples(): number { return this.clearance.size; }
 
@@ -30,7 +37,7 @@ export class BridgeDetector {
         const { x, y, z } = sample.position, { right } = roadFrame(sample);
         const center = y - this.terrain.sample(x, z);
         const side = (offset: number) => y + right.y * offset - this.terrain.sample(x + right.x * offset, z + right.z * offset);
-        gap = { center, minimum: Math.min(center, side(-5.6), side(5.6)) };
+        gap = { center, minimum: Math.min(center, ...this.offsets.map(side)) };
         this.clearance.set(sample.distance, gap);
       }
       if (gap.center <= 12) {
