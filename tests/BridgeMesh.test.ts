@@ -24,11 +24,12 @@ const fixture = () => {
 };
 
 describe('BridgeMesh', () => {
-  it('supports the road with a solid deck and ground-connected piers in two batches', () => {
+  it('supports the road with a solid deck, ground-connected piers and structural details', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(2);
+    expect(scene.children).toHaveLength(3);
+    expect(mesh.details.count).toBeGreaterThan(mesh.deck.count);
     expect(mesh.deck.count).toBe((bridges[0].samples.length - 1) * 3);
     expect(mesh.pierCount).toBeGreaterThan(10);
     const matrix = new Matrix4();

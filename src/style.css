@@ -33,7 +33,7 @@ label span { float: right; font: 8px ui-monospace, monospace; letter-spacing: 1p
 .world-options summary { font-size: 11px; color: #d6e6c1; cursor: pointer; padding: 4px 0; }
 .world-options label { margin-top: 12px; }
 .world-options select { width: 100%; min-height: 34px; margin-top: 6px; padding: 6px; border: 1px solid #ffffff30; border-radius: 3px; background: #1c3037; color: #f2f4ed; font-size: 11px; }
-#road-width-help, #settings-status { font-size: 10px; line-height: 1.7; color: #d0d9d8; }
+#road-width-help, #settings-status, .panel-help { font-size: 10px; line-height: 1.7; color: #d0d9d8; }
 #settings-status { margin-bottom: 0; color: #d6e6c1; }
 output { font: 10px ui-monospace, monospace; color: #d6e6c1; }
 input[type=range] { width: 100%; height: 24px; accent-color: #d6e6c1; margin: 4px 0 6px; cursor: pointer; }

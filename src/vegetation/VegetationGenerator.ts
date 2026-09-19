@@ -22,7 +22,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
     biomes.sample(wx, wz, y, normalY, biome);
     const desert = biome.weights.desert > 0.5;
     const density = desert ? 0.16 : (biome.weights.forest * 0.85 + biome.weights.valley * 0.5) * (0.6 + biome.humidity * 0.4);
-    if (chance > density || corridor.distance(wx, wz, corridor.roadHalfWidth + 10) < corridor.roadHalfWidth + 8) continue;
+    if (chance > density || corridor.distance(wx, wz, corridor.roadHalfWidth + 10) < corridor.roadHalfWidth + 8 || corridor.tunnelCover(wx, wz)) continue;
     plants.push(x, y - 0.15, z, scale, rotation, desert ? 1 : 0, tint);
   }
   return new Float32Array(plants);

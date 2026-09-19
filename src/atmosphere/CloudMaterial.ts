@@ -13,6 +13,7 @@ export class CloudMaterial extends ShaderMaterial {
         phase: { value: new Vector2() }, altitude: { value: 0 },
         nearFar: { value: new Vector2(0.5, 7000) }, fogRange: { value: new Vector2(1000, 1950) },
         cloudsEnabled: { value: true }, immersion: { value: 0 },
+        weatherCover: { value: 0 }, nightAmount: { value: 0 },
         sunDirection: { value: sun.direction }, sunColor: { value: sun.sunColor }, solar: { value: sun.light },
         zenithColor: { value: sun.zenith }, horizonColor: { value: sun.horizon },
         hazeColor: { value: sun.haze }, ambientColor: { value: sun.ambient },

@@ -37,6 +37,29 @@ it('reports the rendered ground biome through road coupling, bridges and origin 
   world.dispose();
 });
 
+it('recognizes tunnel shelter only inside the bore, including after rebasing', () => {
+  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
+  while (!world.road.update(128, 8)) { /* Load the initial structures. */ }
+  world.update(camera);
+  expect(world.inspectTunnel(camera)).toBeDefined();
+  world.update(camera);
+  expect(world.shelter).toBe(0);
+  const span = world.tunnels[0], sample = span.samples[Math.floor(span.samples.length / 2)];
+  camera.position.set(sample.position.x, sample.position.y + 3, sample.position.z);
+  world.update(camera);
+  expect(world.shelter).toBe(1);
+  const before = world.shelter;
+  world.origin.x = 5120; world.origin.z = -5120;
+  camera.position.x -= world.origin.x; camera.position.z -= world.origin.z;
+  world.update(camera);
+  expect(world.shelter).toBe(before);
+  camera.position.y += 20;
+  world.update(camera);
+  expect(world.shelter).toBe(0);
+  world.dispose();
+  expect(scene.children).toHaveLength(0);
+});
+
 it('places the hairpin overview above terrain and aims at the turn', () => {
   const world = new World(new Scene(), 'CLOUD-ROAD-001');
   const camera = new PerspectiveCamera();

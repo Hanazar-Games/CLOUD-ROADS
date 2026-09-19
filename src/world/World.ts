@@ -14,6 +14,9 @@ import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
 import { DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
+import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
+import { TunnelMesh } from '../tunnel/TunnelMesh';
+import { RoadFurniture } from '../road/RoadFurniture';
 
 export interface GroundSample {
   height: number;
@@ -29,8 +32,13 @@ export class World {
   readonly roadDebug: RoadDebug;
   readonly roadMesh: RoadMesh;
   readonly bridgeMesh: BridgeMesh;
+  readonly tunnelMesh: TunnelMesh;
+  readonly furniture: RoadFurniture;
+  tunnels: readonly TunnelSpan[] = [];
+  shelter = 0;
   bridges: readonly BridgeSpan[] = [];
   private readonly bridgeDetector: BridgeDetector;
+  private readonly tunnelDetector: TunnelDetector;
   private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
   roadReady = false;
@@ -47,6 +55,9 @@ export class World {
     this.roadMesh = new RoadMesh(scene, options);
     this.bridgeDetector = new BridgeDetector(this.height, options);
     this.bridgeMesh = new BridgeMesh(scene, options);
+    this.tunnelDetector = new TunnelDetector(this.height, options);
+    this.tunnelMesh = new TunnelMesh(scene, seed, options);
+    this.furniture = new RoadFurniture(scene, seed, options);
   }
 
   resetCamera(camera: PerspectiveCamera): void {
@@ -62,7 +73,8 @@ export class World {
     this.roadReady = this.road.update(z);
     if (this.roadReady && this.corridorVersion !== this.road.version) {
       this.bridges = this.bridgeDetector.detect(this.road.samples);
-      this.corridor = RoadCorridor.fromSamples(this.road.samples, this.bridges, this.options);
+      this.tunnels = this.tunnelDetector.detect(this.road.samples, this.bridges);
+      this.corridor = RoadCorridor.fromSamples(this.road.samples, this.bridges, this.options, this.tunnels);
       this.corridorVersion = this.road.version;
     }
     this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
@@ -71,6 +83,44 @@ export class World {
     this.roadDebug.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.roadMesh.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.bridgeMesh.update(this.bridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
+    this.tunnelMesh.update(this.tunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
+    this.furniture.update(this.road.samples, this.tunnels, this.bridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
+    this.shelter = this.tunnelShelter(x, camera.position.y, z);
+  }
+
+  private tunnelShelter(x: number, y: number, z: number): number {
+    const sample = this.roadSample;
+    if (!sample) return 0;
+    const span = this.tunnels.find(tunnel => sample.distance >= tunnel.start.distance && sample.distance <= tunnel.end.distance);
+    if (!span) return 0;
+    const { right, normal } = roadFrame(sample), dx = x - sample.position.x, dy = y - sample.position.y, dz = z - sample.position.z;
+    const lateral = dx * right.x + dy * right.y + dz * right.z, height = dx * normal.x + dy * normal.y + dz * normal.z;
+    const profile = roadProfile(this.options), offset = Math.min(...profile.centers.map(center => Math.abs(lateral - center)));
+    if (offset > profile.halfWidth + 0.65 || height < -0.5 || height > 4.2 + 3.3 * Math.sqrt(1 - (offset / (profile.halfWidth + 0.75)) ** 2)) return 0;
+    return Math.max(0, Math.min(1, (sample.distance - span.start.distance) / 8, (span.end.distance - sample.distance) / 8));
+  }
+
+  inspectTunnel(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    if (!this.roadReady) return undefined;
+    const span = this.tunnels.find(tunnel => tunnel.start.distance > (this.roadSample?.distance ?? 0) + 50) ?? this.tunnels[0];
+    if (!span) return undefined;
+    const sample = this.road.samples.reduce((best, point) => Math.abs(point.distance - span.start.distance + 18) < Math.abs(best.distance - span.start.distance + 18) ? point : best);
+    this.placeOnRoad(camera, sample, 3);
+    return { heading: sample.heading, pitch: Math.atan(sample.grade) };
+  }
+
+  inspectLights(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    if (!this.roadReady) return undefined;
+    const lamp = this.furniture.lampPositions.find(point => point.sample.distance > (this.roadSample?.distance ?? 0) + 100) ?? this.furniture.lampPositions[0];
+    if (!lamp) return undefined;
+    this.placeOnRoad(camera, lamp.sample, 3);
+    return { heading: lamp.sample.heading, pitch: Math.atan(lamp.sample.grade) };
+  }
+
+  private placeOnRoad(camera: PerspectiveCamera, sample: RoadSample, height: number): void {
+    const offset = roadProfile(this.options).centers.at(-1)!, { right, normal } = roadFrame(sample), p = sample.position;
+    camera.position.set(p.x + right.x * offset + normal.x * height - this.origin.x,
+      p.y + right.y * offset + normal.y * height, p.z + right.z * offset + normal.z * height - this.origin.z);
   }
 
   sampleGround(x: number, z: number): GroundSample {
@@ -84,9 +134,7 @@ export class World {
     if (!this.roadReady) return undefined;
     const sample = this.roadSample;
     if (!sample) return undefined;
-    const offset = roadProfile(this.options).centers.at(-1)!, { right } = roadFrame(sample);
-    camera.position.set(sample.position.x + right.x * offset - this.origin.x, sample.position.y + right.y * offset + 25,
-      sample.position.z + right.z * offset - this.origin.z);
+    this.placeOnRoad(camera, sample, this.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) ? 3 : 25);
     return sample.heading;
   }
 
@@ -139,5 +187,8 @@ export class World {
     return { heading: sample.heading - Math.PI / 2, pitch: -Math.atan2(y - sample.position.y, distance) };
   }
 
-  dispose(): void { this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose(); }
+  dispose(): void {
+    this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
+    this.tunnelMesh.dispose(); this.furniture.dispose();
+  }
 }

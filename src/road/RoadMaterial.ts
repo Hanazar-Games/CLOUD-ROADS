@@ -15,11 +15,14 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       float aa = max(fwidth(vRoadUv.x), 0.015);
       float shoulder = smoothstep(roadHalfWidth - aa, roadHalfWidth + aa, lateral);
       vec3 surface = mix(vec3(0.065, 0.073, 0.078), vec3(0.24, 0.225, 0.19), shoulder);
+      float grain = fract(sin(dot(floor(vRoadUv * 28.0), vec2(127.1, 311.7))) * 43758.5453);
+      surface *= 1.0 + (grain - 0.5) * 0.18 * (1.0 - smoothstep(0.015, 0.15, length(fwidth(vRoadUv))));
       float edge = 1.0 - smoothstep(0.065 - aa, 0.065 + aa, abs(lateral - roadHalfWidth + 0.35));
       float center = 1.0 - smoothstep(0.075 - aa, 0.075 + aa, lateral);
       float along = abs(mod(vRoadUv.y, 12.0) - 6.0);
       float dash = 1.0 - smoothstep(2.0 - fwidth(vRoadUv.y), 2.0 + fwidth(vRoadUv.y), along);
-      vec3 marking = mix(vec3(0.83, 0.82, 0.72), vec3(0.95, 0.61, 0.12), step(abs(vRoadUv.x), roadCenter) * edge);
+      float yellow = roadCenter > 0.01 ? step(abs(vRoadUv.x), roadCenter) * edge : center * dash;
+      vec3 marking = mix(vec3(0.83, 0.82, 0.72), vec3(0.95, 0.61, 0.12), yellow);
       diffuseColor.rgb = mix(surface, marking, max(edge, center * dash));
     `);
   };

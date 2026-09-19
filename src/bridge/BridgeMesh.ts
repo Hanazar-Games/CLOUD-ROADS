@@ -15,6 +15,7 @@ export class BridgeMesh {
   private readonly material = new MeshStandardMaterial({ color: 0xa8a99c, roughness: 0.92 });
   readonly deck: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly piers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   private readonly profile;
   private readonly matrix = new Matrix4();
   private version = -1;
@@ -25,7 +26,8 @@ export class BridgeMesh {
     this.profile = roadProfile(options);
     this.deck = new InstancedMesh(this.geometry, this.material, CAPACITY * (this.profile.centers.length === 1 ? 3 : 4));
     this.piers = new InstancedMesh(this.geometry, this.material, CAPACITY * this.profile.centers.length);
-    for (const mesh of [this.deck, this.piers]) {
+    this.details = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0x586a71, metalness: 0.45, roughness: 0.6 }), CAPACITY * 8);
+    for (const mesh of [this.deck, this.piers, this.details]) {
       mesh.count = 0;
       mesh.visible = false;
       mesh.castShadow = mesh.receiveShadow = true;
@@ -42,7 +44,7 @@ export class BridgeMesh {
       this.version = version;
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
-      this.deck.count = this.piers.count = 0;
+      this.deck.count = this.piers.count = this.details.count = 0;
       const deckWidth = this.profile.halfWidth * 2 + 0.8;
       for (const span of spans) {
         for (let i = 1; i < span.samples.length; i++) {
@@ -55,8 +57,18 @@ export class BridgeMesh {
               z + right.z * center - normal.z * 1.04, deckWidth, 2, length, sample);
             const sides = this.profile.centers.length === 1 ? [-deckWidth / 2 + 0.15, deckWidth / 2 - 0.15]
               : [center + Math.sign(center) * (deckWidth / 2 - 0.15)];
-            for (const side of sides) this.box(this.deck, x + right.x * side + normal.x * 0.45,
-              y + right.y * side + normal.y * 0.45, z + right.z * side + normal.z * 0.45, 0.35, 0.8, length, sample);
+            for (const side of sides) {
+              this.box(this.deck, x + right.x * side + normal.x * 0.45,
+                y + right.y * side + normal.y * 0.45, z + right.z * side + normal.z * 0.45, 0.35, 0.8, length, sample);
+              this.box(this.details, x + right.x * side + normal.x * 1.35, y + right.y * side + normal.y * 1.35,
+                z + right.z * side + normal.z * 1.35, 0.16, 0.16, length, sample);
+              if (Math.floor(a.distance / 6) !== Math.floor(b.distance / 6)) this.box(this.details,
+                x + right.x * side + normal.x * 1.1, y + right.y * side + normal.y * 1.1,
+                z + right.z * side + normal.z * 1.1, 0.14, 0.6, 0.14, sample);
+            }
+            for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
+              x + right.x * (center + offset) - normal.x * 2.45, y + right.y * (center + offset) - normal.y * 2.45,
+              z + right.z * (center + offset) - normal.z * 2.45, 0.65, 1, length, sample);
           }
         }
         this.support(span.start, true, corridor, terrain);
@@ -68,12 +80,14 @@ export class BridgeMesh {
         }
         this.support(span.end, true, corridor, terrain);
       }
-      for (const mesh of [this.deck, this.piers]) {
+      for (const mesh of [this.deck, this.piers, this.details]) {
+        mesh.instanceMatrix.clearUpdateRanges();
+        mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.count) { mesh.computeBoundingBox(); mesh.computeBoundingSphere(); }
       }
     }
-    for (const mesh of [this.deck, this.piers]) {
+    for (const mesh of [this.deck, this.piers, this.details]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = nearRoute && mesh.count > 0;
     }
@@ -127,7 +141,8 @@ export class BridgeMesh {
   }
 
   dispose(): void {
-    for (const mesh of [this.deck, this.piers]) { mesh.removeFromParent(); mesh.dispose(); }
+    for (const mesh of [this.deck, this.piers, this.details]) { mesh.removeFromParent(); mesh.dispose(); }
+    this.details.material.dispose();
     this.geometry.dispose();
     this.material.dispose();
   }

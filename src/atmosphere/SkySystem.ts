@@ -26,11 +26,11 @@ export class SkySystem {
     scene.add(this.light, this.light.target, this.ambient);
   }
 
-  update(camera: PerspectiveCamera, origin: { x: number; z: number }): void {
+  update(camera: PerspectiveCamera, origin: { x: number; z: number }, sunlight = 1, shelter = 0): void {
     this.light.color.copy(this.sun.sunColor);
-    this.light.intensity = this.sun.light.x;
+    this.light.intensity = this.sun.light.x * sunlight * (1 - shelter);
     this.ambient.color.copy(this.sun.ambient);
-    this.ambient.intensity = 2.4 - this.sun.time * 0.6;
+    this.ambient.intensity = ((2.4 - Math.max(0, this.sun.time) * 0.6) * (1 - this.sun.night) + 0.5 * this.sun.night) * (1 - shelter * 0.72);
     this.focus.set(camera.position.x + origin.x, camera.position.y - 250, camera.position.z + origin.z);
     this.right.crossVectors(this.sun.direction, up).normalize();
     this.vertical.crossVectors(this.right, this.sun.direction).normalize();

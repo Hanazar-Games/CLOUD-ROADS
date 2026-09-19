@@ -5,8 +5,9 @@ import { CHUNK_SIZE } from '../world/ChunkPlanner';
 import { BRIDGE_APPROACH, type BridgeSpan } from '../bridge/BridgeDetector';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from './RoadProfile';
+import type { TunnelSpan } from '../tunnel/TunnelDetector';
 
-interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number }
+interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number; tunnel?: boolean }
 export type CorridorEdge = RoadEdge<CorridorPoint>;
 const RADIUS = 160;
 
@@ -21,14 +22,16 @@ export class RoadCorridor {
     this.bedHalfWidth = this.roadHalfWidth + 6.8;
   }
 
-  static fromSamples(samples: readonly RoadSample[], bridges: readonly BridgeSpan[] = [], options: Readonly<WorldOptions> = DEFAULT_OPTIONS): RoadCorridor {
+  static fromSamples(samples: readonly RoadSample[], bridges: readonly BridgeSpan[] = [], options: Readonly<WorldOptions> = DEFAULT_OPTIONS,
+    tunnels: readonly TunnelSpan[] = []): RoadCorridor {
     let bridgeIndex = 0;
     const points = samples.map((sample) => {
       const { normal } = roadFrame(sample);
       while (bridgeIndex < bridges.length && bridges[bridgeIndex].end.distance < sample.distance) bridgeIndex++;
       const span = bridges[bridgeIndex];
       const t = span ? Math.max(0, Math.min(1, (sample.distance - span.start.distance) / BRIDGE_APPROACH, (span.end.distance - sample.distance) / BRIDGE_APPROACH)) : 0;
-      return { ...sample.position, nx: normal.x, ny: normal.y, nz: normal.z, ground: 1 - t * t * (3 - 2 * t) };
+      return { ...sample.position, nx: normal.x, ny: normal.y, nz: normal.z, ground: 1 - t * t * (3 - 2 * t),
+        tunnel: tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) };
     });
     return new RoadCorridor(points.slice(1).map((b, i) => ({ a: points[i], b })), options);
   }
@@ -43,6 +46,11 @@ export class RoadCorridor {
   distance(x: number, z: number, radius: number): number {
     const nearest = this.index.nearest(x, z, radius);
     return nearest ? Math.sqrt(nearest.distanceSquared) : Infinity;
+  }
+
+  tunnelCover(x: number, z: number): boolean {
+    const nearest = this.index.nearest(x, z, this.roadHalfWidth + 130);
+    return !!nearest && !!(this.edges[nearest.index].a.tunnel || this.edges[nearest.index].b.tunnel);
   }
 
   height(x: number, z: number, natural: number): number {

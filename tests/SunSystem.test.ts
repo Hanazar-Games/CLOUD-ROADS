@@ -44,8 +44,8 @@ it('interpolates palette transitions continuously without replacing shared unifo
   expect(distance(before, sun.horizon)).toBeLessThan(0.001);
   expect(sun.direction).toBe(direction);
   expect(sun.horizon).toBe(horizon);
-  sun.setTime(-1);
-  expect(sun.time).toBe(0);
+  sun.setTime(-2);
+  expect(sun.time).toBe(-1);
   sun.setTime(2);
-  expect(sun.time).toBe(1);
+  expect(sun.time).toBe(1.5);
 });

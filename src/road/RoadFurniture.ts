@@ -1,0 +1,115 @@
+import { BoxGeometry, InstancedMesh, Matrix4, MeshStandardMaterial, PointLight, type PerspectiveCamera, type Scene } from 'three';
+import type { BridgeSpan } from '../bridge/BridgeDetector';
+import type { TunnelSpan } from '../tunnel/TunnelDetector';
+import type { TunnelLamp } from '../tunnel/TunnelMesh';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { hashSeed } from '../world/WorldSeed';
+import { roadFrame } from './RoadFrame';
+import { roadProfile } from './RoadProfile';
+import type { RoadSample } from './RoadSegment';
+import { MAX_ROAD_SEGMENTS } from './RoadSpine';
+import { ROAD_SAMPLES } from './RoadSegment';
+
+export class RoadFurniture {
+  readonly rails = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
+  readonly poles = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x52636b, metalness: 0.6, roughness: 0.4 }), 4096);
+  readonly heads = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffe4b8, emissive: 0xffc781 }), 2048);
+  readonly localLights = Array.from({ length: 4 }, () => new PointLight(0xffd4a0, 0, 45, 2));
+  readonly lampPositions: (TunnelLamp & { sample: RoadSample })[] = [];
+  enabled = true;
+  private readonly profile;
+  private readonly matrix = new Matrix4();
+  private version = -1;
+  private anchorX = 0;
+  private anchorZ = 0;
+
+  constructor(scene: Scene, private readonly seed: string, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.profile = roadProfile(options);
+    for (const mesh of [this.rails, this.poles, this.heads]) {
+      mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true;
+      scene.add(mesh);
+    }
+    scene.add(...this.localLights);
+  }
+
+  update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], bridges: readonly BridgeSpan[], version: number,
+    originX: number, originZ: number, nearRoute: boolean): void {
+    if (version !== this.version) {
+      this.version = version;
+      this.anchorX = samples[0]?.position.x ?? 0;
+      this.anchorZ = samples[0]?.position.z ?? 0;
+      this.rails.count = this.poles.count = this.heads.count = 0;
+      this.lampPositions.length = 0;
+      for (let i = 1; i < samples.length; i++) {
+        const sample = samples[i], previous = samples[i - 1], distance = sample.distance;
+        if (tunnels.some(span => distance >= span.start.distance - 8 && distance <= span.end.distance + 8)) continue;
+        const sides = [-this.profile.outerHalfWidth - 0.3, this.profile.outerHalfWidth + 0.3];
+        if (!bridges.some(span => distance >= span.start.distance && distance <= span.end.distance)) {
+          const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,
+            y: (sample.position.y + previous.position.y) / 2, z: (sample.position.z + previous.position.z) / 2 } };
+          for (const offset of sides) {
+            this.box(this.rails, mid, offset, 0.85, 0.16, 0.28, distance - previous.distance + 0.08);
+            if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.rails, sample, offset, 0.48, 0.16, 0.95, 0.16);
+          }
+        }
+        if (Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
+        for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
+          const offset = side * (this.profile.outerHalfWidth + 0.9);
+          this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);
+          this.box(this.poles, sample, offset - side * 1.3, 8.95, 2.7, 0.15, 0.15);
+          this.box(this.heads, sample, offset - side * 2.4, 8.85, 0.85, 0.13, 1.4);
+          const { right, normal } = roadFrame(sample), p = sample.position, lateral = offset - side * 2.4;
+          this.lampPositions.push({ x: p.x + right.x * lateral + normal.x * 8.65,
+            y: p.y + right.y * lateral + normal.y * 8.65, z: p.z + right.z * lateral + normal.z * 8.65, sample });
+        }
+      }
+      for (const mesh of [this.rails, this.poles, this.heads]) {
+        mesh.instanceMatrix.clearUpdateRanges();
+        mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.count) mesh.computeBoundingSphere();
+      }
+    }
+    for (const mesh of [this.rails, this.poles, this.heads]) {
+      mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
+      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || this.enabled);
+    }
+  }
+
+  illuminate(camera: PerspectiveCamera, night: number, tunnelLamps: readonly TunnelLamp[], originX: number, originZ: number): void {
+    this.heads.material.emissiveIntensity = night * 3;
+    const x = camera.position.x + originX, z = camera.position.z + originZ;
+    const nearest: { point: TunnelLamp; distance: number; intensity: number }[] = [];
+    const collect = (points: readonly TunnelLamp[], intensity: number) => {
+      if (!intensity) return;
+      for (const point of points) {
+        const distance = (point.x - x) ** 2 + (point.y - camera.position.y) ** 2 + (point.z - z) ** 2;
+        if (distance > 100 ** 2 || (nearest.length === this.localLights.length && distance >= nearest.at(-1)!.distance)) continue;
+        nearest.push({ point, distance, intensity });
+        nearest.sort((a, b) => a.distance - b.distance);
+        if (nearest.length > this.localLights.length) nearest.pop();
+      }
+    };
+    collect(this.lampPositions, this.enabled ? night * 180 : 0);
+    collect(tunnelLamps, 85);
+    this.localLights.forEach((light, i) => {
+      const candidate = nearest[i];
+      light.intensity = candidate?.intensity ?? 0;
+      if (candidate) light.position.set(candidate.point.x - originX, candidate.point.y, candidate.point.z - originZ);
+    });
+  }
+
+  private box(mesh: InstancedMesh, sample: RoadSample, offset: number, height: number, width: number, tall: number, length: number): void {
+    if (mesh.count >= mesh.instanceMatrix.count) throw new Error('Road furniture capacity exceeded');
+    const { right: r, normal: n } = roadFrame(sample), p = sample.position, t = sample.tangent;
+    this.matrix.set(r.x * width, n.x * tall, -t.x * length, p.x - this.anchorX + r.x * offset + n.x * height,
+      r.y * width, n.y * tall, -t.y * length, p.y + r.y * offset + n.y * height,
+      r.z * width, n.z * tall, -t.z * length, p.z - this.anchorZ + r.z * offset + n.z * height, 0, 0, 0, 1);
+    mesh.setMatrixAt(mesh.count++, this.matrix);
+  }
+
+  dispose(): void {
+    for (const mesh of [this.rails, this.poles, this.heads]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
+    for (const light of this.localLights) { light.removeFromParent(); light.dispose(); }
+  }
+}

@@ -2,6 +2,7 @@ import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, WebGLRen
 import { CLOUD_BASE } from '../atmosphere/CloudField';
 import { CloudSystem } from '../atmosphere/CloudSystem';
 import { SkySystem } from '../atmosphere/SkySystem';
+import { WeatherSystem, weatherNames, type WeatherKind } from '../atmosphere/WeatherSystem';
 import { FreeCamera } from '../camera/FreeCamera';
 import { DebugUI, element } from '../debug/DebugUI';
 import { InputManager } from '../input/InputManager';
@@ -19,6 +20,7 @@ export class Game {
   private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
   private readonly sky = new SkySystem(this.scene);
+  private readonly weather = new WeatherSystem(new Scene());
   private readonly clouds = new CloudSystem(DEFAULT_SEED, this.sky.sun, this.renderer.extensions.has('EXT_color_buffer_float'));
   private readonly camera = new PerspectiveCamera(65, 1, 0.5, 7000);
   private readonly input = new InputManager(this.canvas);
@@ -59,13 +61,20 @@ export class Game {
       element('speed').setAttribute('aria-valuetext', `每秒 ${this.flight.speed} 米`);
     }, { signal: this.events.signal });
     element<HTMLInputElement>('daylight').addEventListener('input', (event) => {
-      this.sky.sun.setTime(Number((event.target as HTMLInputElement).value) / 100);
-      element('daylight-value').textContent = this.sky.sun.label;
-      element('daylight').setAttribute('aria-valuetext', `${this.sky.sun.label}，太阳高度 ${this.sky.sun.elevation.toFixed(1)} 度`);
+      this.setTime(Number((event.target as HTMLInputElement).value));
+    }, { signal: this.events.signal });
+    element('time-preset').addEventListener('change', (event) => {
+      const value = Number((event.target as HTMLSelectElement).value);
+      if (Number.isFinite(value)) this.setTime(value);
+    }, { signal: this.events.signal });
+    element('weather-kind').addEventListener('change', (event) => {
+      const kind = (event.target as HTMLSelectElement).value as WeatherKind;
+      if (kind in weatherNames) this.weather.setKind(kind);
     }, { signal: this.events.signal });
     element('sun-view').addEventListener('click', () => {
       const direction = this.sky.sun.direction;
-      this.flight.reset(Math.atan2(direction.x, -direction.z), Math.asin(direction.y));
+      this.flight.reset(this.sky.sun.night > 0.5 ? Math.atan2(0.45, 0.7) : Math.atan2(direction.x, -direction.z),
+        this.sky.sun.night > 0.5 ? Math.asin(0.55 / Math.hypot(0.45, 0.55, 0.7)) : Math.asin(direction.y));
       this.setPaused(false);
       this.canvas.focus();
     }, { signal: this.events.signal });
@@ -126,6 +135,18 @@ export class Game {
       if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
       this.canvas.focus();
     }, { signal: this.events.signal });
+    for (const [id, inspect] of [['tunnel-view', () => this.world.inspectTunnel(this.camera)], ['lights-view', () => this.world.inspectLights(this.camera)]] as const) {
+      element(id).addEventListener('click', () => {
+        const view = inspect();
+        if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
+        this.canvas.focus();
+      }, { signal: this.events.signal });
+    }
+    element('lights-toggle').addEventListener('click', () => {
+      this.world.furniture.enabled = !this.world.furniture.enabled;
+      element('lights-toggle').setAttribute('aria-pressed', String(this.world.furniture.enabled));
+      this.canvas.focus();
+    }, { signal: this.events.signal });
     element('cloud-view').addEventListener('click', () => {
       const view = this.world.inspectValley(this.camera, CLOUD_BASE - 80);
       if (view) {
@@ -175,6 +196,7 @@ export class Game {
       this.world.chunks.setWireframe(this.wireframe);
       this.world.chunks.vegetation.enabled = element('vegetation-toggle').getAttribute('aria-pressed') === 'true';
       this.world.roadDebug.enabled = element('road-debug').getAttribute('aria-pressed') === 'true';
+      this.world.furniture.enabled = element('lights-toggle').getAttribute('aria-pressed') === 'true';
       element<HTMLInputElement>('seed').value = seed;
       element<HTMLSelectElement>('terrain-kind').value = options.terrain;
       element<HTMLSelectElement>('road-type').value = options.roadType;
@@ -194,10 +216,19 @@ export class Game {
     element('pause').textContent = paused ? '继续探索' : '暂停探索';
   }
 
+  private setTime(value: number): void {
+    this.sky.sun.setTime(value / 100);
+    element<HTMLInputElement>('daylight').value = String(value);
+    element<HTMLSelectElement>('time-preset').value = [-100, 0, 70, 90, 150].includes(value) ? String(value) : 'custom';
+    element('daylight-value').textContent = `${this.sky.sun.label} · ${this.sky.sun.clock}`;
+    element('daylight').setAttribute('aria-valuetext', `${this.sky.sun.label}，${this.sky.sun.clock}`);
+    element('sun-view').textContent = this.sky.sun.night > 0.5 ? '望向月亮' : '望向太阳';
+  }
+
   private setClouds(enabled: boolean): void {
     this.clouds.enabled = enabled;
     element('cloud-toggle').setAttribute('aria-pressed', String(enabled));
-    element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留基础远景雾。';
+    element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留远景雾与所选天气。';
   }
 
   private resetCamera(): void {
@@ -235,10 +266,14 @@ export class Game {
     const frozen = this.paused || this.releaseNotes.open || !this.input.enabled;
     this.flight.update(dt, frozen);
     this.world.update(this.camera);
-    this.sky.update(this.camera, this.world.origin);
-    this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin);
+    this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
+    this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter);
+    this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter);
+    this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z);
+    this.world.roadMesh.mesh.material.roughness = this.weather.profile.rain ? 0.34 : 0.95;
     this.renderer.info.reset();
     this.clouds.render(this.renderer, this.scene, this.camera);
+    this.weather.render(this.renderer, this.camera, this.clouds.target.depthTexture!);
     const { origin, chunks } = this.world;
     const x = this.camera.position.x + origin.x, z = this.camera.position.z + origin.z;
     const y = this.camera.position.y;
@@ -254,6 +289,10 @@ export class Game {
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
       element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
+      element<HTMLButtonElement>('tunnel-view').disabled = !this.world.roadReady || !this.world.tunnels.length;
+      element<HTMLButtonElement>('lights-view').disabled = !this.world.roadReady || !this.world.furniture.lampPositions.length;
+      element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
+        : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;
       element('cloud-region').textContent = this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '云层关闭';
     }
@@ -269,6 +308,11 @@ export class Game {
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
+        Weather: weatherNames[this.weather.kind], 'World time': this.sky.sun.clock,
+        'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
+        Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
+        'Street lamps': this.world.furniture.lampPositions.length,
+        'Local lights': this.world.furniture.localLights.filter(light => light.intensity > 0).length,
         'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',
         Landscape: terrainNames[this.world.options.terrain],
         'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
@@ -302,6 +346,7 @@ export class Game {
     this.input.dispose();
     this.world.dispose();
     this.clouds.dispose();
+    this.weather.dispose();
     this.sky.dispose();
     this.renderer.dispose();
   }
