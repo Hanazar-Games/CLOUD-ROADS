@@ -73,7 +73,7 @@ export class ChunkManager {
       if (this.pending.size + this.ready.length >= this.backend.capacity) break;
       if (this.active.get(request.key)?.cells === request.cells || this.pending.has(request.key) || this.ready.some((result) => result.request.key === request.key)) continue;
       this.pending.set(request.key, request.cells);
-      void this.backend.generate(request, this.seed, corridor.forChunk(request.x, request.z)).then((data) => {
+      void this.backend.generate(request, this.seed, corridor.forChunk(request.x, request.z), corridor.services.forChunk(request.x, request.z)).then((data) => {
         this.pending.delete(request.key);
         if (!this.disposed && this.desired.get(request.key)?.cells === request.cells) this.ready.push({ request, data });
       }, (error: unknown) => {

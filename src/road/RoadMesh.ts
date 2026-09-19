@@ -1,10 +1,11 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, type Scene } from 'three';
+import { BoxGeometry, BufferAttribute, BufferGeometry, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector4, type Scene } from 'three';
 import { createRoadMaterial } from './RoadMaterial';
 import { MAX_ROAD_SEGMENTS, type RoadSpine } from './RoadSpine';
 import { roadFrame } from './RoadFrame';
 import { ROAD_SAMPLES } from './RoadSegment';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from './RoadProfile';
+import type { ServiceArea } from '../service/ServicePlanner';
 
 export class RoadMesh {
   readonly mesh: Mesh<BufferGeometry, MeshStandardMaterial>;
@@ -14,12 +15,13 @@ export class RoadMesh {
   private version = -1;
   private anchorX = 0;
   private anchorZ = 0;
+  private readonly access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1));
 
   constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
     this.barriers = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xb6b5a9, roughness: 0.9 }),
       options.roadType === 'highway' ? MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 2 : 1);
-    this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options));
+    this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access));
     const strips = this.profile.centers.length, stride = strips * 2;
     const rows = MAX_ROAD_SEGMENTS * ROAD_SAMPLES + 1;
     for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2]] as const) {
@@ -41,7 +43,7 @@ export class RoadMesh {
     scene.add(this.mesh, this.barriers);
   }
 
-  update(spine: RoadSpine, originX: number, originZ: number, nearRoute: boolean): void {
+  update(spine: RoadSpine, originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
     if (this.version !== spine.version && spine.segments.length) {
       this.version = spine.version;
       const first = spine.segments[0].start;
@@ -50,7 +52,12 @@ export class RoadMesh {
       const positions = this.mesh.geometry.getAttribute('position') as BufferAttribute;
       const normals = this.mesh.geometry.getAttribute('normal') as BufferAttribute;
       const uv = this.mesh.geometry.getAttribute('uv') as BufferAttribute;
-      const cycleStart = Math.floor(first.distance / 12) * 12;
+      const cycleStart = Math.floor(first.distance / 1560) * 1560; // Shared period of 12 m dashes, 120 m arrows and 1.3 m grooves.
+      this.access.forEach((range, i) => {
+        const distance = services[i]?.sample.distance;
+        if (distance === undefined) range.set(-1, -1, -1, -1);
+        else range.set(distance - cycleStart - 230, distance - cycleStart - 155, distance - cycleStart + 155, distance - cycleStart + 230);
+      });
       const { centers, halfWidth } = this.profile, stride = centers.length * 2;
       this.barriers.count = 0;
       for (const [i, sample] of spine.samples.entries()) {

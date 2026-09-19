@@ -12,6 +12,38 @@ vi.mock('../src/terrain/TerrainWorkers', () => ({
   },
 }));
 
+it('pauses and cancels service searches, visits consecutive sites and replays the first location', () => {
+  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
+  world.resetCamera(camera);
+  while (!world.road.update(128, 8)) { /* Complete the initial window. */ }
+  world.update(camera);
+  const initial = camera.position.clone();
+  world.requestServiceView();
+  for (let i = 0; i < 5; i++) world.update(camera, false);
+  expect(world.serviceSearchProgress).toBe(0);
+  expect(camera.position).toEqual(initial);
+  world.resetCamera(camera);
+  expect(world.serviceSearchProgress).toBeNull();
+  const visit = () => {
+    world.requestServiceView();
+    let frames = 0;
+    while (world.serviceSearchProgress !== null && frames++ < 2000) world.update(camera);
+    expect(world.serviceSearchProgress).toBeNull();
+    expect(world.serviceView).toBeDefined();
+    do { world.update(camera); } while (!world.roadReady && frames++ < 4000);
+    expect(world.services).toHaveLength(1);
+    return world.services[0];
+  };
+  const first = visit(), firstPosition = camera.position.clone().add({ x: world.origin.x, y: 0, z: world.origin.z });
+  const second = visit();
+  expect(second.sample.distance - first.sample.distance).toBeGreaterThanOrEqual(10000);
+  expect(second.sample.distance - first.sample.distance).toBeLessThanOrEqual(20000);
+  world.resetCamera(camera); world.update(camera);
+  expect(visit()).toEqual(first);
+  expect(camera.position.clone().add({ x: world.origin.x, y: 0, z: world.origin.z })).toEqual(firstPosition);
+  world.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it('reports the rendered ground biome through road coupling, bridges and origin rebases', () => {
   const world = new World(new Scene(), 'CLOUD-ROAD-001');
   const camera = new PerspectiveCamera();

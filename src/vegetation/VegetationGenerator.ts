@@ -8,6 +8,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
   positions: Float32Array, corridor: RoadCorridor, biomes: BiomeSystem): Float32Array<ArrayBuffer> {
   if (cells === 8) return new Float32Array();
   const rng = createRng(hashSeed(`${seed}:plants:${cx}:${cz}`));
+  const phase = hashSeed(`${seed}:groves`) % 1000;
   const plants: number[] = [], step = CHUNK_SIZE / cells, biome = createBiomeSample();
   for (let row = 0; row < 14; row++) for (let col = 0; col < 14; col++) {
     const x = 16 + (col + 0.2 + rng() * 0.6) * 16, z = 16 + (row + 0.2 + rng() * 0.6) * 16;
@@ -17,13 +18,19 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
     const a = at(0, 0), b = at(1, 0), c = at(0, 1), d = at(1, 1);
     const y = tx + tz <= 1 ? a + (b - a) * tx + (c - a) * tz : d + (c - d) * (1 - tx) + (b - d) * (1 - tz);
     const normalY = step / Math.hypot(step, tx + tz <= 1 ? b - a : d - c, tx + tz <= 1 ? c - a : d - b);
-    if (normalY < 0.82) continue;
+    if (normalY < 0.72) continue;
     const wx = cx * CHUNK_SIZE + x, wz = cz * CHUNK_SIZE + z;
     biomes.sample(wx, wz, y, normalY, biome);
     const desert = biome.weights.desert > 0.5;
-    const density = desert ? 0.16 : (biome.weights.forest * 0.85 + biome.weights.valley * 0.5) * (0.6 + biome.humidity * 0.4);
-    if (chance > density || corridor.distance(wx, wz, corridor.roadHalfWidth + 10) < corridor.roadHalfWidth + 8 || corridor.tunnelCover(wx, wz)) continue;
-    plants.push(x, y - 0.15, z, scale, rotation, desert ? 1 : 0, tint);
+    const habitat = biome.weights.forest + biome.weights.valley + biome.weights.desert;
+    if (habitat < 0.3 || biome.weights.snow > 0.25) continue;
+    const grove = 0.75 + Math.sin(wx / 95 + phase) * Math.cos(wz / 130 - phase) * 0.35;
+    const density = (desert ? 0.16 : (biome.weights.forest * 0.85 + biome.weights.valley * 0.5) * (0.6 + biome.humidity * 0.4)) * grove;
+    const low = chance >= density || normalY < 0.82;
+    if (chance > density + habitat * 0.2) continue;
+    const kind = low ? desert ? 4 : 3 : desert ? 1 : rotation > 3.5 ? 2 : 0;
+    if (corridor.distance(wx, wz, corridor.roadHalfWidth + 10) < corridor.roadHalfWidth + (low ? 5 : 8) || corridor.tunnelCover(wx, wz) || corridor.serviceCover(wx, wz)) continue;
+    plants.push(x, y - 0.15, z, scale, rotation, kind, tint);
   }
   return new Float32Array(plants);
 }

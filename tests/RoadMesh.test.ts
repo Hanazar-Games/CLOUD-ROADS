@@ -5,6 +5,18 @@ import { RoadSpine } from '../src/road/RoadSpine';
 import { ROAD_SAMPLES, RoadSegment } from '../src/road/RoadSegment';
 
 describe('RoadMesh', () => {
+  it('anchors arrows, lane dashes and shoulder grooves to mileage when old segments leave the window', () => {
+    const spine = new RoadSpine('CLOUD-ROAD-001'), road = new RoadMesh(new Scene());
+    while (!spine.update(128, 8)) { /* Load a complete road window. */ }
+    road.update(spine, 0, 0, true);
+    const before = road.mesh.geometry.getAttribute('uv').getY(ROAD_SAMPLES * 2);
+    spine.segments.shift(); spine.version++;
+    road.update(spine, 0, 0, true);
+    const after = road.mesh.geometry.getAttribute('uv').getY(0);
+    for (const period of [12, 120, 1.3]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
+    road.dispose();
+  });
+
   it('raises the outside shoulder on a right-hand curve', () => {
     const spine = new RoadSpine('test');
     spine.segments.push(new RoadSegment(spine.generator.start, Math.PI / 10, 0));

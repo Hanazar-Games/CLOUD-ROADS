@@ -37,6 +37,18 @@ it('finds complete covered sections, avoids bridges and keeps decisions stable i
   expect(detector.detect(span.samples, [])).toHaveLength(0);
 });
 
+it('retains every ventilation instance across a full highway window with repeated tunnels', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
+  const start = route()[0], segment = new RoadSegment(start, 0, 0, 24000);
+  const samples = Array.from({ length: 12001 }, (_, i) => segment.sample(i / 12000));
+  const terrain = { sample: (_x: number, z: number) => z < -50 && z > -23900 ? 300 : 200 };
+  const spans = new TunnelDetector(terrain, options).detect(samples, []), scene = new Scene(), mesh = new TunnelMesh(scene, 'capacity', options);
+  mesh.update(spans, RoadCorridor.fromSamples(samples, [], options), terrain, 1, 0, 0, true);
+  expect(mesh.fans.count).toBeGreaterThan(512);
+  for (const batch of [mesh.fans, mesh.equipment, mesh.lights]) expect(batch.count).toBeLessThanOrEqual(batch.instanceMatrix.count);
+  mesh.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real curved %s tunnels', roadType => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 };
   const terrain = new HeightFunction(seed), spine = new RoadSpine(seed, terrain, options);
@@ -57,7 +69,7 @@ it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real c
     for (const center of profile.centers) for (const offset of [-5, 0, 5]) {
       const start = point(a, center + offset), finish = point(b, center + offset), direction = finish.clone().sub(start);
       ray.far = direction.length(); ray.set(start, direction.normalize());
-      expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals])).toHaveLength(0);
+      expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals, mesh.equipment, mesh.fans])).toHaveLength(0);
     }
   }
   mesh.dispose();
@@ -73,7 +85,7 @@ it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof a
   const span = spans[0], x = roadType === 'highway' ? 8.2 : 0;
   const startZ = span.start.position.z, endZ = span.end.position.z;
   const ray = new Raycaster(new Vector3(x, 203, startZ + 4), new Vector3(0, 0, -1), 0, startZ - endZ + 8);
-  expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals])).toHaveLength(0);
+  expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals, mesh.equipment, mesh.fans])).toHaveLength(0);
   ray.set(new Vector3(x, 203, (startZ + endZ) / 2), new Vector3(0, 1, 0));
   ray.far = 200;
   const roof = ray.intersectObject(mesh.lining)[0];
@@ -81,6 +93,7 @@ it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof a
   expect(roof.point.y).toBeGreaterThan(206);
   expect(ray.intersectObject(mesh.cover)[0]).toBeDefined();
   expect(mesh.lights.count).toBeGreaterThan(0);
+  expect(mesh.equipment.count).toBeGreaterThan(mesh.lights.count);
   const before = mesh.lining.geometry.getAttribute('position').array.slice();
   mesh.update(spans, corridor, hill, 1, 5120, -5120, true);
   expect(mesh.lining.geometry.getAttribute('position').array).toEqual(before);

@@ -20,6 +20,7 @@ test('renders moving rain against the sky, freezes it when paused, and keeps sel
   expect(await page.screenshot({ clip })).toEqual(frozen);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#weather-kind').selectOption('overcast');
+  await page.locator('#time-preset').scrollIntoViewIfNeeded();
   await page.locator('#time-preset').selectOption('-100');
   await expect(page.locator('#time-preset')).toBeInViewport();
   await expect(page.locator('[data-metric="Weather"]')).toHaveText('多云');

@@ -24,13 +24,25 @@ describe('streamed vegetation', () => {
     for (let i = 0; i < a.vegetation.length; i += 7) {
       const [x, y, z, scale, angle, kind, tint] = a.vegetation.slice(i, i + 7);
       expect([x, y, z, scale, angle, kind, tint].every(Number.isFinite)).toBe(true);
-      expect(Math.abs(x - 128)).toBeGreaterThan(20);
+      const crownRadius = (kind >= 3 ? 1.7 : kind === 1 ? 2 : 4.7) * scale;
+      expect(Math.abs(x - 128) - crownRadius).toBeGreaterThan(14.4);
       expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(256);
       expect(z).toBeGreaterThan(0); expect(z).toBeLessThan(256);
-      expect(kind).toBe(terrain === 'forest' ? 0 : 1);
+      expect(terrain === 'forest' ? [0, 2, 3] : [1, 4]).toContain(kind);
     }
     expect(generator.generate(0, 0, 8, road).vegetation.length).toBe(0);
     expect(new TerrainGenerator('other', options).generate(0, 0, 64, road).vegetation).not.toEqual(a.vegetation);
+  });
+
+  it('mixes broadleaf crowns and undergrowth in forest and dry shrubs in arid land', () => {
+    for (const terrain of ['forest', 'desert'] as const) {
+      const generator = new TerrainGenerator('plants', { ...DEFAULT_OPTIONS, terrain }), species = new Set<number>();
+      for (let z = -1; z <= 1; z++) for (let x = -1; x <= 1; x++) {
+        const data = generator.generate(x, z, 16).vegetation;
+        for (let i = 5; i < data.length; i += 7) species.add(data[i]);
+      }
+      for (const kind of terrain === 'forest' ? [0, 2, 3] : [1, 4]) expect(species.has(kind)).toBe(true);
+    }
   });
 
   it('batches plants, hides removed chunks, rebases and releases GPU resources', () => {

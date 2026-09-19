@@ -63,4 +63,17 @@ export class RoadSpine {
     const nearest = this.index.nearest(x, z)!;
     return this.segments[Math.floor(nearest.index / ROAD_SAMPLES)].sample((nearest.index % ROAD_SAMPLES + nearest.t) / ROAD_SAMPLES);
   }
+
+  advanceToDistance(distance: number): boolean {
+    const deadline = performance.now() + 2;
+    for (let i = 0; i < 4; i++) {
+      const end = this.segments.at(-1)?.end ?? this.generator.start;
+      if (end.distance >= distance) return true;
+      if (i > 0 && performance.now() >= deadline) break;
+      this.segments.push(this.generator.next(end));
+      this.generated++; this.version++;
+      if (this.segments.length > MAX_ROAD_SEGMENTS) this.segments.shift();
+    }
+    return (this.segments.at(-1)?.end.distance ?? 0) >= distance;
+  }
 }

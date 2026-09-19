@@ -147,6 +147,11 @@ export class Game {
       element('lights-toggle').setAttribute('aria-pressed', String(this.world.furniture.enabled));
       this.canvas.focus();
     }, { signal: this.events.signal });
+    element('service-view').addEventListener('click', () => {
+      this.world.requestServiceView();
+      this.setPaused(false);
+      this.canvas.focus();
+    }, { signal: this.events.signal });
     element('cloud-view').addEventListener('click', () => {
       const view = this.world.inspectValley(this.camera, CLOUD_BASE - 80);
       if (view) {
@@ -265,11 +270,18 @@ export class Game {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const frozen = this.paused || this.releaseNotes.open || !this.input.enabled;
     this.flight.update(dt, frozen);
-    this.world.update(this.camera);
+    this.world.update(this.camera, !frozen);
+    if (this.world.serviceView) {
+      this.flight.reset(this.world.serviceView.heading, this.world.serviceView.pitch);
+      this.world.serviceView = undefined;
+      this.input.clear();
+      this.flight.update(0, false);
+    }
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter);
-    this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z);
+    this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
+    this.world.serviceMesh.windows.material.emissiveIntensity = this.sky.sun.night * 0.35;
     this.world.roadMesh.mesh.material.roughness = this.weather.profile.rain ? 0.34 : 0.95;
     this.renderer.info.reset();
     this.clouds.render(this.renderer, this.scene, this.camera);
@@ -291,6 +303,9 @@ export class Game {
       element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
       element<HTMLButtonElement>('tunnel-view').disabled = !this.world.roadReady || !this.world.tunnels.length;
       element<HTMLButtonElement>('lights-view').disabled = !this.world.roadReady || !this.world.furniture.lampPositions.length;
+      const searching = this.world.serviceSearchProgress;
+      element<HTMLButtonElement>('service-view').disabled = searching !== null;
+      element('service-view').textContent = searching === null ? '下一服务区' : `定位中 · ${Math.round(searching * 100)}%`;
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;
@@ -311,6 +326,8 @@ export class Game {
         Weather: weatherNames[this.weather.kind], 'World time': this.sky.sun.clock,
         'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
+        'Service areas': this.world.services.length,
+        'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',
         'Street lamps': this.world.furniture.lampPositions.length,
         'Local lights': this.world.furniture.localLights.filter(light => light.intensity > 0).length,
         'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',

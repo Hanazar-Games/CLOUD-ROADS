@@ -9,6 +9,7 @@ import { roadProfile } from './RoadProfile';
 import type { RoadSample } from './RoadSegment';
 import { MAX_ROAD_SEGMENTS } from './RoadSpine';
 import { ROAD_SAMPLES } from './RoadSegment';
+import type { ServiceArea } from '../service/ServicePlanner';
 
 export class RoadFurniture {
   readonly rails = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
@@ -33,7 +34,7 @@ export class RoadFurniture {
   }
 
   update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], bridges: readonly BridgeSpan[], version: number,
-    originX: number, originZ: number, nearRoute: boolean): void {
+    originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
     if (version !== this.version) {
       this.version = version;
       this.anchorX = samples[0]?.position.x ?? 0;
@@ -44,15 +45,17 @@ export class RoadFurniture {
         const sample = samples[i], previous = samples[i - 1], distance = sample.distance;
         if (tunnels.some(span => distance >= span.start.distance - 8 && distance <= span.end.distance + 8)) continue;
         const sides = [-this.profile.outerHalfWidth - 0.3, this.profile.outerHalfWidth + 0.3];
+        const serviceAccess = services.some(site => distance >= site.start && distance <= site.end);
         if (!bridges.some(span => distance >= span.start.distance && distance <= span.end.distance)) {
           const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,
             y: (sample.position.y + previous.position.y) / 2, z: (sample.position.z + previous.position.z) / 2 } };
           for (const offset of sides) {
+            if (serviceAccess && (this.profile.centers.length === 2 || offset > 0)) continue;
             this.box(this.rails, mid, offset, 0.85, 0.16, 0.28, distance - previous.distance + 0.08);
             if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.rails, sample, offset, 0.48, 0.16, 0.95, 0.16);
           }
         }
-        if (Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
+        if (serviceAccess || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
         for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
           const offset = side * (this.profile.outerHalfWidth + 0.9);
           this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);
@@ -76,7 +79,7 @@ export class RoadFurniture {
     }
   }
 
-  illuminate(camera: PerspectiveCamera, night: number, tunnelLamps: readonly TunnelLamp[], originX: number, originZ: number): void {
+  illuminate(camera: PerspectiveCamera, night: number, tunnelLamps: readonly TunnelLamp[], originX: number, originZ: number, serviceLamps: readonly TunnelLamp[] = []): void {
     this.heads.material.emissiveIntensity = night * 3;
     const x = camera.position.x + originX, z = camera.position.z + originZ;
     const nearest: { point: TunnelLamp; distance: number; intensity: number }[] = [];
@@ -92,6 +95,7 @@ export class RoadFurniture {
     };
     collect(this.lampPositions, this.enabled ? night * 180 : 0);
     collect(tunnelLamps, 85);
+    collect(serviceLamps, night * 160);
     this.localLights.forEach((light, i) => {
       const candidate = nearest[i];
       light.intensity = candidate?.intensity ?? 0;

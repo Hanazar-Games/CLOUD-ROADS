@@ -106,8 +106,8 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.6');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('桥隧、路灯与晴雨昼夜');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.7');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('隧道细节、道路标识与山间服务区');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');
@@ -115,6 +115,7 @@ test('shows the current release, archives the previous baseline and isolates dia
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.3');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.4');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.5');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.6');
   const position = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(450);
@@ -163,7 +164,7 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   expect(Number(await page.locator('[data-metric="Allocated meshes"]').textContent())).toBe(289);
-  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('6');
+  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('7');
   expect(errors).toEqual([]);
 });
 

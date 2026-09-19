@@ -2,13 +2,14 @@ import type { ChunkRequest } from '../world/ChunkPlanner';
 import type { TerrainData } from './TerrainGenerator';
 import type { CorridorEdge } from '../road/RoadCorridor';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import type { ServiceGround } from '../service/ServiceTerrain';
 
 export interface TerrainBackend {
   readonly capacity: number;
-  generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[]): Promise<TerrainData>;
+  generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[], services: readonly ServiceGround[]): Promise<TerrainData>;
   dispose(): void;
 }
-export interface TerrainJob { id: number; seed: string; request: ChunkRequest; road: readonly CorridorEdge[]; options: Readonly<WorldOptions> }
+export interface TerrainJob { id: number; seed: string; request: ChunkRequest; road: readonly CorridorEdge[]; services: readonly ServiceGround[]; options: Readonly<WorldOptions> }
 export type TerrainReply = { id: number; data: TerrainData } | { id: number; error: string };
 interface PendingJob {
   id: number;
@@ -47,7 +48,7 @@ export class TerrainWorkers implements TerrainBackend {
     }
   }
 
-  generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[]): Promise<TerrainData> {
+  generate(request: ChunkRequest, seed: string, road: readonly CorridorEdge[], services: readonly ServiceGround[] = []): Promise<TerrainData> {
     if (this.error) return Promise.reject(this.error);
     const slot = this.slots.find((candidate) => !candidate.pending);
     if (!slot) return Promise.reject(new Error('Terrain worker capacity exceeded'));
@@ -55,7 +56,7 @@ export class TerrainWorkers implements TerrainBackend {
       const id = this.nextId++;
       const timeout = setTimeout(() => this.fail(new Error('Terrain worker timed out')), 15_000);
       slot.pending = { id, resolve, reject, timeout };
-      try { slot.worker.postMessage({ id, seed, request, road, options: this.options } satisfies TerrainJob); }
+      try { slot.worker.postMessage({ id, seed, request, road, services, options: this.options } satisfies TerrainJob); }
       catch (error) { this.fail(error instanceof Error ? error : new Error(String(error))); }
     });
   }

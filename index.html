@@ -18,7 +18,7 @@
       <section id="explorer" class="explorer" aria-label="探索控制">
         <p class="eyebrow">无尽山野，自由探索</p>
         <h1>向群山深处。</h1>
-        <p class="intro">一颗种子，一片没有边界的世界。<br />自由飞行 · 暂无车辆与声音</p>
+        <p class="intro">一颗种子，一片没有边界的世界。<br />自由飞行 · 暂无驾驶与声音</p>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
           <div class="seed-entry"><input id="seed" value="CLOUD-ROAD-001" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
@@ -55,6 +55,8 @@
         <div class="actions road-actions"><button id="hairpin-view" type="button" disabled>发卡弯视角</button><button id="bridge-view" type="button" disabled>桥梁视角</button></div>
         <div class="actions road-actions"><button id="tunnel-view" type="button" disabled>隧道入口</button><button id="lights-view" type="button" disabled>灯光路段</button></div>
         <div class="actions road-actions"><button id="lights-toggle" type="button" aria-pressed="true">路灯</button></div>
+        <div class="actions road-actions"><button id="service-view" type="button">下一服务区</button></div>
+        <p class="panel-help">服务区按道路里程约 10–20 公里一处。点击可前往下一处，定位期间可继续探索，返回起点可取消。</p>
         <p class="panel-help" id="structure-help">路灯分段出现，入夜点亮；隧道在有山体覆盖的路段生成。</p>
         <div class="actions road-actions"><button id="cloud-view" type="button" disabled>穿云起点</button><button id="cloud-toggle" type="button" aria-pressed="true">云层</button><span id="cloud-region">云上</span></div>
         <p id="cloud-help" role="status">前往穿云起点，按住 Space 上升，Shift 下降。</p>

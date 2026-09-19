@@ -5,6 +5,7 @@ import { RoadCorridor, type CorridorEdge } from '../road/RoadCorridor';
 import { BiomeSystem, createBiomeSample } from '../biome/BiomeSystem';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { generateVegetation } from '../vegetation/VegetationGenerator';
+import type { ServiceGround } from '../service/ServiceTerrain';
 
 export interface TerrainData {
   positions: Float32Array<ArrayBuffer>;
@@ -24,13 +25,13 @@ export class TerrainGenerator {
     this.biomes = new BiomeSystem(seed, options.terrain);
   }
 
-  generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = []): TerrainData {
+  generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = [], services: readonly ServiceGround[] = []): TerrainData {
     const coordinates = layouts[cells].coordinates;
     const length = coordinates.length / 2 * 3;
     const positions = new Float32Array(length);
     const normals = new Float32Array(length);
     const colors = new Float32Array(length);
-    const corridor = new RoadCorridor(road, this.options);
+    const corridor = new RoadCorridor(road, this.options, services);
     const biome = createBiomeSample();
     const height = (x: number, z: number) => corridor.height(x, z, this.height.sample(x, z));
     for (let i = 0; i < coordinates.length / 2; i++) {
