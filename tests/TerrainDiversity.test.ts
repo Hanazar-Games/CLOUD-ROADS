@@ -18,7 +18,7 @@ it.each(['badlands', 'karst'] as const)('rounds %s peaks instead of producing th
 
 it('offers distinct meadow hills, red-rock badlands and karst peaks with continuous seeded terrain', () => {
   const shapes: number[][] = [];
-  for (const terrain of ['meadow', 'badlands', 'karst'] as const) {
+  for (const terrain of ['meadow', 'badlands', 'karst', 'volcanic', 'tundra', 'autumn'] as const) {
     const height = new HeightFunction('new-landforms', terrain), values: number[] = [];
     for (let x = -100000; x < 100000; x += 997) {
       const y = height.sample(x, x * 0.37); values.push(y);
@@ -40,4 +40,16 @@ it('offers distinct meadow hills, red-rock badlands and karst peaks with continu
   for (let i = 0; i < shapes.length; i++) for (let j = i + 1; j < shapes.length; j++) expect(shapes[i]).not.toEqual(shapes[j]);
   expect(new BiomeSystem('new-landforms', 'badlands').sample(128, 128, 900, 1).weights.desert).toBeGreaterThan(0.8);
   expect(new BiomeSystem('new-landforms', 'meadow').sample(128, 128, 900, 1).weights.valley).toBeGreaterThan(0.6);
+});
+
+it('gives new climates normalized habitats and appropriate vegetation', () => {
+  const volcanic = new BiomeSystem('ecology', 'volcanic'), tundra = new BiomeSystem('ecology', 'tundra');
+  expect(volcanic.treeDensity).toBeLessThan(0.2); expect(tundra.treeDensity).toBeLessThan(0.2);
+  for (const terrain of ['volcanic', 'tundra', 'autumn'] as const) for (const h of [300, 1000, 2200, 3500]) {
+    const biome = new BiomeSystem('ecology', terrain).sample(128, -128, h, 0.85);
+    expect(Object.values(biome.weights).reduce((a, b) => a + b)).toBeCloseTo(1, 8);
+    expect(biome.color.every(v => v >= 0 && v <= 1)).toBe(true);
+    expect(biome.weights.desert).toBe(0);
+  }
+  expect(tundra.sample(0, 0, 1800, 1).weights.snow).toBeGreaterThan(0.9);
 });

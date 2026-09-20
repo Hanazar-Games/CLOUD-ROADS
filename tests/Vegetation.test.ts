@@ -9,14 +9,25 @@ import { createTerrainLayout } from '../src/terrain/TerrainTopology';
 import { BiomeSystem } from '../src/biome/BiomeSystem';
 import { RoadCorridor } from '../src/road/RoadCorridor';
 
-function flatPlants(cells: 8 | 16 | 64) {
+function flatPlants(cells: 8 | 16 | 64, terrain: 'forest' | 'autumn' = 'forest') {
   const coordinates = createTerrainLayout(cells).coordinates;
   const positions = new Float32Array(coordinates.length / 2 * 3);
   for (let i = 0; i < coordinates.length / 2; i++) positions.set([coordinates[i * 2], 900, coordinates[i * 2 + 1]], i * 3);
-  return generateVegetation('woodland', 0, 0, cells, positions, new RoadCorridor([]), new BiomeSystem('woodland', 'forest'));
+  return generateVegetation('woodland', 0, 0, cells, positions, new RoadCorridor([]), new BiomeSystem('woodland', terrain));
 }
 
 describe('streamed vegetation', () => {
+  it('keeps autumn crowns when switching to distant detail and removes their instances cleanly', () => {
+    const scene = new Scene(), mesh = new VegetationMesh(scene), plants = flatPlants(64, 'autumn');
+    const far = flatPlants(8, 'autumn');
+    expect(Array.from({ length: far.length / 7 }, (_, i) => far[i * 7 + 5])).toContain(10);
+    mesh.setChunk('0,0', 0, 0, plants); mesh.update(0, 0);
+    expect(mesh.autumn.count).toBeGreaterThan(50);
+    mesh.setViewCenter(6, 0); mesh.update(0, 0);
+    expect(mesh.autumn.count).toBe(0); expect(mesh.autumnDistant.count).toBeGreaterThan(10);
+    mesh.removeChunk('0,0'); mesh.update(0, 0); expect(mesh.count).toBe(0); mesh.dispose();
+    expect(scene.children).toHaveLength(0);
+  });
   it('keeps distant canopy as a stable subset and fills the former empty chunk borders', () => {
     const near = flatPlants(64), far = flatPlants(8);
     expect(near.length / 7).toBeGreaterThan(240);
@@ -75,7 +86,7 @@ describe('streamed vegetation', () => {
     mesh.setChunk('0,0', 0, 0, data);
     mesh.update(0, 0);
     expect(mesh.count).toBe(2);
-    expect(scene.children.length).toBeLessThanOrEqual(12);
+    expect(scene.children.length).toBeLessThanOrEqual(14);
     const before = mesh.trees.instanceMatrix.array.slice();
     mesh.update(5120, -5120);
     expect(mesh.trees.instanceMatrix.array).toEqual(before);

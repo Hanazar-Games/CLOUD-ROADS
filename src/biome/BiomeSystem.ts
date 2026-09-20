@@ -35,20 +35,24 @@ const kinds: readonly Biome[] = ['valley', 'forest', 'rock', 'alpine', 'snow', '
 export class BiomeSystem {
   private readonly noise: Noise;
   readonly treeDensity: number;
+  readonly autumn: boolean;
 
   constructor(seed: string, private readonly terrain: TerrainKind = 'alpine') {
-    this.noise = new Noise(hashSeed(`${seed}:biomes`)); this.treeDensity = terrain === 'meadow' ? 0.18 : 1;
+    this.noise = new Noise(hashSeed(`${seed}:biomes`));
+    this.treeDensity = terrain === 'meadow' ? 0.18 : terrain === 'volcanic' ? 0.08 : terrain === 'tundra' ? 0.04 : 1;
+    this.autumn = terrain === 'autumn';
   }
 
   sample(x: number, z: number, height: number, normalY: number, target = createBiomeSample()): BiomeSample {
     const arid = isAridTerrain(this.terrain);
     const climate = this.noise.fractal(x / 5000, z / 5000, 2);
-    const humidity = clamp((arid ? 0.12 : this.terrain === 'karst' ? 0.84 : this.terrain === 'forest' ? 0.72 : 0.5)
+    const humidity = clamp((arid ? 0.12 : this.terrain === 'karst' ? 0.84 : this.terrain === 'forest' || this.autumn ? 0.72 : 0.5)
       + this.noise.fractal(x / 2100 + 31, z / 2100 - 47, 2) * (arid ? 0.12 : 0.45));
     const variation = this.noise.sample(x / 310 - 19, z / 310 + 53);
-    target.temperature = (arid ? 32 : 18) + climate * 1.6 - height * 0.006;
+    const warmth = arid ? 32 : this.terrain === 'tundra' ? 6 : this.autumn ? 15 : 18;
+    target.temperature = warmth + climate * 1.6 - height * 0.006;
     target.humidity = humidity;
-    target.snowLine = (arid ? 32 : 18) / 0.006 + climate * (1.6 / 0.006) + variation * 100 - (humidity - 0.5) * 120;
+    target.snowLine = warmth / 0.006 + climate * (1.6 / 0.006) + variation * 100 - (humidity - 0.5) * 120;
     const altitude = (18 - target.temperature) / 0.006 - (humidity - 0.5) * 220;
     const forest = smooth(450, 950, altitude);
     const treeline = smooth(1450, 2250, altitude);
@@ -64,6 +68,12 @@ export class BiomeSystem {
     weights.snow = snow;
     weights.desert = arid ? (1 - snow) * (1 - cliff * 0.35) : 0;
     if (this.terrain === 'meadow') { weights.valley += weights.forest * 0.85; weights.forest *= 0.15; }
+    if (this.terrain === 'volcanic') {
+      const cover = weights.valley + weights.forest + weights.alpine;
+      weights.rock += cover * 0.82;
+      weights.valley *= 0.18; weights.forest *= 0.18; weights.alpine *= 0.18;
+    }
+    if (this.terrain === 'tundra') { weights.alpine += weights.valley + weights.forest; weights.valley = weights.forest = 0; }
     if (arid) {
       weights.valley = weights.forest = weights.alpine = 0;
       weights.rock = (1 - snow) * cliff * 0.35;
@@ -88,6 +98,9 @@ export class BiomeSystem {
     }
     if (this.terrain === 'badlands') { target.color[0] *= 1.13; target.color[1] *= 0.78; target.color[2] *= 0.75; }
     if (this.terrain === 'karst') for (let channel = 0; channel < 3; channel++) target.color[channel] += weights.rock * [0.055, 0.065, 0.07][channel];
+    if (this.terrain === 'volcanic') for (let channel = 0; channel < 3; channel++) target.color[channel] *= 1 - weights.rock * [0.64, 0.62, 0.55][channel];
+    if (this.autumn) { target.color[0] += soilCover * 0.08; target.color[1] += soilCover * 0.025; }
+    if (this.terrain === 'tundra') { target.color[0] += weights.alpine * 0.02; target.color[1] -= weights.alpine * 0.04; }
     return target;
   }
 }

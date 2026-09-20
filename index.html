@@ -39,6 +39,16 @@
           <input id="camera-height" type="range" min="-0.1" max="0.35" step="0.05" value="0" />
           <label for="suspension">悬挂调校</label>
           <select id="suspension"></select>
+          <label class="speed-label" for="suspension-damping">悬挂阻尼 <output id="suspension-damping-value">100%</output></label>
+          <input id="suspension-damping" type="range" min="70" max="130" step="5" value="100" aria-describedby="suspension-summary" />
+          <p id="suspension-summary" class="panel-help"></p>
+          <p id="suspension-compression" class="panel-help">开始驾驶后显示轮端压缩量</p>
+          <label for="vehicle-lights">车灯 · L 切换</label>
+          <select id="vehicle-lights" aria-describedby="vehicle-lights-help"></select>
+          <p id="vehicle-lights-help" class="panel-help">自动在夜间、隧道和低能见度时开启近光；远光照得更远。关闭车灯仍保留制动灯。</p>
+          <label for="vehicle-wipers">雨刮 · B 切换</label>
+          <select id="vehicle-wipers" aria-describedby="vehicle-wipers-help"></select>
+          <p id="vehicle-wipers-help" class="panel-help"></p>
           <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
           <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。调整设置时车辆暂停，点击画面继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
         </details>
@@ -50,7 +60,7 @@
           <summary>地貌与道路</summary>
           <form id="world-options">
             <label for="terrain-kind">地貌</label>
-            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="karst">喀斯特峰林</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
+            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="autumn">秋色丘陵</option><option value="karst">喀斯特峰林</option><option value="volcanic">火山高地</option><option value="tundra">冰蚀苔原</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">蜿蜒程度</label>
@@ -117,13 +127,14 @@
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
+        <div class="vehicle-indicators"><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span></div>
       </section>
       <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small></section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
         <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
-        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
         <div class="controls" id="walking-controls" hidden><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
       </footer>
       <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>

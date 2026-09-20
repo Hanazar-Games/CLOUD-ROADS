@@ -23,6 +23,20 @@ export class HeightFunction {
     const detail = this.noise.fractal(x / 90, z / 90, 2) * 18;
     const region = this.noise.fractal(wx / 8700 + 19, wz / 7300 - 37, 2);
     const basin = Math.max(0, this.noise.sample(wx / 2100 + 53, wz / 1700 - 71));
+    if (this.terrain === 'autumn') return 210 + macro * 0.3 + ranges * 0.1
+      + this.noise.fractal(wx / 1300 + 17, wz / 1900, 3) * 190 + medium * 0.2 + detail * 0.3 - basin * 85;
+    if (this.terrain === 'volcanic') {
+      const t = Math.max(0, Math.min(1, (this.noise.sample(wx / 2100, wz / 2300) + 0.2) / 0.95));
+      const rim = Math.max(0, (t - 0.7) / 0.3), crater = rim * rim * (3 - 2 * rim);
+      const lavaRidges = this.noise.ridged(wx / 480, wz / 810, 2);
+      return 380 + macro * 0.22 + t * t * (3 - 2 * t) * 1500 - crater * 580
+        + lavaRidges * (50 + basin * 80) + medium * 0.18 + detail * 0.45;
+    }
+    if (this.terrain === 'tundra') {
+      const valley = Math.sin(wx / 2400 + this.noise.fractal(wz / 4800, 31, 2) * 1.8);
+      const flank = 1 - Math.exp(-valley * valley * 5);
+      return 280 + macro * 0.2 + flank * (650 + ranges * 0.38) + medium * 0.13 + detail * 0.25;
+    }
     if (this.terrain === 'meadow') return 230 + macro * 0.22 + ranges * 0.025
       + this.noise.fractal(wx / 950, wz / 1350, 3) * 95 + medium * 0.14 + detail * 0.15;
     if (this.terrain === 'badlands') {

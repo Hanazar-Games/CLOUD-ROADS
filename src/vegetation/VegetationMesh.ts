@@ -22,7 +22,9 @@ export class VegetationMesh {
   readonly meadow = new InstancedMesh(plantGeometry('meadow'), this.material, MEADOW_CAPACITY);
   readonly flowers = new InstancedMesh(plantGeometry('flowers'), this.material, MEADOW_CAPACITY);
   readonly flowerSpikes = new InstancedMesh(plantGeometry('flowerSpikes'), this.material, MEADOW_CAPACITY);
-  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant, this.meadow, this.flowers, this.flowerSpikes];
+  readonly autumn = new InstancedMesh(plantGeometry('autumn'), this.material, TREE_CAPACITY);
+  readonly autumnDistant = new InstancedMesh(plantGeometry('autumn', true), this.material, FAR_CAPACITY);
+  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant, this.meadow, this.flowers, this.flowerSpikes, this.autumn, this.autumnDistant];
   private readonly entries: PlantInstance[][] = this.meshes.map(() => []);
   private readonly changed = this.meshes.map(() => ({ min: Infinity, max: -1 }));
   private readonly chunks = new Map<string, PlantChunk>();
@@ -36,7 +38,7 @@ export class VegetationMesh {
   constructor(scene: Scene) {
     for (const [i, mesh] of this.meshes.entries()) {
       mesh.count = 0; mesh.visible = false; mesh.frustumCulled = false;
-      mesh.castShadow = i < 5; mesh.receiveShadow = i < 6 || i >= 9;
+      mesh.castShadow = i < 5 || mesh === this.autumn; mesh.receiveShadow = i < 6 || i >= 9;
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
       mesh.setColorAt(0, this.color); mesh.instanceColor!.setUsage(DynamicDrawUsage);
       scene.add(mesh);
@@ -44,8 +46,8 @@ export class VegetationMesh {
   }
 
   get count(): number { return this.meshes.reduce((sum, mesh) => sum + mesh.count, 0); }
-  get distantCount(): number { return this.distant.reduce((sum, mesh) => sum + mesh.count, 0); }
-  get canopyCount(): number { return this.trees.count + this.broadleaf.count + this.cacti.count + this.distantCount; }
+  get distantCount(): number { return this.distant.reduce((sum, mesh) => sum + mesh.count, this.autumnDistant.count); }
+  get canopyCount(): number { return this.trees.count + this.broadleaf.count + this.cacti.count + this.autumn.count + this.distantCount; }
   get groundCount(): number { return this.shrubs.count + this.rocks.count + this.grass.count + this.meadow.count + this.flowers.count + this.flowerSpikes.count; }
 
   setChunk(key: string, x: number, z: number, plants: Float32Array): void {
@@ -108,8 +110,8 @@ export class VegetationMesh {
       if (chunk.ring === 3) continue;
       for (let i = 0; i < chunk.plants.length; i += 7) {
         const kind = chunk.plants[i + 5], far = chunk.ring === 2;
-        if ((kind >= 7 && !chunk.near) || (chunk.ring > 0 && kind >= 3) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
-        const batch = kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? kind : kind <= 4 ? 3 : kind - 1;
+        if ((kind >= 7 && kind <= 9 && !chunk.near) || (chunk.ring > 0 && kind >= 3 && kind !== 10) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
+        const batch = kind === 10 ? far ? 13 : 12 : kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? kind : kind <= 4 ? 3 : kind - 1;
         const entries = this.entries[batch], mesh = this.meshes[batch];
         if (entries.length >= mesh.instanceMatrix.count) throw new Error('Vegetation instance capacity exceeded');
         const entry = { chunk, offset: i, batch, index: entries.length };

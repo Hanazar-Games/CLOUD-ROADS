@@ -58,7 +58,7 @@ export const vehicleProfiles = {
     eye: { x: 0, y: 0.91, along: 0.05 }, paint: 0xc6a065 },
 } as const satisfies Record<string, VehicleProfile>;
 export type VehicleKind = keyof typeof vehicleProfiles;
-export function suspensionTuning(level: Suspension, profile: VehicleProfile = vehicleProfiles.roadster): { spring: number; damping: number } {
+export function suspensionTuning(level: Suspension, profile: VehicleProfile = vehicleProfiles.roadster, damping = 1): { spring: number; damping: number } {
   const frequency = [1.3, 1.55, 1.8, 2.05, 2.3][level - 1] * profile.suspensionRate, omega = Math.PI * 2 * frequency;
-  return { spring: omega * omega, damping: 2 * omega * (0.75 + level * 0.025) };
+  return { spring: omega * omega, damping: 2 * omega * (0.75 + level * 0.025) * Math.max(0.7, Math.min(1.3, damping)) };
 }

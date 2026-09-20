@@ -374,7 +374,7 @@ export class Game {
       this.flight.update(0, false);
     }
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
-      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6));
+      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.profile.rain);
     this.walking.sync();
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
@@ -460,6 +460,10 @@ export class Game {
         'Trailer angle': `${(this.driving.car.articulation * 180 / Math.PI).toFixed(1)}°`,
         'Vehicle position': `${this.driving.car.x.toFixed(2)}, ${this.driving.car.y.toFixed(2)}, ${this.driving.car.z.toFixed(2)}`,
         'Vehicle suspension': `${this.driving.car.suspension} · ${this.driving.car.wheels.map(wheel => (wheel.compression * 100).toFixed(1)).join(' / ')} cm`,
+        'Suspension damping': `${Math.round(this.driving.car.damping * 100)}%`,
+        'Vehicle lights': this.driving.systems.beam,
+        'Wiper sweep': this.driving.systems.sweep.toFixed(3),
+        'Wiper rate': this.driving.systems.wiperRate.toFixed(1),
         'Driving camera': this.driving.cameraRig.view,
         'Camera FOV': `${this.camera.fov}°`, 'Camera height': `${Math.round(this.driving.cameraRig.height * 100)} cm`,
         'Cloud region': this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '关闭',

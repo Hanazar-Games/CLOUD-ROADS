@@ -6,10 +6,12 @@ import type { World } from '../world/World';
 import { DrivingSurface } from './DrivingSurface';
 import { VehicleMesh } from './VehicleMesh';
 import { VehiclePhysics } from './VehiclePhysics';
-import { vehicleProfiles, suspensionLevels, suspensionNames, type Suspension, type VehicleKind } from './VehicleConfig';
+import { vehicleProfiles, suspensionLevels, suspensionNames, suspensionTuning, type Suspension, type VehicleKind } from './VehicleConfig';
+import { VehicleSystems, lightNames, wiperNames, type LightMode, type WiperMode } from './VehicleSystems';
 
 export class DrivingSystem {
   car = new VehiclePhysics();
+  readonly systems = new VehicleSystems();
   readonly cameraRig;
   active = false;
   private mesh;
@@ -17,6 +19,7 @@ export class DrivingSystem {
   private surface: DrivingSurface | undefined;
   private collisionTime = 0;
   private hudTime = 0;
+  private systemsDt = 0;
 
   constructor(private readonly scene: Scene, private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World) {
     this.mesh = new VehicleMesh(scene);
@@ -47,8 +50,17 @@ export class DrivingSystem {
     }, options);
     element('suspension').addEventListener('change', () => {
       const value = Number(element<HTMLSelectElement>('suspension').value) as Suspension;
-      if (suspensionLevels.includes(value)) this.car.suspension = value;
+      if (suspensionLevels.includes(value)) { this.car.suspension = value; this.describeSuspension(); }
     }, options);
+    element('suspension-damping').addEventListener('input', () => {
+      this.car.damping = Number(element<HTMLInputElement>('suspension-damping').value) / 100;
+      this.describeSuspension();
+    }, options);
+    const lights = element<HTMLSelectElement>('vehicle-lights'), wipers = element<HTMLSelectElement>('vehicle-wipers');
+    lights.replaceChildren(...Object.entries(lightNames).map(([value, name]) => new Option(name, value)));
+    wipers.replaceChildren(...Object.entries(wiperNames).map(([value, name]) => new Option(name, value)));
+    lights.addEventListener('change', () => { if (Object.hasOwn(lightNames, lights.value)) this.systems.lights = lights.value as LightMode; }, options);
+    wipers.addEventListener('change', () => { if (Object.hasOwn(wiperNames, wipers.value)) this.systems.wipers = wipers.value as WiperMode; }, options);
     element('vehicle-reset').addEventListener('click', () => { this.reset(); element('world').focus(); }, options);
     element('view-reset').addEventListener('click', () => { this.cameraRig.reset(); element('world').focus(); }, options);
   }
@@ -88,6 +100,16 @@ export class DrivingSystem {
   action(code: string): void {
     if (!this.active) return;
     if (code === 'KeyR') this.reset();
+    if (code === 'KeyL') {
+      const modes = Object.keys(lightNames) as LightMode[];
+      this.systems.lights = modes[(modes.indexOf(this.systems.lights) + 1) % modes.length];
+      element<HTMLSelectElement>('vehicle-lights').value = this.systems.lights;
+    }
+    if (code === 'KeyB' && this.systems.hasWindshield) {
+      const modes = Object.keys(wiperNames) as WiperMode[];
+      this.systems.wipers = modes[(modes.indexOf(this.systems.wipers) + 1) % modes.length];
+      element<HTMLSelectElement>('vehicle-wipers').value = this.systems.wipers;
+    }
     if (code === 'KeyC') {
       this.cameraRig.view = drivingViews[(drivingViews.indexOf(this.cameraRig.view) + 1) % drivingViews.length];
       element<HTMLSelectElement>('driving-view').value = this.cameraRig.view; this.cameraRig.reset();
@@ -100,6 +122,7 @@ export class DrivingSystem {
     const focused = document.activeElement === element('world') && document.hasFocus();
     const waiting = !world.roadReady;
     const held = frozen || waiting || !focused;
+    this.systemsDt = held ? 0 : dt;
     this.surface.wet = wet;
     if (!held) {
       const x = this.car.x, z = this.car.z, trip = this.car.trip;
@@ -123,18 +146,27 @@ export class DrivingSystem {
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
       element('speed-line').style.transform = `scaleX(${Math.min(1, Math.abs(this.car.speed) / this.car.profile.maxSpeed)})`;
       element('drive-hud').classList.toggle('braking', this.car.braking);
+      element('suspension-compression').textContent = `轮端压缩 ${this.car.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`
+        + (this.car.trailer ? ` · 挂车 ${this.car.trailer.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm` : '');
     }
   }
 
-  sync(night: number): void {
+  sync(night: number, rain: number): void {
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
-    if (this.active) { this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, night); }
+    if (this.active) {
+      const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
+      this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered);
+      this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt);
+      element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯`;
+      element('vehicle-lights-status').classList.toggle('high-beam', this.systems.beam === 'high');
+      element('vehicle-wipers-status').textContent = this.systems.hasWindshield ? `雨刮 · ${wiperNames[this.systems.wipers]}` : '无雨刮';
+    }
   }
 
   private selectVehicle(kind: VehicleKind): void {
     if (kind === this.car.kind) return;
     const next = new VehiclePhysics(kind);
-    next.suspension = this.car.suspension; next.trip = this.car.trip;
+    next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
     if (this.active && this.surface) {
       const spawn = this.getWorld().roadReady ? this.surface.spawn(this.car.x, this.car.z, next.profile) : undefined;
       if (!spawn) {
@@ -149,9 +181,19 @@ export class DrivingSystem {
 
   private describeVehicle(): void {
     const p = this.car.profile;
+    this.systems.hasWindshield = p.shape !== 'motorcycle';
+    element<HTMLSelectElement>('vehicle-wipers').disabled = !this.systems.hasWindshield;
+    element('vehicle-wipers-help').textContent = this.systems.hasWindshield ? '自动按雨量调速；间歇每次刮动后停顿。关闭后完成当前刮动并归位。' : '此摩托车没有挡风玻璃，不提供雨刮。';
+    this.describeSuspension();
     element('vehicle-summary').textContent = `${p.length} m · ${(p.mass / 1000).toLocaleString('zh-CN')} 吨 · ${p.wheels.length + (p.trailer?.wheels.length ?? 0)} 轮 · ${Math.round(p.power / 1000)} kW。`
       + (p.trailer ? '半挂有内轮差和倒车折叠，窄弯请放慢并留足外侧空间。' : p.shape === 'motorcycle' ? '两轮独立悬挂，转弯自动侧倾，低速自动平衡。' : p.mass > 4000 ? '重车加速较慢，陡坡与湿路请提前减速。' : '五档弹簧与阻尼按车型匹配。');
     element('camera-distance-value').textContent = `${Number(this.cameraRig.distanceFor(this.car).toFixed(1))} m`;
+  }
+
+  private describeSuspension(): void {
+    const p = this.car.profile, tuning = suspensionTuning(this.car.suspension, p, this.car.damping);
+    element('suspension-damping-value').textContent = `${Math.round(this.car.damping * 100)}%`;
+    element('suspension-summary').textContent = `${(Math.sqrt(tuning.spring) / (Math.PI * 2)).toFixed(2)} Hz · 行程 ${Math.round(p.travel * 100)} cm。阻尼越高，回弹越慢；100% 为车型推荐值。`;
   }
 
   private explainSpace(): void {
@@ -171,7 +213,7 @@ export class DrivingSystem {
     element('flight-controls').hidden = this.active;
     element('driving-controls').hidden = !this.active;
     element<HTMLButtonElement>('vehicle-reset').disabled = !this.active;
-    element('world').setAttribute('aria-label', this.active ? '山路驾驶；W 加速，S 刹车倒车，A D 转向，Space 手刹，C 切换视角，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
+    element('world').setAttribute('aria-label', this.active ? '山路驾驶；W 加速，S 刹车倒车，A D 转向，Space 手刹，C 切换视角，L 车灯，B 雨刮，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
   }
 
   dispose(): void { this.events.abort(); this.mesh.dispose(); document.body.classList.remove('driving'); }

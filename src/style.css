@@ -87,6 +87,8 @@ dt { opacity: .55; } dd { margin: 0; text-align: right; overflow-wrap: anywhere;
 .trip-reading small { display: block; font-size: 8px; letter-spacing: 2px; opacity: .65; margin-bottom: 4px; }
 .trip-reading b { font-size: 14px; font-weight: 400; }
 #vehicle-status { text-align: center; font-size: 10px; letter-spacing: 1px; margin: 8px 0 0; min-height: 14px; color: #e1e9df; }
+.vehicle-indicators { display: flex; justify-content: center; gap: 18px; margin-top: 7px; color: #c7d7be; font-size: 10px; }
+.vehicle-indicators .high-beam { color: #8bd4ff; }
 .braking #speed-line { background: #efb594; }
 .driving .crosshair, .driving footer .telemetry { display: none; }
 .driving footer { justify-content: center; }

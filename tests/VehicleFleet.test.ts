@@ -1,13 +1,39 @@
 import { Box3, Scene, Vector3 } from 'three';
 import { expect, it } from 'vitest';
-import { vehicleProfiles, suspensionLevels } from '../src/vehicle/VehicleConfig';
+import { vehicleProfiles, suspensionLevels, suspensionTuning } from '../src/vehicle/VehicleConfig';
 import { VehiclePhysics, type SurfaceSampler } from '../src/vehicle/VehiclePhysics';
 import { VehicleMesh } from '../src/vehicle/VehicleMesh';
+import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 
 const flat: SurfaceSampler = () => ({ height: 0, grip: 1 });
 const drive = (car: VehiclePhysics, seconds: number, steer = 0, throttle = 1, surface = flat, fps = 60) => {
   for (let i = 0; i < seconds * fps; i++) car.update(1 / fps, { throttle, steer, handbrake: false }, surface);
 };
+
+it('trims damping independently of spring stiffness and ride height', () => {
+  const soft = suspensionTuning(3, vehicleProfiles.sedan, 0.7), firm = suspensionTuning(3, vehicleProfiles.sedan, 1.3);
+  expect(soft.spring).toBe(firm.spring); expect(firm.damping / soft.damping).toBeCloseTo(1.3 / 0.7);
+  const a = new VehiclePhysics('sedan'), b = new VehiclePhysics('sedan');
+  a.damping = 0.7; b.damping = 1.3;
+  a.reset(0, 0, 0, flat); b.reset(0, 0, 0, flat);
+  expect(a.y).toBe(b.y);
+  const raised = () => ({ height: 0.1, grip: 1 });
+  drive(a, 0.3, 0, 0, raised); drive(b, 0.3, 0, 0, raised);
+  expect(Math.abs(a.y - b.y)).toBeGreaterThan(0.005);
+});
+
+it('shares wet-road grip between braking and turning and includes trailer tires', () => {
+  const coast = new VehiclePhysics(), brake = new VehiclePhysics();
+  const wet = () => ({ height: 0, grip: 0.55 });
+  for (const car of [coast, brake]) { car.reset(0, 0, 0, wet); car.parked = false; car.speed = 20; car.steering = 0.3; }
+  drive(coast, 0.1, 1, 0, wet, 120); drive(brake, 0.1, 1, -1, wet, 120);
+  expect(brake.heading).toBeLessThan(coast.heading * 0.8);
+  const dry = new VehiclePhysics('semi20'), mixed = new VehiclePhysics('semi20');
+  const mixedSurface: SurfaceSampler = (_x, z) => ({ height: 0, grip: z > 5 ? 0.2 : 1 });
+  for (const car of [dry, mixed]) { car.reset(0, 0, 0, flat); car.parked = false; car.speed = 10; }
+  drive(dry, 0.2, 0, -1, flat); drive(mixed, 0.2, 0, -1, mixedSurface);
+  expect(mixed.speed).toBeGreaterThan(dry.speed + 0.2);
+});
 
 it('provides five suspension levels and distinct cars, trucks, buses, articulated rigs and a motorcycle', () => {
   expect(suspensionLevels).toEqual([1, 2, 3, 4, 5]);
@@ -31,7 +57,7 @@ it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settl
   }
   car.reset(0, 0, 0, flat);
   const scene = new Scene(), mesh = new VehicleMesh(scene, car.profile);
-  mesh.sync(car, { x: 0, z: 0 }, 1); scene.updateMatrixWorld(true);
+  mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems()); scene.updateMatrixWorld(true);
   const size = new Box3().setFromObject(mesh.root).getSize(new Vector3());
   expect(size.z).toBeGreaterThan(car.profile.length - 0.3);
   expect(size.z).toBeLessThan(car.profile.length + 0.6);

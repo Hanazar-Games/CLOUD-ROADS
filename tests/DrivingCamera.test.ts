@@ -2,6 +2,7 @@ import { PerspectiveCamera, Scene, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DrivingCamera, drivingViews } from '../src/camera/DrivingCamera';
 import { VehicleMesh } from '../src/vehicle/VehicleMesh';
+import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import type { DrivingSurface } from '../src/vehicle/DrivingSurface';
 
@@ -65,10 +66,10 @@ describe('Driving rendering', () => {
     for (const view of drivingViews) {
       rig.view = view; rig.reset();
       rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
-      mesh.sync(car, { x: 0, z: 0 }, 1);
+      mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems());
       const position = camera.position.clone(), rotation = camera.quaternion.clone(), vehicle = mesh.root.position.clone();
       const origin = { x: 29952, z: -41984 };
-      rig.update(1 / 60, car, surface, origin, [0, 0]); mesh.sync(car, origin, 1);
+      rig.update(1 / 60, car, surface, origin, [0, 0]); mesh.sync(car, origin, new VehicleSystems());
       expect(camera.position.clone().add(new Vector3(origin.x, 0, origin.z)).distanceTo(position)).toBeLessThan(1e-8);
       expect(camera.quaternion.angleTo(rotation)).toBeLessThan(1e-6);
       expect(mesh.root.position.clone().add(new Vector3(origin.x, 0, origin.z)).distanceTo(vehicle)).toBe(0);

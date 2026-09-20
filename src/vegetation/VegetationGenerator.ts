@@ -30,6 +30,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
         const density = desert ? 0.11 * grove : (w.forest * 0.95 + w.valley * 0.65) * grove * biomes.treeDensity;
         if (chance < density && normalY > 0.76 && w.snow < 0.2) {
           kind = desert ? 1 : height < 1700 && species > 0.5 ? 2 : 0;
+          if (biomes.autumn && species > 0.12) kind = 10;
           scale = desert ? 0.65 + size * 0.8 : 0.55 + size ** 0.7 * 0.95;
           radius = (kind === 1 ? 2 : 4.7) * scale;
         } else if (cells !== 8 && chance < 0.06 + w.rock * 0.4 + w.alpine * 0.18 && w.snow < 0.6) {

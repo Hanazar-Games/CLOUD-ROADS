@@ -1,6 +1,8 @@
 import { BoxGeometry, CatmullRomCurve3, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshStandardMaterial, Shape, SpotLight, TorusGeometry, TubeGeometry, Vector3, type BufferGeometry, type Scene } from 'three';
 import type { VehiclePhysics, WheelState } from './VehiclePhysics';
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, type WheelPoint } from './VehicleConfig';
+import { Windshield } from './Windshield';
+import type { VehicleSystems } from './VehicleSystems';
 
 type Block = (w: number, h: number, l: number, x: number, y: number, z: number, material?: MeshStandardMaterial, parent?: Group) => Mesh;
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
@@ -16,6 +18,8 @@ export class VehicleMesh {
   private readonly trailerBody = new Group();
   private readonly steering = new Group();
   private readonly tail;
+  private readonly lamp;
+  private windshield?: Windshield;
   private readonly headlight = new SpotLight(0xffeed0, 0, 100, 0.6, 0.65, 1.6);
 
   constructor(scene: Scene, private readonly profile: VehicleProfile = vehicleProfiles.roadster) {
@@ -24,7 +28,7 @@ export class VehicleMesh {
     const glass = this.material(profile.shape === 'roadster' ? 0xc3e2e4 : 0x627e88, 0.15, 0.15);
     glass.transparent = true; glass.opacity = profile.shape === 'roadster' ? 0.16 : 0.58; glass.depthWrite = false;
     this.tail = this.material(0xca3932); this.tail.emissive.setHex(0xff3020);
-    const lamp = this.material(0xffefcf); lamp.emissive.setHex(0xffeed0); lamp.emissiveIntensity = 0.7;
+    const lamp = this.lamp = this.material(0xffefcf); lamp.emissive.setHex(0xffeed0); lamp.emissiveIntensity = 0;
     this.root.add(this.chassis); this.root.visible = false; scene.add(this.root);
     const box = this.geometry(new BoxGeometry());
     const block = (w: number, h: number, l: number, x: number, y: number, z: number, material = paint, parent = this.chassis) => {
@@ -57,6 +61,7 @@ export class VehicleMesh {
       const pillar = block(0.035, 0.87, 0.035, side * 0.8, 0.65, -0.74, metal); pillar.rotation.x = 0.27;
     }
     const windshield = block(1.55, 0.81, 0.014, 0, 0.65, -0.74, glass); windshield.rotation.x = 0.27;
+    this.windshield = new Windshield(windshield, 1.55, 0.81);
     block(1.65, 0.035, 0.045, 0, 1.07, -0.63, metal);
     block(1.58, 0.15, 0.3, 0, 0.25, -0.64, trim);
     block(0.2, 0.17, 0.8, 0, 0.09, 0.2, trim);
@@ -108,7 +113,7 @@ export class VehicleMesh {
     this.chassis.add(this.headlight, this.headlight.target);
   }
 
-  sync(car: VehiclePhysics, origin: { x: number; z: number }, night: number): void {
+  sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0): void {
     this.root.position.set(car.x - origin.x, car.y, car.z - origin.z);
     this.root.rotation.y = -car.heading;
     this.chassis.rotation.set(car.pitch, 0, car.roll, 'YXZ');
@@ -121,8 +126,13 @@ export class VehicleMesh {
       this.syncWheels(this.trailerWheels, t.wheels, t.y, t.pitch, t.roll, car);
     }
     this.steering.rotation.z = -car.steering * 2;
-    this.tail.emissiveIntensity = car.braking || car.parked ? 2 : 0.15 + night * 0.6;
-    this.headlight.intensity = night * 160;
+    const on = systems.beam !== 'off', high = systems.beam === 'high';
+    this.tail.emissiveIntensity = car.braking ? 2 : on ? 0.75 : 0;
+    this.lamp.emissiveIntensity = on ? high ? 1.5 : 0.8 : 0;
+    this.headlight.intensity = on ? high ? 280 : 160 : 0;
+    this.headlight.distance = high ? 180 : 90; this.headlight.angle = high ? 0.32 : 0.6;
+    this.headlight.target.position.set(0, high ? -0.4 : -1.1, high ? -75 : -32);
+    this.windshield?.update(dt, systems, car.speed);
   }
 
   private get rideHeight(): number { return this.profile.radius + this.profile.rest - 9.81 / suspensionTuning(3, this.profile).spring; }
@@ -181,6 +191,7 @@ export class VehicleMesh {
       const front = z === cabFront, tilt = Math.atan2(rake, roof - sill) * (front ? 1 : -1);
       const center = z + (front ? rake / 2 : -rake / 2);
       const window = block(w - 0.18, Math.hypot(roof - sill, rake) - 0.07, 0.015, 0, (roof + sill) / 2, center, glass); window.rotation.x = tilt;
+      if (front) this.windshield = new Windshield(window, w - 0.18, Math.hypot(roof - sill, rake) - 0.07);
       for (const side of [-1, 1]) {
         const pillar = block(0.065, Math.hypot(roof - sill, rake), 0.065, side * (w / 2 - 0.07), (roof + sill) / 2, center);
         pillar.rotation.x = tilt;
@@ -270,6 +281,7 @@ export class VehicleMesh {
   }
   private geometry<T extends BufferGeometry>(geometry: T): T { this.geometries.push(geometry); return geometry; }
   dispose(): void {
+    this.windshield?.dispose();
     this.root.removeFromParent(); this.headlight.dispose();
     this.geometries.forEach(geometry => geometry.dispose()); this.materials.forEach(material => material.dispose());
   }

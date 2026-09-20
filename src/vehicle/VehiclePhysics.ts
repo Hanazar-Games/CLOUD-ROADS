@@ -17,6 +17,7 @@ export class VehiclePhysics {
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   braking = false; parked = true; jackknifed = false;
   suspension: Suspension = 3;
+  damping = 1;
   readonly wheels: WheelState[];
   readonly trailer?: TrailerState;
   private vy = 0; private pitchVelocity = 0; private rollVelocity = 0; private accumulator = 0;
@@ -120,26 +121,31 @@ export class VehiclePhysics {
   }
 
   private step(input: VehicleInput, surface: SurfaceSampler): void {
-    const contacts = this.contacts(surface), { spring, damping } = suspensionTuning(this.suspension, this.profile), config = this.profile;
+    const contacts = this.contacts(surface), { spring, damping } = suspensionTuning(this.suspension, this.profile, this.damping), config = this.profile;
     const throttle = clamp(input.throttle, -1, 1), count = this.wheels.length;
     if (throttle && !input.handbrake) this.parked = false;
     const grip = contacts.reduce((sum, c, i) => sum + c.grip * Number(this.wheels[i].grounded), 0) / count;
+    const trailerContacts = this.trailerContacts(surface);
+    const brakingGrip = (grip * count + trailerContacts.reduce((sum, c, i) => sum + c.grip * Number(this.trailer!.wheels[i].grounded), 0)) / (count + trailerContacts.length);
     const grade = this.slope(contacts, 'along'), oldSpeed = this.speed;
     const slopeForce = GRAVITY * grade / Math.hypot(1, grade);
     this.braking = input.handbrake || throttle * this.speed < 0;
     if (input.handbrake || this.parked || this.braking) {
-      const deceleration = (input.handbrake || this.parked ? config.brake * 1.2 : config.brake) * grip;
+      const deceleration = Math.min((input.handbrake || this.parked ? config.brake * 1.2 : config.brake), GRAVITY * 0.94) * brakingGrip;
       this.speed = approach(this.speed - slopeForce * STEP, 0, deceleration * STEP);
     } else {
       const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) / config.mass;
-      const drive = throttle * engine * grip * (throttle < 0 ? 0.55 : 1);
+      const drive = throttle * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : 1);
       this.speed += (drive - slopeForce) * STEP;
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + (1 - grip) * 0.5) * STEP);
     }
     this.speed = clamp(this.speed, -config.reverseSpeed, config.maxSpeed);
     this.steering = approach(this.steering, clamp(input.steer, -1, 1) * config.steer / (1 + Math.abs(this.speed) / 28), config.steerRate * STEP);
     const stability = this.kind === 'motorcycle' ? 8 : Math.min(8, GRAVITY * config.width / (2 * config.cg) * 0.7);
-    const yawLimit = grip * (input.handbrake ? 3 : stability) / Math.max(1, Math.abs(this.speed));
+    const tireAcceleration = (this.speed - oldSpeed) / STEP + slopeForce;
+    const availableGrip = this.braking || this.parked ? Math.min(grip, brakingGrip) : grip;
+    const lateral = Math.sqrt(Math.max(0, (availableGrip * GRAVITY) ** 2 - tireAcceleration ** 2));
+    const yawLimit = Math.min(lateral, availableGrip * (input.handbrake ? 3 : stability)) / Math.max(1, Math.abs(this.speed));
     const yawRate = clamp(this.speed * Math.tan(this.steering) / this.wheelbase, -yawLimit, yawLimit);
     this.heading += yawRate * STEP;
     this.x += Math.sin(this.heading) * this.speed * STEP; this.z -= Math.cos(this.heading) * this.speed * STEP;
@@ -177,11 +183,7 @@ export class VehiclePhysics {
     this.jackknifed = Math.abs(articulation) > limit;
     if (this.jackknifed) { trailer.heading = this.heading - clamp(articulation, -limit, limit); this.speed = 0; }
     Object.assign(trailer, hitch);
-    const contacts = config.wheels.map(p => {
-      const offset = vehicleOffset(p.x, p.along, trailer.pitch, trailer.roll);
-      return surface(trailer.x + Math.cos(trailer.heading) * offset.x - Math.sin(trailer.heading) * offset.z,
-        trailer.z + Math.sin(trailer.heading) * offset.x + Math.cos(trailer.heading) * offset.z);
-    });
+    const contacts = this.trailerContacts(surface);
     const ground = contacts.reduce((sum, c) => sum + c.height, 0) / contacts.length;
     const ride = this.profile.radius + this.profile.rest - GRAVITY / suspensionTuning(this.suspension, this.profile).spring;
     const target = clamp(Math.atan2(trailer.y - ground - ride, config.wheelbase * Math.cos(trailer.pitch)), -0.65, 0.65);
@@ -196,6 +198,16 @@ export class VehiclePhysics {
       wheel.height = Math.max(ground, mount - this.profile.rest);
       wheel.compression = clamp(this.profile.rest - mount + ground, 0, this.profile.travel);
       wheel.grounded = mount - ground < this.profile.rest + 0.03;
+    });
+  }
+
+  private trailerContacts(surface: SurfaceSampler): SurfaceContact[] {
+    const trailer = this.trailer, config = this.profile.trailer;
+    if (!trailer || !config) return [];
+    return config.wheels.map(p => {
+      const offset = vehicleOffset(p.x, p.along, trailer.pitch, trailer.roll);
+      return surface(trailer.x + Math.cos(trailer.heading) * offset.x - Math.sin(trailer.heading) * offset.z,
+        trailer.z + Math.sin(trailer.heading) * offset.x + Math.cos(trailer.heading) * offset.z);
     });
   }
 }
