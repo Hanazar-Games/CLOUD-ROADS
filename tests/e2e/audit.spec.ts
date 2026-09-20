@@ -108,9 +108,10 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.17');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('峰林云桥 · 斜拉大桥与山路十八弯');
-  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.16');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.18');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('百变旅途 · 载具车队与雨雾');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.17');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('峰林云桥 · 斜拉大桥与山路十八弯');
   await dialog.getByText('历史公告', { exact: true }).click();
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.0');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.1');

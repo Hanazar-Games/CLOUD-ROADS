@@ -53,8 +53,9 @@ export class CloudSystem {
     this.sample = this.field.sample(x, camera.position.y, z);
     const density = this.enabled ? this.sample.density : 0;
     const near = 1000 * distance / 2048, far = 1950 * distance / 2048;
-    this.fog.near = Math.min(near + (12 - near) * density, weather === weatherProfiles.clear ? near : weather.near);
-    this.fog.far = Math.min(far + (110 - far) * density, weather === weatherProfiles.clear ? far : weather.far);
+    const clarity = Math.max(0, 1 - weather.cover * 4);
+    this.fog.near = Math.min(near + (12 - near) * density, weather.near * (1 + (distance / 2048 - 1) * clarity));
+    this.fog.far = Math.min(far + (110 - far) * density, weather.far * (1 + (distance / 2048 - 1) * clarity));
     this.fog.near += (near - this.fog.near) * shelter;
     this.fog.far += (far - this.fog.far) * shelter;
     camera.updateMatrixWorld();

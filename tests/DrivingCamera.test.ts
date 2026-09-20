@@ -6,6 +6,18 @@ import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import type { DrivingSurface } from '../src/vehicle/DrivingSurface';
 
 describe('Driving rendering', () => {
+  it('frames the whole long rig and uses its cab inside a tunnel', () => {
+    const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics('semi20');
+    let inside = false;
+    const surface = { sample: () => ({ height: 0, grip: 1 }), inTunnel: () => inside } as unknown as DrivingSurface;
+    car.reset(0, 0, 0, surface.sample);
+    rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.position.z).toBeGreaterThan(20);
+    inside = true; rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.position.z).toBeLessThan(0);
+    expect(camera.position.y).toBeGreaterThan(2.5);
+    expect(camera.position.y).toBeLessThan(3.5);
+  });
   it('previews height and distance changes without moving the parked car or resetting the look direction', () => {
     const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics();
     const surface = { sample: () => ({ height: 0, grip: 1 }), inTunnel: () => false } as unknown as DrivingSurface;

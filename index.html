@@ -26,18 +26,21 @@
         </details>
         <details class="world-options" open>
           <summary>驾驶与视角</summary>
+          <label for="vehicle-kind">载具</label>
+          <select id="vehicle-kind" aria-describedby="vehicle-summary"></select>
+          <p id="vehicle-summary" class="panel-help" aria-live="polite"></p>
           <label for="driving-view">驾驶视角 · C 切换</label>
           <select id="driving-view"><option value="chase">跟车</option><option value="cockpit">驾驶舱</option><option value="hood">引擎盖</option></select>
           <label class="speed-label" for="driving-fov">视野角度 <output id="driving-fov-value">65°</output></label>
           <input id="driving-fov" type="range" min="50" max="90" value="65" />
           <label class="speed-label" for="camera-distance">跟车距离 <output id="camera-distance-value">7 m</output></label>
-          <input id="camera-distance" type="range" min="5" max="11" step="0.5" value="7" />
+          <input id="camera-distance" type="range" min="5" max="20" step="0.5" value="7" />
           <label class="speed-label" for="camera-height">视角高度 <output id="camera-height-value">0 cm</output></label>
           <input id="camera-height" type="range" min="-0.1" max="0.35" step="0.05" value="0" />
           <label for="suspension">悬挂调校</label>
-          <select id="suspension"><option value="soft">柔软 · 起伏更明显</option><option value="balanced" selected>标准 · 均衡舒适</option><option value="firm">运动 · 更紧致</option></select>
+          <select id="suspension"></select>
           <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
-          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。视角调整即时预览，车辆保持暂停；点击画面继续。隧道内跟车镜头自动缩近。当前支持键盘驾驶。</p>
+          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。调整设置时车辆暂停，点击画面继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
         </details>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
@@ -83,7 +86,10 @@
         <details class="world-options" open>
           <summary>天气与时间</summary>
           <label for="weather-kind">天气</label>
-          <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="rain">雨天</option><option value="fog">浓雾</option></select>
+          <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="drizzle">小雨</option><option value="rain">雨天</option><option value="storm">风雨</option><option value="fog">浓雾</option></select>
+          <label class="speed-label" for="fog-density">雾气浓度 <output id="fog-density-value">100%</output></label>
+          <input id="fog-density" type="range" min="50" max="200" step="10" value="100" />
+          <p class="panel-help">天气逐渐过渡，雨后路面慢慢变干；暂停时选择天气可即时预览。雾气浓度越高，远景越朦胧。</p>
           <label for="time-preset">时段</label>
           <select id="time-preset"><option value="-100">清晨 · 07:00</option><option value="0">午后 · 13:00</option><option value="70" selected>金色时刻 · 17:12</option><option value="90">橙色晚霞 · 18:24</option><option value="150">夜晚 · 22:00</option><option value="custom" disabled>自定义时刻</option></select>
           <label class="speed-label" for="daylight">光照时刻 <output id="daylight-value">金色时刻 · 17:12</output></label>

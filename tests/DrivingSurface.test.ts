@@ -17,6 +17,19 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('spawns long rigs with room behind the tractor and detects trailer rear swing', () => {
+    const scene = world(true), surface = new DrivingSurface(scene), car = new VehiclePhysics('semi20');
+    const start = scene.road.samples[0].position, spawn = surface.spawn(start.x, start.z, car.profile)!;
+    expect(spawn).toBeDefined();
+    car.reset(spawn.x, spawn.z, spawn.heading, surface.sample, false, spawn.trailerHeading);
+    expect(car.trailer!.wheels.every(wheel => wheel.height > 90 && wheel.grounded)).toBe(true);
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
+    car.update(1 / 60, { throttle: 0, steer: 0, handbrake: false }, surface.sample);
+    car.trailer!.heading += 0.7;
+    expect(surface.constrain(car, car.x, car.z)).toBe(true);
+    expect(car.trailer!.heading).toBeCloseTo(spawn.trailerHeading, 1);
+    expect(Math.hypot(car.trailer!.x - car.hitch().x, car.trailer!.z - car.hitch().z)).toBeLessThan(0.001);
+  });
   it('keeps elevated service guardrails solid for walkers and cars while leaving the road entrances open', () => {
     const scene = world(true), surface = new DrivingSurface(scene);
     while (!scene.road.advanceToDistance(19000)) { /* Complete a service window. */ }
@@ -28,6 +41,10 @@ describe('DrivingSurface', () => {
     expect(surface.constrainWalker(body, a.x, a.z)).toBe(true);
     const car = new VehiclePhysics(); car.x = b.x; car.y = b.y + 0.8; car.z = b.z; car.speed = 10;
     expect(surface.constrain(car, a.x, a.z)).toBe(true); expect(car.speed).toBeLessThan(10);
+    const truck = new VehiclePhysics('truck5'), before = padPoint(pad, 29, 0), after = padPoint(pad, 31.5, 0);
+    truck.reset(before.x, before.z, pad.heading + Math.PI / 2, surface.sample);
+    truck.x = after.x; truck.z = after.z;
+    expect(surface.constrain(truck, before.x, before.z)).toBe(true);
     const below = { ...b, y: -50 };
     expect(surface.constrainWalker(below, a.x, a.z)).toBe(false);
     expect(surface.ceiling(pad.x, pad.z, -50)).toBeCloseTo(pad.y - 1.45);
@@ -67,13 +84,14 @@ describe('DrivingSurface', () => {
 
   it('shares visible guardrail openings with cars and pedestrians, but closes every bridge side', () => {
     const scene = world(), surface = new DrivingSurface(scene);
-    const sample = scene.road.samples.find(point => !hasRoadBarrier(scene, point, 1))!;
+    const sample = scene.road.samples.find((_point, index) => index > 4 && scene.road.samples.slice(index - 2, index + 3).every(point => !hasRoadBarrier(scene, point, 1)))!;
     expect(sample).toBeDefined();
     const { x, y, z } = sample.position, cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
     const before = { x: x + cos * 4.5, z: z + sin * 4.5 };
     const person = { x: x + cos * 5.7, y, z: z + sin * 5.7 };
     expect(surface.constrainWalker(person, before.x, before.z)).toBe(false);
-    const car = new VehiclePhysics(); car.x = person.x; car.y = y + 0.8; car.z = person.z; car.heading = sample.heading;
+    const car = new VehiclePhysics(); car.reset(before.x, before.z, sample.heading, surface.sample);
+    car.x = person.x; car.z = person.z;
     expect(surface.constrain(car, before.x, before.z)).toBe(false);
     scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
     expect(surface.constrainWalker(person, before.x, before.z)).toBe(true);
@@ -126,7 +144,7 @@ describe('DrivingSurface', () => {
         expect(surface.sample(point.x, point.z).height).toBeCloseTo((a.y + b.y) / 2, 1);
       }
     }
-    surface.wet = true;
+    surface.wet = 1;
     const spawn = surface.spawn(scene.road.samples[100].position.x, scene.road.samples[100].position.z)!;
     expect(surface.sample(spawn.x, spawn.z).grip).toBeLessThan(1);
     scene.services = [];

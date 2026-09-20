@@ -46,7 +46,7 @@ test('changes weather and time in place, lights road sections and preserves choi
   await expect(metric('Coordinates')).toHaveText(coordinates!);
   await page.locator('#cloud-toggle').click();
   await page.locator('#weather-kind').selectOption('fog');
-  await expect(metric('Fog near / far')).toHaveText('35 / 420 m');
+  await expect(metric('Fog near / far')).toHaveText('35 / 420 m', { timeout: 10_000 });
   await page.locator('#weather-kind').selectOption('clear');
   await page.locator('#lights-view').click();
   await expect.poll(async () => Number(await metric('Local lights').textContent())).toBeGreaterThan(0);

@@ -4,11 +4,12 @@ import { roadProfile } from '../road/RoadProfile';
 import type { World } from '../world/World';
 import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
 import { hasRoadBarrier } from '../road/RoadProtection';
+import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels'> & { sampleGround(x: number, z: number): { height: number } };
 
 export class DrivingSurface {
-  wet = false;
+  wet = 0;
   private readonly profile;
   private sites;
   private access;
@@ -34,7 +35,7 @@ export class DrivingSurface {
       if (Math.abs(along) < 1 && this.profile.centers.some(center => Math.abs(lateral - center) <= this.profile.halfWidth)) {
         const { normal } = roadFrame(sample);
         const height = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
-        if (height <= ceiling) return { height, grip: this.wet ? 0.72 : 1 };
+        if (height <= ceiling) return { height, grip: 1 - this.wet * 0.38 };
       }
     }
     this.refreshServices();
@@ -42,7 +43,7 @@ export class DrivingSurface {
       const dx = x - pad.x, dz = z - pad.z;
       const lateral = dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading);
       const along = dx * Math.sin(pad.heading) - dz * Math.cos(pad.heading);
-      if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength && pad.y + pad.grade * along <= ceiling) return { height: pad.y + pad.grade * along, grip: this.wet ? 0.72 : 1 };
+      if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength && pad.y + pad.grade * along <= ceiling) return { height: pad.y + pad.grade * along, grip: 1 - this.wet * 0.38 };
     }
     const access = this.accessIndex.nearest(x, z, 3.5);
     if (access) {
@@ -50,19 +51,48 @@ export class DrivingSurface {
       const height = a.y + (b.y - a.y) * t + 0.015
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      if (height <= ceiling) return { height, grip: this.wet ? 0.72 : 1 };
+      if (height <= ceiling) return { height, grip: 1 - this.wet * 0.38 };
     }
-    return { height: this.world.sampleGround(x, z).height, grip: this.wet ? 0.4 : 0.58 };
+    return { height: this.world.sampleGround(x, z).height, grip: 0.58 - this.wet * 0.24 };
   };
 
-  spawn(x: number, z: number): { x: number; z: number; heading: number } | undefined {
+  spawn(x: number, z: number, vehicle: VehicleProfile = vehicleProfiles.roadster): { x: number; z: number; heading: number; trailerHeading: number } | undefined {
     const road = this.world.road, nearest = road.nearest(x, z);
     if (!nearest) return undefined;
-    const distance = Math.max(road.segments[0].start.distance + 6, Math.min(road.segments.at(-1)!.end.distance - 6, nearest.distance));
-    const sample = road.segments.find(segment => segment.start.distance <= distance && segment.end.distance >= distance)!.atDistance(distance);
+    const margin = Math.max(6, vehicle.length + 3);
+    const start = road.segments[0].start.distance + margin, end = road.segments.at(-1)!.end.distance - margin;
+    if (end < start) return undefined;
+    const distance = Math.max(start, Math.min(end, nearest.distance));
     const offset = this.profile.centers.at(-1)! + this.world.options.roadWidth / 4;
-    const { right } = roadFrame(sample);
-    return { x: sample.position.x + right.x * offset, z: sample.position.z + right.z * offset, heading: sample.heading };
+    const point = (d: number) => {
+      const sample = road.segments.find(segment => segment.start.distance <= d && segment.end.distance >= d)!.atDistance(d);
+      const { right } = roadFrame(sample);
+      return { x: sample.position.x + right.x * offset, z: sample.position.z + right.z * offset, heading: sample.heading };
+    };
+    for (let attempt = 0; attempt < 81; attempt++) {
+      const d = distance + Math.ceil(attempt / 2) * 6 * (attempt % 2 ? 1 : -1);
+      if (d < start || d > end) continue;
+      const spawn = point(d), trailer = vehicle.trailer;
+      const hitch = { x: spawn.x + Math.sin(spawn.heading) * (trailer?.hitchAlong ?? 0), z: spawn.z - Math.cos(spawn.heading) * (trailer?.hitchAlong ?? 0) };
+      const rear = point(d + (trailer?.hitchAlong ?? 0) - (trailer?.wheelbase ?? 0));
+      const trailerHeading = trailer ? Math.atan2(hitch.x - rear.x, rear.z - hitch.z) : spawn.heading;
+      const bodies = [{ ...spawn, front: vehicle.chassisLength / 2, rear: -vehicle.chassisLength / 2 }];
+      if (trailer) bodies.push({ ...hitch, heading: trailerHeading, front: trailer.front, rear: trailer.front - trailer.length });
+      const fits = bodies.every(body => {
+        const steps = Math.ceil(body.front - body.rear);
+        for (let i = 0; i <= steps; i++) {
+          const along = body.rear + (body.front - body.rear) * i / steps;
+          const x = body.x + Math.sin(body.heading) * along, z = body.z - Math.cos(body.heading) * along;
+          const sample = road.nearest(x, z);
+          if (!sample) return false;
+          const lateral = (x - sample.position.x) * Math.cos(sample.heading) + (z - sample.position.z) * Math.sin(sample.heading);
+          if (!this.profile.centers.some(center => Math.abs(lateral - center) + vehicle.width / 2 + 0.18 < this.profile.halfWidth)) return false;
+        }
+        return true;
+      });
+      if (fits) return { ...spawn, trailerHeading };
+    }
+    return undefined;
   }
 
   inTunnel(x: number, z: number, margin = 0): boolean {
@@ -72,7 +102,25 @@ export class DrivingSurface {
   }
 
   constrain(car: VehiclePhysics, previousX: number, previousZ: number): boolean {
-    if (this.constrainService(car, previousX, previousZ, 1.1, car.y - 0.8)) { car.speed *= 0.35; return true; }
+    const bodies = car.bodies(), before = car.bodies(previousX, previousZ, true);
+    for (let b = 0; b < bodies.length; b++) {
+      const body = bodies[b], previous = before[b], steps = Math.ceil((body.front - body.rear) / 1.25);
+      for (let i = 0; i <= steps; i++) {
+        const along = body.rear + (body.front - body.rear) * i / steps;
+        const offset = vehicleOffset(0, along, body.pitch, body.roll), old = vehicleOffset(0, along, previous.pitch, previous.roll);
+        const point = { x: body.x - Math.sin(body.heading) * offset.z, y: body.y + offset.y,
+          z: body.z + Math.cos(body.heading) * offset.z };
+        const px = previous.x - Math.sin(previous.heading) * old.z, pz = previous.z + Math.cos(previous.heading) * old.z;
+        if (this.constrainBody(point, px, pz, car.profile.width / 2, car.profile.radius + car.profile.rest)) {
+          car.restoreMotion(previousX, previousZ); return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private constrainBody(car: { x: number; y: number; z: number }, previousX: number, previousZ: number, width: number, ride: number): boolean {
+    if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride)) return true;
     const sample = this.world.road.nearest(car.x, car.z);
     if (!sample) return false;
     if (car.y < sample.position.y - 2 || car.y > sample.position.y + 3) return false;
@@ -80,19 +128,17 @@ export class DrivingSurface {
     const lateral = (car.x - sample.position.x) * cos + (car.z - sample.position.z) * sin;
     const previous = (previousX - sample.position.x) * cos + (previousZ - sample.position.z) * sin;
     const center = this.profile.centers.reduce((best, c) => Math.abs(previous - c) < Math.abs(previous - best) ? c : best);
-    const relative = car.heading - sample.heading;
-    const extent = Math.abs(Math.cos(relative)) * 0.98 + Math.abs(Math.sin(relative)) * 2.1;
-    const limit = Math.max(0.8, this.profile.halfWidth - extent - 0.3);
+    const limit = Math.max(0.8, this.profile.halfWidth - width - 0.3);
     const road = this.world.road;
     const along = (car.x - sample.position.x) * sin - (car.z - sample.position.z) * cos;
     const endpoint = sample.distance < road.samples[0].distance + 2 && along < 2;
     const side = Math.sign(lateral - center) || 1;
     if (!endpoint && !(center && side * center < 0) && !hasRoadBarrier(this.world, sample, side)) return false;
     if (!endpoint && (Math.abs(lateral - center) <= limit || Math.abs(previous - center) > this.profile.halfWidth + 1)) return false;
+    if (!endpoint && Math.abs(lateral - center) < Math.abs(previous - center) - 0.00001) return false;
     const offset = Math.max(-limit, Math.min(limit, lateral - center)) + center;
     car.x = sample.position.x + cos * offset + (endpoint ? sin * 2.2 : 0);
     car.z = sample.position.z + sin * offset - (endpoint ? cos * 2.2 : 0);
-    car.speed *= 0.35;
     return true;
   }
 
@@ -171,7 +217,7 @@ export class DrivingSurface {
       if (feet + 1.75 < height || feet > height + 1.5) continue;
       const nx = -dz / length, nz = dx / length;
       const before = (previousX - a.x) * nx + (previousZ - a.z) * nz, after = (body.x - a.x) * nx + (body.z - a.z) * nz;
-      if (before * after > 0 && Math.abs(after) >= radius) continue;
+      if (before * after > 0 && (Math.abs(after) >= radius || Math.abs(after) > Math.abs(before) + 0.00001)) continue;
       const correction = (Math.sign(before) || 1) * radius - after;
       body.x += nx * correction; body.z += nz * correction; hit = true;
     }

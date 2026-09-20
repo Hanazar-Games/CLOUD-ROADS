@@ -54,7 +54,7 @@ test('switches views and tuning, isolates settings and announcements, and resume
   await page.locator('#driving-fov').fill('85');
   await page.locator('#camera-distance').fill('10');
   await page.locator('#camera-height').fill('0.25');
-  await page.locator('#suspension').selectOption('soft');
+  await page.locator('#suspension').selectOption('1');
   await expect(page.locator('#driving-fov-value')).toHaveText('85°');
   await expect(page.locator('#camera-distance-value')).toHaveText('10 m');
   await expect(page.locator('#camera-height-value')).toHaveText('+25 cm');
@@ -82,10 +82,10 @@ test('switches views and tuning, isolates settings and announcements, and resume
   await page.getByRole('button', { name: '加载种子' }).click();
   await expect(page.locator('#drive-hud')).toBeHidden();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
-  await expect(page.locator('#suspension')).toHaveValue('soft');
+  await expect(page.locator('#suspension')).toHaveValue('1');
   await start(page);
   await expect(page.locator('#vehicle-trip')).toHaveText('0.00');
-  await expect(metric(page, 'Vehicle suspension')).toContainText('soft');
+  await expect(metric(page, 'Vehicle suspension')).toContainText('1 ·');
 });
 
 test('drives into a lit tunnel and keeps all camera modes inside the bore', async ({ page }) => {
@@ -124,7 +124,7 @@ test('keeps driving controls and instruments reachable in small windows', async 
     await expect(page.locator('#drive-hud')).toBeInViewport();
     await page.locator('#controls-toggle').click();
     await page.locator('#suspension').scrollIntoViewIfNeeded();
-    await page.locator('#suspension').selectOption('firm');
+    await page.locator('#suspension').selectOption('5');
     await expect(page.locator('#suspension')).toBeInViewport();
     await page.locator('#controls-toggle').click();
   }

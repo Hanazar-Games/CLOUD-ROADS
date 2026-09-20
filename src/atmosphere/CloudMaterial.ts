@@ -41,6 +41,13 @@ export class CloudMaterial extends ShaderMaterial {
 
         vec3 fieldAt(vec2 point) { return texture2D(cloudField, point / cloudTile).rgb; }
 
+        float fogAmount(float distance, vec3 ray) {
+          float base = smoothstep(fogRange.x, fogRange.y, distance);
+          float falloff = clamp(ray.y * min(distance, fogRange.y) * 0.003, -1.2, 1.2);
+          float layer = abs(falloff) < 0.01 ? 1.0 : (1.0 - exp(-falloff)) / falloff;
+          return 1.0 - pow(max(0.0, 1.0 - base), mix(1.0, layer, weatherCover));
+        }
+
         void main() {
           vec3 scene = texture2D(sceneColor, vUv).rgb;
           vec4 view = inverseProjection * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
@@ -51,7 +58,7 @@ export class CloudMaterial extends ShaderMaterial {
             ? -perspectiveDepthToViewZ(depth, nearFar.x, nearFar.y) / -direction.z : 1e8;
           vec3 haze = airColor(ray);
           scene = depth >= 1.0 ? skyColor(ray)
-            : mix(scene, haze, smoothstep(fogRange.x, fogRange.y, distanceToScene * -direction.z));
+            : mix(scene, haze, fogAmount(distanceToScene, ray));
           vec4 clouds = vec4(0.0);
           if (cloudsEnabled && abs(ray.y) > 0.0001) {
             for (int i = 0; i < 8; i++) {
@@ -79,7 +86,7 @@ export class CloudMaterial extends ShaderMaterial {
                 + sunColor * (light * 0.55 + silver) * solar.x;
               color *= mix(0.65, 1.0, layer);
               // Nearby layers fade into the same fog as the terrain when crossing a cloud.
-              float mist = smoothstep(fogRange.x, fogRange.y, t * -direction.z);
+              float mist = fogAmount(t, ray);
               color = mix(color, haze, max(mist, immersion));
               clouds.rgb += (1.0 - clouds.a) * opacity * color;
               clouds.a += (1.0 - clouds.a) * opacity;

@@ -90,7 +90,12 @@ export class Game {
     }, { signal: this.events.signal });
     element('weather-kind').addEventListener('change', (event) => {
       const kind = (event.target as HTMLSelectElement).value as WeatherKind;
-      if (kind in weatherNames) this.weather.setKind(kind);
+      if (Object.hasOwn(weatherNames, kind)) this.weather.setKind(kind, this.paused || this.releaseNotes.open || !this.input.enabled);
+    }, { signal: this.events.signal });
+    element('fog-density').addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      this.weather.setFogDensity(value / 100, this.paused || this.releaseNotes.open || !this.input.enabled);
+      element('fog-density-value').textContent = `${value}%`;
     }, { signal: this.events.signal });
     element('sun-view').addEventListener('click', () => {
       const direction = this.sky.sun.direction;
@@ -356,7 +361,7 @@ export class Game {
   private update(dt: number): void {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const frozen = this.paused || this.releaseNotes.open || !this.input.enabled;
-    if (this.driving.active) this.driving.update(dt, frozen, this.weather.profile.rain > 0);
+    if (this.driving.active) this.driving.update(dt, frozen, this.weather.wetness);
     else if (this.walking.active) this.walking.update(dt, frozen);
     else this.flight.update(dt, frozen);
     this.world.update(this.camera, !frozen, this.driving.active ? this.driving.car.heading + (this.driving.car.speed < -0.1 ? Math.PI : 0)
@@ -368,14 +373,15 @@ export class Game {
       this.input.clear();
       this.flight.update(0, false);
     }
-    this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8));
+    this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
+      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6));
     this.walking.sync();
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
-    this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter);
+    this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
     this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
     this.world.serviceMesh.windows.material.emissiveIntensity = this.sky.sun.night * 0.35;
-    this.world.roadMesh.mesh.material.roughness = this.weather.profile.rain ? 0.34 : 0.95;
+    this.world.roadMesh.mesh.material.roughness = 0.95 - this.weather.wetness * 0.58;
     this.renderer.info.reset();
     this.clouds.render(this.renderer, this.scene, this.camera);
     this.weather.render(this.renderer, this.camera, this.clouds.target.depthTexture!);
@@ -425,6 +431,7 @@ export class Game {
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
         Weather: weatherNames[this.weather.kind], 'World time': this.sky.sun.clock,
         'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
+        'Road wetness': `${Math.round(this.weather.wetness * 100)}%`,
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
         'Service areas': this.world.services.length,
         'Cable towers': this.world.bridgeMesh.cableBridges.towerCount, 'Stay cables': this.world.bridgeMesh.cableBridges.cables.count,
@@ -449,6 +456,8 @@ export class Game {
         'Walking grounded': this.walking.person.grounded ? 'yes' : 'no',
         'Walking position': `${this.walking.person.x.toFixed(2)}, ${this.walking.person.y.toFixed(2)}, ${this.walking.person.z.toFixed(2)}`,
         'Vehicle speed': `${(this.driving.car.speed * 3.6).toFixed(1)} km/h`,
+        'Vehicle model': this.driving.car.profile.name,
+        'Trailer angle': `${(this.driving.car.articulation * 180 / Math.PI).toFixed(1)}°`,
         'Vehicle position': `${this.driving.car.x.toFixed(2)}, ${this.driving.car.y.toFixed(2)}, ${this.driving.car.z.toFixed(2)}`,
         'Vehicle suspension': `${this.driving.car.suspension} · ${this.driving.car.wheels.map(wheel => (wheel.compression * 100).toFixed(1)).join(' / ')} cm`,
         'Driving camera': this.driving.cameraRig.view,

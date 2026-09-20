@@ -80,7 +80,7 @@ describe('VehiclePhysics', () => {
   it('responds to suspension tuning and holds safely after reset on a slope', () => {
     const slope: SurfaceSampler = (x, z) => ({ height: x * 0.04 - z * 0.12, grip: 1 });
     const soft = create(), firm = create();
-    soft.suspension = 'soft'; firm.suspension = 'firm';
+    soft.suspension = 1; firm.suspension = 5;
     const raised: SurfaceSampler = () => ({ height: 0.1, grip: 1 });
     run(soft, 0.15, idle, raised); run(firm, 0.15, idle, raised);
     expect(firm.y).toBeGreaterThan(soft.y);
