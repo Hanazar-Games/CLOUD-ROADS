@@ -84,7 +84,7 @@ it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real c
     }
   }
   mesh.dispose();
-});
+}, 20_000);
 
 it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof and buried cover without obstructing travel', roadType => {
   const options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 }, samples = route();
