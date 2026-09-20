@@ -13,12 +13,17 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
       <section id="explorer" class="explorer" aria-label="探索控制">
         <p class="eyebrow">无尽山野，自由探索</p>
         <h1>向群山深处。</h1>
-        <p class="intro">一颗种子，一片没有边界的世界。<br />点右上角「开始驾驶」，沿山路出发。</p>
+        <p class="intro">一颗种子，一片没有边界的世界。<br />驾驶穿越群山，或下车步行看看风景。</p>
+        <details class="world-options">
+          <summary>步行与跑跳</summary>
+          <p class="panel-help">右上角「开始步行」进入第一人称，WASD 行走，按住 Shift 跑步，按住 E 疾跑，Space 跳跃，R 回到道路。拖动鼠标观察，双击画面锁定鼠标，P 暂停。可在驾驶、步行和自由飞行间切换。</p>
+          <p class="panel-help">平缓地面道路留有无护栏段，可走进山野；所有桥梁两侧均有护栏。桥下步行保持在谷底，跳跃必须落地后才能再次起跳。</p>
+        </details>
         <details class="world-options" open>
           <summary>驾驶与视角</summary>
           <label for="driving-view">驾驶视角 · C 切换</label>
@@ -47,7 +52,7 @@
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">路线风格</label>
             <select id="route-style" aria-describedby="route-style-help"><option value="natural">自然山路 · 起伏与缓弯</option><option value="winding">蜿蜒盘山路 · 连续折返</option><option value="cliff">高架盘山公路 · 高墩跨越深谷</option></select>
-            <p id="route-style-help">高架盘山沿山势弯行，在山脊落地、以高桥跨谷。路面高于地面 5 米时优先架桥。高速保持大半径缓弯，坡度不超过 3%；盘山折返只在山路生成。</p>
+            <p id="route-style-help">路面高于地面 5 米时优先架桥；超过 50 米升级大跨度与钢护栏，超过 100 米使用更大桥墩与红色钢护栏。高速保持大半径缓弯，坡度不超过 3%。</p>
             <label for="road-width">车行道宽度</label>
             <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>
@@ -95,11 +100,13 @@
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
       </section>
+      <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small></section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
         <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
         <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="walking-controls" hidden><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
       </footer>
       <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
       <dialog id="release-notes" aria-labelledby="release-title">

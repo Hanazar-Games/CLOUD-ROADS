@@ -23,6 +23,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .eyebrow { font-size: 10px; letter-spacing: 3px; color: #d6e6c1; margin: 0 0 12px; }
 h1 { font-weight: 450; font-size: 29px; letter-spacing: 2px; margin: 0 0 12px; }
 .intro { font-size: 11px; color: #d0d9d8; line-height: 1.7; margin: 0 0 20px; }
+#walk-hud { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; width: min(330px, calc(100vw - 32px)); padding: 12px 16px; background: #14232acc; border-top: 1px solid #d6e6c180; border-radius: 3px; pointer-events: none; font-size: 12px; }
+#walk-hud small { width: 100%; text-align: center; font-size: 10px; color: #d0d9d8; }
+.walking #notice { display: none; }
 label { display: block; font-size: 10px; }
 label span { float: right; font: 8px ui-monospace, monospace; letter-spacing: 1px; opacity: .5; }
 .seed-entry { display: flex; margin: 10px 0 23px; border-bottom: 1px solid #ffffff3b; }
@@ -90,5 +93,5 @@ dt { opacity: .55; } dd { margin: 0; text-align: right; overflow-wrap: anywhere;
 @media (max-width: 1100px) { .phase { display: none; } }
 @media (max-height: 650px) { .masthead { top: 16px; } .explorer { top: 80px; max-height: calc(100dvh - 190px); } #debug { top: 80px; max-height: calc(100dvh - 190px); } #notice { right: 22px; left: auto; bottom: 105px; transform: none; max-width: calc(100vw - 330px); white-space: normal; } }
 @media (max-width: 620px) { .masthead { gap: 12px; align-items: flex-start; } .brand { font-size: 12px; letter-spacing: 1px; gap: 7px; } .brand svg { width: 28px; } .brand small { letter-spacing: 1px; font-size: 7px; } .header-actions { flex-direction: column; gap: 6px; align-items: flex-end; } .header-actions button { min-width: 90px; } .explorer { width: 230px; padding: 18px; } .controls { display: none; } .telemetry { gap: 16px; } .telemetry b { font-size: 14px; } .telemetry small { font-size: 7px; } #notice { right: 16px; left: 16px; bottom: 90px; max-width: none; transform: none; white-space: normal; text-align: center; } #debug { top: 105px; z-index: 1; max-width: calc(100vw - 44px); } }
-@media (max-width: 620px) { .explorer { top: 148px; max-height: calc(100dvh - 290px); } .driving .explorer { max-height: calc(100dvh - 360px); } #drive-hud { bottom: 26px; } }
+@media (max-width: 620px) { .masthead { flex-wrap: wrap; } .header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .header-actions button { min-width: 0; } .explorer { top: 148px; max-height: calc(100dvh - 290px); } .driving .explorer { max-height: calc(100dvh - 360px); } #drive-hud { bottom: 26px; } #walk-hud { bottom: 74px; } }
 @media (max-height: 650px) and (min-width: 621px) { .driving #drive-hud { left: auto; right: 26px; bottom: 70px; transform: none; } .driving .explorer { max-height: calc(100dvh - 175px); } }

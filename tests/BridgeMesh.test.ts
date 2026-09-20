@@ -1,4 +1,4 @@
-import { Matrix4, MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
+import { Color, Matrix4, MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { BridgeMesh } from '../src/bridge/BridgeMesh';
 import { BridgeDetector, type BridgeSpan } from '../src/bridge/BridgeDetector';
@@ -24,6 +24,26 @@ const fixture = () => {
 };
 
 describe('BridgeMesh', () => {
+  it('widens tall spans in two tiers and gives the highest bridges red steel railings', () => {
+    const counts: number[] = [];
+    for (const height of [50, 50.01, 100, 100.01, 350]) {
+      const terrain = { sample: () => 200 - height };
+      const start = new RoadGenerator('tiers', { sample: () => 200 }).start;
+      start.position = { x: 0, y: 200, z: 0 };
+      const segment = new RoadSegment(start, 0, 0, 2304);
+      const samples = Array.from({ length: 1153 }, (_, i) => segment.sample(i / 1152));
+      const spans = new BridgeDetector(terrain).detect(samples), mesh = new BridgeMesh(new Scene());
+      mesh.update(spans, RoadCorridor.fromSamples(samples, spans), terrain, 1, 0, 0, true);
+      counts.push(mesh.pierCount);
+      expect(mesh.railings.count).toBeGreaterThan(1000);
+      const color = new Color(); mesh.railings.getColorAt(0, color);
+      if (height > 100) expect(color.r).toBeGreaterThan(color.g * 2);
+      else expect(Math.abs(color.r - color.g)).toBeLessThan(0.15);
+      mesh.dispose();
+    }
+    expect(counts).toEqual([48, 24, 24, 12, 12]);
+  });
+
   it('anchors tall piers to absolute mileage when either bridge end is outside the loaded window', () => {
     const terrain = { sample: () => -150 }, start = new RoadGenerator('tall', { sample: () => 200 }).start;
     start.position = { x: 0, y: 200, z: 0 };
@@ -44,8 +64,8 @@ describe('BridgeMesh', () => {
       return result;
     };
     const before = foundations(samples, 1);
-    expect(before.length).toBeGreaterThan(15);
-    expect(before.length).toBeLessThan(25);
+    expect(before.length).toBeGreaterThan(8);
+    expect(before.length).toBeLessThan(12);
     expect(mesh.columns.count).toBe(mesh.pierCount * 2);
     const shaft = new Matrix4();
     mesh.columns.getMatrixAt(0, shaft);
@@ -65,8 +85,8 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(4);
-    expect(mesh.details.count).toBeGreaterThan(mesh.deck.count);
+    expect(scene.children).toHaveLength(5);
+    expect(mesh.railings.count).toBeGreaterThan(mesh.deck.count);
     expect(mesh.deck.count).toBe((bridges[0].samples.length - 1) * 3);
     expect(mesh.pierCount).toBeGreaterThan(5);
     const matrix = new Matrix4();

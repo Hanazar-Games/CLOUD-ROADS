@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RoadSpine } from '../src/road/RoadSpine';
 import { roadFrame } from '../src/road/RoadFrame';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
@@ -6,15 +6,53 @@ import { DrivingSurface } from '../src/vehicle/DrivingSurface';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import { ServicePlanner, type ServiceArea } from '../src/service/ServicePlanner';
 import { padPoint } from '../src/service/ServiceTerrain';
+import { hasRoadBarrier } from '../src/road/RoadProtection';
+import type { BridgeSpan } from '../src/bridge/BridgeDetector';
 
 function world(highway = false) {
   const options = { ...DEFAULT_OPTIONS, roadType: highway ? 'highway' as const : 'mountain' as const };
   const road = new RoadSpine('driving-surface', { sample: () => 100 }, options);
   while (!road.update(0)) { /* bounded generation */ }
-  return { road, options, services: [] as ServiceArea[], tunnels: [], sampleGround: () => ({ height: -50 }) };
+  return { seed: 'driving-surface', road, options, bridges: [] as BridgeSpan[], services: [] as ServiceArea[], tunnels: [], sampleGround: () => ({ height: -50 }) };
 }
 
 describe('DrivingSurface', () => {
+  it('keeps bridge barriers effective while jumping on either side of a banked deck', () => {
+    const scene = world(), surface = new DrivingSurface(scene);
+    const sample = { ...scene.road.samples[100], bank: Math.PI / 30, heading: 0, grade: 0 };
+    vi.spyOn(scene.road, 'nearest').mockReturnValue(sample);
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
+    for (const side of [-1, 1]) {
+      const { x, y, z } = sample.position;
+      const person = { x: x + side * 5.7, y: y + Math.tan(sample.bank) * side * 5.7 + 1.13, z };
+      expect(surface.constrainWalker(person, x + side * 4.5, z)).toBe(true);
+    }
+    vi.restoreAllMocks();
+  });
+
+  it('selects ground under a bridge without teleporting a walker onto its deck', () => {
+    const scene = world(), surface = new DrivingSurface(scene), sample = scene.road.samples[100];
+    const { x, y, z } = sample.position;
+    expect(surface.sample(x, z, y + 1).height).toBeCloseTo(y);
+    expect(surface.sample(x, z, -48).height).toBe(-50);
+  });
+
+  it('shares visible guardrail openings with cars and pedestrians, but closes every bridge side', () => {
+    const scene = world(), surface = new DrivingSurface(scene);
+    const sample = scene.road.samples.find(point => !hasRoadBarrier(scene, point, 1))!;
+    expect(sample).toBeDefined();
+    const { x, y, z } = sample.position, cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
+    const before = { x: x + cos * 4.5, z: z + sin * 4.5 };
+    const person = { x: x + cos * 5.7, y, z: z + sin * 5.7 };
+    expect(surface.constrainWalker(person, before.x, before.z)).toBe(false);
+    const car = new VehiclePhysics(); car.x = person.x; car.y = y + 0.8; car.z = person.z; car.heading = sample.heading;
+    expect(surface.constrain(car, before.x, before.z)).toBe(false);
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
+    expect(surface.constrainWalker(person, before.x, before.z)).toBe(true);
+    expect(surface.constrain(car, before.x, before.z)).toBe(true);
+    const below = { x: x + cos * 5.7, y: -50, z: z + sin * 5.7 };
+    expect(surface.constrainWalker(below, before.x, before.z)).toBe(false);
+  });
   it('contacts the banked road plane above a valley, including both highway decks', () => {
     const scene = world(true), surface = new DrivingSurface(scene);
     const sample = scene.road.samples[120], { right } = roadFrame(sample);

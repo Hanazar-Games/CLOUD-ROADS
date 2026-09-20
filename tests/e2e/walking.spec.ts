@@ -1,0 +1,138 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
+async function start(page: Page) {
+  await expect(page.locator('#walk-toggle')).toBeEnabled({ timeout: 30000 });
+  await page.locator('#walk-toggle').click();
+  await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await expect(page.locator('#walk-hud')).toBeVisible();
+  await expect(page.locator('#world')).toBeFocused();
+}
+
+test('walks, accelerates into running and sprinting, jumps once and freezes safely', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/'); await start(page);
+  const home = await metric(page, 'Walking position').textContent();
+  await page.keyboard.down('KeyW');
+  await expect.poll(async () => parseFloat((await metric(page, 'Walking speed').textContent())!)).toBeGreaterThan(7);
+  await page.keyboard.down('ShiftLeft');
+  await expect(page.locator('#walking-status')).toHaveText('跑步');
+  await page.keyboard.down('KeyE');
+  await expect.poll(async () => parseFloat((await metric(page, 'Walking speed').textContent())!)).toBeGreaterThan(25);
+  await expect(page.locator('#walking-status')).toHaveText('疾跑');
+  await page.keyboard.up('KeyE'); await page.keyboard.up('ShiftLeft'); await page.keyboard.up('KeyW');
+  await expect(metric(page, 'Walking speed')).toHaveText('0.0 km/h');
+  await expect(metric(page, 'Walking position')).not.toHaveText(home!);
+  const ground = Number((await metric(page, 'Walking position').textContent())!.split(',')[1]);
+  await page.keyboard.down('Space');
+  await expect(metric(page, 'Walking grounded')).toHaveText('no');
+  await expect(metric(page, 'Walking grounded')).toHaveText('yes');
+  await page.waitForTimeout(450);
+  await expect(metric(page, 'Walking grounded')).toHaveText('yes');
+  expect(Number((await metric(page, 'Walking position').textContent())!.split(',')[1])).toBeCloseTo(ground, 1);
+  await page.keyboard.up('Space');
+  await page.keyboard.down('KeyW'); await page.keyboard.press('KeyP');
+  await expect(page.locator('#walking-status')).toHaveText('已暂停');
+  const paused = await metric(page, 'Walking position').textContent();
+  await page.keyboard.press('KeyP'); await page.waitForTimeout(350);
+  await expect(metric(page, 'Walking position')).toHaveText(paused!);
+  await page.keyboard.up('KeyW'); await page.keyboard.down('KeyW');
+  await expect(metric(page, 'Walking position')).not.toHaveText(paused!);
+  await page.keyboard.up('KeyW'); await page.keyboard.press('KeyR');
+  await expect(metric(page, 'Walking grounded')).toHaveText('yes');
+  expect(errors).toEqual([]);
+});
+
+test('switches walking, driving and flight on a tall bridge and survives settings, context loss and world changes', async ({ page }) => {
+  test.setTimeout(90000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.locator('#route-style').selectOption('cliff');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(page.locator('#bridge-view')).toBeEnabled({ timeout: 30000 });
+  await page.locator('#bridge-view').click();
+  await start(page);
+  expect(parseFloat((await metric(page, 'Tallest bridge').textContent())!)).toBeGreaterThan(100);
+  await page.keyboard.down('KeyD'); await page.keyboard.down('KeyE');
+  await page.waitForTimeout(1800); await page.keyboard.up('KeyD'); await page.keyboard.up('KeyE');
+  await expect(metric(page, 'Walking grounded')).toHaveText('yes');
+  const bridgeHeight = Number((await metric(page, 'Walking position').textContent())!.split(',')[1]);
+  await page.keyboard.press('KeyR');
+  await page.locator('#controls-toggle').click();
+  await page.locator('#weather-kind').selectOption('rain');
+  const held = await metric(page, 'Walking position').textContent();
+  await page.locator('#release-open').click(); await page.keyboard.press('Space'); await page.keyboard.press('KeyR');
+  await expect(metric(page, 'Walking position')).toHaveText(held!);
+  await page.keyboard.press('Escape');
+  await page.locator('#drive-toggle').click();
+  await expect(metric(page, 'Travel mode')).toHaveText('driving');
+  await expect(page.locator('#walk-hud')).toBeHidden();
+  await page.locator('#walk-toggle').click();
+  await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await expect(page.locator('#drive-hud')).toBeHidden();
+  expect(Math.abs(Number((await metric(page, 'Walking position').textContent())!.split(',')[1]) - bridgeHeight)).toBeLessThan(3);
+  await page.locator('#world').evaluate(canvas => {
+    const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
+    extension.loseContext(); setTimeout(() => extension.restoreContext(), 500);
+  });
+  await expect(page.locator('#error')).toBeVisible();
+  await expect(page.locator('#walk-toggle')).toBeDisabled();
+  await expect(page.locator('#error')).toBeHidden({ timeout: 20000 });
+  await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await page.locator('#walk-toggle').click();
+  await expect(metric(page, 'Travel mode')).toHaveText('flight');
+  await start(page);
+  await page.locator('#controls-toggle').click();
+  await page.locator('#home').click();
+  await expect(metric(page, 'Travel mode')).toHaveText('flight');
+  await expect(page.locator('#walk-hud')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('keeps walking controls reachable in a short narrow window', async ({ page }) => {
+  await page.setViewportSize({ width: 480, height: 520 });
+  await page.goto('/'); await start(page);
+  await page.locator('#controls-toggle').click();
+  await page.getByText('步行与跑跳', { exact: true }).click();
+  await expect(page.getByText('右上角「开始步行」进入第一人称', { exact: false })).toBeVisible();
+  await page.locator('#walk-toggle').click();
+  await expect(metric(page, 'Travel mode')).toHaveText('flight');
+});
+
+test('walks at a distant highway service area after rebasing and resets cleanly with a new world', async ({ page }) => {
+  test.setTimeout(90000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.locator('#road-type').selectOption('highway');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric(page, 'Road ready')).toHaveText('yes', { timeout: 30000 });
+  await page.locator('#service-view').click();
+  await expect(page.locator('#service-view')).toHaveText('下一服务区', { timeout: 30000 });
+  await expect.poll(async () => Number(await metric(page, 'Origin rebases').textContent())).toBeGreaterThan(0);
+  await start(page);
+  const position = (await metric(page, 'Walking position').textContent())!.split(',').map(Number);
+  expect(position[2]).toBeLessThan(-5000);
+  const camera = (await metric(page, 'Coordinates').textContent())!.split(',').map(Number);
+  expect(Math.abs(camera[0] - position[0])).toBeLessThan(0.1);
+  expect(Math.abs(camera[1] - position[1] - 1.65)).toBeLessThan(0.1);
+  expect(Math.abs(camera[2] - position[2])).toBeLessThan(0.1);
+  await page.keyboard.down('KeyW'); await page.keyboard.down('KeyE');
+  await expect.poll(async () => parseFloat((await metric(page, 'Walking speed').textContent())!)).toBeGreaterThan(25);
+  await page.keyboard.up('KeyW'); await page.keyboard.up('KeyE');
+  await expect(metric(page, 'Walking speed')).toHaveText('0.0 km/h');
+  await page.locator('#world').evaluate(canvas => {
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }));
+    canvas.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }));
+  });
+  await expect(metric(page, 'Walking grounded')).toHaveText('no');
+  await expect(metric(page, 'Walking grounded')).toHaveText('yes');
+  await page.locator('#controls-toggle').click();
+  await page.locator('#seed').fill('WALKING-RELOAD');
+  await page.getByRole('button', { name: '加载种子' }).click();
+  await expect(page.locator('#walk-hud')).toBeHidden();
+  await expect(metric(page, 'Travel mode')).toHaveText('flight');
+  await start(page);
+  await expect(metric(page, 'Walking speed')).toHaveText('0.0 km/h');
+  expect(Number((await metric(page, 'Walking position').textContent())!.split(',')[2])).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});

@@ -12,6 +12,7 @@ import { DEFAULT_SEED } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { routeNames, terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
+import { WalkingSystem } from '../walking/WalkingSystem';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -32,6 +33,7 @@ export class Game {
   private readonly loop = new GameLoop((dt) => this.update(dt));
   private world: World;
   private readonly driving: DrivingSystem;
+  private readonly walking: WalkingSystem;
   private paused = false;
   private wireframe = false;
   private hudTime = 0;
@@ -42,6 +44,7 @@ export class Game {
     this.scene.background = this.sky.sun.haze;
     this.world = new World(this.scene, DEFAULT_SEED);
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
+    this.walking = new WalkingSystem(this.camera, this.input, () => this.world);
     this.world.resetCamera(this.camera);
     element('phase-label').textContent = '/ DRIVE';
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -54,15 +57,20 @@ export class Game {
     this.input.onAction = (code) => {
       if (code === 'F3') this.debug.toggle();
       if (code === 'KeyP') this.setPaused(!this.paused);
-      if (!this.paused && !this.releaseNotes.open) this.driving.action(code);
+      if (!this.paused && !this.releaseNotes.open) { this.driving.action(code); this.walking.action(code); }
     };
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
-      else this.driving.start();
+      else { this.stopWalking(); this.driving.start(); }
+      this.setPaused(false); this.canvas.focus();
+    }, { signal: this.events.signal });
+    element('walk-toggle').addEventListener('click', () => {
+      if (this.walking.active) this.stopWalking();
+      else { this.stopDriving(); this.walking.start(); }
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
     for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
-      element(id).addEventListener('click', () => this.stopDriving(), { signal: this.events.signal });
+      element(id).addEventListener('click', () => this.stopTravel(), { signal: this.events.signal });
     }
     element('debug-close').addEventListener('click', () => {
       this.debug.hide();
@@ -222,7 +230,7 @@ export class Game {
     if (this.contextLost) return;
     try {
       const world = new World(this.scene, seed, options);
-      this.stopDriving();
+      this.stopTravel();
       this.world.dispose();
       this.world = world;
       this.world.chunks.setViewRadius(this.viewRadius);
@@ -267,7 +275,7 @@ export class Game {
   }
 
   private resetCamera(): void {
-    this.stopDriving();
+    this.stopTravel();
     this.world.resetCamera(this.camera);
     this.flight.reset();
     this.setPaused(false);
@@ -281,6 +289,14 @@ export class Game {
     this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
   }
 
+  private stopWalking(): void {
+    if (!this.walking.active) return;
+    this.walking.stop();
+    this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
+  }
+
+  private stopTravel(): void { this.stopDriving(); this.stopWalking(); }
+
   private setError(message: string | null): void {
     const panel = element('error');
     panel.hidden = message === null;
@@ -290,6 +306,7 @@ export class Game {
     this.canvas.inert = element('explorer').inert = message !== null;
     element<HTMLButtonElement>('controls-toggle').disabled = message !== null;
     element<HTMLButtonElement>('drive-toggle').disabled = message !== null || (!this.driving.active && !this.world.roadReady);
+    element<HTMLButtonElement>('walk-toggle').disabled = message !== null || (!this.walking.active && !this.world.roadReady);
     if (message !== null) {
       if (document.pointerLockElement === this.canvas) document.exitPointerLock();
       if (!this.releaseNotes.open) panel.focus();
@@ -308,16 +325,19 @@ export class Game {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const frozen = this.paused || this.releaseNotes.open || !this.input.enabled;
     if (this.driving.active) this.driving.update(dt, frozen, this.weather.profile.rain > 0);
+    else if (this.walking.active) this.walking.update(dt, frozen);
     else this.flight.update(dt, frozen);
-    this.world.update(this.camera, !frozen, this.driving.active ? this.driving.car.heading + (this.driving.car.speed < -0.1 ? Math.PI : 0) : undefined);
+    this.world.update(this.camera, !frozen, this.driving.active ? this.driving.car.heading + (this.driving.car.speed < -0.1 ? Math.PI : 0)
+      : this.walking.active ? this.walking.person.heading : undefined);
     if (this.world.serviceView) {
-      this.stopDriving();
+      this.stopTravel();
       this.flight.reset(this.world.serviceView.heading, this.world.serviceView.pitch);
       this.world.serviceView = undefined;
       this.input.clear();
       this.flight.update(0, false);
     }
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8));
+    this.walking.sync();
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
@@ -388,7 +408,10 @@ export class Game {
         'Distant canopies': chunks.vegetation.enabled ? chunks.vegetation.distantCount : 0,
         'Ground cover': chunks.vegetation.enabled ? chunks.vegetation.groundCount : 0,
         'Origin rebases': origin.count, 'Flight speed': `${this.flight.speed} m/s`, Seed: this.world.seed,
-        'Travel mode': this.driving.active ? 'driving' : 'flight',
+        'Travel mode': this.driving.active ? 'driving' : this.walking.active ? 'walking' : 'flight',
+        'Walking speed': `${(this.walking.person.speed * 3.6).toFixed(1)} km/h`,
+        'Walking grounded': this.walking.person.grounded ? 'yes' : 'no',
+        'Walking position': `${this.walking.person.x.toFixed(2)}, ${this.walking.person.y.toFixed(2)}, ${this.walking.person.z.toFixed(2)}`,
         'Vehicle speed': `${(this.driving.car.speed * 3.6).toFixed(1)} km/h`,
         'Vehicle position': `${this.driving.car.x.toFixed(2)}, ${this.driving.car.y.toFixed(2)}, ${this.driving.car.z.toFixed(2)}`,
         'Vehicle suspension': `${this.driving.car.suspension} · ${this.driving.car.wheels.map(wheel => (wheel.compression * 100).toFixed(1)).join(' / ')} cm`,
@@ -421,6 +444,7 @@ export class Game {
     this.events.abort();
     this.input.dispose();
     this.driving.dispose();
+    this.walking.dispose();
     this.world.dispose();
     this.clouds.dispose();
     this.weather.dispose();

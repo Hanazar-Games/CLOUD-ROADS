@@ -11,6 +11,7 @@ import { MAX_ROAD_SEGMENTS } from './RoadSpine';
 import { ROAD_SAMPLES } from './RoadSegment';
 import type { ServiceArea } from '../service/ServicePlanner';
 import { guardrailGeometry } from './RoadHardwareGeometry';
+import { hasRoadBarrier } from './RoadProtection';
 
 export class RoadFurniture {
   readonly rails = new InstancedMesh(guardrailGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
@@ -26,7 +27,7 @@ export class RoadFurniture {
   private anchorX = 0;
   private anchorZ = 0;
 
-  constructor(scene: Scene, private readonly seed: string, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(scene: Scene, private readonly seed: string, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
     for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
       mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true;
@@ -53,7 +54,7 @@ export class RoadFurniture {
           const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,
             y: (sample.position.y + previous.position.y) / 2, z: (sample.position.z + previous.position.z) / 2 } };
           for (const offset of sides) {
-            if (serviceAccess && (this.profile.centers.length === 2 || offset > 0)) continue;
+            if (!hasRoadBarrier({ seed: this.seed, options: this.options, bridges, tunnels, services }, sample, Math.sign(offset))) continue;
             this.box(this.rails, mid, offset, 0.85, 0.16, 0.28, distance - previous.distance + 0.08);
             if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.posts, sample, offset, 0.48, 0.16, 0.95, 0.16);
           }
