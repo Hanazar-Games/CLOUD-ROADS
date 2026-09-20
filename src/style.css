@@ -38,6 +38,9 @@ label span { float: right; font: 8px ui-monospace, monospace; letter-spacing: 1p
 .world-options select { width: 100%; min-height: 34px; margin-top: 6px; padding: 6px; border: 1px solid #ffffff30; border-radius: 3px; background: #1c3037; color: #f2f4ed; font-size: 11px; }
 #road-width-help, #settings-status, .panel-help { font-size: 10px; line-height: 1.7; color: #d0d9d8; }
 #settings-status { margin-bottom: 0; color: #d6e6c1; }
+.climb-range { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.climb-range input { display: block; width: 100%; min-width: 0; min-height: 34px; margin-top: 6px; padding: 6px; border: 1px solid #ffffff30; border-radius: 3px; background: #1c3037; color: #f2f4ed; font-size: 12px; }
+.climb-range input:disabled { opacity: 0.45; }
 output { font: 10px ui-monospace, monospace; color: #d6e6c1; }
 input[type=range] { width: 100%; height: 24px; accent-color: #d6e6c1; margin: 4px 0 6px; cursor: pointer; }
 .actions { display: flex; gap: 8px; }

@@ -52,7 +52,7 @@ describe('streamed vegetation', () => {
       expect(Math.abs(x - 128) - crownRadius).toBeGreaterThan(14.4);
       expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(256);
       expect(z).toBeGreaterThan(0); expect(z).toBeLessThan(256);
-      expect(terrain === 'forest' ? [0, 2, 3, 5, 6, 7, 8] : [1, 4, 5]).toContain(kind);
+      expect(terrain === 'forest' ? [0, 2, 3, 5, 6, 7, 8, 9] : [1, 4, 5]).toContain(kind);
     }
     if (terrain === 'forest') expect(generator.generate(0, 0, 8, road).vegetation.length).toBeGreaterThan(0);
     expect(new TerrainGenerator('other', options).generate(0, 0, 64, road).vegetation).not.toEqual(a.vegetation);
@@ -75,7 +75,7 @@ describe('streamed vegetation', () => {
     mesh.setChunk('0,0', 0, 0, data);
     mesh.update(0, 0);
     expect(mesh.count).toBe(2);
-    expect(scene.children.length).toBeLessThanOrEqual(11);
+    expect(scene.children.length).toBeLessThanOrEqual(12);
     const before = mesh.trees.instanceMatrix.array.slice();
     mesh.update(5120, -5120);
     expect(mesh.trees.instanceMatrix.array).toEqual(before);

@@ -6,7 +6,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
 import type { RoadSample } from './RoadSegment';
-import { createSignAtlas } from './SignAtlas';
+import { createSignAtlas, SIGN_ROWS } from './SignAtlas';
 
 const CAPACITY = 2048;
 
@@ -21,13 +21,13 @@ export class RoadSigns {
   private anchorX = 0;
   private anchorZ = 0;
 
-  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(scene: Scene, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
     this.boards.geometry.setAttribute('signTile', this.tiles);
     this.boards.material.onBeforeCompile = shader => {
       shader.vertexShader = `attribute float signTile;\n${shader.vertexShader}`.replace('#include <uv_vertex>', `
         #include <uv_vertex>
-        vMapUv = (uv + vec2(mod(signTile, 4.0), floor(signTile / 4.0))) / vec2(4.0, 6.0);
+        vMapUv = (uv + vec2(mod(signTile, 4.0), floor(signTile / 4.0))) / vec2(4.0, ${SIGN_ROWS}.0);
         vEmissiveMapUv = vMapUv;
       `);
     };
@@ -51,7 +51,12 @@ export class RoadSigns {
             [...digits].forEach((digit, j) => this.add({ x: point.x + Math.cos(heading) * (j - (digits.length - 1) / 2) * 0.42,
               y: point.y - 0.55, z: point.z + Math.sin(heading) * (j - (digits.length - 1) / 2) * 0.42 }, heading, 0.43, 0.52, 12 + Number(digit)));
           }
-          if (Math.floor(sample.distance / 2000) !== Math.floor(previous.distance / 2000)) this.add({ ...point, y: point.y + 1.2 }, heading, 1.2, 1.1, this.profile.centers.length === 2 ? 7 : 6);
+          if (Math.floor(sample.distance / 2000) !== Math.floor(previous.distance / 2000)) this.add({ ...point, y: point.y + 1.2 }, heading, 1.2, 1.1,
+            this.options.routeStyle >= 4 ? 26 : this.profile.centers.length === 2 && this.options.routeStyle < 2 ? 7 : 6);
+          if (Math.abs(sample.grade) > 0.1 && Math.floor(sample.distance / 384) !== Math.floor(previous.distance / 384)) {
+            this.add(point, heading, 2.4, 1.1, 24, 2.6);
+            this.add({ ...point, y: point.y - 1.15 }, heading, 2.4, 1.1, 25);
+          }
           if (Math.abs(sample.curvature) > 0.004 && Math.floor(sample.distance / 48) !== Math.floor(previous.distance / 48)) this.add(point, heading, 1.6, 0.85, sample.curvature * side > 0 ? 10 : 9, 2.6);
         }
       }

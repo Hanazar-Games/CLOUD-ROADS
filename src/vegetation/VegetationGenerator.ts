@@ -27,7 +27,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       const habitat = w.forest + w.valley;
       let kind: number, scale: number, radius: number;
       if (layer === 0) {
-        const density = desert ? 0.11 * grove : (w.forest * 0.95 + w.valley * 0.65) * grove;
+        const density = desert ? 0.11 * grove : (w.forest * 0.95 + w.valley * 0.65) * grove * biomes.treeDensity;
         if (chance < density && normalY > 0.76 && w.snow < 0.2) {
           kind = desert ? 1 : height < 1700 && species > 0.5 ? 2 : 0;
           scale = desert ? 0.65 + size * 0.8 : 0.55 + size ** 0.7 * 0.95;
@@ -59,7 +59,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       const w = biome.weights, patch = 0.65 + groves.sample(wx / 38, wz / 38) * 0.35;
       if (w.desert > 0.2 || w.snow > 0.15 || chance > (w.valley + w.forest + w.alpine * 0.25) * patch) continue;
       if (!clear(wx, wz, 1.1)) continue;
-      plants.push(x, height - 0.04, z, 0.7 + size * 0.65, rotation, species < 0.2 ? 8 : 7, 0.85 + size * 0.25);
+      plants.push(x, height - 0.04, z, 0.7 + size * 0.65, rotation, species < 0.12 ? 8 : species < 0.24 ? 9 : 7, 0.85 + size * 0.25);
     }
   }
   return new Float32Array(plants);

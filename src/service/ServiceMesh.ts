@@ -4,6 +4,7 @@ import { padPoint, type ServicePad, type ServicePoint } from './ServiceTerrain';
 import type { WorldOptions } from '../world/WorldOptions';
 import type { RoadTerrain } from '../road/RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
+import { serviceArchitecture, type ServiceArchitecture } from './ServiceArchitecture';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -56,7 +57,7 @@ export class ServiceMesh {
       for (const site of sites) {
         for (const pad of site.ground.pads) {
           quad(data, vertex(padPoint(pad, -33, -75)), vertex(padPoint(pad, 33, -75)), vertex(padPoint(pad, -33, 75)), vertex(padPoint(pad, 33, 75)));
-          this.build(pad);
+          this.build(pad, serviceArchitecture(this.options.terrain, site.id));
           if (site.ground.elevated) for (const along of [-60, -20, 20, 60]) {
             this.box(this.structures, pad, 0, along, -1.7, 66, 0.6, 2, 0xffffff, true);
             for (const x of [-24, 0, 24]) this.column(pad, x, along, -2);
@@ -121,19 +122,43 @@ export class ServiceMesh {
     mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(0xffffff));
   }
 
-  private build(pad: ServicePad): void {
+  private build(pad: ServicePad, architecture: ServiceArchitecture): void {
     const box = (x: number, along: number, y: number, w: number, h: number, l: number, color: number, followGrade = false) =>
       this.box(this.buildings, pad, x * pad.side, along, y, w, h, l, color, followGrade);
     const stripe = (x: number, along: number, w: number, l: number) => this.box(this.markings, pad, x * pad.side, along, 0.025, w, 0.012, l, 0xffffff, true);
-    const facade = this.options.terrain === 'desert' || this.options.terrain === 'dunes' ? 0xc7ac86 : 0xc1c3b5;
+    const facade = architecture === 'courtyard' ? 0xc7ac86 : architecture === 'lodge' ? 0x8c7357 : 0xc1cbd0;
     box(0, 0, -0.8, 66, 1.3, 150, 0x7e827b, true);
     for (const x of [-33, 33]) box(x, 0, 0.14, 0.35, 0.28, 150, 0xb8b6a5, true);
     for (const along of [-75, 75]) box(6.5, along, 0.14, 53, 0.28, 0.35, 0xb8b6a5, true);
     box(15, 28, 0.25, 23, 0.8, 32, 0x98978d, true);
     box(15, 28, 2.8, 22, 5, 30, facade);
-    const roofColor = this.options.terrain === 'desert' || this.options.terrain === 'dunes' ? 0x9b6244 : 0x35594f;
-    this.box(this.roofs, pad, 15 * pad.side, 28, 5.25, 25, 2.2, 33, roofColor);
-    box(15, 28, 7.47, 0.28, 0.12, 33.2, roofColor);
+    const roofColor = architecture === 'courtyard' ? 0x9b6244 : 0x35594f;
+    if (architecture === 'lodge') {
+      this.box(this.roofs, pad, 15 * pad.side, 28, 5.25, 25, 2.2, 33, roofColor);
+      box(15, 28, 7.47, 0.28, 0.12, 33.2, roofColor);
+      box(22, 38, 7, 1.5, 5, 1.7, 0x837e73); box(22, 38, 9.55, 2, 0.25, 2.2, 0x484e4b);
+      for (let y = 0.65; y < 5.2; y += 0.48) box(3.82, 28, y, 0.18, 0.12, 29, 0xb39770);
+      for (const along of [14, 42]) box(3.65, along, 2.7, 0.3, 5, 0.4, 0x4f5847);
+    } else if (architecture === 'modern') {
+      box(14.5, 28, 5.5, 27, 0.5, 35, 0xd4d9d0);
+      box(18, 30, 6.45, 13, 1.4, 19, 0x768989);
+      box(18, 30, 7.3, 16, 0.3, 22, 0xd2d9d6);
+      for (const along of [21, 27, 33, 39]) {
+        box(17.5, along, 7.55, 12, 0.16, 4.5, 0x284b65);
+        for (const x of [12, 17.5, 23]) box(x, along, 7.65, 0.05, 0.035, 4.5, 0x92aeba);
+      }
+      for (const along of [17, 39]) this.box(this.windows, pad, 7 * pad.side, along, 5.75, 6, 1.7, 0.12, 0xffffff);
+    } else {
+      box(15, 28, 5.45, 24, 0.4, 32, 0xd5bc8e);
+      for (const x of [3, 27]) box(x, 28, 6.1, 0.45, 1.2, 32, 0xc7a77b);
+      for (const along of [12, 44]) box(15, along, 6.1, 24, 1.2, 0.45, 0xc7a77b);
+      for (const along of [16, 24, 32, 40]) {
+        box(1, along, 2.3, 0.6, 4.6, 0.6, 0xcab88e);
+        this.box(this.roofs, pad, 1 * pad.side, along, 4.65, 6, 0.7, 7.8, 0xad7952);
+      }
+      box(22, 37, 6.5, 3.2, 2, 3.2, 0xe0d1ad);
+      box(22, 37, 7.55, 3.7, 0.15, 3.7, 0x9e7f5b);
+    }
     for (const x of [2.5, 27.5]) box(x, 28, 5.25, 0.22, 0.28, 33, 0x8eaa9a);
     box(2, 28, 4.2, 5, 0.25, 30, 0x53695f);
     for (const along of [16, 20, 24, 28, 32, 36, 40]) {
@@ -183,13 +208,16 @@ export class ServiceMesh {
     }
     for (const x of [10, 21]) for (const along of [51, 68]) box(x, along, 1.9, 0.23, 3.8, 0.23, 0x8e7450);
     for (const x of [10, 21]) box(x, 59.5, 3.85, 0.3, 0.25, 18, 0x8e7450);
-    for (let along = 51; along <= 68; along += 1.7) box(15.5, along, 4, 12, 0.18, 0.3, 0xb09770);
+    if (architecture === 'courtyard') this.box(this.roofs, pad, 15.5 * pad.side, 59.5, 3.9, 12, 0.8, 18, 0xd5b481);
+    else for (let along = 51; along <= 68; along += architecture === 'modern' ? 3.4 : 1.7) box(15.5, along, 4, 12, 0.18, 0.3, architecture === 'modern' ? 0x667c80 : 0xb09770);
     for (const along of [-12, 4, 59]) {
       box(29, along, 0.25, 4, 0.5, 8, 0xafb2a1, true);
       box(29, along, 0.53, 3.7, 0.06, 7.7, 0x5d5943, true);
       box(29, along, 2, 0.2, 3, 0.2, 0x756044);
       this.box(this.landscaping, pad, 29 * pad.side, along, 4.1, 2.6, 2.2, 2.6, 0x637e43);
       for (const dz of [-2.5, 2.5]) this.box(this.landscaping, pad, 29 * pad.side, along + dz, 1.1, 1.6, 0.75, 1.5, 0x83964e);
+      for (const dz of [-3, -1, 1, 3]) this.box(this.landscaping, pad, 30 * pad.side, along + dz, 0.83, 0.4, 0.3, 0.4,
+        architecture === 'courtyard' ? 0xd7a76b : architecture === 'modern' ? 0xa395c9 : 0xe7d4a0);
     }
     for (const along of [11, 36]) {
       box(-17, along, 1.25, 0.7, 2.5, 0.65, 0xd0d7c8);

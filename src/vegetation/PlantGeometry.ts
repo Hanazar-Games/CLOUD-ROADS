@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-type Plant = 'pine' | 'cactus' | 'broadleaf' | 'shrub' | 'rock' | 'grass' | 'meadow' | 'flowers';
+type Plant = 'pine' | 'cactus' | 'broadleaf' | 'shrub' | 'rock' | 'grass' | 'meadow' | 'flowers' | 'flowerSpikes';
 function colored(geometry: BufferGeometry, color: string): BufferGeometry {
   const rgb = new Color(color), colors = new Float32Array(geometry.getAttribute('position').count * 3);
   for (let i = 0; i < colors.length; i += 3) rgb.toArray(colors, i);
@@ -48,6 +48,16 @@ export function plantGeometry(kind: Plant, distant = false): BufferGeometry {
   } else if (kind === 'rock') {
     pieces = [colored(new IcosahedronGeometry(1.75, 0).scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0), '#c1c0ab'),
       colored(new IcosahedronGeometry(0.65, 0).scale(1, 0.7, 1).translate(1.3, 0.25, 0.7), '#989e8e')];
+  } else if (kind === 'flowerSpikes') {
+    pieces = [];
+    for (let i = 0; i < 5; i++) {
+      const angle = i * 2.4, x = Math.cos(angle) * 0.4, z = Math.sin(angle) * 0.4, h = 0.65 + i * 0.05;
+      pieces.push(colored(new CylinderGeometry(0.013, 0.025, h, 3).translate(x, h / 2, z), '#668246'));
+      for (let j = 0; j < 4; j++) pieces.push(colored(new IcosahedronGeometry(0.085 - j * 0.012, 0).scale(1, 1.35, 1)
+        .translate(x, h - 0.18 + j * 0.07, z), i % 2 ? '#b8a3ce' : '#817bb1'));
+      for (const side of [-1, 1]) pieces.push(colored(new ConeGeometry(0.09, 0.3, 3).rotateZ(side * 0.8).rotateY(angle)
+        .translate(x + side * 0.05, 0.22, z), '#829855'));
+    }
   } else if (kind === 'meadow' || kind === 'flowers') {
     const vertices: number[] = [];
     for (let i = 0; i < (kind === 'flowers' ? 8 : 22); i++) {

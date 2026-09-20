@@ -1,4 +1,4 @@
-import { BoxGeometry, InstancedMesh, Matrix4, MeshStandardMaterial, PointLight, type PerspectiveCamera, type Scene } from 'three';
+import { BoxGeometry, Color, InstancedMesh, Matrix4, MeshStandardMaterial, PointLight, type PerspectiveCamera, type Scene } from 'three';
 import type { BridgeSpan } from '../bridge/BridgeDetector';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
 import type { TunnelLamp } from '../tunnel/TunnelMesh';
@@ -17,6 +17,8 @@ export class RoadFurniture {
   readonly rails = new InstancedMesh(guardrailGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
   readonly posts = new InstancedMesh(new BoxGeometry(), this.rails.material, MAX_ROAD_SEGMENTS * ROAD_SAMPLES);
   readonly poles = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x52636b, metalness: 0.6, roughness: 0.4 }), 4096);
+  readonly markers = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.15 }), 16384);
+  private readonly markerColor = new Color();
   readonly heads = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffe4b8, emissive: 0xffc781 }), 2048);
   readonly localLights = Array.from({ length: 4 }, () => new PointLight(0xffd4a0, 0, 45, 2));
   readonly lampPositions: (TunnelLamp & { sample: RoadSample })[] = [];
@@ -29,7 +31,7 @@ export class RoadFurniture {
 
   constructor(scene: Scene, private readonly seed: string, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
-    for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
       mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true;
       scene.add(mesh);
     }
@@ -42,7 +44,7 @@ export class RoadFurniture {
       this.version = version;
       this.anchorX = samples[0]?.position.x ?? 0;
       this.anchorZ = samples[0]?.position.z ?? 0;
-      this.rails.count = this.posts.count = this.poles.count = this.heads.count = 0;
+      this.rails.count = this.posts.count = this.poles.count = this.heads.count = this.markers.count = 0;
       this.lampPositions.length = 0;
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1], distance = sample.distance;
@@ -59,6 +61,14 @@ export class RoadFurniture {
             if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.posts, sample, offset, 0.48, 0.16, 0.95, 0.16);
           }
         }
+        if (!onBridge && !serviceAccess && Math.floor(distance / 32) !== Math.floor(previous.distance / 32)) {
+          for (const side of [-1, 1]) for (const [height, tall, width, depth, color] of [
+            [0.5, 1, 0.18, 0.18, 0xe3e5dc], [0.82, 0.3, 0.2, 0.22, 0x29383b], [0.83, 0.13, 0.12, 0.24, side > 0 ? 0xe7b14d : 0xe6e7df],
+          ]) {
+            this.box(this.markers, sample, side * (this.profile.outerHalfWidth + 1.1), height, width, tall, depth);
+            this.markers.setColorAt(this.markers.count - 1, this.markerColor.setHex(color));
+          }
+        }
         if (serviceAccess || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
         for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
           const offset = side * (this.profile.outerHalfWidth + (onBridge ? 0.15 : 0.9));
@@ -70,16 +80,17 @@ export class RoadFurniture {
             y: p.y + right.y * lateral + normal.y * 8.65, z: p.z + right.z * lateral + normal.z * 8.65, sample });
         }
       }
-      for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
+      for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
         mesh.instanceMatrix.clearUpdateRanges();
         mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
-    for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
-      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || mesh === this.posts || this.enabled);
+      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || mesh === this.posts || mesh === this.markers || this.enabled);
     }
   }
 
@@ -117,8 +128,8 @@ export class RoadFurniture {
   }
 
   dispose(): void {
-    for (const mesh of [this.rails, this.posts, this.poles, this.heads]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
-    for (const mesh of [this.rails, this.poles, this.heads]) mesh.material.dispose();
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
+    for (const mesh of [this.rails, this.poles, this.heads, this.markers]) mesh.material.dispose();
     for (const light of this.localLights) { light.removeFromParent(); light.dispose(); }
   }
 }

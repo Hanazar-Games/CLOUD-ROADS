@@ -118,12 +118,27 @@ export class Game {
       const roadWidth = Number(element<HTMLSelectElement>('road-width').value);
       const routeStyle = Number(element<HTMLSelectElement>('route-style').value) as WorldOptions['routeStyle'];
       const maxGrade = Number(element<HTMLInputElement>('max-grade').value) / 100;
+      const elevationMode = element<HTMLSelectElement>('elevation-mode').value as WorldOptions['elevationMode'];
+      const climbMin = elevationMode === 'cycles' ? Number(element<HTMLInputElement>('climb-min').value) : this.world.options.climbMin;
+      const climbMax = elevationMode === 'cycles' ? Number(element<HTMLInputElement>('climb-max').value) : this.world.options.climbMax;
       if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)
-        || !Number.isFinite(maxGrade) || maxGrade < 0 || maxGrade > 0.4) return;
-      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle, maxGrade });
+        || !Number.isFinite(maxGrade) || maxGrade < 0 || maxGrade > 0.4 || !['natural', 'cycles'].includes(elevationMode)
+        || !Number.isFinite(climbMin + climbMax) || climbMin < 50 || climbMax > 2000 || climbMin > climbMax) return;
+      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle, maxGrade, elevationMode, climbMin, climbMax });
     }, { signal: this.events.signal });
     element('max-grade').addEventListener('input', () => {
       element('max-grade-value').textContent = `${element<HTMLInputElement>('max-grade').value}%`;
+    }, { signal: this.events.signal });
+    for (const id of ['elevation-mode', 'climb-min', 'climb-max']) element(id).addEventListener('input', () => this.syncClimbControls(), { signal: this.events.signal });
+    element('eighteen-bends').addEventListener('click', () => {
+      element<HTMLSelectElement>('road-type').value = 'mountain';
+      element<HTMLSelectElement>('route-style').value = '5';
+      element<HTMLInputElement>('max-grade').value = '25'; element('max-grade-value').textContent = '25%';
+      element<HTMLSelectElement>('elevation-mode').value = 'cycles';
+      const min = element<HTMLInputElement>('climb-min'), max = element<HTMLInputElement>('climb-max');
+      this.syncClimbControls();
+      if (!min.validity.valid || !max.validity.valid) { min.value = '300'; max.value = '900'; }
+      this.syncClimbControls();
     }, { signal: this.events.signal });
     element('vegetation-toggle').addEventListener('click', () => {
       const vegetation = this.world.chunks.vegetation;
@@ -251,7 +266,10 @@ export class Game {
       element<HTMLSelectElement>('route-style').value = String(options.routeStyle);
       element<HTMLInputElement>('max-grade').value = String(Math.round(options.maxGrade * 100));
       element('max-grade-value').textContent = `${Math.round(options.maxGrade * 100)}%`;
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米`;
+      element<HTMLSelectElement>('elevation-mode').value = options.elevationMode;
+      element<HTMLInputElement>('climb-min').value = String(options.climbMin); element<HTMLInputElement>('climb-max').value = String(options.climbMax);
+      this.syncClimbControls();
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.elevationMode === 'cycles' ? ` · 单次爬升 ${options.climbMin}–${options.climbMax} 米` : ''}`;
       this.setError(null);
       this.resetCamera();
     } catch (error) {
@@ -279,6 +297,13 @@ export class Game {
     this.clouds.enabled = enabled;
     element('cloud-toggle').setAttribute('aria-pressed', String(enabled));
     element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留远景雾与所选天气。';
+  }
+
+  private syncClimbControls(): void {
+    const enabled = element<HTMLSelectElement>('elevation-mode').value === 'cycles';
+    const min = element<HTMLInputElement>('climb-min'), max = element<HTMLInputElement>('climb-max');
+    min.disabled = max.disabled = !enabled;
+    max.setCustomValidity(enabled && Number(min.value) > Number(max.value) ? '爬升上限不能低于下限。' : '');
   }
 
   private resetCamera(): void {
@@ -402,6 +427,8 @@ export class Game {
         'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
         'Service areas': this.world.services.length,
+        'Cable towers': this.world.bridgeMesh.cableBridges.towerCount, 'Stay cables': this.world.bridgeMesh.cableBridges.cables.count,
+        'Climb range': this.world.options.elevationMode === 'cycles' ? `${this.world.options.climbMin}–${this.world.options.climbMax} m` : 'natural',
         'Elevated services': this.world.services.filter(site => site.ground.elevated).length,
         'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',
         'Street lamps': this.world.furniture.lampPositions.length,
@@ -411,7 +438,7 @@ export class Game {
         'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
         'Carriageway width': `${this.world.options.roadWidth} m`,
         'Route style': routeNames[this.world.options.routeStyle], 'Maximum grade': `${Math.round(this.world.options.maxGrade * 100)}%`, 'Route checkpoints': this.world.road.checkpointCount,
-        'Roadside grass': this.world.chunks.vegetation.meadow.count, 'Wildflowers': this.world.chunks.vegetation.flowers.count,
+        'Roadside grass': chunks.vegetation.meadow.count, 'Wildflowers': chunks.vegetation.flowers.count + chunks.vegetation.flowerSpikes.count,
         'Vegetation instances': chunks.vegetation.enabled ? chunks.vegetation.count : 0,
         'Tree canopies': chunks.vegetation.enabled ? chunks.vegetation.canopyCount : 0,
         'Distant canopies': chunks.vegetation.enabled ? chunks.vegetation.distantCount : 0,

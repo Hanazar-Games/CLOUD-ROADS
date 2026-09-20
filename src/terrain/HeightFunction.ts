@@ -23,6 +23,21 @@ export class HeightFunction {
     const detail = this.noise.fractal(x / 90, z / 90, 2) * 18;
     const region = this.noise.fractal(wx / 8700 + 19, wz / 7300 - 37, 2);
     const basin = Math.max(0, this.noise.sample(wx / 2100 + 53, wz / 1700 - 71));
+    if (this.terrain === 'meadow') return 230 + macro * 0.22 + ranges * 0.025
+      + this.noise.fractal(wx / 950, wz / 1350, 3) * 95 + medium * 0.14 + detail * 0.15;
+    if (this.terrain === 'badlands') {
+      const ridge = this.noise.ridged(wx / 1400, wz / 1900, 1);
+      const t = Math.max(0, Math.min(1, (ridge - 0.22) / 0.58));
+      const towers = t * t * (3 - 2 * t);
+      const washes = this.noise.ridged(wx / 180 + 37, wz / 650 - 81, 2);
+      return 320 + macro * 0.2 + towers * (650 + (region + 1) * 230) - washes * basin * 55 + medium * 0.24 + detail * 0.2;
+    }
+    if (this.terrain === 'karst') {
+      const t = Math.max(0, Math.min(1, (this.noise.sample(wx / 840, wz / 1100) + 0.25) / 0.85));
+      const peaks = t * t * (3 - 2 * t);
+      const shoulders = this.noise.ridged(wx / 1600 + 81, wz / 1250 - 47, 3);
+      return 180 + macro * 0.2 + peaks * (700 + (region + 1) * 200) + shoulders * 95 + medium * 0.12 + detail * 0.25;
+    }
     if (this.terrain === 'forest') return 180 + macro * 0.34 + ranges * (0.2 + (region + 1) * 0.12) + medium * (0.3 + basin) + detail * 0.55
       + (this.noise.ridged(wx / 180, wz / 280, 2) - 0.5) * 26 - basin * basin * 115;
     if (this.terrain === 'dunes') {

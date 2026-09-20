@@ -21,9 +21,36 @@ export class RoadGenerator {
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    const planned = this.plan(start);
+    if (this.options.elevationMode !== 'cycles' || this.options.maxGrade === 0) return planned;
+    let climb = start.climb ?? { cycle: 0, base: this.start.position.y, target: this.start.position.y + this.climbGain(0), ascending: true };
+    if (Math.abs(climb.target - start.position.y) < 0.25 && Math.abs(start.grade) < 0.002) {
+      const cycle = climb.cycle + (climb.ascending ? 0 : 1);
+      climb = { ...climb, cycle, ascending: !climb.ascending, target: climb.ascending ? climb.base : climb.base + this.climbGain(cycle) };
+    }
+    const direction = climb.ascending ? 1 : -1;
+    const remaining = Math.max(0, direction * (climb.target - start.position.y) - Math.abs(start.grade) * planned.length / 2);
+    const limit = this.serviceApproach(start.distance) ? Math.min(0.02, this.options.maxGrade) : this.options.maxGrade;
+    const grade = this.nextGrade(start, direction * Math.min(limit, remaining / (planned.length * 2)));
+    const segment = new RoadSegment(start, planned.end.heading, grade, planned.length, planned.kind);
+    segment.end.mountain = planned.end.mountain; segment.end.nextMountain = planned.end.nextMountain;
+    segment.end.climb = climb;
+    return segment;
+  }
+
+  private climbGain(cycle: number): number {
+    return this.options.climbMin + hashSeed(`${this.seed}:climb:${cycle}`) / 4294967296 * (this.options.climbMax - this.options.climbMin);
+  }
+
+  private serviceApproach(distance: number): boolean {
+    const target = serviceTarget(this.seed, Math.max(1, Math.round(distance / 15000)));
+    return distance >= target - 1000 && distance < target + 800;
+  }
+
+  private plan(start: RoadControlPoint): RoadSegment {
     if (this.options.routeStyle >= 2 || this.options.maxGrade > 0.06) {
       const target = serviceTarget(this.seed, Math.max(1, Math.round(start.distance / 15000)));
-      if (start.distance >= target - 1000 && start.distance < target + 800) {
+      if (this.serviceApproach(start.distance)) {
         const heading = this.options.routeStyle === 0 ? 0 : start.heading + clamp(-start.heading, Math.PI / 10);
         const grade = this.nextGrade(start, clamp(this.desiredGrade(start, heading), 0.02));
         const segment = new RoadSegment(start, heading, grade);

@@ -60,8 +60,10 @@ test('switches walking, driving and flight on a tall bridge and survives setting
   await page.keyboard.down('KeyD'); await page.keyboard.down('KeyE');
   await page.waitForTimeout(1800); await page.keyboard.up('KeyD'); await page.keyboard.up('KeyE');
   await expect(metric(page, 'Walking grounded')).toHaveText('yes');
-  const bridgeHeight = Number((await metric(page, 'Walking position').textContent())!.split(',')[1]);
+  const bridgePosition = await metric(page, 'Walking position').textContent();
+  const bridgeHeight = Number(bridgePosition!.split(',')[1]);
   await page.keyboard.press('KeyR');
+  await expect(metric(page, 'Walking position')).not.toHaveText(bridgePosition!);
   await page.locator('#controls-toggle').click();
   await page.locator('#weather-kind').selectOption('rain');
   const held = await metric(page, 'Walking position').textContent();

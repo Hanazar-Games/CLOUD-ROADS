@@ -1,6 +1,6 @@
 import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
-import type { TerrainKind } from '../world/WorldOptions';
+import { isAridTerrain, type TerrainKind } from '../world/WorldOptions';
 
 export type Biome = 'valley' | 'forest' | 'rock' | 'alpine' | 'snow' | 'desert';
 
@@ -34,13 +34,16 @@ const kinds: readonly Biome[] = ['valley', 'forest', 'rock', 'alpine', 'snow', '
 
 export class BiomeSystem {
   private readonly noise: Noise;
+  readonly treeDensity: number;
 
-  constructor(seed: string, private readonly terrain: TerrainKind = 'alpine') { this.noise = new Noise(hashSeed(`${seed}:biomes`)); }
+  constructor(seed: string, private readonly terrain: TerrainKind = 'alpine') {
+    this.noise = new Noise(hashSeed(`${seed}:biomes`)); this.treeDensity = terrain === 'meadow' ? 0.18 : 1;
+  }
 
   sample(x: number, z: number, height: number, normalY: number, target = createBiomeSample()): BiomeSample {
-    const arid = this.terrain === 'desert' || this.terrain === 'dunes';
+    const arid = isAridTerrain(this.terrain);
     const climate = this.noise.fractal(x / 5000, z / 5000, 2);
-    const humidity = clamp((arid ? 0.12 : this.terrain === 'forest' ? 0.72 : 0.5)
+    const humidity = clamp((arid ? 0.12 : this.terrain === 'karst' ? 0.84 : this.terrain === 'forest' ? 0.72 : 0.5)
       + this.noise.fractal(x / 2100 + 31, z / 2100 - 47, 2) * (arid ? 0.12 : 0.45));
     const variation = this.noise.sample(x / 310 - 19, z / 310 + 53);
     target.temperature = (arid ? 32 : 18) + climate * 1.6 - height * 0.006;
@@ -60,6 +63,7 @@ export class BiomeSystem {
     weights.alpine = treeline * alpine * soil;
     weights.snow = snow;
     weights.desert = arid ? (1 - snow) * (1 - cliff * 0.35) : 0;
+    if (this.terrain === 'meadow') { weights.valley += weights.forest * 0.85; weights.forest *= 0.15; }
     if (arid) {
       weights.valley = weights.forest = weights.alpine = 0;
       weights.rock = (1 - snow) * cliff * 0.35;
@@ -82,6 +86,8 @@ export class BiomeSystem {
       target.color[1] += palette.desert[1] * weights.desert * shade * strata * 0.18;
       target.color[2] += palette.desert[2] * weights.desert * shade * strata * 0.35;
     }
+    if (this.terrain === 'badlands') { target.color[0] *= 1.13; target.color[1] *= 0.78; target.color[2] *= 0.75; }
+    if (this.terrain === 'karst') for (let channel = 0; channel < 3; channel++) target.color[channel] += weights.rock * [0.055, 0.065, 0.07][channel];
     return target;
   }
 }

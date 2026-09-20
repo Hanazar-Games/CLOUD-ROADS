@@ -47,7 +47,7 @@
           <summary>地貌与道路</summary>
           <form id="world-options">
             <label for="terrain-kind">地貌</label>
-            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option></select>
+            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="karst">喀斯特峰林</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">蜿蜒程度</label>
@@ -56,6 +56,15 @@
             <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
+            <label for="elevation-mode">上下坡节奏</label>
+            <select id="elevation-mode" aria-describedby="climb-help"><option value="natural">自然起伏 · 跟随地形</option><option value="cycles">反复上下山 · 自选爬升高度</option></select>
+            <div class="climb-range">
+              <label for="climb-min">单次爬升下限 · 米<input id="climb-min" type="number" min="50" max="2000" step="50" value="300" disabled required /></label>
+              <label for="climb-max">单次爬升上限 · 米<input id="climb-max" type="number" min="50" max="2000" step="50" value="900" disabled required /></label>
+            </div>
+            <p id="climb-help" class="panel-help">每次从范围内选取净爬升高度，到山顶后下山，再开始下一次爬升；不是绝对海拔。仍遵守最大坡度，0% 时保持水平。服务区附近会减缓坡度。</p>
+            <div class="actions"><button id="eighteen-bends" type="button">山路十八弯预设</button></div>
+            <p class="panel-help">预设选择 5 档山路、25% 坡度及反复上下山，保留有效爬升范围；点击下方应用后生成。</p>
             <label for="road-width">车行道宽度</label>
             <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>

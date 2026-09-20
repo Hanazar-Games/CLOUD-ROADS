@@ -267,18 +267,25 @@ export class World {
   inspectBridge(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     if (!this.roadReady) return undefined;
     const ahead = this.bridges.filter(bridge => bridge.end.distance > (this.roadSample?.distance ?? 0) + 100);
-    const span = ahead.find(bridge => bridge.depth >= 80) ?? ahead[0] ?? this.bridges[0];
+    const span = ahead.find(bridge => bridge.depth > 200) ?? ahead.find(bridge => bridge.depth >= 80) ?? ahead[0] ?? this.bridges[0];
     if (!span) return undefined;
     const sample = span.samples[Math.floor(span.samples.length / 2)];
     const distance = Math.max(180, Math.min(550, (span.end.distance - span.start.distance) * 0.7));
-    const viewpoints = [-1, 1].map(side => {
-      const x = sample.position.x + Math.cos(sample.heading) * distance * side, z = sample.position.z + Math.sin(sample.heading) * distance * side;
-      return { x, z, side, ground: this.corridor.height(x, z, this.height.sample(x, z)) };
-    });
-    const { x, z, side, ground } = viewpoints.reduce((best, point) => point.ground < best.ground ? point : best);
-    const y = Math.max(sample.position.y + distance * 0.35, ground + 80);
+    const ground = (x: number, z: number) => this.corridor.height(x, z, this.height.sample(x, z));
+    const viewpoints = [-1, 1].flatMap(side => [-Math.PI / 4, 0, Math.PI / 4].map(turn => {
+      const angle = sample.heading + turn;
+      const x = sample.position.x + Math.cos(angle) * distance * side, z = sample.position.z + Math.sin(angle) * distance * side;
+      let y = Math.max(sample.position.y + distance * 0.35, ground(x, z) + 80);
+      const steps = Math.ceil(distance / 4);
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps, px = sample.position.x + (x - sample.position.x) * t, pz = sample.position.z + (z - sample.position.z) * t;
+        y = Math.max(y, sample.position.y + (ground(px, pz) + 12 - sample.position.y) / t);
+      }
+      return { x, y, z, heading: angle - side * Math.PI / 2 };
+    }));
+    const { x, y, z, heading } = viewpoints.reduce((best, point) => point.y < best.y ? point : best);
     camera.position.set(x - this.origin.x, y, z - this.origin.z);
-    return { heading: sample.heading - side * Math.PI / 2, pitch: -Math.atan2(y - sample.position.y, distance) };
+    return { heading, pitch: -Math.atan2(y - sample.position.y, distance) };
   }
 
   dispose(): void {

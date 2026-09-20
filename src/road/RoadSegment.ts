@@ -2,6 +2,7 @@ export const ROAD_STEP = 96;
 export const ROAD_SAMPLES = 48;
 export interface RoadVector { x: number; y: number; z: number }
 export interface MountainPlan { stage: number; side: number; grade: number }
+export interface ClimbPlan { cycle: number; base: number; target: number; ascending: boolean }
 export interface RoadControlPoint {
   position: RoadVector;
   heading: number;
@@ -11,6 +12,7 @@ export interface RoadControlPoint {
   bank: number;
   nextMountain: number;
   mountain?: MountainPlan;
+  climb?: ClimbPlan;
 }
 export interface RoadSample extends RoadControlPoint {
   tangent: RoadVector;

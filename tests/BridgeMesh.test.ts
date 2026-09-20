@@ -47,7 +47,7 @@ describe('BridgeMesh', () => {
     mesh.dispose();
   });
 
-  it('widens tall spans in two tiers and gives the highest bridges red steel railings', () => {
+  it('widens tall spans through cable-stayed heights and gives high bridges red steel railings', () => {
     const counts: number[] = [];
     for (const height of [50, 50.01, 100, 100.01, 350]) {
       const terrain = { sample: () => 200 - height };
@@ -64,11 +64,11 @@ describe('BridgeMesh', () => {
       else expect(Math.abs(color.r - color.g)).toBeLessThan(0.15);
       mesh.dispose();
     }
-    expect(counts).toEqual([48, 24, 24, 12, 12]);
+    expect(counts).toEqual([48, 24, 24, 12, 6]);
   });
 
   it('anchors tall piers to absolute mileage when either bridge end is outside the loaded window', () => {
-    const terrain = { sample: () => -150 }, start = new RoadGenerator('tall', { sample: () => 200 }).start;
+    const terrain = { sample: () => 50 }, start = new RoadGenerator('tall', { sample: () => 200 }).start;
     start.position = { x: 0, y: 200, z: 0 };
     const segment = new RoadSegment(start, 0, 0, 2400);
     const samples = Array.from({ length: 601 }, (_, i) => segment.sample(i / 600));
@@ -79,7 +79,7 @@ describe('BridgeMesh', () => {
       const result: number[] = [], matrix = new Matrix4();
       for (let i = 0; i < mesh.piers.count; i++) {
         mesh.piers.getMatrixAt(i, matrix);
-        if (matrix.elements[13] < -145) {
+        if (matrix.elements[13] < 55) {
           const z = matrix.elements[14] + mesh.piers.position.z;
           if (z < -200 && z > -2000) result.push(z);
         }
@@ -108,7 +108,7 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(6);
+    expect(scene.children).toHaveLength(9);
     expect(mesh.railings.count).toBeGreaterThan(mesh.parapets.count);
     expect(mesh.parapets.count).toBe((bridges[0].samples.length - 1) * 2);
     expect(mesh.pierCount).toBeGreaterThan(5);

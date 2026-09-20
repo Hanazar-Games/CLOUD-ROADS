@@ -71,7 +71,7 @@ it('pauses and cancels service searches, visits consecutive sites and replays th
 }, 20000);
 
 it('reports the rendered ground biome through road coupling, bridges and origin rebases', () => {
-  const world = new World(new Scene(), 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8, routeStyle: 1, maxGrade: 0.06 });
+  const world = new World(new Scene(), 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
   load(world, camera);
@@ -132,8 +132,23 @@ it('places the hairpin overview above terrain and aims at the turn', () => {
   world.dispose();
 });
 
+it('keeps the karst bridge overview sightline above intervening peaks', () => {
+  const world = new World(new Scene(), 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'karst', routeStyle: 5,
+    maxGrade: 0.25, elevationMode: 'cycles', climbMin: 1000, climbMax: 1500 });
+  const camera = new PerspectiveCamera(); world.resetCamera(camera); load(world, camera);
+  const view = world.inspectBridge(camera)!;
+  const corridor = RoadCorridor.fromSamples(world.road.samples, world.bridges, world.options);
+  const x = camera.position.x + world.origin.x, z = camera.position.z + world.origin.z;
+  const direction = { x: Math.sin(view.heading), y: Math.tan(view.pitch), z: -Math.cos(view.heading) };
+  for (let distance = 0; distance <= 140; distance += 4) {
+    const px = x + direction.x * distance, pz = z + direction.z * distance;
+    expect(camera.position.y + direction.y * distance).toBeGreaterThan(corridor.height(px, pz, world.height.sample(px, pz)) + 1);
+  }
+  world.dispose();
+});
+
 it('frames a detected bridge above terrain and releases its meshes with the world', () => {
-  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8, routeStyle: 1, maxGrade: 0.06 });
+  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
   load(world, camera);

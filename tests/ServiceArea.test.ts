@@ -101,6 +101,8 @@ it.each([
     { terrain: 'forest' as const, routeStyle: 3 as const }, { terrain: 'desert' as const, routeStyle: 5 as const },
   ].flatMap(style => (['mountain', 'highway'] as const).flatMap(roadType => [6, 8, 10].map(roadWidth => ({ ...style, roadType, roadWidth })))),
   ...(['mountain', 'highway'] as const).map(roadType => ({ terrain: 'alpine' as const, routeStyle: 5 as const, roadType, roadWidth: 10, maxGrade: 0.4 })),
+  ...(['meadow', 'badlands', 'karst'] as const).map(terrain => ({ terrain, routeStyle: 5 as const, roadType: 'highway' as const,
+    roadWidth: 10, maxGrade: 0.4, elevationMode: 'cycles' as const, climbMin: 300, climbMax: 900 })),
 ])(
   'keeps real $terrain $routeStyle $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.roadType);

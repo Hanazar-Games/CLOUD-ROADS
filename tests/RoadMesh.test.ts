@@ -1,3 +1,4 @@
+import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { Scene } from 'three';
 import { describe, expect, it } from 'vitest';
 import { RoadMesh } from '../src/road/RoadMesh';
@@ -6,7 +7,7 @@ import { ROAD_SAMPLES, RoadSegment } from '../src/road/RoadSegment';
 
 describe('RoadMesh', () => {
   it('gives highway barriers a wider foot and a narrow crown within the reserved median', () => {
-    const scene = new Scene(), road = new RoadMesh(scene, { terrain: 'alpine', roadType: 'highway', roadWidth: 8, routeStyle: 1, maxGrade: 0.06 });
+    const scene = new Scene(), road = new RoadMesh(scene, { ...DEFAULT_OPTIONS, roadType: 'highway' });
     const positions = road.barriers.geometry.getAttribute('position');
     let foot = 0, crown = 0;
     for (let i = 0; i < positions.count; i++) {

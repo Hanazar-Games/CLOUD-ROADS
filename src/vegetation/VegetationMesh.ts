@@ -21,7 +21,8 @@ export class VegetationMesh {
   readonly distant = ['pine', 'cactus', 'broadleaf'].map(kind => new InstancedMesh(plantGeometry(kind as 'pine' | 'cactus' | 'broadleaf', true), this.material, FAR_CAPACITY));
   readonly meadow = new InstancedMesh(plantGeometry('meadow'), this.material, MEADOW_CAPACITY);
   readonly flowers = new InstancedMesh(plantGeometry('flowers'), this.material, MEADOW_CAPACITY);
-  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant, this.meadow, this.flowers];
+  readonly flowerSpikes = new InstancedMesh(plantGeometry('flowerSpikes'), this.material, MEADOW_CAPACITY);
+  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant, this.meadow, this.flowers, this.flowerSpikes];
   private readonly entries: PlantInstance[][] = this.meshes.map(() => []);
   private readonly changed = this.meshes.map(() => ({ min: Infinity, max: -1 }));
   private readonly chunks = new Map<string, PlantChunk>();
@@ -45,7 +46,7 @@ export class VegetationMesh {
   get count(): number { return this.meshes.reduce((sum, mesh) => sum + mesh.count, 0); }
   get distantCount(): number { return this.distant.reduce((sum, mesh) => sum + mesh.count, 0); }
   get canopyCount(): number { return this.trees.count + this.broadleaf.count + this.cacti.count + this.distantCount; }
-  get groundCount(): number { return this.shrubs.count + this.rocks.count + this.grass.count + this.meadow.count + this.flowers.count; }
+  get groundCount(): number { return this.shrubs.count + this.rocks.count + this.grass.count + this.meadow.count + this.flowers.count + this.flowerSpikes.count; }
 
   setChunk(key: string, x: number, z: number, plants: Float32Array): void {
     this.removeChunk(key);

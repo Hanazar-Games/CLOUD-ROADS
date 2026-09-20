@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene } from 'three';
+import { Matrix4, PerspectiveCamera, Raycaster, Scene, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { RoadFurniture } from '../src/road/RoadFurniture';
 import { RoadGenerator } from '../src/road/RoadGenerator';
@@ -10,6 +10,14 @@ it('places reproducible lamp sections with dark gaps and keeps lights out of tun
   const samples = Array.from({ length: 3001 }, (_, i) => segment.sample(i / 3000));
   const scene = new Scene(), furniture = new RoadFurniture(scene, 'lamps');
   furniture.update(samples, [], [], 1, 0, 0, true);
+  expect(furniture.markers.count).toBeGreaterThan(100);
+  scene.updateMatrixWorld(true);
+  for (const [instance, y] of [[1, 0.4], [2, 0]]) {
+    const matrix = new Matrix4(); furniture.markers.getMatrixAt(instance, matrix);
+    const point = new Vector3(0, y, 10).applyMatrix4(matrix).add(furniture.markers.position);
+    const hit = new Raycaster(point, new Vector3(0, 0, -1)).intersectObject(furniture.markers)[0];
+    expect(hit.instanceId).toBe(instance);
+  }
   const points = furniture.lampPositions.map(p => ({ ...p }));
   expect(points.length).toBeGreaterThan(10);
   expect(points.length).toBeLessThan(100);
