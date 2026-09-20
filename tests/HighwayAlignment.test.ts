@@ -78,7 +78,7 @@ it('reuses cached windows when revisiting in either direction without losing det
   expect(road.checkpointCount).toBeLessThanOrEqual(64);
 });
 
-it.each(['CLOUD-ROAD-001', 'CLIFF-REPLAY', 'HIGHWAY-100KM'])('keeps the %s cliff highway on its hillside platform instead of boring into the wall', seed => {
+it.each(['CLOUD-ROAD-001', 'CLIFF-REPLAY', 'HIGHWAY-100KM'])('keeps the %s elevated highway aligned with its mountain guide', seed => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 'cliff' as const };
   const terrain = new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
   const generator = new RoadGenerator(seed, terrain, options);

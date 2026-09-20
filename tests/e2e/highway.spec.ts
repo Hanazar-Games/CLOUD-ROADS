@@ -26,7 +26,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await page.locator('#controls-toggle').click();
   await page.locator('#route-style').selectOption('cliff');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
-  await expect(metric('Route style')).toHaveText('峡谷挂壁公路'); await ready();
+  await expect(metric('Route style')).toHaveText('高架盘山公路'); await ready();
   await page.locator('#view-distance').selectOption('16');
   await expect(metric('Target chunks')).toHaveText('1089'); await ready();
   const before = await metric('Coordinates').textContent();

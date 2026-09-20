@@ -1,7 +1,7 @@
 import { Scene } from 'three';
 import { describe, expect, it } from 'vitest';
 import { ChunkManager } from '../src/world/ChunkManager';
-import type { ChunkRequest } from '../src/world/ChunkPlanner';
+import { planChunks, type ChunkRequest } from '../src/world/ChunkPlanner';
 import { TerrainGenerator, type TerrainData } from '../src/terrain/TerrainGenerator';
 import type { TerrainBackend } from '../src/terrain/TerrainWorkers';
 import { RoadCorridor } from '../src/road/RoadCorridor';
@@ -25,6 +25,29 @@ class DeferredTerrain implements TerrainBackend {
 }
 
 describe('ChunkManager lifecycle', () => {
+  it('prepares the next view while stationary and consumes it without regenerating visible terrain', async () => {
+    const backend = new DeferredTerrain(), scene = new Scene(), manager = new ChunkManager(scene, 'test', backend);
+    manager.setViewRadius(6);
+    const forward = { x: 0, z: -1 };
+    for (let frame = 0; frame < 220; frame++) {
+      manager.update(128, 128, forward, emptyCorridor);
+      await backend.complete();
+    }
+    expect(manager.stats.active).toBe(169);
+    expect(manager.stats.prefetched).toBeGreaterThan(0);
+    expect(manager.stats.prefetched).toBeLessThanOrEqual(128);
+    const next = new Set(planChunks(128, -1, forward, 6).map(request => `${request.key}:${request.cells}`));
+    for (let frame = 0; frame < 30; frame++) {
+      manager.update(128, -1, forward, emptyCorridor);
+      expect(backend.jobs.filter(job => next.has(`${job.request.key}:${job.request.cells}`))).toHaveLength(0);
+      await backend.complete();
+    }
+    expect(manager.stats.active).toBe(169);
+    manager.update(100000, 100000, forward, null);
+    expect(manager.stats.prefetched).toBe(0);
+    manager.dispose(); expect(scene.children).toHaveLength(0);
+  }, 20000);
+
   it('discards old results during road replay and reprioritizes newly faced terrain', async () => {
     const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
     manager.update(0, 0, { x: 0, z: -1 }, emptyCorridor);

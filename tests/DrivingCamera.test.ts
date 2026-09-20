@@ -6,6 +6,45 @@ import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import type { DrivingSurface } from '../src/vehicle/DrivingSurface';
 
 describe('Driving rendering', () => {
+  it('previews height and distance changes without moving the parked car or resetting the look direction', () => {
+    const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics();
+    const surface = { sample: () => ({ height: 0, grip: 1 }), inTunnel: () => false } as unknown as DrivingSurface;
+    car.reset(0, 0, 0, surface.sample);
+    rig.view = 'hood'; rig.update(0, car, surface, { x: 0, z: 0 }, [100, 0]);
+    const before = camera.position.clone(), rotation = camera.quaternion.clone();
+    rig.height = 0.25;
+    rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.position.y - before.y).toBeCloseTo(0.25);
+    expect(camera.quaternion.angleTo(rotation)).toBeLessThan(1e-6);
+    rig.view = 'chase'; rig.reset(); rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    rig.distance = 10; rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.position.z).toBeCloseTo(10);
+    expect(car.x).toBe(0); expect(car.z).toBe(0);
+  });
+
+  it('filters first-person suspension rotation while continuing to follow the car position', () => {
+    const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics();
+    const surface = { sample: () => ({ height: 0, grip: 1 }), inTunnel: () => false } as unknown as DrivingSurface;
+    car.reset(0, 0, 0, surface.sample); rig.view = 'cockpit';
+    rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    const before = camera.quaternion.clone();
+    car.pitch = 0.2; car.roll = 0.15; car.z = -10;
+    rig.update(1 / 60, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.quaternion.angleTo(before)).toBeLessThan(0.08);
+    expect(camera.position.z).toBeLessThan(-9);
+    for (let frame = 0; frame < 120; frame++) rig.update(1 / 60, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.rotation.x).toBeCloseTo(car.pitch, 3);
+  });
+
+  it('retracts the chase camera when a ridge blocks the line of sight', () => {
+    const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics();
+    const surface = { sample: (_x: number, z: number) => ({ height: z > 3 && z < 6 ? 5 : 0, grip: 1 }), inTunnel: () => false } as unknown as DrivingSurface;
+    car.reset(0, 0, 0, surface.sample);
+    rig.distance = 10; rig.update(0, car, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.position.z).toBeLessThanOrEqual(3);
+    expect(camera.position.y).toBeGreaterThan(surface.sample(camera.position.x, camera.position.z).height);
+  });
+
   it('preserves every camera and the vehicle through repeated floating origin shifts', () => {
     const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics(), scene = new Scene();
     const mesh = new VehicleMesh(scene);

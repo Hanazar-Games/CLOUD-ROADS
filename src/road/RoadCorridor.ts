@@ -2,7 +2,7 @@ import { roadFrame } from './RoadFrame';
 import type { RoadSample } from './RoadSegment';
 import { RoadIndex, type RoadEdge } from './RoadIndex';
 import { CHUNK_SIZE } from '../world/ChunkPlanner';
-import { BRIDGE_APPROACH, type BridgeSpan } from '../bridge/BridgeDetector';
+import type { BridgeSpan } from '../bridge/BridgeDetector';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from './RoadProfile';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
@@ -32,8 +32,9 @@ export class RoadCorridor {
       const { normal } = roadFrame(sample);
       while (bridgeIndex < bridges.length && bridges[bridgeIndex].end.distance < sample.distance) bridgeIndex++;
       const span = bridges[bridgeIndex];
-      const t = span ? Math.max(0, Math.min(1, (sample.distance - span.start.distance) / BRIDGE_APPROACH, (span.end.distance - sample.distance) / BRIDGE_APPROACH)) : 0;
-      return { ...sample.position, nx: normal.x, ny: normal.y, nz: normal.z, ground: 1 - t * t * (3 - 2 * t),
+      const elevated = span && (sample.distance > span.start.distance || span.openStart)
+        && (sample.distance < span.end.distance || span.openEnd);
+      return { ...sample.position, nx: normal.x, ny: normal.y, nz: normal.z, ground: elevated ? 0 : 1,
         tunnel: tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) };
     });
     return new RoadCorridor(points.slice(1).map((b, i) => ({ a: points[i], b })), options, services);
@@ -68,7 +69,8 @@ export class RoadCorridor {
     const width = Math.min(RADIUS, this.bedHalfWidth + 18 + Math.abs(natural - surface) * 0.65);
     const blend = Math.max(0, Math.min(1, (Math.sqrt(distanceSquared) - this.bedHalfWidth) / (width - this.bedHalfWidth)));
     const ground = a.ground + (b.ground - a.ground) * t;
-    const height = natural + (surface - natural) * (1 - blend * blend * (3 - 2 * blend)) * ground;
+    const bed = surface - (1 - ground) * 3.2;
+    const height = natural + (bed - natural) * (1 - blend * blend * (3 - 2 * blend)) * (natural > bed ? 1 : ground);
     return this.services.height(x, z, height, Math.sqrt(distanceSquared), this.roadHalfWidth);
   }
 }

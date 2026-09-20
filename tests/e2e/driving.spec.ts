@@ -53,9 +53,13 @@ test('switches views and tuning, isolates settings and announcements, and resume
   await page.locator('#driving-view').selectOption('cockpit');
   await page.locator('#driving-fov').fill('85');
   await page.locator('#camera-distance').fill('10');
+  await page.locator('#camera-height').fill('0.25');
   await page.locator('#suspension').selectOption('soft');
   await expect(page.locator('#driving-fov-value')).toHaveText('85°');
   await expect(page.locator('#camera-distance-value')).toHaveText('10 m');
+  await expect(page.locator('#camera-height-value')).toHaveText('+25 cm');
+  await expect(metric(page, 'Camera FOV')).toHaveText('85°');
+  await expect(metric(page, 'Camera height')).toHaveText('25 cm');
   await expect(metric(page, 'Vehicle position')).toHaveText(held!);
   await page.locator('#release-open').click();
   await page.keyboard.press('KeyR'); await page.keyboard.press('KeyC');

@@ -309,7 +309,7 @@ export class Game {
     const frozen = this.paused || this.releaseNotes.open || !this.input.enabled;
     if (this.driving.active) this.driving.update(dt, frozen, this.weather.profile.rain > 0);
     else this.flight.update(dt, frozen);
-    this.world.update(this.camera, !frozen);
+    this.world.update(this.camera, !frozen, this.driving.active ? this.driving.car.heading + (this.driving.car.speed < -0.1 ? Math.PI : 0) : undefined);
     if (this.world.serviceView) {
       this.stopDriving();
       this.flight.reset(this.world.serviceView.heading, this.world.serviceView.pitch);
@@ -367,6 +367,7 @@ export class Game {
         'Mountain stage': this.world.routeStage, 'Mountain passes': this.world.passes.length,
         'Pooled meshes': stats.pooled, 'Allocated meshes': stats.allocated,
         'Pending / queued': `${stats.pending} / ${stats.queued}`, 'Generated chunks': stats.completed,
+        'Prefetched chunks': stats.prefetched, 'Preloading chunks': stats.preloading,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
@@ -392,6 +393,7 @@ export class Game {
         'Vehicle position': `${this.driving.car.x.toFixed(2)}, ${this.driving.car.y.toFixed(2)}, ${this.driving.car.z.toFixed(2)}`,
         'Vehicle suspension': `${this.driving.car.suspension} · ${this.driving.car.wheels.map(wheel => (wheel.compression * 100).toFixed(1)).join(' / ')} cm`,
         'Driving camera': this.driving.cameraRig.view,
+        'Camera FOV': `${this.camera.fov}°`, 'Camera height': `${Math.round(this.driving.cameraRig.height * 100)} cm`,
         'Cloud region': this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '关闭',
         'Cloud base / top': `${this.clouds.sample.base.toFixed(0)} / ${this.clouds.sample.top.toFixed(0)} m`,
         'Cloud density': `${((this.clouds.enabled ? this.clouds.sample.density : 0) * 100).toFixed(0)}%`,
@@ -406,6 +408,7 @@ export class Game {
         'Road segments': this.world.road.segments.length, 'Road ready': this.world.roadReady ? 'yes' : 'generating',
         'Hairpins': this.world.road.segments.filter((segment) => segment.kind === 'hairpin').length,
         'Bridges': this.world.bridges.length, 'Bridge piers': this.world.bridgeMesh.pierCount,
+        'Tallest bridge': `${Math.max(0, ...this.world.bridges.map(bridge => bridge.depth)).toFixed(0)} m`,
         'Road distance': this.world.roadSample ? `${(this.world.roadSample.distance / 1000).toFixed(2)} km` : '—',
         'Road grade': this.world.roadSample ? `${(this.world.roadSample.grade * 100).toFixed(2)}%` : '—',
         'Road curvature': this.world.roadSample?.curvature.toFixed(5) ?? '—',

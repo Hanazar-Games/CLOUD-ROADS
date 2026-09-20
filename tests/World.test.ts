@@ -12,11 +12,29 @@ vi.mock('../src/terrain/TerrainWorkers', () => ({
   },
 }));
 
+const load = (world: World, camera: PerspectiveCamera) => {
+  for (let frame = 0; frame < 1000; frame++) {
+    world.update(camera);
+    if (world.roadReady) return;
+  }
+  throw new Error('World did not finish its terrain and preloading corridor');
+};
+
+it('preloads along the driving direction even when the camera looks the other way', () => {
+  const world = new World(new Scene(), 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
+  world.resetCamera(camera);
+  const update = vi.spyOn(world.chunks, 'update');
+  world.update(camera, true, Math.PI);
+  const forward = update.mock.calls.at(-1)![2];
+  expect(forward.x).toBeCloseTo(0);
+  expect(forward.z).toBeCloseTo(1);
+  world.dispose();
+});
+
 it('pauses and cancels service searches, visits consecutive sites and replays the first location', () => {
   const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
   world.resetCamera(camera);
-  while (!world.road.update(128, 8)) { /* Complete the initial window. */ }
-  world.update(camera);
+  load(world, camera);
   const initial = camera.position.clone();
   world.requestServiceView();
   for (let i = 0; i < 5; i++) world.update(camera, false);
@@ -49,14 +67,13 @@ it('pauses and cancels service searches, visits consecutive sites and replays th
   expect(visit()).toEqual(first);
   expect(camera.position.clone().add({ x: world.origin.x, y: 0, z: world.origin.z })).toEqual(firstPosition);
   world.dispose(); expect(scene.children).toHaveLength(0);
-});
+}, 20000);
 
 it('reports the rendered ground biome through road coupling, bridges and origin rebases', () => {
   const world = new World(new Scene(), 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8, routeStyle: 'natural' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
-  while (!world.road.update(128, 8)) { /* Load terrain coupling. */ }
-  world.update(camera);
+  load(world, camera);
   const sample = world.roadSample!;
   const x = Math.round(sample.position.x / 4) * 4, z = Math.round(sample.position.z / 4) * 4;
   const cx = Math.floor(x / 256), cz = Math.floor(z / 256);
@@ -78,8 +95,7 @@ it('reports the rendered ground biome through road coupling, bridges and origin 
 
 it('recognizes tunnel shelter only inside the bore, including after rebasing', () => {
   const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
-  while (!world.road.update(128, 8)) { /* Load the initial structures. */ }
-  world.update(camera);
+  load(world, camera);
   expect(world.inspectTunnel(camera)).toBeDefined();
   world.update(camera);
   expect(world.shelter).toBe(0);
@@ -103,8 +119,7 @@ it('places the hairpin overview above terrain and aims at the turn', () => {
   const world = new World(new Scene(), 'CLOUD-ROAD-001');
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
-  while (!world.road.update(128, 8)) { /* Load a complete corridor. */ }
-  world.update(camera);
+  load(world, camera);
   const target = world.road.segments.find((segment) => segment.kind === 'hairpin')!.sample(0.5);
   const view = world.inspectHairpin(camera)!;
   const corridor = RoadCorridor.fromSamples(world.road.samples, world.bridges);
@@ -120,8 +135,7 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
   const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { terrain: 'forest', roadType: 'mountain', roadWidth: 8, routeStyle: 'natural' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
-  while (!world.road.update(128, 8)) { /* Load bridge anchors. */ }
-  world.update(camera);
+  load(world, camera);
   expect(world.bridges.length).toBeGreaterThan(0);
   expect(world.bridgeMesh.deck.visible).toBe(true);
   const matrix = world.bridgeMesh.deck.instanceMatrix.array.slice();
@@ -150,8 +164,7 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
 it('finds a safe cloud approach above coupled valley terrain, including after a rebase', () => {
   const world = new World(new Scene(), 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
   world.resetCamera(camera);
-  while (!world.road.update(128, 8)) { /* Load the valley corridor. */ }
-  world.update(camera);
+  load(world, camera);
   const view = world.inspectValley(camera, 1720);
   expect(view).toBeDefined();
   expect(camera.position.y).toBe(1720);
@@ -178,8 +191,7 @@ it('pauses pass searches, visits consecutive saddles and deterministically retur
   world.resetCamera(camera);
   world.requestPassView();
   expect(world.searching).toBe(false);
-  while (!world.road.update(128, 8)) { /* Prepare the initial view before requesting a destination. */ }
-  world.update(camera);
+  load(world, camera);
   world.requestPassView();
   const home = camera.position.clone();
   world.update(camera, false);

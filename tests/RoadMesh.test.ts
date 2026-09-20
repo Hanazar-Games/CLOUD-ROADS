@@ -5,15 +5,30 @@ import { RoadSpine } from '../src/road/RoadSpine';
 import { ROAD_SAMPLES, RoadSegment } from '../src/road/RoadSegment';
 
 describe('RoadMesh', () => {
-  it('anchors arrows, lane dashes and shoulder grooves to mileage when old segments leave the window', () => {
+  it('gives highway barriers a wider foot and a narrow crown within the reserved median', () => {
+    const scene = new Scene(), road = new RoadMesh(scene, { terrain: 'alpine', roadType: 'highway', roadWidth: 8, routeStyle: 'natural' });
+    const positions = road.barriers.geometry.getAttribute('position');
+    let foot = 0, crown = 0;
+    for (let i = 0; i < positions.count; i++) {
+      const width = Math.abs(positions.getX(i));
+      if (positions.getY(i) < -0.4) foot = Math.max(foot, width);
+      if (positions.getY(i) > 0.4) crown = Math.max(crown, width);
+      expect(width).toBeLessThanOrEqual(0.5);
+    }
+    expect(foot).toBeGreaterThan(crown * 1.5);
+    road.dispose(); expect(scene.children).toHaveLength(0);
+  });
+
+  it.each([1560, 78000, 780000])('anchors 2 km arrows, dashes and grooves across the %i m window boundary', distance => {
     const spine = new RoadSpine('CLOUD-ROAD-001'), road = new RoadMesh(new Scene());
-    while (!spine.update(128, 8)) { /* Load a complete road window. */ }
+    const first = new RoadSegment({ ...spine.generator.start, distance: distance - 48 }, 0, 0);
+    spine.segments.push(first, new RoadSegment(first.end, 0, 0));
     road.update(spine, 0, 0, true);
     const before = road.mesh.geometry.getAttribute('uv').getY(ROAD_SAMPLES * 2);
     spine.segments.shift(); spine.version++;
     road.update(spine, 0, 0, true);
     const after = road.mesh.geometry.getAttribute('uv').getY(0);
-    for (const period of [12, 60, 1.3]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
+    for (const period of [12, 2000, 1.3]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
     road.dispose();
   });
 

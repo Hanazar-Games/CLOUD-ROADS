@@ -4,60 +4,53 @@ import { roadFrame } from '../road/RoadFrame';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 
-export const MAX_BRIDGE_LENGTH = 1400;
-export const BRIDGE_APPROACH = 32;
 export interface BridgeSpan {
   start: RoadSample;
   end: RoadSample;
   depth: number;
   samples: readonly RoadSample[];
+  openStart: boolean;
+  openEnd: boolean;
 }
 
 export class BridgeDetector {
-  private readonly clearance = new Map<number, { center: number; minimum: number }>();
+  private readonly clearance = new Map<number, number>();
 
-  private readonly offsets: number[];
+  private readonly centers;
 
   constructor(private readonly terrain: RoadTerrain, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    const profile = roadProfile(options);
-    this.offsets = profile.centers.flatMap(center => [center - profile.halfWidth - 0.4, center, center + profile.halfWidth + 0.4]);
+    this.centers = roadProfile(options).centers;
   }
 
   get cachedSamples(): number { return this.clearance.size; }
 
-  detect(samples: readonly RoadSample[]): BridgeSpan[] {
+  detect(samples: readonly RoadSample[], earthworks: readonly { start: number; end: number }[] = []): BridgeSpan[] {
     const active = new Set(samples.map((sample) => sample.distance));
     for (const distance of this.clearance.keys()) if (!active.has(distance)) this.clearance.delete(distance);
     const spans: BridgeSpan[] = [];
-    let anchor = -1, deepStart = -1, deepLength = 0, depth = 0;
+    let first = -1, depth = 0;
+    const finish = (last: number, openEnd: boolean) => {
+      const start = Math.max(0, first - 1), crossing = samples.slice(start, last + 1);
+      if (crossing.length > 1) spans.push({ start: crossing[0], end: crossing.at(-1)!, depth, samples: crossing,
+        openStart: first === 0, openEnd });
+      first = -1; depth = 0;
+    };
     for (let i = 0; i < samples.length; i++) {
       const sample = samples[i];
       let gap = this.clearance.get(sample.distance);
-      if (!gap) {
+      if (gap === undefined) {
         const { x, y, z } = sample.position, { right } = roadFrame(sample);
-        const center = y - this.terrain.sample(x, z);
-        const side = (offset: number) => y + right.y * offset - this.terrain.sample(x + right.x * offset, z + right.z * offset);
-        gap = { center, minimum: Math.min(center, ...this.offsets.map(side)) };
+        gap = Math.max(...this.centers.map(offset => y + right.y * offset
+          - this.terrain.sample(x + right.x * offset, z + right.z * offset)));
         this.clearance.set(sample.distance, gap);
       }
-      if (gap.center <= 12) {
-        if (anchor >= 0 && deepLength >= 80 && sample.distance - samples[anchor].distance <= MAX_BRIDGE_LENGTH) {
-          const crossing = samples.slice(anchor, i + 1);
-          const clear = crossing.every((point) => point.distance - crossing[0].distance < BRIDGE_APPROACH
-            || sample.distance - point.distance < BRIDGE_APPROACH || this.clearance.get(point.distance)!.minimum > 3);
-          if (clear) spans.push({ start: crossing[0], end: sample, depth, samples: crossing });
-        }
-        anchor = i;
-        deepStart = -1; deepLength = 0; depth = 0;
-      } else {
-        depth = Math.max(depth, gap.center);
-        if (gap.center > 40) {
-          if (deepStart < 0) deepStart = sample.distance;
-          deepLength = Math.max(deepLength, sample.distance - deepStart);
-        } else deepStart = -1;
-        if (anchor >= 0 && sample.distance - samples[anchor].distance > MAX_BRIDGE_LENGTH) anchor = -1;
-      }
+      const bridge = gap > 5 && !earthworks.some(site => sample.distance >= site.start && sample.distance <= site.end);
+      if (bridge) {
+        if (first < 0) first = i;
+        depth = Math.max(depth, gap);
+      } else if (first >= 0) finish(i, false);
     }
+    if (first >= 0) finish(samples.length - 1, true);
     return spans;
   }
 }

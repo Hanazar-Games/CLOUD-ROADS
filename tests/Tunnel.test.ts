@@ -32,7 +32,7 @@ it('finds complete covered sections, avoids bridges and keeps decisions stable i
   expect(detector.detect(samples.slice(50, -50), []).map(span => [span.start.distance, span.end.distance]))
     .toEqual(spans.map(span => [span.start.distance, span.end.distance]));
   const span = spans[0];
-  expect(detector.detect(samples, [{ ...span, depth: 90 }])).toHaveLength(0);
+  expect(detector.detect(samples, [{ ...span, depth: 90, openStart: false, openEnd: false }])).toHaveLength(0);
   expect(new TunnelDetector({ sample: () => 100 }).detect(samples, [])).toHaveLength(0);
   expect(detector.detect(span.samples, [])).toHaveLength(0);
 });

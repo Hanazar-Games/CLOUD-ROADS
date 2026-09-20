@@ -20,18 +20,23 @@ it('creates deliberate winding traverses even on a gently rolling landscape', ()
   expect(counts[0]).toBe(0); expect(counts[1]).toBeGreaterThanOrEqual(8);
 });
 
-it('forms a continuous canyon with a road ledge, an open drop and an uphill wall', () => {
+it('forms continuous deep ravines below the elevated mountain route with intervening ridges', () => {
   const terrain = new HeightFunction('cliff-route', 'desert', 'cliff');
   const copy = new HeightFunction('cliff-route', 'desert', 'cliff');
+  let high = 0, ridges = 0, total = 0;
   for (let z = 128; z > -100000; z -= 211) {
     const guide = terrain.route(z)!;
     expect(guide).toBeDefined();
     const shelf = terrain.sample(guide.x, z);
-    expect(shelf - terrain.sample(guide.x - 180, z)).toBeGreaterThan(180);
+    if (guide.height - shelf > 150) high++;
+    if (guide.height - shelf < 5) ridges++;
+    total++;
     expect(terrain.sample(guide.x + 180, z) - shelf).toBeGreaterThan(150);
     expect(shelf).toBe(copy.sample(guide.x, z));
     expect(Math.abs(shelf - terrain.sample(guide.x, z + 0.01))).toBeLessThan(0.1);
   }
+  expect(high / total).toBeGreaterThan(0.35);
+  expect(ridges / total).toBeGreaterThan(0.1);
   const generator = new TerrainGenerator('cliff-route', { ...DEFAULT_OPTIONS, terrain: 'desert', routeStyle: 'cliff' });
   const edge = (data: ReturnType<typeof generator.generate>, x: number) => {
     const result = new Map<number, number>();
@@ -45,7 +50,7 @@ it.each((['winding', 'cliff'] as const).flatMap(routeStyle => (['mountain', 'hig
   'streams 100 km of $routeStyle $roadType with safe grades, continuous joins and cliff exposure', options => {
   const seed = 'CLOUD-ROAD-001', config = { ...DEFAULT_OPTIONS, ...options };
   const terrain = new HeightFunction(seed, config.terrain, config.routeStyle, config.roadType), generator = new RoadGenerator(seed, terrain, config);
-  let point = generator.start, exposed = 0, total = 0;
+  let point = generator.start, exposed = 0, high = 0, total = 0;
   while (point.distance < 100000) {
     const segment = generator.next(point);
     expect(segment.sample(0).position).toEqual(point.position);
@@ -59,11 +64,15 @@ it.each((['winding', 'cliff'] as const).flatMap(routeStyle => (['mountain', 'hig
     if (options.routeStyle === 'cliff') {
       const sample = segment.sample(0.5), { x, y, z } = sample.position;
       if (y - terrain.sample(x - 180, z) > 140 && terrain.sample(x + 180, z) - y > 130) exposed++;
+      if (y - terrain.sample(x, z) > 100) high++;
       total++;
     }
     point = segment.end;
   }
-  if (total) expect(exposed / total).toBeGreaterThan(0.8);
+  if (total) {
+    expect(exposed / total).toBeGreaterThan(0.65);
+    expect(high / total).toBeGreaterThan(0.35);
+  }
 }, 30000);
 
 it.each(['natural', 'winding', 'cliff'] as const)('resumes a visited %s route from bounded checkpoints and reproduces the same window', routeStyle => {

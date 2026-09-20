@@ -46,8 +46,8 @@ export class RoadGenerator {
         for (const t of [0.25, 0.5, 0.75, 1]) {
           const point = segment.sample(t);
           const gap = point.position.y - this.terrain.sample(point.position.x, point.position.z);
-          terrainCost += Math.min(Math.abs(gap), 1000) / 400;
-          cliffCost += Math.max(0, gap - 100) / 1500;
+          terrainCost += Math.min(cliff ? Math.max(-gap, 0) : Math.abs(gap), 1000) / 400;
+          cliffCost += cliff ? 0 : Math.max(0, gap - 100) / 1500;
           scenicReward += Math.min(Math.max(gap, 0), 80) / 1600;
         }
         const curvatureCost = (turn / 18) ** 2 * 0.25;

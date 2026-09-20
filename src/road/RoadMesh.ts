@@ -1,4 +1,5 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector4, type Scene } from 'three';
+import { BufferAttribute, BufferGeometry, DynamicDrawUsage, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector4, type Scene } from 'three';
+import { barrierGeometry } from './RoadHardwareGeometry';
 import { createRoadMaterial } from './RoadMaterial';
 import { MAX_ROAD_SEGMENTS, type RoadSpine } from './RoadSpine';
 import { roadFrame } from './RoadFrame';
@@ -9,7 +10,7 @@ import type { ServiceArea } from '../service/ServicePlanner';
 
 export class RoadMesh {
   readonly mesh: Mesh<BufferGeometry, MeshStandardMaterial>;
-  readonly barriers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  readonly barriers: InstancedMesh<BufferGeometry, MeshStandardMaterial>;
   private readonly profile;
   private readonly matrix = new Matrix4();
   private version = -1;
@@ -19,7 +20,7 @@ export class RoadMesh {
 
   constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
-    this.barriers = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xb6b5a9, roughness: 0.9 }),
+    this.barriers = new InstancedMesh(barrierGeometry(), new MeshStandardMaterial({ color: 0xb6b5a9, roughness: 0.9 }),
       options.roadType === 'highway' ? MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 2 : 1);
     this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access));
     const strips = this.profile.centers.length, stride = strips * 2;
@@ -52,7 +53,7 @@ export class RoadMesh {
       const positions = this.mesh.geometry.getAttribute('position') as BufferAttribute;
       const normals = this.mesh.geometry.getAttribute('normal') as BufferAttribute;
       const uv = this.mesh.geometry.getAttribute('uv') as BufferAttribute;
-      const cycleStart = Math.floor(first.distance / 1560) * 1560; // Shared period of 12 m dashes, 60 m arrows and 1.3 m grooves.
+      const cycleStart = Math.floor(first.distance / 78000) * 78000; // Shared period of 12 m dashes, 2 km arrows and 1.3 m grooves.
       this.access.forEach((range, i) => {
         const distance = services[i]?.sample.distance;
         if (distance === undefined) range.set(-1, -1, -1, -1);

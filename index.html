@@ -27,10 +27,12 @@
           <input id="driving-fov" type="range" min="50" max="90" value="65" />
           <label class="speed-label" for="camera-distance">跟车距离 <output id="camera-distance-value">7 m</output></label>
           <input id="camera-distance" type="range" min="5" max="11" step="0.5" value="7" />
+          <label class="speed-label" for="camera-height">视角高度 <output id="camera-height-value">0 cm</output></label>
+          <input id="camera-height" type="range" min="-0.1" max="0.35" step="0.05" value="0" />
           <label for="suspension">悬挂调校</label>
           <select id="suspension"><option value="soft">柔软 · 起伏更明显</option><option value="balanced" selected>标准 · 均衡舒适</option><option value="firm">运动 · 更紧致</option></select>
           <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
-          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。调整设置时车辆暂停，点击画面继续。当前支持键盘驾驶。</p>
+          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。视角调整即时预览，车辆保持暂停；点击画面继续。隧道内跟车镜头自动缩近。当前支持键盘驾驶。</p>
         </details>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
@@ -44,8 +46,8 @@
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">路线风格</label>
-            <select id="route-style" aria-describedby="route-style-help"><option value="natural">自然山路 · 起伏与缓弯</option><option value="winding">蜿蜒盘山路 · 连续折返</option><option value="cliff">峡谷挂壁公路 · 山腰临崖</option></select>
-            <p id="route-style-help">挂壁路线会塑造连续峡谷。高速始终优先长直道与大半径缓弯，坡度不超过 3%；盘山折返只在山路生成。</p>
+            <select id="route-style" aria-describedby="route-style-help"><option value="natural">自然山路 · 起伏与缓弯</option><option value="winding">蜿蜒盘山路 · 连续折返</option><option value="cliff">高架盘山公路 · 高墩跨越深谷</option></select>
+            <p id="route-style-help">高架盘山沿山势弯行，在山脊落地、以高桥跨谷。路面高于地面 5 米时优先架桥。高速保持大半径缓弯，坡度不超过 3%；盘山折返只在山路生成。</p>
             <label for="road-width">车行道宽度</label>
             <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>
@@ -59,7 +61,7 @@
           <summary>渲染距离</summary>
           <label for="view-distance">周围地形范围</label>
           <select id="view-distance" aria-describedby="view-distance-help"><option value="6">约 1.5 公里 · 轻量</option><option value="8" selected>约 2 公里 · 标准</option><option value="12">约 3 公里 · 开阔</option><option value="16">约 4 公里 · 远景</option></select>
-          <p class="panel-help" id="view-distance-help">即时切换，保留当前位置。更远的视距需要更多显存与加载时间；植被细节集中在附近，云雾仍会影响能见度。</p>
+          <p class="panel-help" id="view-distance-help">即时切换，保留当前位置。附近地形优先加载，后台提前准备前方地块与细节；远离的区域会回收。更远的视距需要更多显存，云雾仍会影响能见度。</p>
         </details>
         <details class="world-options" open>
           <summary>天气与时间</summary>

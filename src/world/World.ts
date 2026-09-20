@@ -82,15 +82,16 @@ export class World {
     camera.position.set(128, this.height.sample(128, 128) + 450, 128);
   }
 
-  update(camera: PerspectiveCamera, explore = true): void {
+  update(camera: PerspectiveCamera, explore = true, travelHeading?: number): void {
     if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
+    if (travelHeading !== undefined) this.forward.set(Math.sin(travelHeading), 0, -Math.cos(travelHeading));
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
-    this.roadReady = this.road.update(z, 4, Math.max(4000, (this.chunks.viewRadius + 1) * 256 + 1600));
+    this.roadReady = this.road.update(z, 4, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
     if (this.roadReady && this.corridorVersion !== this.road.version) {
       this.services = this.servicePlanner.detect(this.road.samples);
       const clear = (span: { start: RoadSample; end: RoadSample }) => !this.services.some(site => site.start < span.end.distance && site.end > span.start.distance);
-      this.bridges = this.bridgeDetector.detect(this.road.samples).filter(clear);
+      this.bridges = this.bridgeDetector.detect(this.road.samples, this.services);
       this.tunnels = this.tunnelDetector.detect(this.road.samples, this.bridges).filter(clear);
       const passes: RoadSample[] = [], samples = this.road.samples;
       if (this.options.terrain === 'alpine') {
@@ -263,15 +264,19 @@ export class World {
 
   inspectBridge(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     if (!this.roadReady) return undefined;
-    const span = this.bridges.find((bridge) => bridge.end.distance > (this.roadSample?.distance ?? 0) + 100) ?? this.bridges[0];
+    const ahead = this.bridges.filter(bridge => bridge.end.distance > (this.roadSample?.distance ?? 0) + 100);
+    const span = ahead.find(bridge => bridge.depth >= 80) ?? ahead[0] ?? this.bridges[0];
     if (!span) return undefined;
     const sample = span.samples[Math.floor(span.samples.length / 2)];
     const distance = Math.max(180, Math.min(550, (span.end.distance - span.start.distance) * 0.7));
-    const x = sample.position.x + Math.cos(sample.heading) * distance, z = sample.position.z + Math.sin(sample.heading) * distance;
-    const ground = this.corridor.height(x, z, this.height.sample(x, z));
+    const viewpoints = [-1, 1].map(side => {
+      const x = sample.position.x + Math.cos(sample.heading) * distance * side, z = sample.position.z + Math.sin(sample.heading) * distance * side;
+      return { x, z, side, ground: this.corridor.height(x, z, this.height.sample(x, z)) };
+    });
+    const { x, z, side, ground } = viewpoints.reduce((best, point) => point.ground < best.ground ? point : best);
     const y = Math.max(sample.position.y + distance * 0.35, ground + 80);
     camera.position.set(x - this.origin.x, y, z - this.origin.z);
-    return { heading: sample.heading - Math.PI / 2, pitch: -Math.atan2(y - sample.position.y, distance) };
+    return { heading: sample.heading - side * Math.PI / 2, pitch: -Math.atan2(y - sample.position.y, distance) };
   }
 
   dispose(): void {

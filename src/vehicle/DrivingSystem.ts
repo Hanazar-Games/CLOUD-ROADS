@@ -33,6 +33,10 @@ export class DrivingSystem {
       this.cameraRig.distance = Number(element<HTMLInputElement>('camera-distance').value);
       element('camera-distance-value').textContent = `${this.cameraRig.distance} m`;
     }, options);
+    element('camera-height').addEventListener('input', () => {
+      this.cameraRig.height = Number(element<HTMLInputElement>('camera-height').value);
+      element('camera-height-value').textContent = `${this.cameraRig.height > 0 ? '+' : ''}${Math.round(this.cameraRig.height * 100)} cm`;
+    }, options);
     element('suspension').addEventListener('change', () => {
       const value = element<HTMLSelectElement>('suspension').value as Suspension;
       if (['soft', 'balanced', 'firm'].includes(value)) this.car.suspension = value;
@@ -98,8 +102,8 @@ export class DrivingSystem {
         this.collisionTime = 1.2;
         this.car.trip = trip + Math.min(this.car.trip - trip, Math.hypot(this.car.x - x, this.car.z - z));
       }
-      this.cameraRig.update(dt, this.car, this.surface, world.origin, look);
     }
+    this.cameraRig.update(held ? 0 : dt, this.car, this.surface, world.origin, held ? [0, 0] : look);
     this.hudTime += dt;
     if (this.hudTime >= 0.1) {
       this.hudTime = 0;

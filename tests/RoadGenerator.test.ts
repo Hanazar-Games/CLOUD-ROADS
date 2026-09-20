@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { MAX_ROAD_SEGMENTS, ROAD_HALO, RoadSpine } from '../src/road/RoadSpine';
+import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 describe('RoadGenerator', () => {
+  it.each((['natural', 'winding', 'cliff'] as const).flatMap(routeStyle =>
+    (['mountain', 'highway'] as const).map(roadType => ({ routeStyle, roadType }))))(
+    'covers 4 km viewing and the preload margin for 100 km of $routeStyle $roadType', options => {
+      const spine = new RoadSpine('CLOUD-ROAD-001', undefined, { ...DEFAULT_OPTIONS, ...options });
+      const halo = (16 + 2) * 256 + 1600;
+      for (let z = 128; z > -100000; z -= 4096) {
+        let ready = false;
+        for (let frame = 0; frame < 2000 && !ready; frame++) ready = spine.update(z, 8, halo);
+        expect(ready).toBe(true);
+        expect(spine.segments.length).toBeLessThanOrEqual(MAX_ROAD_SEGMENTS);
+        expect(spine.segments[0].start.position.z).toBeGreaterThanOrEqual(Math.min(128, z + halo));
+        expect(spine.segments.at(-1)!.end.position.z).toBeLessThanOrEqual(z - halo);
+      }
+    }, 20000);
+
   it('reproduces a route independently of generation batch size', () => {
     const a = new RoadSpine('CLOUD-ROAD-001');
     const b = new RoadSpine('CLOUD-ROAD-001');

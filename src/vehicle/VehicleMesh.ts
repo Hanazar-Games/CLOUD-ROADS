@@ -40,7 +40,10 @@ export class VehicleMesh {
       block(0.05, 0.04, 0.2, side * 0.94, 0.17, 0.5, metal);
       block(0.5, 0.09, 0.055, side * 0.53, 0.02, -2.09, lamp);
       block(0.56, 0.09, 0.055, side * 0.52, 0.04, 2.09, this.tail);
-      block(0.26, 0.13, 0.17, side * 1.02, 0.48, -0.64, paint);
+      block(0.03, 0.22, 0.035, side * 0.86, 0.34, -0.66, trim);
+      block(0.2, 0.035, 0.045, side * 0.93, 0.44, -0.66, trim);
+      block(0.22, 0.12, 0.13, side * 1.03, 0.44, -0.64, paint);
+      block(0.19, 0.09, 0.012, side * 1.03, 0.44, -0.569, metal);
       block(0.56, 0.16, 0.65, side * 0.43, 0.03, 0.4, leather);
       const seat = block(0.57, 0.58, 0.17, side * 0.43, 0.33, 0.83, leather); seat.rotation.x = -0.14;
       block(0.29, 0.2, 0.14, side * 0.43, 0.69, 0.88, leather);
@@ -50,7 +53,7 @@ export class VehicleMesh {
     block(1.65, 0.035, 0.045, 0, 1.07, -0.63, metal);
     block(1.58, 0.15, 0.3, 0, 0.25, -0.64, trim);
     block(0.2, 0.17, 0.8, 0, 0.09, 0.2, trim);
-    this.steering.position.set(-0.43, 0.32, -0.4); this.steering.rotation.x = -0.25; this.chassis.add(this.steering);
+    this.steering.position.set(-0.43, 0.42, -0.4); this.steering.rotation.x = -0.25; this.chassis.add(this.steering);
     const ring = new Mesh(this.geometry(new TorusGeometry(0.155, 0.018, 6, 24)), trim); this.steering.add(ring);
     block(0.27, 0.027, 0.025, 0, 0, 0, metal, this.steering);
     block(0.035, 0.14, 0.03, 0, -0.065, 0, metal, this.steering);

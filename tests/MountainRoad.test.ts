@@ -41,12 +41,14 @@ describe('mountain roads', () => {
       point = segment.end;
     }
     expect(hairpins).toBeGreaterThanOrEqual(4);
+    let clearance = Infinity;
     for (let i = 0; i < positions.length; i++) {
       for (let j = i + 1; j < positions.length; j++) {
         if (positions[j].distance - positions[i].distance < 80) continue;
-        expect(Math.hypot(positions[i].x - positions[j].x, positions[i].z - positions[j].z)).toBeGreaterThan(24);
+        clearance = Math.min(clearance, Math.hypot(positions[i].x - positions[j].x, positions[i].z - positions[j].z));
       }
     }
+    expect(clearance).toBeGreaterThan(24);
   });
 
   it('couples both legs of a reversing road and preserves local subsets', () => {

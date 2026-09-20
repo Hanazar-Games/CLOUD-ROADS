@@ -10,9 +10,11 @@ import type { RoadSample } from './RoadSegment';
 import { MAX_ROAD_SEGMENTS } from './RoadSpine';
 import { ROAD_SAMPLES } from './RoadSegment';
 import type { ServiceArea } from '../service/ServicePlanner';
+import { guardrailGeometry } from './RoadHardwareGeometry';
 
 export class RoadFurniture {
-  readonly rails = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
+  readonly rails = new InstancedMesh(guardrailGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
+  readonly posts = new InstancedMesh(new BoxGeometry(), this.rails.material, MAX_ROAD_SEGMENTS * ROAD_SAMPLES);
   readonly poles = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x52636b, metalness: 0.6, roughness: 0.4 }), 4096);
   readonly heads = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffe4b8, emissive: 0xffc781 }), 2048);
   readonly localLights = Array.from({ length: 4 }, () => new PointLight(0xffd4a0, 0, 45, 2));
@@ -26,7 +28,7 @@ export class RoadFurniture {
 
   constructor(scene: Scene, private readonly seed: string, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
-    for (const mesh of [this.rails, this.poles, this.heads]) {
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
       mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true;
       scene.add(mesh);
     }
@@ -39,25 +41,26 @@ export class RoadFurniture {
       this.version = version;
       this.anchorX = samples[0]?.position.x ?? 0;
       this.anchorZ = samples[0]?.position.z ?? 0;
-      this.rails.count = this.poles.count = this.heads.count = 0;
+      this.rails.count = this.posts.count = this.poles.count = this.heads.count = 0;
       this.lampPositions.length = 0;
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1], distance = sample.distance;
         if (tunnels.some(span => distance >= span.start.distance - 8 && distance <= span.end.distance + 8)) continue;
         const sides = [-this.profile.outerHalfWidth - 0.3, this.profile.outerHalfWidth + 0.3];
         const serviceAccess = services.some(site => distance >= site.start && distance <= site.end);
-        if (!bridges.some(span => distance >= span.start.distance && distance <= span.end.distance)) {
+        const onBridge = bridges.some(span => distance >= span.start.distance && distance <= span.end.distance);
+        if (!onBridge) {
           const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,
             y: (sample.position.y + previous.position.y) / 2, z: (sample.position.z + previous.position.z) / 2 } };
           for (const offset of sides) {
             if (serviceAccess && (this.profile.centers.length === 2 || offset > 0)) continue;
             this.box(this.rails, mid, offset, 0.85, 0.16, 0.28, distance - previous.distance + 0.08);
-            if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.rails, sample, offset, 0.48, 0.16, 0.95, 0.16);
+            if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.posts, sample, offset, 0.48, 0.16, 0.95, 0.16);
           }
         }
         if (serviceAccess || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
         for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
-          const offset = side * (this.profile.outerHalfWidth + 0.9);
+          const offset = side * (this.profile.outerHalfWidth + (onBridge ? 0.15 : 0.9));
           this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);
           this.box(this.poles, sample, offset - side * 1.3, 8.95, 2.7, 0.15, 0.15);
           this.box(this.heads, sample, offset - side * 2.4, 8.85, 0.85, 0.13, 1.4);
@@ -66,16 +69,16 @@ export class RoadFurniture {
             y: p.y + right.y * lateral + normal.y * 8.65, z: p.z + right.z * lateral + normal.z * 8.65, sample });
         }
       }
-      for (const mesh of [this.rails, this.poles, this.heads]) {
+      for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
         mesh.instanceMatrix.clearUpdateRanges();
         mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
-    for (const mesh of [this.rails, this.poles, this.heads]) {
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
-      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || this.enabled);
+      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || mesh === this.posts || this.enabled);
     }
   }
 
@@ -113,7 +116,8 @@ export class RoadFurniture {
   }
 
   dispose(): void {
-    for (const mesh of [this.rails, this.poles, this.heads]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
+    for (const mesh of [this.rails, this.poles, this.heads]) mesh.material.dispose();
     for (const light of this.localLights) { light.removeFromParent(); light.dispose(); }
   }
 }

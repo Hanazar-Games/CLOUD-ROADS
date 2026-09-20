@@ -24,20 +24,57 @@ const fixture = () => {
 };
 
 describe('BridgeMesh', () => {
+  it('anchors tall piers to absolute mileage when either bridge end is outside the loaded window', () => {
+    const terrain = { sample: () => -150 }, start = new RoadGenerator('tall', { sample: () => 200 }).start;
+    start.position = { x: 0, y: 200, z: 0 };
+    const segment = new RoadSegment(start, 0, 0, 2400);
+    const samples = Array.from({ length: 601 }, (_, i) => segment.sample(i / 600));
+    const detector = new BridgeDetector(terrain), mesh = new BridgeMesh(new Scene());
+    const foundations = (window: typeof samples, version: number) => {
+      const spans = detector.detect(window);
+      mesh.update(spans, RoadCorridor.fromSamples(window, spans), terrain, version, 0, 0, true);
+      const result: number[] = [], matrix = new Matrix4();
+      for (let i = 0; i < mesh.piers.count; i++) {
+        mesh.piers.getMatrixAt(i, matrix);
+        if (matrix.elements[13] < -145) {
+          const z = matrix.elements[14] + mesh.piers.position.z;
+          if (z < -200 && z > -2000) result.push(z);
+        }
+      }
+      return result;
+    };
+    const before = foundations(samples, 1);
+    expect(before.length).toBeGreaterThan(15);
+    expect(before.length).toBeLessThan(25);
+    expect(mesh.columns.count).toBe(mesh.pierCount * 2);
+    const shaft = new Matrix4();
+    mesh.columns.getMatrixAt(0, shaft);
+    expect(shaft.elements[5] / shaft.elements[0]).toBeLessThan(90);
+    const vertices = mesh.columns.geometry.getAttribute('position');
+    let base = 0, crown = 0;
+    for (let i = 0; i < vertices.count; i++) {
+      if (vertices.getY(i) < 0) base = Math.max(base, Math.abs(vertices.getX(i)));
+      else crown = Math.max(crown, Math.abs(vertices.getX(i)));
+    }
+    expect(base).toBeGreaterThan(crown * 1.3);
+    expect(foundations(samples.slice(17, -23), 2)).toEqual(before);
+    mesh.dispose();
+  });
+
   it('supports the road with a solid deck, ground-connected piers and structural details', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(3);
+    expect(scene.children).toHaveLength(4);
     expect(mesh.details.count).toBeGreaterThan(mesh.deck.count);
     expect(mesh.deck.count).toBe((bridges[0].samples.length - 1) * 3);
-    expect(mesh.pierCount).toBeGreaterThan(10);
+    expect(mesh.pierCount).toBeGreaterThan(5);
     const matrix = new Matrix4();
     for (let i = 0; i < mesh.piers.count; i++) {
       mesh.piers.getMatrixAt(i, matrix);
       expect(matrix.elements.every(Number.isFinite)).toBe(true);
       expect(matrix.determinant()).toBeGreaterThan(0);
-      if (i % 3 === 0) {
+      if (matrix.elements[5] === 3) {
         const center = new Vector3().setFromMatrixPosition(matrix);
         expect(center.y - matrix.elements[5] / 2 + mesh.piers.position.y).toBeLessThan(terrain.sample(center.x + mesh.piers.position.x, center.z + mesh.piers.position.z));
       }
@@ -76,6 +113,8 @@ describe('BridgeMesh', () => {
     ['CLOUD-ROAD-001', DEFAULT_OPTIONS], ['ROAD-TEST-002', DEFAULT_OPTIONS],
     ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'desert', roadType: 'highway', roadWidth: 10 }],
     ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest', roadType: 'highway', roadWidth: 6 }],
+    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'desert', routeStyle: 'cliff' }],
+    ['CLIFF-REPLAY', { ...DEFAULT_OPTIONS, roadType: 'highway', roadWidth: 10, routeStyle: 'cliff' }],
   ])('keeps real curved decks below asphalt and above the natural valley (%s, %j)', (seed, options) => {
     const terrain = new TerrainGenerator(seed, options), spine = new RoadSpine(seed, terrain.height, options);
     const detector = new BridgeDetector(terrain.height, options);

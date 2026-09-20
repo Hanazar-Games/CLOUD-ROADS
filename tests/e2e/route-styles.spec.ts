@@ -25,7 +25,9 @@ test('applies winding and cliff routes, drives them and preserves choices during
   await page.locator('#terrain-kind').selectOption('desert');
   await page.locator('#route-style').selectOption('cliff');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
-  await expect(metric('Route style')).toHaveText('峡谷挂壁公路'); await ready();
+  await expect(metric('Route style')).toHaveText('高架盘山公路'); await ready();
+  expect(Number(await metric('Bridges').textContent())).toBeGreaterThan(0);
+  expect(Number(await metric('Bridge piers').textContent())).toBeGreaterThan(10);
   await expect(page.locator('#view-distance')).toHaveValue('16');
   await page.locator('#drive-toggle').click();
   await expect(metric('Travel mode')).toHaveText('driving');
@@ -44,7 +46,7 @@ test('applies winding and cliff routes, drives them and preserves choices during
   await page.locator('#road-width').selectOption('10');
   await page.getByRole('button', { name: '应用并返回起点' }).click(); await ready();
   await expect(metric('Road layout')).toHaveText('双向四车道');
-  await expect(metric('Route style')).toHaveText('峡谷挂壁公路');
+  await expect(metric('Route style')).toHaveText('高架盘山公路');
   await expect(metric('Hairpins')).toHaveText('0');
   await page.locator('#service-view').click();
   await expect(metric('Service areas')).toHaveText('1', { timeout: 30000 }); await ready();
