@@ -47,8 +47,12 @@ test('switches walking, driving and flight on a tall bridge and survives setting
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
-  await page.locator('#route-style').selectOption('cliff');
+  await page.locator('#terrain-kind').selectOption('forest');
+  await page.locator('#route-style').selectOption('5');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await expect(metric(page, 'Landscape')).toHaveText('森林山谷');
+  await expect(metric(page, 'Route style')).toHaveText('5 档 · 连续发卡弯');
+  await expect(metric(page, 'Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   await expect(page.locator('#bridge-view')).toBeEnabled({ timeout: 30000 });
   await page.locator('#bridge-view').click();
   await start(page);

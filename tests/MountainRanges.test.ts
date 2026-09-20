@@ -39,14 +39,14 @@ it('starts in lower mountains and crosses a saddle between higher flanks', () =>
 });
 
 it.each(['mountain', 'highway'] as const)('repeatedly climbs and descends through three %s mountain ranges without grade or continuity breaks', roadType => {
-  const terrain = new HeightFunction('CLOUD-ROAD-001', 'alpine', 'natural', roadType), options = { ...DEFAULT_OPTIONS, roadType };
+  const terrain = new HeightFunction('CLOUD-ROAD-001', 'alpine', roadType), options = { ...DEFAULT_OPTIONS, roadType };
   const generator = new RoadGenerator('CLOUD-ROAD-001', terrain, options);
   let point = generator.start, lowest = point.position.y, highest = lowest, climb = 0, descent = 0;
   const peaks = new Map<number, number>(), valleys = new Map<number, number>();
   while (point.distance < terrain.ranges.length * 3.2) {
     const segment = generator.next(point), end = segment.end;
     expect(segment.sample(0).position).toEqual(point.position);
-    expect(Math.abs(end.grade)).toBeLessThanOrEqual(roadType === 'highway' ? 0.030001 : 0.060001);
+    expect(Math.abs(end.grade)).toBeLessThanOrEqual(options.maxGrade + 0.000001);
     expect(end.position.z).toBeLessThan(point.position.z);
     const delta = end.position.y - point.position.y;
     climb += Math.max(0, delta); descent += Math.max(0, -delta);

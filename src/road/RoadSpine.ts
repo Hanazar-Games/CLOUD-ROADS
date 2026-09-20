@@ -20,7 +20,7 @@ export class RoadSpine {
   private readonly terrain;
 
   constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType);
     this.generator = new RoadGenerator(seed, this.terrain, options);
     this.resume = this.generator.start;
   }

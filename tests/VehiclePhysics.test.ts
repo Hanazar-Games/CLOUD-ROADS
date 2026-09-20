@@ -10,6 +10,24 @@ function run(car: VehiclePhysics, seconds: number, input = idle, surface = flat,
 function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); return car; }
 
 describe('VehiclePhysics', () => {
+  it('climbs and brakes on the maximum selectable 40% slope with all wheels supported', () => {
+    const slope: SurfaceSampler = (_x, z) => ({ height: 400 - z * 0.4, grip: 1 });
+    const car = create(slope);
+    run(car, 8, forward, slope);
+    expect(car.z).toBeLessThan(-30);
+    expect(car.y).toBeGreaterThan(412);
+    expect(car.pitch).toBeCloseTo(Math.atan(0.4), 1);
+    for (const wheel of car.wheels) {
+      expect(Number.isFinite(wheel.height)).toBe(true);
+      expect(wheel.compression).toBeGreaterThan(0);
+    }
+    run(car, 4, { ...idle, handbrake: true }, slope);
+    expect(car.speed).toBe(0);
+    const stopped = car.z;
+    run(car, 3, { ...idle, handbrake: true }, slope);
+    expect(car.z).toBe(stopped);
+  });
+
   it('accelerates, brakes without instantly reversing, then reverses at a limited speed', () => {
     const car = create();
     run(car, 4, forward);

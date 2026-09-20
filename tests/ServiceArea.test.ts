@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { ServicePlanner, serviceTarget } from '../src/service/ServicePlanner';
+import { ServicePlanner } from '../src/service/ServicePlanner';
+import { serviceTarget } from '../src/service/ServiceSchedule';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { RoadCorridor } from '../src/road/RoadCorridor';
@@ -95,11 +96,14 @@ it('builds parking, buildings and access pavement, then rebases and releases eve
 });
 
 it.each([
-  ...(['alpine', 'forest', 'desert', 'dunes'] as const).map(terrain => ({ terrain, routeStyle: 'natural' as const })),
-  { terrain: 'forest' as const, routeStyle: 'winding' as const }, { terrain: 'desert' as const, routeStyle: 'cliff' as const },
-].flatMap(style => (['mountain', 'highway'] as const).flatMap(roadType => [6, 8, 10].map(roadWidth => ({ ...style, roadType, roadWidth })))))(
+  ...[
+    ...(['alpine', 'forest', 'desert', 'dunes'] as const).map(terrain => ({ terrain, routeStyle: 1 as const })),
+    { terrain: 'forest' as const, routeStyle: 3 as const }, { terrain: 'desert' as const, routeStyle: 5 as const },
+  ].flatMap(style => (['mountain', 'highway'] as const).flatMap(roadType => [6, 8, 10].map(roadWidth => ({ ...style, roadType, roadWidth })))),
+  ...(['mountain', 'highway'] as const).map(roadType => ({ terrain: 'alpine' as const, routeStyle: 5 as const, roadType, roadWidth: 10, maxGrade: 0.4 })),
+])(
   'keeps real $terrain $routeStyle $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
-  const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.routeStyle, choice.roadType);
+  const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.roadType);
   const spine = new RoadSpine(seed, terrain, options);
   while (!spine.advanceToDistance(serviceTarget(seed, 1) + 1000)) { /* Complete the service window. */ }
   const sites = new ServicePlanner(seed, terrain, options).detect(spine.samples), site = sites[0];

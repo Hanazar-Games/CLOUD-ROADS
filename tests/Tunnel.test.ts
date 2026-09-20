@@ -52,7 +52,7 @@ it('retains every ventilation instance across a full highway window with repeate
 
 it('keeps winding traverses open and reserves tunnels for the connecting cruise sections', () => {
   const samples = route().map(sample => ({ ...sample, mountain: { stage: 3, side: 1, grade: 0.04 } }));
-  const winding = { ...DEFAULT_OPTIONS, routeStyle: 'winding' as const };
+  const winding = { ...DEFAULT_OPTIONS, routeStyle: 3 as const };
   expect(new TunnelDetector(hill).detect(samples, []).length).toBeGreaterThan(0);
   expect(new TunnelDetector(hill, winding).detect(samples, [])).toHaveLength(0);
   expect(new TunnelDetector(hill, winding).detect(route(), []).length).toBeGreaterThan(0);
@@ -60,7 +60,7 @@ it('keeps winding traverses open and reserves tunnels for the connecting cruise 
 
 it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real curved %s tunnels', roadType => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 };
-  const terrain = new HeightFunction(seed, options.terrain, options.routeStyle, roadType), spine = new RoadSpine(seed, terrain, options);
+  const terrain = new HeightFunction(seed, options.terrain, roadType), spine = new RoadSpine(seed, terrain, options);
   while (!spine.update(128, 8)) { /* Complete the initial route window. */ }
   const bridges = new BridgeDetector(terrain, options).detect(spine.samples);
   const spans = new TunnelDetector(terrain, options).detect(spine.samples, bridges);
@@ -85,6 +85,29 @@ it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real c
   }
   mesh.dispose();
 }, 20_000);
+
+it.each(['mountain', 'highway'] as const)('keeps the full carriageway clear through a 40% %s tunnel', roadType => {
+  const options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10, maxGrade: 0.4 };
+  const segment = new RoadSegment({ ...route()[0], grade: 0.4 }, 0, 0.4, 1800);
+  const samples = Array.from({ length: 901 }, (_, i) => segment.sample(i / 900));
+  const terrain = { sample: (x: number, z: number) => hill.sample(x, z) - z * 0.4 };
+  const spans = new TunnelDetector(terrain, options).detect(samples, []);
+  expect(spans.length).toBeGreaterThan(0);
+  const scene = new Scene(), mesh = new TunnelMesh(scene, 'steep', options);
+  mesh.update(spans, RoadCorridor.fromSamples(samples, [], options), terrain, 1, 0, 0, true);
+  scene.updateMatrixWorld(true);
+  for (const span of spans) for (const center of roadProfile(options).centers) for (const offset of [-5, 0, 5]) {
+    const point = (sample: typeof span.start) => {
+      const { right, normal } = roadFrame(sample), p = sample.position;
+      return new Vector3(p.x + right.x * (center + offset) + normal.x * 3, p.y + right.y * (center + offset) + normal.y * 3,
+        p.z + right.z * (center + offset) + normal.z * 3);
+    };
+    const start = point(span.start), direction = point(span.end).sub(start);
+    const ray = new Raycaster(start, direction.clone().normalize(), 0, direction.length());
+    expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals, mesh.ribs, mesh.equipment, mesh.fans])).toHaveLength(0);
+  }
+  mesh.dispose();
+});
 
 it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof and buried cover without obstructing travel', roadType => {
   const options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 }, samples = route();

@@ -156,8 +156,10 @@ describe('BridgeMesh', () => {
     ['CLOUD-ROAD-001', DEFAULT_OPTIONS], ['ROAD-TEST-002', DEFAULT_OPTIONS],
     ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'desert', roadType: 'highway', roadWidth: 10 }],
     ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest', roadType: 'highway', roadWidth: 6 }],
-    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'desert', routeStyle: 'cliff' }],
-    ['CLIFF-REPLAY', { ...DEFAULT_OPTIONS, roadType: 'highway', roadWidth: 10, routeStyle: 'cliff' }],
+    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'desert', routeStyle: 5 }],
+    ['CLIFF-REPLAY', { ...DEFAULT_OPTIONS, roadType: 'highway', roadWidth: 10, routeStyle: 5 }],
+    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, roadWidth: 10, routeStyle: 5, maxGrade: 0.4 }],
+    ['CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, roadType: 'highway', roadWidth: 10, routeStyle: 5, maxGrade: 0.4 }],
   ])('keeps real curved decks below asphalt and above the natural valley (%s, %j)', (seed, options) => {
     const terrain = new TerrainGenerator(seed, options), spine = new RoadSpine(seed, terrain.height, options);
     const detector = new BridgeDetector(terrain.height, options);
@@ -194,7 +196,11 @@ describe('BridgeMesh', () => {
         expect(asphalt.point.y - concrete.point.y).toBeGreaterThan(0.005);
         expect(asphalt.point.y - concrete.point.y).toBeLessThan(0.15);
         expect(concrete.point.y - ground.point.y).toBeGreaterThan(2);
-        expect(Math.abs(ground.point.y - terrain.height.sample(x, z))).toBeLessThan(2);
+        const gx = Math.floor(x / 4) * 4, gz = Math.floor(z / 4) * 4, tx = (x - gx) / 4, tz = (z - gz) / 4;
+        const a = terrain.height.sample(gx, gz), b = terrain.height.sample(gx + 4, gz);
+        const c = terrain.height.sample(gx, gz + 4), d = terrain.height.sample(gx + 4, gz + 4);
+        const naturalTriangle = tx + tz <= 1 ? a + (b - a) * tx + (c - a) * tz : d + (c - d) * (1 - tx) + (b - d) * (1 - tz);
+        expect(ground.point.y - naturalTriangle).toBeLessThan(0.1);
       }
     }
     for (const chunk of chunks.values()) chunk.dispose();

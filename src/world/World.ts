@@ -17,7 +17,8 @@ import { roadFrame } from '../road/RoadFrame';
 import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
 import { TunnelMesh } from '../tunnel/TunnelMesh';
 import { RoadFurniture } from '../road/RoadFurniture';
-import { ServicePlanner, SERVICE_SEARCH_RADIUS, serviceTarget, type ServiceArea } from '../service/ServicePlanner';
+import { ServicePlanner, type ServiceArea } from '../service/ServicePlanner';
+import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule';
 import { ServiceMesh } from '../service/ServiceMesh';
 import { padPoint } from '../service/ServiceTerrain';
 import { RoadSigns } from '../road/RoadSigns';
@@ -58,7 +59,7 @@ export class World {
   private corridorVersion = -1;
 
   constructor(scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.height = new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
+    this.height = new HeightFunction(seed, options.terrain, options.roadType);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
     this.road = new RoadSpine(seed, this.height, options);

@@ -65,6 +65,8 @@ test('inspects generated hairpins and continues streaming the coupled terrain', 
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto('/');
   const button = page.getByRole('button', { name: '发卡弯视角' });
+  await page.locator('#route-style').selectOption('3');
+  await page.getByRole('button', { name: '应用并返回起点' }).click();
   await expect(button).toBeEnabled({ timeout: 20_000 });
   expect(Number(await page.locator('[data-metric="Hairpins"]').textContent())).toBeGreaterThanOrEqual(2);
   const before = await page.locator('#position').textContent();

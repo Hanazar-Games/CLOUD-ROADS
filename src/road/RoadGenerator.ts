@@ -4,6 +4,7 @@ import { hashSeed } from '../world/WorldSeed';
 import { RoadSegment, type MountainPlan, type RoadControlPoint } from './RoadSegment';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { MountainGuide } from '../terrain/MountainRanges';
+import { serviceTarget } from '../service/ServiceSchedule';
 
 export interface RoadTerrain { sample(x: number, z: number): number; route?(z: number): MountainGuide | undefined }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -13,30 +14,40 @@ export class RoadGenerator {
   private readonly noise: Noise;
   private readonly terrain: RoadTerrain;
 
-  constructor(seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
+  constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType);
     this.noise = new Noise(hashSeed(`${seed}:road`));
     this.start = { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
   }
 
   next(start: RoadControlPoint): RoadSegment {
-    if (this.options.roadType === 'highway') return this.highwaySegment(start);
-    const winding = this.options.routeStyle === 'winding', cliff = this.options.routeStyle === 'cliff';
+    if (this.options.routeStyle >= 2 || this.options.maxGrade > 0.06) {
+      const target = serviceTarget(this.seed, Math.max(1, Math.round(start.distance / 15000)));
+      if (start.distance >= target - 1000 && start.distance < target + 800) {
+        const heading = this.options.routeStyle === 0 ? 0 : start.heading + clamp(-start.heading, Math.PI / 10);
+        const grade = this.nextGrade(start, clamp(this.desiredGrade(start, heading), 0.02));
+        const segment = new RoadSegment(start, heading, grade);
+        segment.end.mountain = undefined; segment.end.nextMountain = target + 800;
+        return segment;
+      }
+    }
+    if (this.options.routeStyle === 0) return this.highwaySegment(start, true);
     const guide = this.terrain.route?.(start.position.z - 900);
     let mountain = start.mountain;
-    if (!cliff && !mountain && start.distance >= start.nextMountain) {
-      const gap = this.terrain.sample(start.position.x, start.position.z - 500) - start.position.y;
-      if (winding || Math.abs(gap) > 80 || guide && Math.abs(guide.grade) > 0.023) mountain = {
+    if (this.options.routeStyle >= 2 && !mountain && start.distance >= (this.options.routeStyle === 5 ? 0 : start.nextMountain)) {
+      mountain = {
         stage: 0, side: guide ? guide.x > start.position.x ? 1 : -1 : this.noise.sample(start.distance / 1000, 41) < 0 ? -1 : 1,
-        grade: guide ? clamp((guide.height - start.position.y) / 1800, 0.06) : clamp(gap / 900, 0.06) };
+        grade: this.desiredGrade(start, start.heading) };
     }
     if (mountain) return this.mountainSegment(start, mountain);
+    if (this.options.roadType === 'highway') return this.highwaySegment(start);
     const desiredHeading = guide ? clamp(Math.atan2(guide.x - start.position.x, 900) + this.noise.sample(start.distance / 1300, 17) * 0.16, 0.85)
-      : this.noise.fractal(start.distance / (winding ? 900 : 2400), 17, 2) * 1.1;
+      : this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
-    const gradeLimit = 0.06;
-    const grades = new Set([-1, -0.5, 0, 0.5, 1].map((grade) => start.grade + clamp(grade * gradeLimit - start.grade, 0.02)));
+    const gradeLimit = this.options.maxGrade;
+    const desiredGrade = this.desiredGrade(start, start.heading);
+    const grades = new Set([-1, -0.5, 0, 0.5, 1].map(grade => this.nextGrade(start, grade * gradeLimit)));
     for (const turn of [-18, -12, -6, 0, 6, 12, 18]) {
       const heading = start.heading + turn * Math.PI / 180;
       if (Math.abs(heading) > 1) continue;
@@ -46,16 +57,16 @@ export class RoadGenerator {
         for (const t of [0.25, 0.5, 0.75, 1]) {
           const point = segment.sample(t);
           const gap = point.position.y - this.terrain.sample(point.position.x, point.position.z);
-          terrainCost += Math.min(cliff ? Math.max(-gap, 0) : Math.abs(gap), 1000) / 400;
-          cliffCost += cliff ? 0 : Math.max(0, gap - 100) / 1500;
+          terrainCost += Math.min(Math.abs(gap), 1000) / 400;
+          cliffCost += Math.max(0, gap - 100) / 1500;
           scenicReward += Math.min(Math.max(gap, 0), 80) / 1600;
         }
         const curvatureCost = (turn / 18) ** 2 * 0.25;
-        const slopeCost = (grade / 0.06) ** 2 * 0.025;
+        const slopeCost = (grade / Math.max(gradeLimit, 0.01)) ** 2 * 0.025
+          + ((grade - desiredGrade) / Math.max(gradeLimit, 0.01)) ** 2 * 0.12;
         const repetitionCost = (heading - desiredHeading) ** 2 * 0.8;
-        const target = cliff ? this.terrain.route?.(segment.end.position.z) : guide;
-        const routeCost = target ? Math.abs(segment.end.position.y - target.height) / (cliff ? 40 : 150)
-          + Math.abs(segment.end.position.x - target.x) / (cliff ? 30 : 1500) : 0;
+        const routeCost = guide ? Math.abs(segment.end.position.y - guide.height) / 150
+          + Math.abs(segment.end.position.x - guide.x) / 1500 : 0;
         const score = terrainCost + cliffCost + curvatureCost + slopeCost + repetitionCost + routeCost - scenicReward;
         if (score < bestScore) { bestScore = score; best = segment; }
       }
@@ -64,33 +75,49 @@ export class RoadGenerator {
     return best;
   }
 
-  private highwaySegment(start: RoadControlPoint): RoadSegment {
+  private nextGrade(start: RoadControlPoint, target: number): number {
+    const limit = this.options.maxGrade;
+    return limit === 0 ? 0 : clamp(start.grade + clamp(target - start.grade, Math.max(0.002, limit / 3)), limit);
+  }
+
+  private desiredGrade(start: RoadControlPoint, heading: number): number {
     const { x, y, z } = start.position;
-    const cliff = this.options.routeStyle === 'cliff';
-    const guide = this.terrain.route?.(z - 700), behind = this.terrain.route?.(z + 700);
+    const ahead = this.terrain.sample(x + Math.sin(heading) * 400, z - Math.cos(heading) * 400);
+    return clamp((ahead - y) / 700, this.options.maxGrade);
+  }
+
+  private highwaySegment(start: RoadControlPoint, straight = false): RoadSegment {
+    const { x, y, z } = start.position;
+    const guide = straight ? undefined : this.terrain.route?.(z - 700), behind = this.terrain.route?.(z + 700);
     const direction = guide && behind ? Math.atan2(guide.x - behind.x, 1400) : this.noise.fractal(start.distance / 12000, 17, 2) * 0.28;
-    const desired = clamp(guide ? cliff ? Math.atan2(guide.x - x, 700) : direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
-    const heading = start.heading + clamp((desired - start.heading) * (cliff ? 0.35 : 0.16), Math.PI / 60);
+    const desired = clamp(guide ? direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
+    const heading = straight ? 0 : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60);
     let targetHeight = guide?.height;
     if (targetHeight === undefined) {
       targetHeight = 0;
       for (const distance of [400, 1000, 1800]) targetHeight += this.terrain.sample(x + Math.sin(heading) * distance, z - Math.cos(heading) * distance) / 3;
     }
-    const grade = start.grade + clamp(clamp((targetHeight - y) / (cliff ? 700 : 1600), 0.03) - start.grade, 0.002);
+    const limit = this.options.maxGrade;
+    const grade = limit === 0 ? 0 : clamp(start.grade + clamp(clamp((targetHeight - y) / 1600, limit) - start.grade, 0.002 * Math.max(1, limit / 0.03)), limit);
     return new RoadSegment(start, heading, grade);
   }
 
   private mountainSegment(start: RoadControlPoint, plan: MountainPlan): RoadSegment {
-    const angle = plan.side * Math.PI * 5 / 12;
-    const target = plan.stage === 13 ? 0 : plan.stage >= 5 && plan.stage < 10 ? -angle : angle;
-    const hairpin = plan.stage === 5 || plan.stage === 10;
+    const level = this.options.routeStyle;
+    const angle = plan.side * (65 + (level - 2) * 3.3) * Math.PI / 180;
+    const last = [0, 0, 3, 7, 15, Infinity][level], exiting = plan.stage > last;
+    const target = exiting ? 0 : angle * (Math.ceil(plan.stage / 2) % 2 ? -1 : 1);
+    const hairpin = !exiting && plan.stage % 2 === 1;
     const heading = hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10);
-    const grade = start.grade + clamp(plan.grade - start.grade, 0.02);
-    const segment = new RoadSegment(start, heading, grade, hairpin ? 144 : 96, hairpin ? 'hairpin' : 'traverse');
+    const desired = hairpin || plan.stage === 0 ? this.desiredGrade(start, heading) : plan.grade;
+    const grade = this.nextGrade(start, desired);
+    const length = hairpin ? [0, 0, 272, 224, 192, 160][level] : plan.stage === 0 || exiting ? 96 : [0, 0, 288, 192, 96, 96][level];
+    const segment = new RoadSegment(start, heading, grade, length, hairpin ? 'hairpin' : 'traverse');
     const aligned = Math.abs(target - heading) < 1e-8;
-    const stage = (plan.stage === 0 || plan.stage === 13) && !aligned ? plan.stage : plan.stage + 1;
-    segment.end.mountain = stage <= 13 ? { ...plan, stage } : undefined;
-    if (stage > 13) segment.end.nextMountain = segment.end.distance + (this.options.routeStyle === 'winding' ? 1200 + (this.noise.sample(start.distance / 600, 83) + 1) * 450 : 4000);
+    const stage = !aligned ? plan.stage : plan.stage + (level === 5 && hairpin ? 2 : 1);
+    segment.end.mountain = exiting && aligned ? undefined : { ...plan, stage, grade: desired };
+    if (!segment.end.mountain) segment.end.nextMountain = segment.end.distance + [0, 0, 2200, 1100, 260, 0][level]
+      * (0.85 + (this.noise.sample(start.distance / 600, 83) + 1) * 0.15);
     return segment;
   }
 }

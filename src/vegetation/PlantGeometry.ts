@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-type Plant = 'pine' | 'cactus' | 'broadleaf' | 'shrub' | 'rock' | 'grass';
+type Plant = 'pine' | 'cactus' | 'broadleaf' | 'shrub' | 'rock' | 'grass' | 'meadow' | 'flowers';
 function colored(geometry: BufferGeometry, color: string): BufferGeometry {
   const rgb = new Color(color), colors = new Float32Array(geometry.getAttribute('position').count * 3);
   for (let i = 0; i < colors.length; i += 3) rgb.toArray(colors, i);
@@ -48,6 +48,28 @@ export function plantGeometry(kind: Plant, distant = false): BufferGeometry {
   } else if (kind === 'rock') {
     pieces = [colored(new IcosahedronGeometry(1.75, 0).scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0), '#c1c0ab'),
       colored(new IcosahedronGeometry(0.65, 0).scale(1, 0.7, 1).translate(1.3, 0.25, 0.7), '#989e8e')];
+  } else if (kind === 'meadow' || kind === 'flowers') {
+    const vertices: number[] = [];
+    for (let i = 0; i < (kind === 'flowers' ? 8 : 22); i++) {
+      const angle = i * 2.4, radius = 0.18 + (i % 4) * 0.15, x = Math.sin(angle) * radius, z = Math.cos(angle) * radius;
+      const h = 0.24 + (i % 5) * 0.065, dx = Math.cos(angle), dz = -Math.sin(angle);
+      const a = [x - dx * 0.045, 0, z - dz * 0.045], b = [x + dx * 0.045, 0, z + dz * 0.045];
+      const c = [x + dx * 0.025, h * 0.6, z + dz * 0.025], d = [x - dx * 0.07, h, z - dz * 0.07];
+      vertices.push(...a, ...b, ...c, ...b, ...a, ...c, ...a, ...c, ...d, ...c, ...a, ...d);
+    }
+    const blades = new BufferGeometry(); blades.setAttribute('position', new BufferAttribute(new Float32Array(vertices), 3)); blades.computeVertexNormals();
+    blades.setAttribute('uv', new BufferAttribute(new Float32Array(vertices.length / 3 * 2), 2));
+    pieces = [colored(blades, '#71954b')];
+    if (kind === 'flowers') for (let i = 0; i < 4; i++) {
+      const x = Math.sin(i * 2.4) * 0.42, z = Math.cos(i * 2.4) * 0.42, height = 0.35 + i * 0.075;
+      pieces.push(colored(new CylinderGeometry(0.012, 0.02, height, 3).translate(x, height / 2, z), '#668246'));
+      for (let petal = 0; petal < 5; petal++) {
+        const angle = petal * Math.PI * 2 / 5;
+        pieces.push(colored(new IcosahedronGeometry(0.08, 0).scale(1, 0.35, 1.6).rotateY(angle)
+          .translate(x + Math.sin(angle) * 0.07, height, z + Math.cos(angle) * 0.07), ['#f2e5c5', '#e6ba48', '#b3a3d2', '#eee7d4'][i]));
+      }
+      pieces.push(colored(new IcosahedronGeometry(0.037, 0).translate(x, height + 0.02, z), '#b48b31'));
+    }
   } else {
     const vertices: number[] = [];
     for (let i = 0; i < 7; i++) {

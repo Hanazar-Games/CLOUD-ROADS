@@ -17,7 +17,7 @@ try {
     if (highway) await page.locator('#road-type').selectOption('highway');
     await page.getByRole('button', { name: '应用并返回起点' }).click();
     if (route) await page.waitForFunction(style => document.querySelector('[data-metric="Route style"]')?.textContent === style,
-      { natural: '自然山路', winding: '蜿蜒盘山路', cliff: '高架盘山公路' }[route]);
+      { 0: '全直道 · 零弯道', 1: '1 档 · 舒缓山路', 2: '2 档 · 蜿蜒山路', 3: '3 档 · 盘山折返', 4: '4 档 · 密集发卡弯', 5: '5 档 · 连续发卡弯' }[route]);
     if (highway) await page.waitForFunction(() => document.querySelector('[data-metric="Road layout"]')?.textContent === '双向四车道');
     await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
     await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');

@@ -4,12 +4,10 @@ import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
 import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
-import { hashSeed } from '../world/WorldSeed';
+import { SERVICE_SEARCH_RADIUS, serviceTarget } from './ServiceSchedule';
 import { padPoint, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
 
 export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround }
-export const SERVICE_SEARCH_RADIUS = 840;
-export const serviceTarget = (seed: string, id: number): number => id * 15000 + (hashSeed(`${seed}:services:${id}`) % 3601) - 1800;
 
 export class ServicePlanner {
   private readonly profile;

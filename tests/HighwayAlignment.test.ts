@@ -6,9 +6,9 @@ import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 it.each((['alpine', 'forest', 'desert', 'dunes'] as const).flatMap(terrain =>
-  (['natural', 'winding', 'cliff'] as const).map(routeStyle => ({ terrain, routeStyle }))))(
+  ([0, 1] as const).map(routeStyle => ({ terrain, routeStyle }))))(
   'keeps 100 km of $terrain $routeStyle highway straight, gently graded and smooth', options => {
-    const config = { ...DEFAULT_OPTIONS, ...options, roadType: 'highway' as const };
+    const config = { ...DEFAULT_OPTIONS, ...options, roadType: 'highway' as const, maxGrade: 0.03 };
     const generator = new RoadGenerator('CLOUD-ROAD-001', undefined, config);
     let point = generator.start, turns = 0, lastTurn = 0, distance = 0;
     while (point.distance < 100000) {
@@ -33,9 +33,9 @@ it.each((['alpine', 'forest', 'desert', 'dunes'] as const).flatMap(terrain =>
     expect(turns).toBeLessThan(90);
   }, 30000);
 
-it('stretches highway valleys and cliff bends while keeping their seeded height profile continuous', () => {
-  for (const routeStyle of ['natural', 'cliff'] as const) {
-    const terrain = new HeightFunction('highway-landscape', 'alpine', routeStyle, 'highway');
+it('stretches highway valleys independently of winding levels while keeping their seeded height profile continuous', () => {
+  for (const routeStyle of [0, 5] as const) {
+    const terrain = new HeightFunction('highway-landscape', 'alpine', 'highway');
     expect(terrain.ranges.length).toBe(64000);
     for (let z = 128; z > -300000; z -= 311) {
       const guide = terrain.route(z)!;
@@ -76,20 +76,4 @@ it('reuses cached windows when revisiting in either direction without losing det
   expect(road.checkpointCount).toBe(64);
   expect(visit(-40000)).toEqual(first);
   expect(road.checkpointCount).toBeLessThanOrEqual(64);
-});
-
-it.each(['CLOUD-ROAD-001', 'CLIFF-REPLAY', 'HIGHWAY-100KM'])('keeps the %s elevated highway aligned with its mountain guide', seed => {
-  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 'cliff' as const };
-  const terrain = new HeightFunction(seed, options.terrain, options.routeStyle, options.roadType);
-  const generator = new RoadGenerator(seed, terrain, options);
-  let point = generator.start;
-  while (point.distance < 100000) {
-    const segment = generator.next(point);
-    for (const t of [0, 0.5, 1]) {
-      const sample = segment.sample(t), guide = terrain.route(sample.position.z)!;
-      expect(Math.abs(sample.position.x - guide.x)).toBeLessThan(30);
-      expect(Math.abs(sample.position.y - guide.height)).toBeLessThan(65);
-    }
-    point = segment.end;
-  }
 });

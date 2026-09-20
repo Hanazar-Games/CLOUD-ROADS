@@ -48,11 +48,11 @@ describe('streamed vegetation', () => {
     for (let i = 0; i < a.vegetation.length; i += 7) {
       const [x, y, z, scale, angle, kind, tint] = a.vegetation.slice(i, i + 7);
       expect([x, y, z, scale, angle, kind, tint].every(Number.isFinite)).toBe(true);
-      const crownRadius = (kind === 6 ? 0.9 : kind === 5 ? 2.1 : kind >= 3 ? 1.7 : kind === 1 ? 2 : 4.7) * scale;
+      const crownRadius = (kind >= 7 ? 0.8 : kind === 6 ? 0.9 : kind === 5 ? 2.1 : kind >= 3 ? 1.7 : kind === 1 ? 2 : 4.7) * scale;
       expect(Math.abs(x - 128) - crownRadius).toBeGreaterThan(14.4);
       expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(256);
       expect(z).toBeGreaterThan(0); expect(z).toBeLessThan(256);
-      expect(terrain === 'forest' ? [0, 2, 3, 5, 6] : [1, 4, 5]).toContain(kind);
+      expect(terrain === 'forest' ? [0, 2, 3, 5, 6, 7, 8] : [1, 4, 5]).toContain(kind);
     }
     if (terrain === 'forest') expect(generator.generate(0, 0, 8, road).vegetation.length).toBeGreaterThan(0);
     expect(new TerrainGenerator('other', options).generate(0, 0, 64, road).vegetation).not.toEqual(a.vegetation);
@@ -75,7 +75,7 @@ describe('streamed vegetation', () => {
     mesh.setChunk('0,0', 0, 0, data);
     mesh.update(0, 0);
     expect(mesh.count).toBe(2);
-    expect(scene.children.length).toBeLessThanOrEqual(9);
+    expect(scene.children.length).toBeLessThanOrEqual(11);
     const before = mesh.trees.instanceMatrix.array.slice();
     mesh.update(5120, -5120);
     expect(mesh.trees.instanceMatrix.array).toEqual(before);

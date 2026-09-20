@@ -50,14 +50,17 @@
             <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option></select>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
-            <label for="route-style">路线风格</label>
-            <select id="route-style" aria-describedby="route-style-help"><option value="natural">自然山路 · 起伏与缓弯</option><option value="winding">蜿蜒盘山路 · 连续折返</option><option value="cliff">高架盘山公路 · 高墩跨越深谷</option></select>
-            <p id="route-style-help">路面高于地面 5 米时优先架桥；超过 50 米升级大跨度与钢护栏，超过 100 米使用更大桥墩与红色钢护栏。高速保持大半径缓弯，坡度不超过 3%。</p>
+            <label for="route-style">蜿蜒程度</label>
+            <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
+            <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；5 档以连续发卡弯为主，服务区附近保留短段缓路。全直道方向固定，仍可上下起伏。</p>
+            <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
+            <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
+            <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
             <label for="road-width">车行道宽度</label>
             <select id="road-width" aria-describedby="road-width-help"><option value="6">窄 · 6 米</option><option value="8" selected>标准 · 8 米</option><option value="10">宽 · 10 米</option></select>
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>
             <div class="actions"><button type="submit">应用并返回起点</button><button id="vegetation-toggle" type="button" aria-pressed="true">植被</button></div>
-            <p id="settings-status" role="status">当前：高山雪岭 · 自然山路 · 山路 · 8 米</p>
+            <p id="settings-status" role="status">当前：高山雪岭 · 1 档 · 舒缓山路 · 最大坡度 6% · 山路 · 8 米</p>
           </form>
         </details>
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>

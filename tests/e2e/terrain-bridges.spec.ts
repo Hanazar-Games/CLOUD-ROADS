@@ -11,12 +11,15 @@ test('renders continuous concrete bridges and elevated services through distant 
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 45000 });
   };
   await page.goto('/');
+  await page.locator('#seed').fill('ROAD-TEST-002');
+  await page.getByRole('button', { name: '加载种子' }).click();
+  await expect(metric('Seed')).toHaveText('ROAD-TEST-002'); await ready();
   await page.locator('#terrain-kind').selectOption('desert');
   await page.locator('#road-type').selectOption('highway');
-  await page.locator('#route-style').selectOption('cliff');
+  await page.locator('#route-style').selectOption('5');
   await page.locator('#view-distance').selectOption('16');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
-  await expect(metric('Route style')).toHaveText('高架盘山公路'); await ready();
+  await expect(metric('Route style')).toHaveText('5 档 · 连续发卡弯'); await ready();
   await expect(metric('Active chunks')).toHaveText('1089');
   expect(parseFloat((await metric('Tallest bridge').textContent())!)).toBeGreaterThan(100);
   await page.locator('#bridge-view').click();

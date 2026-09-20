@@ -1,13 +1,14 @@
 import { Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshStandardMaterial, type Scene } from 'three';
 import { CHUNK_SIZE, VIEW_RADII } from '../world/ChunkPlanner';
 import { plantGeometry } from './PlantGeometry';
-import { distantPlant, GROUND_DETAIL_RADIUS, PLANT_GRID, TREE_DETAIL_RADIUS } from './VegetationConfig';
+import { distantPlant, GROUND_DETAIL_RADIUS, MEADOW_DETAIL_RADIUS, MEADOW_GRID, PLANT_GRID, TREE_DETAIL_RADIUS } from './VegetationConfig';
 
-interface PlantChunk { x: number; z: number; plants: Float32Array; entries: PlantInstance[]; ring: number }
+interface PlantChunk { x: number; z: number; plants: Float32Array; entries: PlantInstance[]; ring: number; near: boolean }
 interface PlantInstance { chunk: PlantChunk; offset: number; batch: number; index: number }
 const TREE_CAPACITY = (TREE_DETAIL_RADIUS * 2 + 1) ** 2 * PLANT_GRID ** 2;
 const GROUND_CAPACITY = (GROUND_DETAIL_RADIUS * 2 + 1) ** 2 * PLANT_GRID ** 2;
 const FAR_CAPACITY = (VIEW_RADII.at(-1)! * 2 + 1) ** 2 * PLANT_GRID ** 2 / 4;
+const MEADOW_CAPACITY = (MEADOW_DETAIL_RADIUS * 2 + 1) ** 2 * MEADOW_GRID ** 2;
 
 export class VegetationMesh {
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
@@ -18,7 +19,9 @@ export class VegetationMesh {
   readonly rocks = new InstancedMesh(plantGeometry('rock'), this.material, GROUND_CAPACITY);
   readonly grass = new InstancedMesh(plantGeometry('grass'), this.material, GROUND_CAPACITY);
   readonly distant = ['pine', 'cactus', 'broadleaf'].map(kind => new InstancedMesh(plantGeometry(kind as 'pine' | 'cactus' | 'broadleaf', true), this.material, FAR_CAPACITY));
-  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant];
+  readonly meadow = new InstancedMesh(plantGeometry('meadow'), this.material, MEADOW_CAPACITY);
+  readonly flowers = new InstancedMesh(plantGeometry('flowers'), this.material, MEADOW_CAPACITY);
+  private readonly meshes = [this.trees, this.cacti, this.broadleaf, this.shrubs, this.rocks, this.grass, ...this.distant, this.meadow, this.flowers];
   private readonly entries: PlantInstance[][] = this.meshes.map(() => []);
   private readonly changed = this.meshes.map(() => ({ min: Infinity, max: -1 }));
   private readonly chunks = new Map<string, PlantChunk>();
@@ -32,7 +35,7 @@ export class VegetationMesh {
   constructor(scene: Scene) {
     for (const [i, mesh] of this.meshes.entries()) {
       mesh.count = 0; mesh.visible = false; mesh.frustumCulled = false;
-      mesh.castShadow = i < 5; mesh.receiveShadow = i < 6;
+      mesh.castShadow = i < 5; mesh.receiveShadow = i < 6 || i >= 9;
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
       mesh.setColorAt(0, this.color); mesh.instanceColor!.setUsage(DynamicDrawUsage);
       scene.add(mesh);
@@ -42,11 +45,11 @@ export class VegetationMesh {
   get count(): number { return this.meshes.reduce((sum, mesh) => sum + mesh.count, 0); }
   get distantCount(): number { return this.distant.reduce((sum, mesh) => sum + mesh.count, 0); }
   get canopyCount(): number { return this.trees.count + this.broadleaf.count + this.cacti.count + this.distantCount; }
-  get groundCount(): number { return this.shrubs.count + this.rocks.count + this.grass.count; }
+  get groundCount(): number { return this.shrubs.count + this.rocks.count + this.grass.count + this.meadow.count + this.flowers.count; }
 
   setChunk(key: string, x: number, z: number, plants: Float32Array): void {
     this.removeChunk(key);
-    const chunk: PlantChunk = { x, z, plants, entries: [], ring: -1 };
+    const chunk: PlantChunk = { x, z, plants, entries: [], ring: -1, near: false };
     this.chunks.set(key, chunk); this.dirty.add(chunk);
   }
 
@@ -59,7 +62,11 @@ export class VegetationMesh {
   setViewCenter(x: number, z: number): void {
     if (x === this.centerX && z === this.centerZ) return;
     this.centerX = x; this.centerZ = z;
-    for (const chunk of this.chunks.values()) if (this.detail(chunk) !== chunk.ring) this.dirty.add(chunk);
+    for (const chunk of this.chunks.values()) if (this.detail(chunk) !== chunk.ring || this.near(chunk) !== chunk.near) this.dirty.add(chunk);
+  }
+
+  private near(chunk: PlantChunk): boolean {
+    return Math.max(Math.abs(chunk.x - this.centerX), Math.abs(chunk.z - this.centerZ)) <= MEADOW_DETAIL_RADIUS;
   }
 
   private detail(chunk: PlantChunk): number {
@@ -96,11 +103,12 @@ export class VegetationMesh {
     for (const chunk of this.dirty) this.removeInstances(chunk);
     for (const chunk of this.dirty) {
       chunk.ring = this.detail(chunk);
+      chunk.near = this.near(chunk);
       if (chunk.ring === 3) continue;
       for (let i = 0; i < chunk.plants.length; i += 7) {
         const kind = chunk.plants[i + 5], far = chunk.ring === 2;
-        if ((chunk.ring > 0 && kind >= 3) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
-        const batch = far ? 6 + kind : kind <= 2 ? kind : kind <= 4 ? 3 : kind - 1;
+        if ((kind >= 7 && !chunk.near) || (chunk.ring > 0 && kind >= 3) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
+        const batch = kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? kind : kind <= 4 ? 3 : kind - 1;
         const entries = this.entries[batch], mesh = this.meshes[batch];
         if (entries.length >= mesh.instanceMatrix.count) throw new Error('Vegetation instance capacity exceeded');
         const entry = { chunk, offset: i, batch, index: entries.length };

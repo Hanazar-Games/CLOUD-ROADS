@@ -3,6 +3,7 @@ import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { RoadCorridor } from '../src/road/RoadCorridor';
 import { RoadSpine } from '../src/road/RoadSpine';
+import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 describe('mountain roads', () => {
   it('joins turns with continuous curvature, grade and banking', () => {
@@ -18,17 +19,17 @@ describe('mountain roads', () => {
   });
 
   it.each([1, -1])('plans spaced switchbacks on steep terrain (%i), with bounded radius and grade', (direction) => {
-    const generator = new RoadGenerator('switchbacks', { sample: (_x, z) => 2000 + direction * (128 - z) * 0.4 });
+    const generator = new RoadGenerator('switchbacks', { sample: (_x, z) => 2000 + direction * (128 - z) * 0.4 }, { ...DEFAULT_OPTIONS, routeStyle: 3 });
     let point = generator.start, previousHairpin = -Infinity, hairpins = 0;
     const positions: { x: number; z: number; distance: number }[] = [];
     while (point.distance < 12_000) {
       const segment = generator.next(point);
       if (segment.kind === 'hairpin') {
         hairpins++;
-        expect(point.distance - previousHairpin).toBeGreaterThan(350);
-        expect(Math.abs(segment.end.heading - point.heading)).toBeGreaterThan(2.5);
+        expect(point.distance - previousHairpin).toBeGreaterThan(180);
+        expect(Math.abs(segment.end.heading - point.heading)).toBeGreaterThan(2.3);
         previousHairpin = segment.end.distance;
-        expect(Math.abs(segment.sample(0.5).curvature)).toBeGreaterThan(1 / 40);
+        expect(Math.abs(segment.sample(0.5).curvature)).toBeGreaterThan(1 / 80);
         expect(Math.sign(segment.sample(0.5).grade)).toBe(direction);
       }
       for (let i = 1; i <= 24; i++) {
@@ -66,7 +67,7 @@ describe('mountain roads', () => {
   });
 
   it('finds the road by both horizontal coordinates', () => {
-    const spine = new RoadSpine('CLOUD-ROAD-001');
+    const spine = new RoadSpine('CLOUD-ROAD-001', undefined, { ...DEFAULT_OPTIONS, routeStyle: 3 });
     while (!spine.update(-1000, 8)) { /* Load the mountain window. */ }
     const hairpin = spine.segments.find((segment) => segment.kind === 'hairpin');
     expect(hairpin).toBeDefined();

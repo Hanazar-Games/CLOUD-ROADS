@@ -113,7 +113,7 @@ describe('landscape and road choices', () => {
       for (const t of [0, 0.25, 0.5, 0.75, 1]) {
         const sample = segment.sample(t);
         expect(Object.values(sample.position).every(Number.isFinite)).toBe(true);
-        expect(Math.abs(sample.grade)).toBeLessThanOrEqual(0.040001);
+        expect(Math.abs(sample.grade)).toBeLessThanOrEqual(options.maxGrade + 0.000001);
         expect(Math.abs(sample.curvature)).toBeLessThan(1 / 100);
       }
       point = segment.end;

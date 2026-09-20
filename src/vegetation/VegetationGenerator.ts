@@ -4,7 +4,7 @@ import { createBiomeSample, type BiomeSystem } from '../biome/BiomeSystem';
 import type { RoadCorridor } from '../road/RoadCorridor';
 import { Noise } from '../terrain/Noise';
 import { TerrainSurface } from '../terrain/TerrainSurface';
-import { distantPlant, PLANT_GRID, PLANT_SPACING } from './VegetationConfig';
+import { distantPlant, MEADOW_GRID, PLANT_GRID, PLANT_SPACING } from './VegetationConfig';
 
 // Local x/y/z, scale, rotation, species, tint; randomness precedes LOD filtering.
 export function generateVegetation(seed: string, cx: number, cz: number, cells: TerrainCells,
@@ -44,6 +44,22 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       }
       if (!clear(wx, wz, radius)) continue;
       plants.push(x, height - 0.15, z, scale, rotation, kind, tint);
+    }
+  }
+  if (cells === 64 && corridor.edges.length) {
+    const meadow = createRng(hashSeed(`${seed}:meadow:${cx}:${cz}`)), spacing = CHUNK_SIZE / MEADOW_GRID;
+    for (let row = 0; row < MEADOW_GRID; row++) for (let col = 0; col < MEADOW_GRID; col++) {
+      const x = (col + 0.15 + meadow() * 0.7) * spacing, z = (row + 0.15 + meadow() * 0.7) * spacing;
+      const chance = meadow(), species = meadow(), size = meadow(), rotation = meadow() * Math.PI * 2;
+      const wx = cx * CHUNK_SIZE + x, wz = cz * CHUNK_SIZE + z, distance = corridor.distance(wx, wz, 42);
+      if (distance > 42 || distance < corridor.roadHalfWidth + 3.2) continue;
+      const { height, normalY } = surface.sample(x, z);
+      if (normalY < 0.75) continue;
+      biomes.sample(wx, wz, height, normalY, biome);
+      const w = biome.weights, patch = 0.65 + groves.sample(wx / 38, wz / 38) * 0.35;
+      if (w.desert > 0.2 || w.snow > 0.15 || chance > (w.valley + w.forest + w.alpine * 0.25) * patch) continue;
+      if (!clear(wx, wz, 1.1)) continue;
+      plants.push(x, height - 0.04, z, 0.7 + size * 0.65, rotation, species < 0.2 ? 8 : 7, 0.85 + size * 0.25);
     }
   }
   return new Float32Array(plants);

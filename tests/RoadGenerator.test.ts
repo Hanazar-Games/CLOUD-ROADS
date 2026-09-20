@@ -4,7 +4,7 @@ import { MAX_ROAD_SEGMENTS, ROAD_HALO, RoadSpine } from '../src/road/RoadSpine';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 describe('RoadGenerator', () => {
-  it.each((['natural', 'winding', 'cliff'] as const).flatMap(routeStyle =>
+  it.each(([1, 3, 5] as const).flatMap(routeStyle =>
     (['mountain', 'highway'] as const).map(roadType => ({ routeStyle, roadType }))))(
     'covers 4 km viewing and the preload margin for 100 km of $routeStyle $roadType', options => {
       const spine = new RoadSpine('CLOUD-ROAD-001', undefined, { ...DEFAULT_OPTIONS, ...options });

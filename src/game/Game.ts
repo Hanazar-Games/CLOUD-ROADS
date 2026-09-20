@@ -116,9 +116,14 @@ export class Game {
       const terrain = element<HTMLSelectElement>('terrain-kind').value as TerrainKind;
       const roadType = element<HTMLSelectElement>('road-type').value as WorldOptions['roadType'];
       const roadWidth = Number(element<HTMLSelectElement>('road-width').value);
-      const routeStyle = element<HTMLSelectElement>('route-style').value as WorldOptions['routeStyle'];
-      if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)) return;
-      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle });
+      const routeStyle = Number(element<HTMLSelectElement>('route-style').value) as WorldOptions['routeStyle'];
+      const maxGrade = Number(element<HTMLInputElement>('max-grade').value) / 100;
+      if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)
+        || !Number.isFinite(maxGrade) || maxGrade < 0 || maxGrade > 0.4) return;
+      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle, maxGrade });
+    }, { signal: this.events.signal });
+    element('max-grade').addEventListener('input', () => {
+      element('max-grade-value').textContent = `${element<HTMLInputElement>('max-grade').value}%`;
     }, { signal: this.events.signal });
     element('vegetation-toggle').addEventListener('click', () => {
       const vegetation = this.world.chunks.vegetation;
@@ -243,8 +248,10 @@ export class Game {
       element<HTMLSelectElement>('terrain-kind').value = options.terrain;
       element<HTMLSelectElement>('road-type').value = options.roadType;
       element<HTMLSelectElement>('road-width').value = String(options.roadWidth);
-      element<HTMLSelectElement>('route-style').value = options.routeStyle;
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米`;
+      element<HTMLSelectElement>('route-style').value = String(options.routeStyle);
+      element<HTMLInputElement>('max-grade').value = String(Math.round(options.maxGrade * 100));
+      element('max-grade-value').textContent = `${Math.round(options.maxGrade * 100)}%`;
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米`;
       this.setError(null);
       this.resetCamera();
     } catch (error) {
@@ -403,7 +410,8 @@ export class Game {
         Landscape: terrainNames[this.world.options.terrain],
         'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
         'Carriageway width': `${this.world.options.roadWidth} m`,
-        'Route style': routeNames[this.world.options.routeStyle], 'Route checkpoints': this.world.road.checkpointCount,
+        'Route style': routeNames[this.world.options.routeStyle], 'Maximum grade': `${Math.round(this.world.options.maxGrade * 100)}%`, 'Route checkpoints': this.world.road.checkpointCount,
+        'Roadside grass': this.world.chunks.vegetation.meadow.count, 'Wildflowers': this.world.chunks.vegetation.flowers.count,
         'Vegetation instances': chunks.vegetation.enabled ? chunks.vegetation.count : 0,
         'Tree canopies': chunks.vegetation.enabled ? chunks.vegetation.canopyCount : 0,
         'Distant canopies': chunks.vegetation.enabled ? chunks.vegetation.distantCount : 0,

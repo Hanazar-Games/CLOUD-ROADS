@@ -4,6 +4,8 @@ export const PLANT_GRID = 20;
 export const PLANT_SPACING = CHUNK_SIZE / PLANT_GRID;
 export const TREE_DETAIL_RADIUS = 4;
 export const GROUND_DETAIL_RADIUS = 3;
+export const MEADOW_GRID = 64;
+export const MEADOW_DETAIL_RADIUS = 1;
 
 // One persistent tree candidate per 2×2 cell keeps distant silhouettes bounded.
 export function distantPlant(x: number, z: number): boolean {
