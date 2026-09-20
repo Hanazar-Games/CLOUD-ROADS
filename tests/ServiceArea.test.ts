@@ -11,6 +11,27 @@ import { HeightFunction } from '../src/terrain/HeightFunction';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { padPoint } from '../src/service/ServiceTerrain';
 import { RoadSigns } from '../src/road/RoadSigns';
+import { BridgeDetector } from '../src/bridge/BridgeDetector';
+
+it('supports elevated service platforms without filling the natural valley or interrupting the main bridge', () => {
+  const samples = route(), terrain = { sample: () => 20 };
+  const sites = new ServicePlanner('services', terrain).detect(samples);
+  const bridges = new BridgeDetector(terrain).detect(samples);
+  expect(bridges).toHaveLength(1);
+  const corridor = RoadCorridor.fromSamples(samples, bridges, DEFAULT_OPTIONS, [], sites.map(site => site.ground));
+  for (const site of sites) for (const pad of site.ground.pads) {
+    expect(corridor.height(pad.x, pad.z, 20)).toBe(20);
+    expect(corridor.height(site.sample.position.x, site.sample.position.z, 20)).toBe(20);
+  }
+  const scene = new Scene(), mesh = new ServiceMesh(scene, DEFAULT_OPTIONS, terrain);
+  mesh.update(sites, 1, 0, 0); scene.updateMatrixWorld(true);
+  expect(mesh.structures.count).toBeGreaterThan(40);
+  expect(mesh.railings.count).toBeGreaterThan(40);
+  const pad = sites[0].ground.pads[0], p = padPoint(pad, 0, -60, -5);
+  const ray = new Raycaster(new Vector3(p.x, p.y, p.z), new Vector3(0, -1, 0));
+  expect(ray.intersectObject(mesh.structures)[0]).toBeDefined();
+  mesh.dispose(); expect(scene.children).toHaveLength(0);
+});
 
 const route = () => {
   const start = new RoadGenerator('services', { sample: () => 200 }).start;
@@ -49,7 +70,7 @@ it.each(['mountain', 'highway'] as const)('grounds %s parking and access roads w
 
 it('builds parking, buildings and access pavement, then rebases and releases every batch', () => {
   const site = new ServicePlanner('services', { sample: () => 200 }).detect(route())[0];
-  const scene = new Scene(), mesh = new ServiceMesh(scene);
+  const scene = new Scene(), mesh = new ServiceMesh(scene, DEFAULT_OPTIONS, { sample: () => 200 });
   mesh.update([site], 1, 0, 0);
   scene.updateMatrixWorld(true);
   const pad = site.ground.pads[0], ray = new Raycaster(new Vector3(pad.x, pad.y + 10, pad.z), new Vector3(0, -1, 0));
@@ -83,7 +104,8 @@ it.each([
   while (!spine.advanceToDistance(serviceTarget(seed, 1) + 1000)) { /* Complete the service window. */ }
   const sites = new ServicePlanner(seed, terrain, options).detect(spine.samples), site = sites[0];
   expect(site).toBeDefined();
-  const corridor = RoadCorridor.fromSamples(spine.samples, [], options, [], sites.map(site => site.ground));
+  const bridges = new BridgeDetector(terrain, options).detect(spine.samples);
+  const corridor = RoadCorridor.fromSamples(spine.samples, bridges, options, [], sites.map(site => site.ground));
   const generator = new TerrainGenerator(seed, options), chunks = new Map<string, Float32Array>();
   const ground = (x: number, z: number) => {
     const cx = Math.floor(x / 256), cz = Math.floor(z / 256), key = `${cx},${cz}`;
@@ -94,7 +116,7 @@ it.each([
     const a = at(0, 0), b = at(1, 0), c = at(0, 1), d = at(1, 1);
     return tx + tz <= 1 ? a + (b - a) * tx + (c - a) * tz : d + (c - d) * (1 - tx) + (b - d) * (1 - tz);
   };
-  const scene = new Scene(), mesh = new ServiceMesh(scene, options), signs = new RoadSigns(scene, options);
+  const scene = new Scene(), mesh = new ServiceMesh(scene, options, terrain), signs = new RoadSigns(scene, options);
   mesh.update(sites, 1, 0, 0); signs.update(spine.samples, [], sites, 1, 0, 0); scene.updateMatrixWorld(true);
   for (const pad of site.ground.pads) {
     for (const x of [-30, 0, 30]) for (const along of [-72, 0, 72]) {
@@ -121,6 +143,7 @@ it.each([
     }
   }
   expect(Math.min(...clearances.map(p => p.gap)), JSON.stringify(clearances.filter(p => p.gap < 0.01))).toBeGreaterThan(0.01);
-  expect(Math.max(...clearances.map(p => p.gap))).toBeLessThan(0.75);
+  if (!site.ground.elevated) expect(Math.max(...clearances.map(p => p.gap))).toBeLessThan(0.75);
+  else expect(mesh.structures.count).toBeGreaterThan(0);
   mesh.dispose(); signs.dispose(); expect(scene.children).toHaveLength(0);
 });

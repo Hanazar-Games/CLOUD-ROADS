@@ -17,6 +17,15 @@ const valley = (depth = 120, length = 600) => ({
 });
 
 describe('BridgeDetector', () => {
+  it('bridges a road whose center is grounded but whose outer shoulder crosses a drop', () => {
+    const samples = route(400);
+    const terrain = { sample: (x: number) => x > 4 ? 90 : 199 };
+    const spans = new BridgeDetector(terrain).detect(samples);
+    expect(spans).toHaveLength(1);
+    expect(spans[0].depth).toBe(110);
+    expect(spans[0].openStart && spans[0].openEnd).toBe(true);
+  });
+
   it('uses earthworks up to 5 m and bridges higher gaps, including short and open crossings', () => {
     const samples = route(), terrain = valley();
     const spans = new BridgeDetector(terrain).detect(samples);
@@ -36,7 +45,7 @@ describe('BridgeDetector', () => {
     expect(new BridgeDetector(valley(120, 3000)).detect(route(4000))).toHaveLength(1);
   });
 
-  it('keeps open deep valleys unfilled across window boundaries and splits only service approaches', () => {
+  it('keeps open deep valleys unfilled across window boundaries', () => {
     const samples = route(8000), terrain = { sample: () => 20 }, detector = new BridgeDetector(terrain);
     const before = RoadCorridor.fromSamples(samples, detector.detect(samples));
     const clipped = samples.slice(100, -100);
@@ -45,11 +54,7 @@ describe('BridgeDetector', () => {
       expect(before.height(0, sample.position.z, 20)).toBe(20);
       expect(after.height(0, sample.position.z, 20)).toBe(20);
     }
-    const split = detector.detect(samples, [{ start: 3600, end: 4100 }]);
-    expect(split).toHaveLength(2);
-    expect(split[0].end.distance).toBeLessThanOrEqual(3604);
-    expect(split[1].start.distance).toBeGreaterThanOrEqual(4096);
-    const corridor = RoadCorridor.fromSamples(samples, split);
+    const corridor = RoadCorridor.fromSamples(samples, detector.detect(samples));
     expect(corridor.height(0, -2000, 20)).toBe(20);
     expect(corridor.height(0, -6000, 20)).toBe(20);
   });

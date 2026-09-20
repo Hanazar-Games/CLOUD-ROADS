@@ -24,6 +24,29 @@ const fixture = () => {
 };
 
 describe('BridgeMesh', () => {
+  it('seats bearings against the girder and cap on both sides of a banked bridge', () => {
+    const terrain = { sample: () => 20 }, start = new RoadGenerator('bearing', { sample: () => 200 }).start;
+    const segment = new RoadSegment(start, 0, 0, 576);
+    const samples = Array.from({ length: 145 }, (_, i) => ({ ...segment.sample(i / 144), bank: 0.12 }));
+    const spans = new BridgeDetector(terrain).detect(samples), scene = new Scene(), mesh = new BridgeMesh(scene);
+    mesh.update(spans, RoadCorridor.fromSamples(samples, spans), terrain, 1, 0, 0, true);
+    scene.updateMatrixWorld(true);
+    const matrix = new Matrix4(), ray = new Raycaster(), normal = new Vector3().copy(roadFrame(samples[0]).normal);
+    let bearings = 0;
+    for (let i = 0; i < mesh.details.count; i++) {
+      mesh.details.getMatrixAt(i, matrix);
+      if (Math.abs(new Vector3().setFromMatrixColumn(matrix, 1).length() - 0.5) > 0.001) continue;
+      const center = new Vector3().setFromMatrixPosition(matrix).add(mesh.details.position);
+      ray.set(center.clone().addScaledVector(normal, 0.249), normal);
+      expect(ray.intersectObject(mesh.deck)[0]?.distance ?? Infinity).toBeLessThan(0.025);
+      ray.set(center.clone().addScaledVector(normal, -0.249), normal.clone().negate());
+      expect(ray.intersectObject(mesh.piers)[0]?.distance ?? Infinity).toBeLessThan(0.025);
+      bearings++;
+    }
+    expect(bearings).toBeGreaterThan(4);
+    mesh.dispose();
+  });
+
   it('widens tall spans in two tiers and gives the highest bridges red steel railings', () => {
     const counts: number[] = [];
     for (const height of [50, 50.01, 100, 100.01, 350]) {
@@ -85,9 +108,9 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(5);
-    expect(mesh.railings.count).toBeGreaterThan(mesh.deck.count);
-    expect(mesh.deck.count).toBe((bridges[0].samples.length - 1) * 3);
+    expect(scene.children).toHaveLength(6);
+    expect(mesh.railings.count).toBeGreaterThan(mesh.parapets.count);
+    expect(mesh.parapets.count).toBe((bridges[0].samples.length - 1) * 2);
     expect(mesh.pierCount).toBeGreaterThan(5);
     const matrix = new Matrix4();
     for (let i = 0; i < mesh.piers.count; i++) {
@@ -112,15 +135,15 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    const data = mesh.deck.instanceMatrix.array.slice(), buffer = mesh.deck.instanceMatrix;
+    const buffer = mesh.deck.geometry.getAttribute('position'), data = buffer.array.slice();
     const x = mesh.deck.position.x, z = mesh.piers.position.z;
     mesh.update(bridges, corridor, terrain, 1, 5120, -5120, true);
-    expect(mesh.deck.instanceMatrix).toBe(buffer);
-    expect(mesh.deck.instanceMatrix.array).toEqual(data);
+    expect(mesh.deck.geometry.getAttribute('position')).toBe(buffer);
+    expect(mesh.deck.geometry.getAttribute('position').array).toEqual(data);
     expect(mesh.deck.position.x).toBe(x - 5120);
     expect(mesh.piers.position.z).toBe(z + 5120);
     mesh.update([], new RoadCorridor([]), terrain, 2, 5120, -5120, true);
-    expect(mesh.deck.count).toBe(0);
+    expect(mesh.deck.geometry.drawRange.count).toBe(0);
     expect(mesh.piers.count).toBe(0);
     expect(mesh.deck.visible).toBe(false);
     const geometryDispose = vi.spyOn(mesh.deck.geometry, 'dispose');

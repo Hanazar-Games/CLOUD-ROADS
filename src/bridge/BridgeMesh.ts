@@ -1,4 +1,4 @@
-import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshStandardMaterial, type Scene } from 'three';
+import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshStandardMaterial, Vector2, type Scene } from 'three';
 import { MAX_ROAD_SEGMENTS } from '../road/RoadSpine';
 import { ROAD_SAMPLES, type RoadSample } from '../road/RoadSegment';
 import { roadFrame } from '../road/RoadFrame';
@@ -8,14 +8,19 @@ import type { BridgeSpan } from './BridgeDetector';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 import { bridgeSpacing, bridgeTier } from './BridgeProfile';
+import { BridgeDeck } from './BridgeDeck';
+import { createConcreteMaterial } from './ConcreteMaterial';
+import { isServiceAccess } from '../road/RoadProtection';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
 const RAIL_COLORS = [new Color(0x81949e), new Color(0xb0bec6), new Color(0xbb302b)];
 
 export class BridgeMesh {
   private readonly geometry = new BoxGeometry();
-  private readonly material = new MeshStandardMaterial({ color: 0xa8a99c, roughness: 0.92 });
-  readonly deck: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  private readonly materialOrigin = new Vector2();
+  private readonly material = createConcreteMaterial(this.materialOrigin);
+  readonly deck: BridgeDeck;
+  readonly parapets: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly piers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly columns: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
@@ -28,9 +33,10 @@ export class BridgeMesh {
   private anchorZ = 0;
   private supports = 0;
 
-  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(scene: Scene, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
-    this.deck = new InstancedMesh(this.geometry, this.material, CAPACITY * (this.profile.centers.length === 1 ? 3 : 4));
+    this.deck = new BridgeDeck(this.material, options);
+    this.parapets = new InstancedMesh(this.geometry, this.material, CAPACITY * 3);
     this.piers = new InstancedMesh(this.geometry, this.material, CAPACITY * this.profile.centers.length * 2);
     const column = new BoxGeometry(), vertices = column.getAttribute('position');
     for (let i = 0; i < vertices.count; i++) {
@@ -41,7 +47,10 @@ export class BridgeMesh {
     this.columns = new InstancedMesh(column, this.material, CAPACITY * this.profile.centers.length);
     this.details = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0x586a71, metalness: 0.45, roughness: 0.6 }), CAPACITY * 8);
     this.railings = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.44 }), CAPACITY * 12);
-    for (const mesh of [this.deck, this.piers, this.columns, this.details, this.railings]) {
+    this.deck.visible = false;
+    this.deck.castShadow = this.deck.receiveShadow = true;
+    scene.add(this.deck);
+    for (const mesh of [this.parapets, this.piers, this.columns, this.details, this.railings]) {
       mesh.count = 0;
       mesh.visible = false;
       mesh.castShadow = mesh.receiveShadow = true;
@@ -53,12 +62,13 @@ export class BridgeMesh {
   get pierCount(): number { return this.supports; }
 
   update(spans: readonly BridgeSpan[], corridor: RoadCorridor, terrain: RoadTerrain, version: number,
-    originX: number, originZ: number, nearRoute: boolean): void {
+    originX: number, originZ: number, nearRoute: boolean, services: readonly { start: number; end: number }[] = []): void {
     if (this.version !== version) {
       this.version = version;
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
-      this.deck.count = this.piers.count = this.columns.count = this.details.count = this.railings.count = this.supports = 0;
+      this.parapets.count = this.piers.count = this.columns.count = this.details.count = this.railings.count = this.supports = 0;
+      this.deck.rebuild(spans, this.anchorX, this.anchorZ);
       const active = new Set<number>();
       const heightAt = (sample: RoadSample) => {
         active.add(sample.distance);
@@ -79,22 +89,22 @@ export class BridgeMesh {
           const length = Math.hypot(b.position.x - a.position.x, b.position.y - a.position.y, b.position.z - a.position.z)
             + (this.profile.outerHalfWidth * 2 + 1) * Math.sin(Math.abs(b.heading - a.heading) / 2) + 0.03;
           for (const center of this.profile.centers) {
-            this.box(this.deck, x + right.x * center - normal.x * 1.04, y + right.y * center - normal.y * 1.04,
-              z + right.z * center - normal.z * 1.04, deckWidth, 2, length, sample);
             const sides = this.profile.centers.length === 1 ? [-deckWidth / 2 + 0.15, deckWidth / 2 - 0.15]
               : [center + Math.sign(center) * (deckWidth / 2 - 0.15)];
             for (const side of sides) {
+              if (isServiceAccess(this.options, services, sample.distance, Math.sign(side))) continue;
               const base = tier ? 0.12 : 0.45;
-              this.box(this.deck, x + right.x * side + normal.x * base,
+              this.box(this.parapets, x + right.x * side + normal.x * base,
                 y + right.y * side + normal.y * base, z + right.z * side + normal.z * base, 0.35, tier ? 0.2 : 0.8, length, sample);
               for (const level of tier ? [0.4, 0.92, 1.45] : [1.35]) this.railing(sample, side, level, 0.16, 0.16, length, color);
               if (Math.floor(a.distance / 4) !== Math.floor(b.distance / 4)) this.railing(sample, side, tier ? 0.8 : 1.1, 0.18, tier ? 1.5 : 0.6, 0.18, color);
               if (tier) for (const direction of [-1, 1]) this.railing(sample, side, 0.92, 0.09, 0.09,
                 Math.hypot(length, 0.9), color, direction * Math.atan2(0.9, length));
             }
-            for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
-              x + right.x * (center + offset) - normal.x * 2.45, y + right.y * (center + offset) - normal.y * 2.45,
-              z + right.z * (center + offset) - normal.z * 2.45, 0.65, 1, length, sample);
+            if (Math.abs(sample.curvature) > 0.0015 && Math.floor(a.distance / 24) !== Math.floor(b.distance / 24)) {
+              this.box(this.parapets, x + right.x * center - normal.x * 2.4, y + right.y * center - normal.y * 2.4,
+                z + right.z * center - normal.z * 2.4, deckWidth * 0.9, 1.15, 0.65, sample);
+            }
           }
         }
         if (!span.openStart) this.support(span.start, true, corridor, terrain);
@@ -111,14 +121,17 @@ export class BridgeMesh {
       }
       for (const distance of this.heights.keys()) if (!active.has(distance)) this.heights.delete(distance);
       if (this.railings.instanceColor) { this.railings.instanceColor.setUsage(DynamicDrawUsage); this.railings.instanceColor.needsUpdate = true; }
-      for (const mesh of [this.deck, this.piers, this.columns, this.details, this.railings]) {
+      for (const mesh of [this.parapets, this.piers, this.columns, this.details, this.railings]) {
         mesh.instanceMatrix.clearUpdateRanges();
         mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.count) { mesh.computeBoundingBox(); mesh.computeBoundingSphere(); }
       }
     }
-    for (const mesh of [this.deck, this.piers, this.columns, this.details, this.railings]) {
+    this.materialOrigin.set(originX % 4096, originZ % 4096);
+    this.deck.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
+    this.deck.visible = nearRoute && this.deck.geometry.drawRange.count > 0;
+    for (const mesh of [this.parapets, this.piers, this.columns, this.details, this.railings]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = nearRoute && mesh.count > 0;
     }
@@ -154,20 +167,23 @@ export class BridgeMesh {
     let bottom = Math.min(ground(x, z), y - 5);
     for (const dx of [-footing / 2, footing / 2]) for (const dz of [-footing / 2, footing / 2]) bottom = Math.min(bottom, ground(x + dx, z + dz));
     bottom -= 4;
-    const top = y - 3.1, base = bottom + 2;
+    const base = bottom + 2;
     this.box(this.piers, x, bottom + 1.5, z, footing, 3, footing);
-    const upright = { ...sample, grade: 0, bank: 0 }, { right } = roadFrame(upright);
-    for (const offset of tall ? [-separation, separation] : [0]) this.box(this.columns,
-      x + right.x * offset, (base + top) / 2, z + right.z * offset, width, top - base, abutment ? 4 : width, upright);
+    const upright = { ...sample, grade: 0, bank: 0 }, verticalFrame = roadFrame(upright), { right, normal } = roadFrame(sample);
+    for (const offset of tall ? [-separation, separation] : [0]) {
+      const dx = verticalFrame.right.x * offset, dz = verticalFrame.right.z * offset;
+      const top = y - (4.65 + normal.x * dx + normal.z * dz) / normal.y
+        + (Math.abs(normal.x) + Math.abs(normal.z)) * width / (2 * normal.y) + 0.02;
+      this.box(this.columns, x + dx, (base + top) / 2, z + dz, width, top - base, abutment ? 4 : width, upright);
+    }
     const bracing = tier === 2 ? 28 : 38;
-    if (tall) for (let level = base + bracing; level < top - 18; level += bracing) this.box(this.piers,
+    if (tall) for (let level = base + bracing; level < y - 22.65; level += bracing) this.box(this.piers,
       x, level, z, separation * 2 + width * 0.75, tier === 2 ? 2.2 : 1.5, width * 0.85, upright);
-    const { normal } = roadFrame(sample);
-    this.box(this.piers, x - normal.x * 2.64, y - normal.y * 2.64, z - normal.z * 2.64,
+    this.box(this.piers, x - normal.x * 4.05, y - normal.y * 4.05, z - normal.z * 4.05,
       Math.max(deckWidth, separation * 2 + width * 0.7 + 1), 1.2, tier === 2 ? 6 : 4, sample);
     for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
-      x + right.x * offset - normal.x * 2.05, y - normal.y * 2.05, z + right.z * offset - normal.z * 2.05,
-      1.2, 0.3, 1.4, sample);
+      x + right.x * offset - normal.x * 3.2, y + right.y * offset - normal.y * 3.2, z + right.z * offset - normal.z * 3.2,
+      1.2, 0.5, 1.4, sample);
     this.box(this.details, x + normal.x * 0.015, y + normal.y * 0.015, z + normal.z * 0.015,
       deckWidth - 0.8, 0.02, 0.09, sample);
     this.supports++;
@@ -194,7 +210,8 @@ export class BridgeMesh {
   }
 
   dispose(): void {
-    for (const mesh of [this.deck, this.piers, this.columns, this.details, this.railings]) { mesh.removeFromParent(); mesh.dispose(); }
+    this.deck.removeFromParent(); this.deck.geometry.dispose();
+    for (const mesh of [this.parapets, this.piers, this.columns, this.details, this.railings]) { mesh.removeFromParent(); mesh.dispose(); }
     this.heights.clear(); this.railings.material.dispose();
     this.columns.geometry.dispose();
     this.details.material.dispose();

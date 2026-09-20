@@ -70,7 +70,7 @@ export class World {
     this.tunnelMesh = new TunnelMesh(scene, seed, options);
     this.furniture = new RoadFurniture(scene, seed, options);
     this.servicePlanner = new ServicePlanner(seed, this.height, options);
-    this.serviceMesh = new ServiceMesh(scene, options);
+    this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.signs = new RoadSigns(scene, options);
   }
 
@@ -91,7 +91,7 @@ export class World {
     if (this.roadReady && this.corridorVersion !== this.road.version) {
       this.services = this.servicePlanner.detect(this.road.samples);
       const clear = (span: { start: RoadSample; end: RoadSample }) => !this.services.some(site => site.start < span.end.distance && site.end > span.start.distance);
-      this.bridges = this.bridgeDetector.detect(this.road.samples, this.services);
+      this.bridges = this.bridgeDetector.detect(this.road.samples);
       this.tunnels = this.tunnelDetector.detect(this.road.samples, this.bridges).filter(clear);
       const passes: RoadSample[] = [], samples = this.road.samples;
       if (this.options.terrain === 'alpine') {
@@ -99,7 +99,8 @@ export class World {
         for (let id = first; id <= last; id++) {
           const z = this.height.ranges.passZ(id);
           if (samples[0].position.z < z + 600 || samples.at(-1)!.position.z > z - 600) continue;
-          const nearby = samples.filter(sample => Math.abs(sample.position.z - z) < 500);
+          const nearby = samples.filter(sample => Math.abs(sample.position.z - z) < 1000
+            && !this.tunnels.some(span => sample.distance >= span.start.distance - 12 && sample.distance <= span.end.distance + 12));
           if (nearby.length) passes.push(nearby.reduce((best, sample) => sample.position.y > best.position.y ? sample : best));
         }
       }
@@ -112,7 +113,7 @@ export class World {
     const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < this.chunks.viewRadius * 256 + 1500;
     this.roadDebug.update(this.road, this.origin.x, this.origin.z, nearRoute);
     this.roadMesh.update(this.road, this.origin.x, this.origin.z, nearRoute, this.services);
-    this.bridgeMesh.update(this.bridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
+    this.bridgeMesh.update(this.bridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.services);
     this.tunnelMesh.update(this.tunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.road.samples, this.tunnels, this.bridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.services);
     this.serviceMesh.update(this.services, this.corridorVersion, this.origin.x, this.origin.z);

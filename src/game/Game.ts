@@ -395,6 +395,7 @@ export class Game {
         'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
         'Service areas': this.world.services.length,
+        'Elevated services': this.world.services.filter(site => site.ground.elevated).length,
         'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',
         'Street lamps': this.world.furniture.lampPositions.length,
         'Local lights': this.world.furniture.localLights.filter(light => light.intensity > 0).length,

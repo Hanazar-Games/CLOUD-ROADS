@@ -17,6 +17,34 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('keeps elevated service guardrails solid for walkers and cars while leaving the road entrances open', () => {
+    const scene = world(true), surface = new DrivingSurface(scene);
+    while (!scene.road.advanceToDistance(19000)) { /* Complete a service window. */ }
+    scene.services = new ServicePlanner('driving-surface', { sample: () => -50 }, scene.options).detect(scene.road.samples);
+    const site = scene.services[0], pad = site.ground.pads[0];
+    expect(site.ground.elevated).toBe(true);
+    const a = padPoint(pad, 32, 0), b = padPoint(pad, 34, 0);
+    const body = { ...b };
+    expect(surface.constrainWalker(body, a.x, a.z)).toBe(true);
+    const car = new VehiclePhysics(); car.x = b.x; car.y = b.y + 0.8; car.z = b.z; car.speed = 10;
+    expect(surface.constrain(car, a.x, a.z)).toBe(true); expect(car.speed).toBeLessThan(10);
+    const below = { ...b, y: -50 };
+    expect(surface.constrainWalker(below, a.x, a.z)).toBe(false);
+    expect(surface.ceiling(pad.x, pad.z, -50)).toBeCloseTo(pad.y - 1.45);
+    const ramp = site.ground.access.find(({ a, b }) => {
+      const x = (a.x + b.x) / 2, z = (a.z + b.z) / 2;
+      return Math.hypot(x - scene.road.nearest(x, z)!.position.x, z - scene.road.nearest(x, z)!.position.z) > 20
+        && site.ground.pads.every(p => Math.abs((x - p.x) * Math.sin(p.heading) - (z - p.z) * Math.cos(p.heading)) > p.halfLength + 5);
+    })!;
+    expect(ramp).toBeDefined();
+    const rx = (ramp.a.x + ramp.b.x) / 2, rz = (ramp.a.z + ramp.b.z) / 2, ry = (ramp.a.y + ramp.b.y) / 2;
+    expect(surface.ceiling(rx, rz, -50)).toBeCloseTo(ry - 1.45);
+    expect(surface.ceiling(rx, rz, ry)).toBe(Infinity);
+    const entrance = { ...site.sample, distance: site.start + 45 };
+    expect(hasRoadBarrier(scene, entrance, 1)).toBe(false);
+    expect(hasRoadBarrier(scene, entrance, -1)).toBe(false);
+  });
+
   it('keeps bridge barriers effective while jumping on either side of a banked deck', () => {
     const scene = world(), surface = new DrivingSurface(scene);
     const sample = { ...scene.road.samples[100], bank: Math.PI / 30, heading: 0, grade: 0 };

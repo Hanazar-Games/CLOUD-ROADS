@@ -1,7 +1,9 @@
-import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, type Scene } from 'three';
+import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector2, type Scene } from 'three';
 import type { ServiceArea } from './ServicePlanner';
 import { padPoint, type ServicePad, type ServicePoint } from './ServiceTerrain';
-import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import type { WorldOptions } from '../world/WorldOptions';
+import type { RoadTerrain } from '../road/RoadGenerator';
+import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -16,6 +18,9 @@ function roofGeometry(): BufferGeometry {
 }
 
 export class ServiceMesh {
+  private readonly materialOrigin = new Vector2();
+  readonly structures = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.materialOrigin), 8000);
+  readonly railings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xaebdc0, metalness: 0.6, roughness: 0.45 }), 16000);
   readonly pavement = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x41494a, roughness: 0.87 }));
   readonly buildings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.78 }), 8000);
   readonly windows = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x395764, metalness: 0.3, roughness: 0.22, emissive: 0xffd6a1, emissiveIntensity: 0 }), 2000);
@@ -23,7 +28,7 @@ export class ServiceMesh {
   readonly lights = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffebc7, emissive: 0xffd39a, emissiveIntensity: 1.6 }), 512);
   readonly roofs = new InstancedMesh(roofGeometry(), new MeshStandardMaterial({ roughness: 0.7, metalness: 0.2 }), 64);
   readonly landscaping = new InstancedMesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ roughness: 1, flatShading: true }), 512);
-  private readonly batches = [this.buildings, this.windows, this.markings, this.lights, this.roofs, this.landscaping];
+  private readonly batches = [this.buildings, this.windows, this.markings, this.lights, this.roofs, this.landscaping, this.structures, this.railings];
   readonly lampPositions: ServicePoint[] = [];
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
@@ -31,9 +36,9 @@ export class ServiceMesh {
   private anchorX = 0;
   private anchorZ = 0;
 
-  constructor(scene: Scene, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(scene: Scene, private readonly options: Readonly<WorldOptions>, private readonly terrain: RoadTerrain) {
     for (const mesh of [this.pavement, ...this.batches]) {
-      mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping;
+      mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping || mesh === this.structures;
       scene.add(mesh);
     }
     for (const mesh of this.batches) mesh.count = 0;
@@ -52,12 +57,31 @@ export class ServiceMesh {
         for (const pad of site.ground.pads) {
           quad(data, vertex(padPoint(pad, -33, -75)), vertex(padPoint(pad, 33, -75)), vertex(padPoint(pad, -33, 75)), vertex(padPoint(pad, 33, 75)));
           this.build(pad);
+          if (site.ground.elevated) for (const along of [-60, -20, 20, 60]) {
+            this.box(this.structures, pad, 0, along, -1.7, 66, 0.6, 2, 0xffffff, true);
+            for (const x of [-24, 0, 24]) this.column(pad, x, along, -2);
+          }
         }
         for (const { a, b } of site.ground.access) {
           const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length * 3.5, nz = (b.x - a.x) / length * 3.5;
           const ay = a.slopeX * nx + a.slopeZ * nz, by = b.slopeX * nx + b.slopeZ * nz;
           quad(data, vertex({ x: a.x - nx, y: a.y - ay, z: a.z - nz }, 0.015), vertex({ x: a.x + nx, y: a.y + ay, z: a.z + nz }, 0.015),
             vertex({ x: b.x - nx, y: b.y - by, z: b.z - nz }, 0.015), vertex({ x: b.x + nx, y: b.y + by, z: b.z + nz }, 0.015));
+          const insidePad = site.ground.pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < 33
+            && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < 75);
+          if (site.ground.elevated && !insidePad) {
+            this.edge(this.structures, a, b, 7.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx / 3.5 + (a.slopeZ + b.slopeZ) / 2 * nz / 3.5);
+            if (Math.floor(a.z / 32) !== Math.floor(b.z / 32)) this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
+          }
+        }
+        for (const { a, b } of site.ground.barriers) {
+          for (const height of [0.45, 0.95, 1.4]) this.edge(this.railings, a, b, 0.14, 0.14, height);
+          const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 4));
+          for (let i = 0; i <= count; i++) {
+            const t = i / count;
+            this.box(this.railings, { ...site.ground.pads[0], x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
+              z: a.z + (b.z - a.z) * t, heading: 0, grade: 0 }, 0, 0, 0.75, 0.17, 1.5, 0.17, 0xffffff);
+          }
         }
       }
       const geometry = new BufferGeometry();
@@ -71,10 +95,30 @@ export class ServiceMesh {
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
+    this.materialOrigin.set(originX % 4096, originZ % 4096);
     for (const mesh of [this.pavement, ...this.batches]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = sites.length > 0;
     }
+  }
+
+  private column(pad: ServicePad, x: number, along: number, top: number): void {
+    const p = padPoint(pad, x, along, top), gap = p.y - this.terrain.sample(p.x, p.z), width = gap > 100 ? 5 : 3;
+    let bottom = Math.min(this.terrain.sample(p.x, p.z), p.y - 1);
+    for (const dx of [-width, width]) for (const dz of [-width, width]) bottom = Math.min(bottom, this.terrain.sample(p.x + dx, p.z + dz));
+    bottom -= 4;
+    const height = p.y - bottom;
+    this.box(this.structures, pad, x, along, top - height + 1.5, width + 2, 3, width + 2, 0xffffff);
+    this.box(this.structures, pad, x, along, top - height / 2 + 1, width, height - 2, width, 0xffffff);
+  }
+
+  private edge(mesh: InstancedMesh, a: ServicePoint, b: ServicePoint, width: number, height: number, lift: number, crossSlope = 0): void {
+    if (mesh.count >= mesh.instanceMatrix.count) throw new Error('Service structure capacity exceeded');
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, length = Math.hypot(dx, dz), overlap = 1 + 0.03 / length;
+    this.matrix.set(-dz / length * width, 0, -dx * overlap, (a.x + b.x) / 2 - this.anchorX,
+      crossSlope * width, height, -dy * overlap, (a.y + b.y) / 2 + lift,
+      dx / length * width, 0, -dz * overlap, (a.z + b.z) / 2 - this.anchorZ, 0, 0, 0, 1);
+    mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(0xffffff));
   }
 
   private build(pad: ServicePad): void {

@@ -18,9 +18,10 @@ export class MountainRanges {
   private range(id: number) {
     let range = this.cache.get(id);
     if (!range) {
-      const start = 300 + hashSeed(`${this.seed}:valley:${id}`) % 151, end = 300 + hashSeed(`${this.seed}:valley:${id + 1}`) % 151;
-      range = { start, end, top: Math.max(start, end) + 500 + hashSeed(`${this.seed}:summit:${id}`) % 181,
-        peak: 0.44 + (hashSeed(`${this.seed}:pass:${id}`) % 1201) / 10000 };
+      const start = 450 + this.noise.sample(id / 3, 113) * 320, end = 450 + this.noise.sample((id + 1) / 3, 113) * 320;
+      const peak = 0.44 + (hashSeed(`${this.seed}:pass:${id}`) % 1201) / 10000;
+      range = { start, end, peak, top: Math.min(Math.max(start, end) + 500 + hashSeed(`${this.seed}:summit:${id}`) % 401,
+        start + peak * RANGE_LENGTH * 0.045, end + (1 - peak) * RANGE_LENGTH * 0.045) };
       if (this.cache.size >= 8) this.cache.delete(this.cache.keys().next().value!);
       this.cache.set(id, range);
     }

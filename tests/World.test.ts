@@ -138,11 +138,11 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
   load(world, camera);
   expect(world.bridges.length).toBeGreaterThan(0);
   expect(world.bridgeMesh.deck.visible).toBe(true);
-  const matrix = world.bridgeMesh.deck.instanceMatrix.array.slice();
+  const positions = world.bridgeMesh.deck.geometry.getAttribute('position').array.slice();
   const generating = vi.spyOn(world.road, 'update').mockReturnValue(false);
   world.update(camera);
   expect(world.bridgeMesh.deck.visible).toBe(true);
-  expect(world.bridgeMesh.deck.instanceMatrix.array).toEqual(matrix);
+  expect(world.bridgeMesh.deck.geometry.getAttribute('position').array).toEqual(positions);
   const position = camera.position.clone();
   expect(world.inspectRoad(camera)).toBeUndefined();
   expect(world.inspectHairpin(camera)).toBeUndefined();

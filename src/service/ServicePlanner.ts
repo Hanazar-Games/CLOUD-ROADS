@@ -99,7 +99,28 @@ export class ServicePlanner {
           }
           for (let i = 1; i < points.length; i++) access.push({ a: points[i - 1], b: points[i] });
         }
-        site = { id, sample, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access } };
+        const elevated = pads.some(pad => [-33, 0, 33].some(x => [-75, 0, 75].some(along => {
+          const p = padPoint(pad, x, along); return p.y - this.terrain.sample(p.x, p.z) > 5;
+        }))) || access.some(({ a, b }) => [a, b].some(p => p.y - this.terrain.sample(p.x, p.z) > 5));
+        const barriers: ServiceGround['barriers'] = [];
+        if (elevated) {
+          for (const pad of pads) {
+            for (const side of [-1, 1]) barriers.push({ a: padPoint(pad, side * 33, -75), b: padPoint(pad, side * 33, 75) });
+            for (const along of [-75, 75]) barriers.push({ a: padPoint(pad, -pad.side * 22, along), b: padPoint(pad, pad.side * 33, along) });
+          }
+          for (const { a, b } of access) {
+            const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
+            const insidePad = pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < 33
+              && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < 77);
+            if (insidePad) continue;
+            for (const side of [-1, 1]) {
+              const point = (p: ServiceAccessPoint) => ({ x: p.x + nx * side * 3.7, y: p.y + (p.slopeX * nx + p.slopeZ * nz) * side * 3.7, z: p.z + nz * side * 3.7 });
+              const from = point(a), to = point(b);
+              if ((roadIndex.nearest(from.x, from.z)?.distanceSquared ?? Infinity) > (this.profile.outerHalfWidth + 0.3) ** 2) barriers.push({ a: from, b: to });
+            }
+          }
+        }
+        site = { id, sample, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };
         this.cache.set(id, site);
       }
       sites.push(site);

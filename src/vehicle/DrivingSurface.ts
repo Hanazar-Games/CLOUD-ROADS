@@ -13,12 +13,16 @@ export class DrivingSurface {
   private sites;
   private access;
   private accessIndex;
+  private barriers;
+  private barrierIndex;
 
   constructor(private readonly world: DrivingWorld) {
     this.profile = roadProfile(world.options);
     this.sites = world.services;
     this.access = this.sites.flatMap(site => site.ground.access);
     this.accessIndex = new RoadIndex(this.access);
+    this.barriers = this.sites.flatMap(site => site.ground.barriers);
+    this.barrierIndex = new RoadIndex(this.barriers);
   }
 
   readonly sample = (x: number, z: number, ceiling = Infinity): SurfaceContact => {
@@ -33,11 +37,7 @@ export class DrivingSurface {
         if (height <= ceiling) return { height, grip: this.wet ? 0.72 : 1 };
       }
     }
-    if (this.sites !== this.world.services) {
-      this.sites = this.world.services;
-      this.access = this.sites.flatMap(site => site.ground.access);
-      this.accessIndex = new RoadIndex(this.access);
-    }
+    this.refreshServices();
     for (const site of this.sites) for (const pad of site.ground.pads) {
       const dx = x - pad.x, dz = z - pad.z;
       const lateral = dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading);
@@ -72,6 +72,7 @@ export class DrivingSurface {
   }
 
   constrain(car: VehiclePhysics, previousX: number, previousZ: number): boolean {
+    if (this.constrainService(car, previousX, previousZ, 1.1, car.y - 0.8)) { car.speed *= 0.35; return true; }
     const sample = this.world.road.nearest(car.x, car.z);
     if (!sample) return false;
     if (car.y < sample.position.y - 2 || car.y > sample.position.y + 3) return false;
@@ -96,6 +97,7 @@ export class DrivingSurface {
   }
 
   constrainWalker(body: { x: number; y: number; z: number }, previousX: number, previousZ: number): boolean {
+    if (this.constrainService(body, previousX, previousZ, 0.42, body.y)) return true;
     const sample = this.world.road.nearest(body.x, body.z);
     if (!sample) return false;
     const { x, y, z } = sample.position, cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
@@ -122,13 +124,57 @@ export class DrivingSurface {
   }
 
   ceiling(x: number, z: number, feet: number): number {
+    this.refreshServices();
+    let ceiling = Infinity;
+    for (const site of this.sites) if (site.ground.elevated) for (const pad of site.ground.pads) {
+      const dx = x - pad.x, dz = z - pad.z;
+      const along = dx * Math.sin(pad.heading) - dz * Math.cos(pad.heading), height = pad.y + pad.grade * along;
+      if (feet < height - 0.15 && Math.abs(along) <= pad.halfLength
+        && Math.abs(dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading)) <= pad.halfWidth) ceiling = Math.min(ceiling, height - 1.45);
+    }
+    const access = this.accessIndex.nearest(x, z, 3.8);
+    if (access && this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[access.index]))) {
+      const { a, b } = this.access[access.index], t = access.t;
+      const height = a.y + (b.y - a.y) * t
+        + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
+        + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
+      if (feet < height - 0.15) ceiling = Math.min(ceiling, height - 1.45);
+    }
     const sample = this.world.road.nearest(x, z);
-    if (!sample) return Infinity;
+    if (!sample) return ceiling;
     const dx = x - sample.position.x, dz = z - sample.position.z;
     const lateral = dx * Math.cos(sample.heading) + dz * Math.sin(sample.heading);
-    if (!this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + 0.4)) return Infinity;
+    if (!this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + 0.4)) return ceiling;
     const { normal } = roadFrame(sample), road = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
-    if (feet < road - 0.15 && this.world.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) return road - 3;
-    return this.inTunnel(x, z) ? road + 4.5 : Infinity;
+    if (feet < road - 0.15 && this.world.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) return Math.min(ceiling, road - 3);
+    return this.inTunnel(x, z) ? Math.min(ceiling, road + 4.5) : ceiling;
+  }
+
+  private refreshServices(): void {
+    if (this.sites === this.world.services) return;
+    this.sites = this.world.services;
+    this.access = this.sites.flatMap(site => site.ground.access);
+    this.accessIndex = new RoadIndex(this.access);
+    this.barriers = this.sites.flatMap(site => site.ground.barriers);
+    this.barrierIndex = new RoadIndex(this.barriers);
+  }
+
+  private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number): boolean {
+    this.refreshServices();
+    let hit = false;
+    for (const index of this.barrierIndex.within(Math.min(body.x, previousX) - radius, Math.min(body.z, previousZ) - radius,
+      Math.max(body.x, previousX) + radius, Math.max(body.z, previousZ) + radius)) {
+      const { a, b } = this.barriers[index], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+      const t = ((body.x - a.x) * dx + (body.z - a.z) * dz) / (length * length);
+      if (t < -radius / length || t > 1 + radius / length) continue;
+      const height = a.y + (b.y - a.y) * Math.max(0, Math.min(1, t));
+      if (feet + 1.75 < height || feet > height + 1.5) continue;
+      const nx = -dz / length, nz = dx / length;
+      const before = (previousX - a.x) * nx + (previousZ - a.z) * nz, after = (body.x - a.x) * nx + (body.z - a.z) * nz;
+      if (before * after > 0 && Math.abs(after) >= radius) continue;
+      const correction = (Math.sign(before) || 1) * radius - after;
+      body.x += nx * correction; body.z += nz * correction; hit = true;
+    }
+    return hit;
   }
 }

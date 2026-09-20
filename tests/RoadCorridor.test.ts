@@ -9,18 +9,28 @@ import { MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../src/world/WorldOptions';
 import { HeightFunction } from '../src/terrain/HeightFunction';
 import { roadProfile } from '../src/road/RoadProfile';
+import { BridgeDetector } from '../src/bridge/BridgeDetector';
 
 describe('RoadCorridor', () => {
+  it('limits road fill to five metres and preserves mountains beyond local earthworks', () => {
+    const corridor = new RoadCorridor([{
+      a: { x: 0, y: 200, z: 300, nx: 0, ny: 1, nz: 0, ground: 1 },
+      b: { x: 0, y: 200, z: -300, nx: 0, ny: 1, nz: 0, ground: 1 },
+    }]);
+    for (const x of [0, 8, 16, 24, 40]) expect(corridor.height(x, 0, 20) - 20).toBeLessThanOrEqual(5);
+    for (const x of [-65, 65, 120]) for (const natural of [20, 500]) expect(corridor.height(x, 0, natural)).toBe(natural);
+  });
+
   it('cuts and fills a banked roadbed, blends slopes and preserves distant terrain', () => {
     const corridor = new RoadCorridor([{
       a: { x: 0, y: 200, z: 300, nx: -0.02, ny: 1, nz: 0, ground: 1 },
       b: { x: 0, y: 200, z: -300, nx: -0.02, ny: 1, nz: 0, ground: 1 },
     }]);
-    for (const natural of [50, 500]) {
+    for (const natural of [196, 500]) {
       expect(corridor.height(0, 0, natural)).toBeCloseTo(199.92, 5);
       expect(corridor.height(5, 0, natural)).toBeCloseTo(200.02, 5);
       expect(corridor.height(300, 0, natural)).toBe(natural);
-      const transition = corridor.height(50, 0, natural);
+      const transition = corridor.height(25, 0, natural);
       expect(transition).toBeGreaterThan(Math.min(200, natural));
       expect(transition).toBeLessThan(Math.max(202, natural));
     }
@@ -51,9 +61,10 @@ describe('RoadCorridor', () => {
     ['HIGHWAY', { ...DEFAULT_OPTIONS, terrain: 'forest', roadType: 'highway', roadWidth: 10 }],
     ['DESERT', { ...DEFAULT_OPTIONS, terrain: 'desert', roadType: 'highway', roadWidth: 6 }],
   ])('supports the actual road triangles and shoulders for %s', (seed, options) => {
-    const spine = new RoadSpine(seed, new HeightFunction(seed, options.terrain), options);
+    const height = new HeightFunction(seed, options.terrain), spine = new RoadSpine(seed, height, options);
     while (!spine.update(-800, 8)) { /* Load enough road to test both sides of chunk seams. */ }
-    const corridor = RoadCorridor.fromSamples(spine.samples, [], options);
+    const bridges = new BridgeDetector(height, options).detect(spine.samples);
+    const corridor = RoadCorridor.fromSamples(spine.samples, bridges, options);
     const generator = new TerrainGenerator(seed, options);
     const road = new RoadMesh(new Scene(), options);
     road.update(spine, 0, 0, true);
@@ -80,7 +91,7 @@ describe('RoadCorridor', () => {
         expect(roadHit).toBeDefined();
         const gap = roadHit.point.y - groundHit.point.y;
         expect(gap).toBeGreaterThan(0.01);
-        expect(gap).toBeLessThan(0.2);
+        if (!bridges.some(span => sample.distance >= span.start.distance - 8 && sample.distance <= span.end.distance + 8)) expect(gap).toBeLessThan(0.2);
       }
     }
     for (const chunk of chunks.values()) chunk.dispose();

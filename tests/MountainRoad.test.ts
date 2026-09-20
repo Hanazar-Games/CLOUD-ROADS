@@ -57,8 +57,8 @@ describe('mountain roads', () => {
     const c = point(100, 220, -500), d = point(100, 220, 500);
     const corridor = new RoadCorridor([{ a, b }, { a: b, b: c }, { a: c, b: d }]);
     for (const z of [-300, 0, 300]) {
-      expect(corridor.height(10, z, 100)).toBeCloseTo(199.92, 6);
-      expect(corridor.height(100, z, 100)).toBeCloseTo(219.92, 6);
+      expect(corridor.height(10, z, 196)).toBeCloseTo(199.92, 6);
+      expect(corridor.height(100, z, 216)).toBeCloseTo(219.92, 6);
       const local = new RoadCorridor(structuredClone(corridor.forChunk(0, Math.floor(z / 256))));
       expect(local.height(100, z, 100)).toBe(corridor.height(100, z, 100));
       expect(local.height(10, z, 100)).toBe(corridor.height(10, z, 100));

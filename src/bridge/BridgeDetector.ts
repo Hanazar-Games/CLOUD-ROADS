@@ -19,12 +19,13 @@ export class BridgeDetector {
   private readonly centers;
 
   constructor(private readonly terrain: RoadTerrain, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.centers = roadProfile(options).centers;
+    const profile = roadProfile(options);
+    this.centers = profile.centers.flatMap(center => [center - profile.halfWidth - 6.8, center, center + profile.halfWidth + 6.8]);
   }
 
   get cachedSamples(): number { return this.clearance.size; }
 
-  detect(samples: readonly RoadSample[], earthworks: readonly { start: number; end: number }[] = []): BridgeSpan[] {
+  detect(samples: readonly RoadSample[]): BridgeSpan[] {
     const active = new Set(samples.map((sample) => sample.distance));
     for (const distance of this.clearance.keys()) if (!active.has(distance)) this.clearance.delete(distance);
     const spans: BridgeSpan[] = [];
@@ -44,7 +45,7 @@ export class BridgeDetector {
           - this.terrain.sample(x + right.x * offset, z + right.z * offset)));
         this.clearance.set(sample.distance, gap);
       }
-      const bridge = gap > 5 && !earthworks.some(site => sample.distance >= site.start && sample.distance <= site.end);
+      const bridge = gap > 5;
       if (bridge) {
         if (first < 0) first = i;
         depth = Math.max(depth, gap);

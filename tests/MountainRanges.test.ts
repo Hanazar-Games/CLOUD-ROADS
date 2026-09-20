@@ -5,6 +5,16 @@ import { RoadGenerator } from '../src/road/RoadGenerator';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { RoadSpine, MAX_ROAD_SEGMENTS } from '../src/road/RoadSpine';
 
+it('varies valley elevations and summit prominence across independently seeded regions', () => {
+  const ranges = new MountainRanges('REGIONAL-DIVERSITY'), valleys: number[] = [], peaks: number[] = [];
+  for (let id = -20; id < 20; id++) {
+    valleys.push(ranges.sample(128 - id * RANGE_LENGTH).height);
+    peaks.push(ranges.sample(ranges.passZ(id)).height);
+  }
+  expect(Math.max(...valleys) - Math.min(...valleys)).toBeGreaterThan(250);
+  expect(Math.max(...peaks) - Math.min(...peaks)).toBeGreaterThan(350);
+});
+
 it('joins independently seeded valleys and saddles continuously in both infinite directions', () => {
   const ranges = new MountainRanges('CLOUD-ROAD-001'), replay = new MountainRanges('CLOUD-ROAD-001');
   for (const id of [-100, -1, 0, 1, 30, 100]) {

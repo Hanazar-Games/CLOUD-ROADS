@@ -3,7 +3,7 @@ import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 export interface ServicePoint { x: number; y: number; z: number }
 export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slopeZ: number }
 export interface ServicePad extends ServicePoint { heading: number; grade: number; side: number; halfWidth: number; halfLength: number }
-export interface ServiceGround { pads: ServicePad[]; access: RoadEdge<ServiceAccessPoint>[] }
+export interface ServiceGround { pads: ServicePad[]; access: RoadEdge<ServiceAccessPoint>[]; elevated: boolean; barriers: RoadEdge<ServicePoint>[] }
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 export function padPoint(pad: ServicePad, x: number, along: number, height = 0): ServicePoint {
@@ -15,11 +15,17 @@ export class ServiceTerrain {
   private readonly access;
   private readonly index;
   private readonly pads;
+  private readonly elevatedPads = new Set<ServicePad>();
+  private readonly elevatedAccess = new Set<RoadEdge<ServiceAccessPoint>>();
 
   constructor(readonly sites: readonly ServiceGround[]) {
     this.access = sites.flatMap(site => site.access);
     this.index = new RoadIndex(this.access);
     this.pads = sites.flatMap(site => site.pads);
+    for (const site of sites) if (site.elevated) {
+      for (const pad of site.pads) this.elevatedPads.add(pad);
+      for (const edge of site.access) this.elevatedAccess.add(edge);
+    }
   }
 
   private local(pad: ServicePad, x: number, z: number) {
@@ -29,21 +35,22 @@ export class ServiceTerrain {
 
   height(x: number, z: number, ground: number, roadDistance: number, roadHalfWidth: number): number {
     if (!this.sites.length || roadDistance <= roadHalfWidth + 0.1) return ground;
-    const roadBlend = smooth((roadDistance - roadHalfWidth - 0.1) / 5);
+    const roadBlend = smooth((roadDistance - roadHalfWidth - 0.1) / 2);
     for (const pad of this.pads) {
       const local = this.local(pad, x, z);
       const distance = Math.hypot(Math.max(0, Math.abs(local.x) - pad.halfWidth - 3), Math.max(0, Math.abs(local.along) - pad.halfLength - 3));
-      if (distance >= 45) continue;
-      const target = pad.y + pad.grade * local.along - 0.14;
-      ground += (target - ground) * (1 - smooth(distance / 45)) * roadBlend;
+      if (distance >= 24) continue;
+      const elevated = this.elevatedPads.has(pad), target = pad.y + pad.grade * local.along - (elevated ? 1.7 : 0.14);
+      ground += Math.min(elevated ? 0 : 5, target - ground) * (1 - smooth(distance / 24)) * roadBlend;
     }
     const nearest = this.index.nearest(x, z, 22);
     if (nearest) {
       const { a, b } = this.access[nearest.index], t = nearest.t;
-      const target = a.y + (b.y - a.y) * t - 0.26
+      const elevated = this.elevatedAccess.has(this.access[nearest.index]);
+      const target = a.y + (b.y - a.y) * t - (elevated ? 2 : 0.38)
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      ground += (target - ground) * (1 - smooth((Math.sqrt(nearest.distanceSquared) - 5) / 17)) * roadBlend;
+      ground += Math.min(elevated ? 0 : 5, target - ground) * (1 - smooth((Math.sqrt(nearest.distanceSquared) - 6) / 16)) * roadBlend;
     }
     return ground;
   }

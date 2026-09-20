@@ -10,7 +10,7 @@ import { ServiceTerrain, type ServiceGround } from '../service/ServiceTerrain';
 
 interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number; tunnel?: boolean }
 export type CorridorEdge = RoadEdge<CorridorPoint>;
-const RADIUS = 160;
+const RADIUS = 64;
 
 export class RoadCorridor {
   private readonly index: RoadIndex;
@@ -61,16 +61,16 @@ export class RoadCorridor {
 
   height(x: number, z: number, natural: number): number {
     const nearest = this.index.nearest(x, z, RADIUS);
-    if (!nearest) return this.services.height(x, z, natural, Infinity, this.roadHalfWidth);
+    if (!nearest) return Math.min(natural + 5, this.services.height(x, z, natural, Infinity, this.roadHalfWidth));
     const { index, t, distanceSquared } = nearest, { a, b } = this.edges[index];
     const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
     const nx = a.nx + (b.nx - a.nx) * t, ny = a.ny + (b.ny - a.ny) * t, nz = a.nz + (b.nz - a.nz) * t;
     const surface = a.y + (b.y - a.y) * t - (nx * (x - px) + nz * (z - pz)) / ny - 0.08;
-    const width = Math.min(RADIUS, this.bedHalfWidth + 18 + Math.abs(natural - surface) * 0.65);
+    const width = Math.min(RADIUS, this.bedHalfWidth + 18 + Math.min(12, Math.abs(natural - surface) * 0.65));
     const blend = Math.max(0, Math.min(1, (Math.sqrt(distanceSquared) - this.bedHalfWidth) / (width - this.bedHalfWidth)));
     const ground = a.ground + (b.ground - a.ground) * t;
     const bed = surface - (1 - ground) * 3.2;
-    const height = natural + (bed - natural) * (1 - blend * blend * (3 - 2 * blend)) * (natural > bed ? 1 : ground);
-    return this.services.height(x, z, height, Math.sqrt(distanceSquared), this.roadHalfWidth);
+    const height = natural + Math.min(5, bed - natural) * (1 - blend * blend * (3 - 2 * blend)) * (natural > bed ? 1 : ground);
+    return Math.min(natural + 5, this.services.height(x, z, height, Math.sqrt(distanceSquared), this.roadHalfWidth));
   }
 }
