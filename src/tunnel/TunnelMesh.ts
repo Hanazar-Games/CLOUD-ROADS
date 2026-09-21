@@ -84,7 +84,7 @@ export class TunnelMesh {
 
   update(spans: readonly TunnelSpan[], corridor: RoadCorridor, terrain: RoadTerrain, version: number,
     originX: number, originZ: number, nearRoute: boolean): void {
-    const spanKey = this.version === version ? this.spanKey : spans.map(span => `${span.start.routeId ?? ''}:${span.start.distance}:${span.end.distance}`).join(',');
+    const spanKey = this.version === version ? this.spanKey : spans.map(span => `${span.start.routeId ?? ''}:${span.start.distance}:${span.end.distance}:${!!span.openStart}:${!!span.openEnd}`).join(',');
     this.version = version;
     if (this.spanKey !== spanKey) {
       this.spanKey = spanKey;
@@ -112,7 +112,8 @@ export class TunnelMesh {
         ...this.profile.centers.flatMap(center => [center - half - 0.01, ...arch.map(([x]) => center + x), center + half + 0.01]),
         this.profile.outerHalfWidth + 4, 50, 80, 120, 160])].sort((a, b) => a - b);
       for (const span of spans) {
-        const rows = span.samples.filter((_, i) => i % 2 === 0 || i === span.samples.length - 1);
+        const rows = span.samples.filter((sample, i) => i === 0 || i === span.samples.length - 1
+          || Math.floor(sample.distance / 8) !== Math.floor(span.samples[i - 1].distance / 8));
         let nextLamp = Math.ceil(span.start.distance / 24) * 24;
         const extents = new Map<RoadSample, number[]>();
         const edge = this.profile.outerHalfWidth + 4;
@@ -131,12 +132,13 @@ export class TunnelMesh {
           const extent = extents.get(sample)![offset < 0 ? 0 : 1];
           offset = coverOffset(sample, offset);
           const blend = Math.max(0, 1 - Math.max(0, Math.abs(offset) - edge) / Math.max(1, extent - edge));
-          const setback = 12 * blend * (Math.max(0, 1 - (sample.distance - span.start.distance) / 80) ** 2
-            - Math.max(0, 1 - (span.end.distance - sample.distance) / 80) ** 2);
+          const setback = 12 * blend * ((span.openStart ? 0 : Math.max(0, 1 - (sample.distance - span.start.distance) / 80) ** 2)
+            - (span.openEnd ? 0 : Math.max(0, 1 - (span.end.distance - sample.distance) / 80) ** 2));
           const p = this.point(sample, offset, 0, setback);
           const natural = terrain.sample(p[0] + this.anchorX, p[2] + this.anchorZ);
           const ground = corridor.height(p[0] + this.anchorX, p[2] + this.anchorZ, natural);
-          const approach = Math.min(1, (sample.distance - span.start.distance) / 80, (span.end.distance - sample.distance) / 80);
+          const approach = Math.min(1, span.openStart ? 1 : (sample.distance - span.start.distance) / 80,
+            span.openEnd ? 1 : (span.end.distance - sample.distance) / 80);
           const entrance = Math.max(ground, p[1] + 9.5);
           const roof = entrance + (Math.max(natural, entrance) - entrance) * approach * approach * (3 - 2 * approach);
           p[1] = ground + (roof - ground) * blend - 0.3 * (1 - blend);
@@ -167,7 +169,7 @@ export class TunnelMesh {
               const [ax, ay] = arch[j - 1], [bx, by] = arch[j];
               quad(lining, this.point(previous, center + ax, ay), this.point(previous, center + bx, by),
                 this.point(sample, center + ax, ay), this.point(sample, center + bx, by));
-              const a = previous.distance - span.start.distance, b = sample.distance - span.start.distance;
+              const a = previous.distance, b = sample.distance;
               uv.push(a, ay, a, by, b, ay, a, by, b, by, b, ay);
               const normal = (point: RoadSample, x: number, y: number): Point => {
                 let nx = x / (half * half), ny = Math.max(0, y - 4.2) / (3.4 * 3.4);
@@ -209,6 +211,7 @@ export class TunnelMesh {
           }
         }
         for (const sample of [span.start, span.end]) {
+          if (sample === span.start ? span.openStart : span.openEnd) continue;
           const end = sample === span.end ? 1 : -1;
           const bottom = (offset: number): Point => {
             offset = coverOffset(sample, offset);

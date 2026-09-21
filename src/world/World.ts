@@ -195,7 +195,11 @@ export class World {
         return points.length < 2 ? [] : [{ ...span, start: points[0], end: points.at(-1)!, samples: points,
           openStart: span.openStart || span.start.distance < min, openEnd: span.openEnd || span.end.distance > max }];
       });
-      const tunnels = route.tunnels.filter(span => span.start.distance >= min && span.end.distance <= max);
+      const tunnels = route.tunnels.flatMap(span => {
+        const points = span.samples.filter(p => p.distance >= min && p.distance <= max);
+        return points.length < 2 ? [] : [{ ...span, start: points[0], end: points.at(-1)!, samples: points,
+          openStart: span.openStart || span.start.distance < min, openEnd: span.openEnd || span.end.distance > max }];
+      });
       const services = route.services.filter(site => site.start >= min && site.end <= max);
       this.renderRoutes.push({ id: route.id, source: { version: this.corridorVersion, samples, segments }, services, tunnels });
       this.renderSamples.push(...samples); this.renderBridges.push(...bridges); this.renderTunnels.push(...tunnels); this.renderServices.push(...services);
@@ -283,7 +287,8 @@ export class World {
     const lateral = dx * right.x + dy * right.y + dz * right.z, height = dx * normal.x + dy * normal.y + dz * normal.z;
     const profile = roadProfile(this.options), offset = Math.min(...profile.centers.map(center => Math.abs(lateral - center)));
     if (offset > profile.halfWidth + 0.65 || height < -0.5 || height > 4.2 + 3.3 * Math.sqrt(1 - (offset / (profile.halfWidth + 0.75)) ** 2)) return 0;
-    return Math.max(0, Math.min(1, (sample.distance - span.start.distance) / 8, (span.end.distance - sample.distance) / 8));
+    return Math.max(0, Math.min(1, span.openStart ? 1 : (sample.distance - span.start.distance) / 8,
+      span.openEnd ? 1 : (span.end.distance - sample.distance) / 8));
   }
 
   inspectTunnel(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {

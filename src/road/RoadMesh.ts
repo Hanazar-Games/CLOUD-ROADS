@@ -73,7 +73,8 @@ export class RoadMesh {
       for (const [i, sample] of spine.samples.entries()) {
         const { right, normal } = roadFrame(sample);
         const tunnel = tunnels.find(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
-        const cover = tunnel ? Math.max(0, Math.min(1, (sample.distance - tunnel.start.distance) / 8, (tunnel.end.distance - sample.distance) / 8)) : 0;
+        const cover = tunnel ? Math.max(0, Math.min(1, tunnel.openStart ? 1 : (sample.distance - tunnel.start.distance) / 8,
+          tunnel.openEnd ? 1 : (tunnel.end.distance - sample.distance) / 8)) : 0;
         for (const [strip, center] of centers.entries()) for (let side = 0; side < 2; side++) {
           const index = i * stride + strip * 2 + side, offset = center + (side === 0 ? -halfWidth : halfWidth);
           positions.setXYZ(index, sample.position.x - this.anchorX + right.x * offset, sample.position.y + right.y * offset, sample.position.z - this.anchorZ + right.z * offset);

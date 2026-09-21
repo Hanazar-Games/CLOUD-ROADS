@@ -6,6 +6,16 @@ import { RoadMesh } from '../src/road/RoadMesh';
 import { RoadSpine } from '../src/road/RoadSpine';
 
 describe('seasonal climate', () => {
+  it('keeps both edges of a streamed tunnel interior free of seasonal snow', () => {
+    const scene = new Scene(), mesh = new RoadMesh(scene), road = new RoadSpine('covered-window', { sample: () => 100 });
+    while (!road.update(0)) { /* Complete the local route. */ }
+    const samples = road.samples, start = samples[0], end = samples.at(-1)!;
+    mesh.update(road, 0, 0, true, [], [{ start, end, samples, openStart: true, openEnd: true }]);
+    const exposure = mesh.mesh.geometry.getAttribute('seasonExposure') as BufferAttribute;
+    expect(exposure.getX(0)).toBe(0); expect(exposure.getX((samples.length - 1) * 2)).toBe(0);
+    mesh.dispose();
+  });
+
   it('keeps tunnel road vertices sheltered while exposing the open approaches', () => {
     const scene = new Scene(), mesh = new RoadMesh(scene), road = new RoadSpine('season', { sample: () => 100 });
     while (!road.update(0)) { /* Complete the local route. */ }

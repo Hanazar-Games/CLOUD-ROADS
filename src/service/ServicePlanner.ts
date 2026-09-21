@@ -60,6 +60,7 @@ export class ServicePlanner {
         let chosen: RoadSample | undefined, score = Infinity, bucket = -1;
         for (const sample of samples) {
           if (Math.abs(sample.distance - target) > 600 || Math.floor(sample.distance / 24) === bucket) continue;
+          if (sample.structure?.kind === 'tunnel' && sample.distance > sample.structure.start - 245 && sample.distance < sample.structure.end + 245) continue;
           bucket = Math.floor(sample.distance / 24);
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;
           for (const side of this.options.roadType === 'highway' ? [-1, 1] : [1]) {

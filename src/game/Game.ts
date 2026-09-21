@@ -152,7 +152,8 @@ export class Game {
       if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)
         || !Number.isFinite(maxGrade) || maxGrade < 0 || maxGrade > 0.4 || !['natural', 'cycles'].includes(elevationMode)
         || !Number.isFinite(climbMin + climbMax) || climbMin < 50 || climbMax > 2000 || climbMin > climbMax) return;
-      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle, maxGrade, elevationMode, climbMin, climbMax });
+      const junctions = element<HTMLInputElement>('junctions').checked, interchanges = element<HTMLInputElement>('interchanges').checked;
+      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle, maxGrade, elevationMode, climbMin, climbMax, junctions, interchanges });
     }, { signal: this.events.signal });
     element('max-grade').addEventListener('input', () => {
       element('max-grade-value').textContent = `${element<HTMLInputElement>('max-grade').value}%`;
@@ -249,11 +250,19 @@ export class Game {
     }, { signal: this.events.signal });
     element('service-view').addEventListener('click', () => {
       this.world.requestServiceView();
+      if (this.world.searching) {
+        element<HTMLButtonElement>('service-view').disabled = true;
+        element('service-view').textContent = '定位中 · 0%';
+      }
       this.setPaused(false);
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('pass-view').addEventListener('click', () => {
       this.world.requestPassView();
+      if (this.world.searching) {
+        element<HTMLButtonElement>('pass-view').disabled = true;
+        element('pass-view').textContent = '定位中 · 0%';
+      }
       this.setPaused(false);
       this.canvas.focus();
     }, { signal: this.events.signal });
@@ -318,12 +327,14 @@ export class Game {
       element<HTMLSelectElement>('road-type').value = options.roadType;
       element<HTMLSelectElement>('road-width').value = String(options.roadWidth);
       element<HTMLSelectElement>('route-style').value = String(options.routeStyle);
+      element<HTMLInputElement>('junctions').checked = options.junctions;
+      element<HTMLInputElement>('interchanges').checked = options.interchanges;
       element<HTMLInputElement>('max-grade').value = String(Math.round(options.maxGrade * 100));
       element('max-grade-value').textContent = `${Math.round(options.maxGrade * 100)}%`;
       element<HTMLSelectElement>('elevation-mode').value = options.elevationMode;
       element<HTMLInputElement>('climb-min').value = String(options.climbMin); element<HTMLInputElement>('climb-max').value = String(options.climbMax);
       this.syncClimbControls();
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.elevationMode === 'cycles' ? ` · 单次爬升 ${options.climbMin}–${options.climbMax} 米` : ''}`;
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.elevationMode === 'cycles' ? ` · 单次爬升 ${options.climbMin}–${options.climbMax} 米` : ''} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`;
       this.setError(null);
       this.resetCamera();
     } catch (error) {
@@ -366,6 +377,8 @@ export class Game {
   private resetCamera(): void {
     this.stopTravel();
     this.world.resetCamera(this.camera);
+    for (const id of ['drive-toggle', 'walk-toggle', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'crossing-view',
+      'tunnel-view', 'lights-view', 'service-view', 'pass-view']) element<HTMLButtonElement>(id).disabled = true;
     this.flight.reset();
     this.setPaused(false);
     this.setClouds(this.clouds.enabled);

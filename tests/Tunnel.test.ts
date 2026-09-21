@@ -41,7 +41,7 @@ it('retains every ventilation instance across a full highway window with repeate
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
   const start = route()[0], segment = new RoadSegment(start, 0, 0, 24000);
   const samples = Array.from({ length: 12001 }, (_, i) => segment.sample(i / 12000));
-  const terrain = { sample: (_x: number, z: number) => z < -50 && z > -23900 ? 300 : 200 };
+  const terrain = { sample: (_x: number, z: number) => -z % 4000 > 100 && -z % 4000 < 3900 ? 300 : 200 };
   const spans = new TunnelDetector(terrain, options).detect(samples, []), scene = new Scene(), mesh = new TunnelMesh(scene, 'capacity', options);
   mesh.update(spans, RoadCorridor.fromSamples(samples, [], options), terrain, 1, 0, 0, true);
   expect(mesh.fans.count).toBeGreaterThan(512);
@@ -56,6 +56,28 @@ it('keeps winding traverses open and reserves tunnels for the connecting cruise 
   expect(new TunnelDetector(hill).detect(samples, []).length).toBeGreaterThan(0);
   expect(new TunnelDetector(hill, winding).detect(samples, [])).toHaveLength(0);
   expect(new TunnelDetector(hill, winding).detect(route(), []).length).toBeGreaterThan(0);
+});
+
+it('does not carve artificial open gaps into a covered run longer than 5 km', () => {
+  const segment = new RoadSegment(route()[0], 0, 0, 6500);
+  const samples = Array.from({ length: 3251 }, (_, i) => segment.sample(i / 3250));
+  const terrain = { sample: (_x: number, z: number) => z < -100 && z > -6400 ? 300 : 200 };
+  expect(new TunnelDetector(terrain).detect(samples, [])).toHaveLength(0);
+});
+
+it('keeps streamed tunnel interiors roofed without rendering false portals or cover end walls', () => {
+  const samples = route(), complete = new TunnelDetector(hill).detect(samples, [])[0];
+  const points = complete.samples.slice(50, -50);
+  const span = { ...complete, start: points[0], end: points.at(-1)!, samples: points, openStart: true, openEnd: true };
+  const scene = new Scene(), mesh = new TunnelMesh(scene, 'interior');
+  mesh.update([span], RoadCorridor.fromSamples(samples, []), hill, 1, 0, 0, true); scene.updateMatrixWorld(true);
+  expect(mesh.portals.geometry.getAttribute('position').count).toBe(0);
+  const ray = new Raycaster(new Vector3(0, 203, span.start.position.z + 1), new Vector3(0, 0, -1), 0, span.end.distance - span.start.distance + 2);
+  expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.equipment])).toHaveLength(0);
+  ray.set(new Vector3(0, 203, (span.start.position.z + span.end.position.z) / 2), new Vector3(0, 1, 0));
+  expect(ray.intersectObject(mesh.lining).length).toBeGreaterThan(0);
+  expect(ray.intersectObject(mesh.cover).length).toBeGreaterThan(0);
+  mesh.dispose();
 });
 
 it.each(['mountain', 'highway'] as const)('keeps both lane edges clear on real curved %s tunnels', roadType => {

@@ -73,7 +73,10 @@
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">蜿蜒程度</label>
             <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
-            <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；5 档以连续发卡弯为主，服务区附近保留短段缓路。全直道方向固定，仍可上下起伏。</p>
+            <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。斜拉桥保持直线，坡度不超过 1%。全直道方向固定，仍可上下起伏。</p>
+            <label for="junctions"><input id="junctions" type="checkbox" checked /> 山路岔路 · 可转入支路</label>
+            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 高速立交 · 含进出匝道</label>
+            <p class="panel-help">按道路类型启用；关闭后沿主路双向无限延伸。受地形限制的高速立交仅在岔路也开启时改为普通岔路。应用后重新生成。</p>
             <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
@@ -154,7 +157,7 @@
         <div class="actions road-actions"><button id="pass-view" type="button" disabled>下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>
         <p class="panel-help">服务区约 10–20 公里一处，深谷地段以架空平台连接匝道。点击可前往下一处，定位期间可继续探索，返回起点可取消。</p>
-        <p class="panel-help" id="structure-help">路灯分段出现，入夜点亮；隧道在有山体覆盖的路段生成。</p>
+        <p class="panel-help" id="structure-help">路灯分段出现，入夜点亮；隧道依山势生成，单座最长 5 公里。深谷采用桥梁跨越，保留谷底地形。</p>
         <div class="actions road-actions"><button id="cloud-view" type="button" disabled>穿云起点</button><button id="cloud-toggle" type="button" aria-pressed="true">云层</button><span id="cloud-region">云上</span></div>
         <p id="cloud-help" role="status">前往穿云起点，按住 Space 上升，Shift 下降。</p>
         <div class="actions road-actions"><button id="pause" type="button" aria-pressed="false">暂停探索</button></div>

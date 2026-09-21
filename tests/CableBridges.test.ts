@@ -99,7 +99,7 @@ it.each([200, 200.01, 350])('uses long-span cable stays only above 200 m (%s)', 
   mesh.dispose(); expect(scene.children).toHaveLength(0);
 });
 
-it('keeps cable fans out of steep hairpin carriageways', () => {
+it('uses regular supports instead of cable towers on steep hairpin carriageways', () => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, roadWidth: 10, routeStyle: 5 as const, maxGrade: 0.4 };
   const generator = new RoadGenerator('curved-cables', { sample: (_x, z) => 500 - z * 0.5 }, options);
   let point = generator.start; const samples = [];
@@ -108,7 +108,8 @@ it('keeps cable fans out of steep hairpin carriageways', () => {
   const terrain = { sample: () => 0 }, spans = new BridgeDetector(terrain, options).detect(samples);
   const scene = new Scene(), mesh = new BridgeMesh(scene, options);
   mesh.update(spans, RoadCorridor.fromSamples(samples, spans, options), terrain, 1, 0, 0, true); scene.updateMatrixWorld(true);
-  expect(mesh.cableBridges.towerCount).toBeGreaterThan(0); expect(mesh.cableBridges.cables.count).toBeGreaterThan(20);
+  expect(mesh.cableBridges.towerCount).toBe(0); expect(mesh.cableBridges.cables.count).toBe(0);
+  expect(mesh.pierCount).toBeGreaterThan(10);
   for (let i = 1; i < samples.length; i += 8) for (const offset of [-12, -6, 6, 12]) {
     const a = samples[i - 1], b = samples[i], start = (s: typeof a) => {
       const { right, normal } = roadFrame(s), p = s.position;
@@ -120,3 +121,23 @@ it('keeps cable fans out of steep hairpin carriageways', () => {
   }
   mesh.dispose();
 }, 20000);
+
+it.each([0.01, -0.01, 0.0101, -0.0101])('enforces the absolute 1 percent grade limit on cable decks (%s)', grade => {
+  const start = { ...new RoadGenerator('grade', { sample: () => 299 }).start, grade };
+  const segment = new RoadSegment(start, start.heading, grade, 960);
+  const samples = Array.from({ length: 481 }, (_, i) => segment.sample(i / 480));
+  const terrain = { sample: () => 0 }, spans = new BridgeDetector(terrain).detect(samples), mesh = new BridgeMesh(new Scene());
+  mesh.update(spans, RoadCorridor.fromSamples(samples, spans), terrain, 1, 0, 0, true);
+  expect(mesh.cableBridges.towerCount > 0).toBe(Math.abs(grade) <= 0.01);
+  mesh.dispose();
+});
+
+it('rejects cable towers on a level curved crossing', () => {
+  const start = new RoadGenerator('curve', { sample: () => 299 }).start;
+  const segment = new RoadSegment(start, 0.3, 0, 960);
+  const samples = Array.from({ length: 481 }, (_, i) => segment.sample(i / 480)), terrain = { sample: () => 0 };
+  const spans = new BridgeDetector(terrain).detect(samples), mesh = new BridgeMesh(new Scene());
+  mesh.update(spans, RoadCorridor.fromSamples(samples, spans), terrain, 1, 0, 0, true);
+  expect(mesh.cableBridges.towerCount).toBe(0); expect(mesh.pierCount).toBeGreaterThan(3);
+  mesh.dispose();
+});

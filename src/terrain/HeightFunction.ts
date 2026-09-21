@@ -76,7 +76,11 @@ export class HeightFunction {
     const relief = flank * flank * (3 - 2 * flank);
     const saddle = Math.min(1, Math.abs(z - this.ranges.passZ(guide.id)) / 1600);
     const ribs = this.noise.ridged(wx / 180, wz / 290, 2);
-    return guide.height + relief * (180 + ranges * (0.12 + guide.level * (0.65 + region * 0.25)) + macro * 0.12 + (ribs - 0.45) * (55 + guide.level * 135))
-      + medium * (0.1 + saddle * 0.3) + detail * 0.45;
+    const crests = this.noise.ridged(wx / 1250 + 31, wz / 1700 - 53, 2);
+    const drainage = Math.abs(this.noise.sample(wx / 3200 + 61, wz / 900 - 117));
+    const gorge = Math.max(0, 1 - drainage / 0.16) ** 2 * (90 + guide.level * 230) * (1 - relief * 0.65) * saddle;
+    return guide.height + relief * (180 + ranges * (0.12 + guide.level * (0.65 + region * 0.25)) + macro * 0.12
+      + crests ** 3 * (240 + guide.level * 650) + (ribs - 0.45) * (55 + guide.level * 135))
+      + medium * (0.1 + saddle * 0.3) + detail * 0.45 - gorge;
   }
 }

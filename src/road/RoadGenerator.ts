@@ -5,6 +5,7 @@ import { RoadSegment, type MountainPlan, type RoadControlPoint } from './RoadSeg
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { MountainGuide } from '../terrain/MountainRanges';
 import { serviceTarget } from '../service/ServiceSchedule';
+import { StructurePlanner } from './StructurePlanner';
 
 export interface RoadTerrain { sample(x: number, z: number): number; route?(z: number): MountainGuide | undefined }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -13,14 +14,35 @@ export class RoadGenerator {
   readonly start: RoadControlPoint;
   private readonly noise: Noise;
   private readonly terrain: RoadTerrain;
+  private readonly structures: StructurePlanner;
 
   constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS, origin?: RoadControlPoint) {
     this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType);
     this.noise = new Noise(hashSeed(`${seed}:road`));
+    this.structures = new StructurePlanner(this.terrain, options);
     this.start = origin ?? { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    let structure = start.structure;
+    if (structure && start.distance >= structure.finish) structure = undefined;
+    if (!structure && start.distance >= (start.nextStructure ?? 0) && !this.serviceApproach(start.distance)) {
+      structure = this.structures.plan(start);
+      if (structure) {
+        const service = serviceTarget(this.seed, Math.max(1, Math.round((start.distance + structure.finish) / 30000)));
+        if (structure.finish > service - 1000 && start.distance < service + 800) structure = undefined;
+      }
+      start = { ...start, nextStructure: start.distance + 192 };
+    }
+    start = { ...start, structure };
+    if (structure) {
+      const grade = Math.abs(structure.grade - start.grade) <= this.structures.gradeStep ? structure.grade
+        : start.grade + Math.sign(structure.grade - start.grade) * this.structures.gradeStep;
+      const segment = new RoadSegment({ ...start, mountain: undefined }, structure.heading, grade);
+      segment.end.nextMountain = structure.finish + 192;
+      segment.end.nextStructure = structure.finish + 192;
+      return segment;
+    }
     const planned = this.plan(start);
     if (this.options.elevationMode !== 'cycles' || this.options.maxGrade === 0) return planned;
     let climb = start.climb ?? { cycle: 0, base: this.start.position.y, target: this.start.position.y + this.climbGain(0), ascending: true };

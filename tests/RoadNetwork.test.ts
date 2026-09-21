@@ -10,6 +10,16 @@ import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 const flat = { sample: () => 100 };
 const options = { ...DEFAULT_OPTIONS, terrain: 'meadow' as const, routeStyle: 1 as const };
 
+it.each(['mountain', 'highway'] as const)('can disable %s junctions while retaining the continuous road in both directions', roadType => {
+  const settings = { ...options, roadType, junctions: false, interchanges: false };
+  const root = new RoadSpine('optional', flat, settings), network = new RoadNetwork('optional', flat, settings, root);
+  for (let i = 0; i < 160; i++) network.update(128, 128, 101, 4000);
+  expect(network.junctions).toHaveLength(0);
+  expect(network.routes.map(route => route.id).sort()).toEqual(['back', 'root']);
+  expect(root.openings).toHaveLength(0);
+  expect(network.nearest(128, 400)!.sample.position.z).toBeGreaterThan(300);
+});
+
 it('extends an oriented road east or south and replays its geometry after returning', () => {
   const base = new RoadSpine('axis', flat, options);
   for (const heading of [Math.PI / 2, Math.PI]) {
@@ -22,6 +32,18 @@ it('extends an oriented road east or south and replays its geometry after return
     for (let i = 0; i < 1000 && !road.update(road.coordinate(128, 128)); i++) { /* Return to the origin. */ }
     expect(road.segments[0].start.position).toEqual(base.generator.start.position);
   }
+});
+
+it.each([
+  ['mountain', true, false, 0.06, 'fork'], ['mountain', false, true, 0.06, undefined],
+  ['highway', false, true, 0.06, 'stack'], ['highway', true, false, 0.06, undefined],
+  ['highway', false, true, 0, undefined],
+] as const)('independently configures %s forks %s and interchanges %s with grade %s', (roadType, junctions, interchanges, maxGrade, kind) => {
+  const settings = { ...options, roadType, junctions, interchanges, maxGrade, routeStyle: 0 as const };
+  const root = new RoadSpine('stack', flat, settings), network = new RoadNetwork('stack', flat, settings, root);
+  for (let i = 0; i < 200; i++) network.update(128, 128, 101, 4000);
+  expect(network.junctions[0]?.kind).toBe(kind);
+  if (!kind) { expect(root.openings).toHaveLength(0); expect(network.routes).toHaveLength(2); }
 });
 
 it('separates interchange crossings vertically and samples the selected deck', () => {

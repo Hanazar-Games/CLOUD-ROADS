@@ -96,6 +96,7 @@ dt { opacity: .55; } dd { margin: 0; text-align: right; overflow-wrap: anywhere;
 #turn-left.lit, #turn-right.lit { color: #ffbe55; text-shadow: 0 0 9px #ffac5470; }
 .world-options summary, output, #settings-status, .seed-entry button, #cloud-region { color: var(--accent); }
 input[type=range] { accent-color: var(--accent); }
+input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertical-align: middle; accent-color: var(--accent); }
 .actions button:hover, .actions button[aria-pressed=true] { background: #79e5ed20; border-color: var(--accent); }
 .world-options select, .climb-range input { background: #0a1d2d; border-color: #79e5ed35; }
 .braking #speed-line { background: #efb594; }

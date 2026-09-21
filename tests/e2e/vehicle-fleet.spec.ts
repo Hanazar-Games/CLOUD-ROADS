@@ -6,7 +6,8 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/?seed=CLOUD-ROAD-001');
+  await page.goto('/?seed=FLEET-FLAT');
+  await page.locator('#terrain-kind').selectOption('meadow');
   await page.locator('#road-type').selectOption('highway');
   await page.locator('#route-style').selectOption('0');
   await page.locator('#max-grade').fill('0');
@@ -36,6 +37,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   await page.locator('#vehicle-kind').selectOption('semi20');
   await page.locator('#weather-kind').selectOption('storm');
   await page.locator('#fog-density').fill('150');
+  await expect(metric('Tunnel shelter')).toHaveText('0%');
   await expect(metric('Rain visible')).toHaveText('yes');
   await page.locator('#world').evaluate(canvas => {
     const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;

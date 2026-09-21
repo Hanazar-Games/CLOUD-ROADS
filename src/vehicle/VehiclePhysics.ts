@@ -145,8 +145,13 @@ export class VehiclePhysics {
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + (1 - grip) * 0.5) * STEP);
     }
     this.speed = clamp(this.speed, -config.reverseSpeed, config.maxSpeed);
-    this.steering = approach(this.steering, clamp(input.steer, -1, 1) * config.steer / (1 + Math.abs(this.speed) / 28), config.steerRate * STEP);
     const stability = this.kind === 'motorcycle' ? 8 : Math.min(8, GRAVITY * config.width / (2 * config.cg) * 0.7);
+    const speed = Math.abs(this.speed), blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
+    const lowSpeedLock = config.steer / (1 + speed / 28);
+    const highSpeedLock = Math.min(lowSpeedLock, Math.atan(this.wheelbase * stability * 1.15 / Math.max(1, speed * speed)));
+    const steeringLock = lowSpeedLock + (highSpeedLock - lowSpeedLock) * smooth;
+    this.steering = approach(this.steering, clamp(input.steer, -1, 1) * steeringLock,
+      config.steerRate * Math.max(0.08, steeringLock / config.steer) * STEP);
     const tireAcceleration = (this.speed - oldSpeed) / STEP + slopeForce;
     const availableGrip = this.braking || this.parked ? Math.min(grip, brakingGrip) : grip;
     const lateral = Math.sqrt(Math.max(0, (availableGrip * GRAVITY) ** 2 - tireAcceleration ** 2));

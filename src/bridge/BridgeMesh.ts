@@ -12,7 +12,7 @@ import { bridgeSpacing, bridgeTier } from './BridgeProfile';
 import { BridgeDeck } from './BridgeDeck';
 import { createConcreteMaterial } from './ConcreteMaterial';
 import { isServiceAccess } from '../road/RoadProtection';
-import { CABLE_SPACING, CableBridgeMesh } from './CableBridgeMesh';
+import { cableAlignment, CABLE_SPACING, CableBridgeMesh } from './CableBridgeMesh';
 import type { ServiceArea } from '../service/ServicePlanner';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
@@ -132,7 +132,7 @@ export class BridgeMesh {
           return this.between(a, b, (distance - a.distance) / (b.distance - a.distance));
         };
         const towers: RoadSample[] = [];
-        if (span.depth > 200) {
+        if (span.depth > 200 && cableAlignment(span)) {
           for (let distance = Math.ceil(first / CABLE_SPACING) * CABLE_SPACING; distance < last - 1e-6; distance += CABLE_SPACING) {
             if (span.samples.some(s => Math.abs(s.distance - distance) <= CABLE_SPACING / 2 && heightAt(s) > 200)) towers.push(at(distance));
           }
@@ -152,7 +152,7 @@ export class BridgeMesh {
           while (span.samples[index].distance < distance) index++;
           const a = span.samples[index - 1], b = span.samples[index];
           const point = this.between(a, b, (distance - a.distance) / (b.distance - a.distance));
-          if (towers.some(tower => Math.abs(tower.distance - distance) < CABLE_SPACING / 2)) continue;
+          if (towers.some(tower => Math.abs(tower.distance - distance) <= CABLE_SPACING / 2)) continue;
           if (distance % bridgeSpacing(heightAt(point)) !== 0) continue;
           this.support(point, false, corridor, terrain);
         }

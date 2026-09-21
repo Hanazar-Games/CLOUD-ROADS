@@ -10,6 +10,28 @@ function run(car: VehiclePhysics, seconds: number, input = idle, surface = flat,
 function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); return car; }
 
 describe('VehiclePhysics', () => {
+  it('progressively limits fast steering without losing low-speed manoeuvrability or self-centering', () => {
+    const slow = create(), fast = create();
+    slow.speed = 8; fast.speed = 36; slow.parked = fast.parked = false;
+    run(slow, 0.6, { ...idle, steer: 1 }); run(fast, 0.6, { ...idle, steer: 1 });
+    expect(slow.steering).toBeGreaterThan(0.35);
+    expect(fast.steering).toBeLessThan(0.06);
+    expect(fast.steering).toBeGreaterThan(0.005);
+    const partial = create(); partial.speed = 36; partial.parked = false;
+    run(partial, 0.6, { ...idle, steer: 0.2 });
+    expect(partial.heading).toBeLessThan(fast.heading * 0.3);
+    run(fast, 0.5); expect(fast.steering).toBe(0);
+  });
+
+  it('keeps rapid high-speed steering reversals independent of frame rate', () => {
+    const a = create(), b = create();
+    for (const car of [a, b]) { car.speed = 36; car.parked = false; }
+    for (const steer of [1, -1, 0, 0.3]) {
+      run(a, 1, { ...idle, steer }, flat, 30); run(b, 1, { ...idle, steer }, flat, 144);
+    }
+    for (const field of ['x', 'z', 'speed', 'heading', 'steering'] as const) expect(a[field]).toBeCloseTo(b[field], 8);
+  });
+
   it('climbs and brakes on the maximum selectable 40% slope with all wheels supported', () => {
     const slope: SurfaceSampler = (_x, z) => ({ height: 400 - z * 0.4, grip: 1 });
     const car = create(slope);

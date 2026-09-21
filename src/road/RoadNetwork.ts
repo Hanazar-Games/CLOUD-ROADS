@@ -106,6 +106,7 @@ export class RoadNetwork {
   }
 
   private planJunctions(x: number, z: number): void {
+    if (this.options.roadType === 'highway' ? !this.options.interchanges : !this.options.junctions) return;
     const route = this.active, current = route.road.nearest(x, z)!;
     const first = Math.max(0, Math.floor((current.distance - 2400) / 7200));
     for (let index = first; index <= first + 1; index++) {
@@ -117,7 +118,8 @@ export class RoadNetwork {
       if (Math.abs(service - distance) < 1300) distance += 2300;
       if (distance > current.distance + 2800 || distance < current.distance - 1400) continue;
       const segment = route.road.segments.find(s => s.start.distance >= distance && s.start.distance < distance + 1200
-        && Math.abs(s.start.grade) < 0.075 && !route.tunnels.some(span => s.start.distance > span.start.distance - 200 && s.start.distance < span.end.distance + 200)
+        && !s.start.structure && !s.end.structure && Math.abs(s.start.grade) < 0.075
+        && !route.tunnels.some(span => s.start.distance > span.start.distance - 200 && s.start.distance < span.end.distance + 200)
         && !route.services.some(site => Math.abs(site.sample.distance - s.start.distance) < 1300));
       if (!segment) continue;
       distance = segment.start.distance;
@@ -132,7 +134,8 @@ export class RoadNetwork {
       });
       let exits = ramps(kind);
       if (kind === 'stack' && exits.some(exit => !this.clearance(exit.prefix, route.road)
-        || route.tunnels.some(span => exit.entry.distance > span.start.distance - 200 && exit.entry.distance < span.end.distance + 200))) { kind = 'fork'; exits = ramps(kind); }
+        || exit.entry.structure || route.tunnels.some(span => exit.entry.distance > span.start.distance - 200 && exit.entry.distance < span.end.distance + 200))) { kind = 'fork'; exits = ramps(kind); }
+      if (kind === 'fork' && !this.options.junctions) continue;
       const junction: Junction = { id, route: route.id, distance, sample, kind, exits: [] };
       route.road.openings.splice(0, route.road.openings.length, ...route.road.openings.filter(range => range.end >= current.distance - 8000));
       for (const { side, childId, entry, prefix } of exits) {
@@ -151,7 +154,8 @@ export class RoadNetwork {
 
   private ramp(entry: RoadSample, id: string, side: number, kind: Junction['kind']): RoadSegment[] {
     const prefix: RoadSegment[] = [];
-    let start: RoadControlPoint = { ...entry, position: { ...entry.position, y: entry.position.y + 0.015 }, distance: 0, routeId: id, mountain: undefined, climb: undefined, opening: undefined, bank: 0 };
+    let start: RoadControlPoint = { ...entry, position: { ...entry.position, y: entry.position.y + 0.015 }, distance: 0, routeId: id,
+      mountain: undefined, climb: undefined, structure: undefined, nextStructure: undefined, opening: undefined, bank: 0 };
     const turns = kind === 'stack' ? side < 0 ? [Math.PI / 2, Math.PI, Math.PI * 1.5, Math.PI * 1.5] : [Math.PI / 2, Math.PI / 2] : [side * 0.7, side * 0.85];
     for (const [i, turn] of turns.entries()) {
       const grade = kind === 'stack' ? Math.min(this.options.maxGrade, 0.06) * (i === 0 ? 1 : i === 1 && side < 0 ? 0.8 : 0) : 0;

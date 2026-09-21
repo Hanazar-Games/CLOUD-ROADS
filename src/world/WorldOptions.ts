@@ -10,10 +10,12 @@ export interface WorldOptions {
   elevationMode: 'natural' | 'cycles';
   climbMin: number;
   climbMax: number;
+  junctions: boolean;
+  interchanges: boolean;
 }
 
 export const DEFAULT_OPTIONS: Readonly<WorldOptions> = { terrain: 'alpine', roadType: 'mountain', roadWidth: 8, routeStyle: 1, maxGrade: 0.06,
-  elevationMode: 'natural', climbMin: 300, climbMax: 900 };
+  elevationMode: 'natural', climbMin: 300, climbMax: 900, junctions: true, interchanges: true };
 export const routeNames: Record<RouteStyle, string> = { 0: '全直道 · 零弯道', 1: '1 档 · 舒缓山路', 2: '2 档 · 蜿蜒山路', 3: '3 档 · 盘山折返', 4: '4 档 · 密集发卡弯', 5: '5 档 · 连续发卡弯' };
 export const terrainNames: Record<TerrainKind, string> = { alpine: '高山雪岭', forest: '森林山谷', desert: '沙漠峡谷', dunes: '沙丘旷野',
   meadow: '草甸丘陵', badlands: '红岩荒原', karst: '喀斯特峰林', volcanic: '火山高地', tundra: '冰蚀苔原', autumn: '阔叶丘陵' };

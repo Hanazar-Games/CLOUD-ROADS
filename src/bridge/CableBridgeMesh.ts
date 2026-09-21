@@ -8,6 +8,9 @@ import { RoadIndex } from '../road/RoadIndex';
 import type { WorldOptions } from '../world/WorldOptions';
 
 export const CABLE_SPACING = 384;
+export const cableAlignment = (span: BridgeSpan): boolean => span.samples.length > 1 && span.samples.every(sample =>
+  Math.abs(sample.grade) <= 0.01 && Math.abs(sample.curvature) < 1e-8
+  && Math.abs(sample.heading - span.start.heading) < 1e-8 && Math.abs(sample.bank) < 1e-8);
 
 export class CableBridgeMesh {
   readonly towers: InstancedMesh;
@@ -33,6 +36,7 @@ export class CableBridgeMesh {
   }
 
   add(sample: RoadSample, span: BridgeSpan, terrain: RoadTerrain): void {
+    if (!cableAlignment(span)) return;
     const p = sample.position, shaft = Math.max(3.6, Math.min(10, (p.y - terrain.sample(p.x, p.z)) * 0.014));
     const half = this.profile.outerHalfWidth + shaft / 2 + 1.2;
     const r = { x: Math.cos(sample.heading), z: Math.sin(sample.heading) };
