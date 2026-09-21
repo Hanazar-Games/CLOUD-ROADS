@@ -1,8 +1,18 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { WalkingPhysics, type WalkingInput } from '../src/walking/WalkingPhysics';
 
 const flat = { sample: () => ({ height: 10, grip: 1 }), constrainWalker: () => false };
 const idle: WalkingInput = { forward: 0, lateral: 0, run: false, sprint: false, jump: false };
+
+it('reuses stationary foot contacts within a frame but notices changed ground on the next frame', () => {
+  const person = new WalkingPhysics(); person.reset(0, 10, 0, 0);
+  let height = 10;
+  const surface = { ...flat, sample: vi.fn(() => ({ height })) };
+  person.update(1 / 30, idle, surface);
+  expect(surface.sample.mock.calls.length).toBeLessThanOrEqual(5);
+  height = 9.8; person.update(1 / 60, idle, surface);
+  expect(person.y).toBeCloseTo(height);
+});
 const move = (input: Partial<WalkingInput>, seconds = 3, hz = 60) => {
   const person = new WalkingPhysics(); person.reset(0, 10, 0, 0);
   for (let i = 0; i < seconds * hz; i++) person.update(1 / hz, { ...idle, ...input }, flat);

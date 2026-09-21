@@ -72,7 +72,10 @@ export class CloudSystem {
     uniforms.nightAmount.value = this.sun.night;
   }
 
-  resize(width: number, height: number): void { this.target.setSize(width, height); }
+  resize(width: number, height: number): void {
+    this.target.setSize(width, height);
+    this.material.uniforms.pixelSize.value.set(1 / Math.max(1, width), 1 / Math.max(1, height));
+  }
 
   render(renderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): void {
     renderer.setRenderTarget(this.target);

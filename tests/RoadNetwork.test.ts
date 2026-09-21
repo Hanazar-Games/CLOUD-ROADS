@@ -89,7 +89,7 @@ it('separates interchange crossings vertically and samples the selected deck', (
     expect(point.position.y - below.position.y).toBeGreaterThan(12);
   }
   const point = crossings.reduce((a, b) => Math.abs(a.position.x - 128) < Math.abs(b.position.x - 128) ? a : b);
-  const surface = new DrivingSurface({ seed: 'stack', options: highway, road: root, network, bridges: network.active.bridges, tunnels: [], services: [], sampleGround: () => ({ height: 100 }) });
+  const surface = new DrivingSurface({ seed: 'stack', options: highway, road: root, network, bridges: network.active.bridges, tunnels: [], services: [], groundHeight: () => 100 });
   const x = 128 + roadProfile(highway).centers[1];
   surface.level = 100;
   expect(surface.sample(x, point.position.z).height).toBeCloseTo(root.nearest(x, point.position.z)!.position.y, 2);
@@ -127,7 +127,7 @@ it.each([['mountain', false, 'roadster'], ['mountain', true, 'roadster'], ['high
   const root = new RoadSpine('drive-fork', flat, settings), network = new RoadNetwork('drive-fork', flat, settings, root);
   visit(network);
   const junction = network.junctions[0], branch = network.routes.find(route => route.id === junction.exits[0])!;
-  const surface = new DrivingSurface({ seed:'drive-fork', options:settings, network, road:root, bridges:[], tunnels:[], services:[], sampleGround:()=>({height:100}) });
+  const surface = new DrivingSurface({ seed:'drive-fork', options:settings, network, road:root, bridges:[], tunnels:[], services:[], groundHeight:()=>100 });
   const car = new VehiclePhysics(kind), lane = roadProfile(settings).centers.at(-1)! + settings.roadWidth / 4;
   const start = branch.road.samples[0], r = roadFrame(start).right;
   car.reset(start.position.x + r.x * lane, start.position.z + r.z * lane, start.heading, surface.sample);

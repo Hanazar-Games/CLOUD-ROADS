@@ -11,6 +11,8 @@ export class VehicleSystems {
   hasWindshield = true;
   beam: 'off' | 'low' | 'high' = 'off';
   sweep = 0;
+  sweepFrom = 0;
+  sweepTo = 0;
   wiperRate = 0;
   rain = 0;
   signal: SignalMode = 'off';
@@ -27,6 +29,7 @@ export class VehicleSystems {
   private cycling = false;
 
   update(dt: number, darkness: number, rain: number, shelter: number, steering = 0): void {
+    this.sweepFrom = this.sweepTo = this.sweep;
     if (this.lastSignal !== this.signal) { this.blink = 0; this.turned = false; this.lastSignal = this.signal; }
     if (dt > 0 && Number.isFinite(dt)) {
       this.blink = (this.blink + Math.min(dt, 0.1)) % 0.8;
@@ -39,7 +42,7 @@ export class VehicleSystems {
     this.rain = Math.max(0, Math.min(1, rain * (1 - shelter)));
     this.wiperRate = !this.hasWindshield || this.wipers === 'off' ? 0 : this.wipers === 'high' ? 1.6
       : this.wipers === 'low' || this.wipers === 'intermittent' ? 1.1 : this.rain < 0.03 ? 0 : this.rain > 0.65 ? 1.6 : 1.1;
-    if (!this.hasWindshield) { this.sweep = this.phase = this.waiting = 0; this.cycling = false; return; }
+    if (!this.hasWindshield) { this.sweep = this.sweepFrom = this.sweepTo = this.phase = this.waiting = 0; this.cycling = false; return; }
     let remaining = Number.isFinite(dt) ? Math.max(0, Math.min(0.1, dt)) : 0;
     const delay = this.wipers === 'intermittent' ? 2.5 : this.wipers === 'auto' && this.rain < 0.3 ? 2.5 : 0;
     if (!this.wiperRate || !delay) this.waiting = 0;
@@ -51,9 +54,11 @@ export class VehicleSystems {
         this.cycling = true; this.cycleRate = this.wiperRate;
       }
       const step = Math.min(remaining, (1 - this.phase) / this.cycleRate);
+      if (this.phase <= 0.5 && this.phase + step * this.cycleRate >= 0.5) this.sweepTo = 1;
       this.phase += step * this.cycleRate; remaining -= step;
-      if (this.phase >= 1 - 1e-9) { this.phase = 0; this.cycling = false; this.waiting = delay; }
+      if (this.phase >= 1 - 1e-9) { this.phase = 0; this.cycling = false; this.waiting = delay; this.sweepFrom = 0; }
     }
     this.sweep = (1 - Math.cos(this.phase * Math.PI * 2)) / 2;
+    this.sweepFrom = Math.min(this.sweepFrom, this.sweep); this.sweepTo = Math.max(this.sweepTo, this.sweep);
   }
 }

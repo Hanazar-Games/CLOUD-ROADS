@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, Scene, SpotLight } from 'three';
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Scene, ShaderMaterial, SpotLight } from 'three';
 import { expect, it } from 'vitest';
 import { Windshield } from '../src/vehicle/Windshield';
 import { VehicleSystems } from '../src/vehicle/VehicleSystems';
@@ -10,11 +10,11 @@ it('clears actual glass droplets within the swept area and freezes water when pa
     const window = new Mesh(new BoxGeometry(), new MeshBasicMaterial()), parent = new Group(); parent.add(window);
     const glass = new Windshield(window, 1.55, 0.81), systems = new VehicleSystems(); systems.wipers = wipers;
     for (let i = 0; i < 600; i++) { systems.update(1 / 60, 0, 1, 0); glass.update(1 / 60, systems, 0); }
-    const drops = glass.root.children.find(child => child instanceof InstancedMesh) as InstancedMesh;
-    const sizes = Array.from({ length: drops.count }, (_, i) => drops.instanceMatrix.array[i * 16]);
-    const before = drops.instanceMatrix.array.slice(); glass.update(0, systems, 0);
-    expect(drops.instanceMatrix.array).toEqual(before);
-    expect(drops.visible).toBe(true);
+    const film = glass.root.children.find(child => child instanceof Mesh && child.material instanceof ShaderMaterial) as Mesh;
+    const sizes = Array.from(glass.rain.data);
+    const before = glass.rain.data.slice(); glass.update(0, systems, 0);
+    expect(glass.rain.data).toEqual(before);
+    expect(film.visible).toBe(true);
     glass.dispose(); window.geometry.dispose(); window.material.dispose();
     expect(parent.children).toHaveLength(1);
     return sizes;

@@ -42,6 +42,10 @@ export class VehiclePhysics {
   }
 
   get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
+  park(): void {
+    this.speed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
+    this.parked = true; this.braking = false; this.saveMotion();
+  }
   wheelSteering(point: WheelPoint): number {
     const curvature = Math.tan(this.steering) / this.wheelbase;
     return point.steer ? Math.atan((point.along - this.rearAxle) * curvature / (1 - point.x * curvature)) : 0;

@@ -336,10 +336,11 @@ export class World {
       p.y + right.y * offset + normal.y * height, p.z + right.z * offset + normal.z * height - this.origin.z);
   }
 
+  groundHeight(x: number, z: number): number { return this.corridor.height(x, z, this.height.sample(x, z)); }
+
   sampleGround(x: number, z: number): GroundSample {
-    const height = (px: number, pz: number) => this.corridor.height(px, pz, this.height.sample(px, pz));
-    const y = height(x, z);
-    const normalY = 4 / Math.hypot(height(x - 2, z) - height(x + 2, z), 4, height(x, z - 2) - height(x, z + 2));
+    const y = this.groundHeight(x, z);
+    const normalY = 4 / Math.hypot(this.groundHeight(x - 2, z) - this.groundHeight(x + 2, z), 4, this.groundHeight(x, z - 2) - this.groundHeight(x, z + 2));
     return { height: y, normalY, biome: this.biomes.sample(x, z, y, normalY) };
   }
 

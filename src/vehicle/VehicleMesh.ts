@@ -157,6 +157,8 @@ export class VehicleMesh {
   }
 
   setPaint(color: number): void { this.paint.color.setHex(color); }
+  get glassWater(): number { return this.windshield?.rain.coverage ?? 0; }
+  get sweptWater(): number { return this.windshield?.rain.sweptCoverage ?? 0; }
 
   sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0): void {
     this.root.position.set(car.x - origin.x, car.y, car.z - origin.z);

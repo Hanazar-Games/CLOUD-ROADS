@@ -14,10 +14,23 @@ function world(highway = false) {
   const options = { ...DEFAULT_OPTIONS, roadType: highway ? 'highway' as const : 'mountain' as const };
   const road = new RoadSpine('driving-surface', { sample: () => 100 }, options);
   while (!road.update(0)) { /* bounded generation */ }
-  return { seed: 'driving-surface', road, options, bridges: [] as BridgeSpan[], services: [] as ServiceArea[], tunnels: [], sampleGround: () => ({ height: -50 }) };
+  return { seed: 'driving-surface', road, options, bridges: [] as BridgeSpan[], services: [] as ServiceArea[], tunnels: [], groundHeight: () => -50 };
 }
 
 describe('DrivingSurface', () => {
+  it.each([false, true])('exits beside the cab on the same bridge deck without crossing a barrier (highway %s)', highway => {
+    const scene = world(highway), surface = new DrivingSurface(scene), car = new VehiclePhysics('truck5');
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
+    const sample = scene.road.samples[300], spawn = surface.spawn(sample.position.x, sample.position.z, car.profile)!;
+    car.reset(spawn.x, spawn.z, spawn.heading, surface.sample);
+    const exit = surface.exit(car)!;
+    expect(exit).toBeDefined();
+    expect(exit.y).toBeCloseTo(surface.sample(exit.x, exit.z, car.y + 1).height);
+    expect(Math.abs(exit.y - sample.position.y)).toBeLessThan(2);
+    const side = (exit.x - car.x) * Math.cos(car.heading) + (exit.z - car.z) * Math.sin(car.heading);
+    expect(Math.abs(side)).toBeGreaterThan(car.profile.width / 2 + 0.35);
+    expect(surface.constrainWalker({ ...exit }, car.x, car.z)).toBe(false);
+  });
   it('uses seasonal grip at each contact and exempts only the matching road tunnel', () => {
     const scene = { ...world(), season: new SeasonState('forest') }, sample = scene.road.samples[100], outside = scene.road.samples[300];
     const span = { start: scene.road.samples[90], end: scene.road.samples[110], samples: scene.road.samples.slice(90, 111) };

@@ -5,6 +5,16 @@ const tick = (systems: VehicleSystems, seconds: number, rain = 1, shelter = 0, d
   for (let i = 0; i < Math.round(seconds / dt); i++) systems.update(dt, 1, rain, shelter);
 };
 
+it('reports the complete blade sweep when a frame crosses the reversal point', () => {
+  const systems = new VehicleSystems(); systems.wipers = 'high';
+  tick(systems, 0.3, 1, 0, 0.1);
+  systems.update(0.1, 1, 1, 0);
+  expect(systems.sweepTo).toBe(1);
+  expect(systems.sweepFrom).toBeLessThanOrEqual(systems.sweep);
+  systems.update(0, 1, 1, 0);
+  expect(systems.sweepFrom).toBe(systems.sweepTo);
+});
+
 it('honors manual lights in daylight and darkness and distinguishes high beams', () => {
   const systems = new VehicleSystems();
   systems.update(0, 0, 0, 0); expect(systems.beam).toBe('off');

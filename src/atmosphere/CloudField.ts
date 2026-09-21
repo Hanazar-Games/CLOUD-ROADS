@@ -54,8 +54,8 @@ export class CloudField {
   }
 
   sample(x: number, y: number, z: number) {
-    const top = CLOUD_TOP + (this.channel(x, z, 1) - 0.5) * CLOUD_RELIEF;
-    const density = smooth(CLOUD_BASE, CLOUD_BASE + 100, y) * (1 - smooth(top - 120, top, y)) * (0.85 + this.channel(x, z, 0) * 0.15);
+    const top = CLOUD_TOP + (this.channel(x, z, 1) - 0.5) * CLOUD_RELIEF + (this.channel(x, z, 2) - 0.5) * 48;
+    const density = smooth(CLOUD_BASE, CLOUD_BASE + 100, y) * (1 - smooth(top - 90, top, y)) * (0.85 + this.channel(x, z, 0) * 0.15);
     return {
       base: CLOUD_BASE, top, density,
       region: y < CLOUD_BASE ? 'below' as const : y > top ? 'above' as const : 'inside' as const,

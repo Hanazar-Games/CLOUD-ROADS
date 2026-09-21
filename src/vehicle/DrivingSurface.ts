@@ -6,7 +6,7 @@ import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
 import { hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels'> & Partial<Pick<World, 'network' | 'season'>> & { sampleGround(x: number, z: number): { height: number } };
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>;
 
 export class DrivingSurface {
   wet = 0;
@@ -65,7 +65,7 @@ export class DrivingSurface {
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
       if (height <= ceiling) return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
     }
-    const height = this.world.sampleGround(x, z).height;
+    const height = this.world.groundHeight(x, z);
     return { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
   };
 
@@ -112,6 +112,20 @@ export class DrivingSurface {
     const route = this.route(x, z), sample = route.road.nearest(x, z);
     return !!sample && Math.hypot(x - sample.position.x, z - sample.position.z) < this.profile.outerHalfWidth + 1
       && route.tunnels.some(span => sample.distance >= span.start.distance - margin && sample.distance <= span.end.distance + margin);
+  }
+
+  exit(car: VehiclePhysics): { x: number; y: number; z: number; heading: number } | undefined {
+    const floor = this.sample(car.x, car.z, car.y + 0.3).height;
+    const cos = Math.cos(car.heading), sin = Math.sin(car.heading), along = car.profile.eye.along;
+    for (const side of [-1, 1]) {
+      const lateral = side * (car.profile.width / 2 + 0.65);
+      const x = car.x + cos * lateral + sin * along, z = car.z + sin * lateral - cos * along;
+      const y = this.sample(x, z, floor + 0.45).height, point = { x, y, z, heading: car.heading };
+      if (Math.abs(y - floor) > 0.5 || this.ceiling(x, z, y) < y + 1.8) continue;
+      if (this.constrainWalker(point, car.x + sin * along, car.z - cos * along)) continue;
+      return point;
+    }
+    return undefined;
   }
 
   constrain(car: VehiclePhysics, previousX: number, previousZ: number, dt = 1 / 60): boolean {

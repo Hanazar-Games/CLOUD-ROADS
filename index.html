@@ -126,7 +126,9 @@
           <label for="shadow-quality">山体投影精度</label>
           <select id="shadow-quality"><option value="0">关闭</option><option value="1024">标准 · 1024</option><option value="2048" selected>精细 · 2048</option></select>
           <label for="antialiasing">边缘抗锯齿</label>
-          <select id="antialiasing"><option value="0">关闭</option><option value="2" selected>2×</option><option value="4">4×</option></select>
+          <select id="antialiasing"><option value="0">关闭</option><option value="1">轻量 FXAA</option><option value="2" selected>2× + FXAA</option><option value="4">4× + FXAA</option></select>
+          <label for="cloud-quality">云雾细节</label>
+          <select id="cloud-quality"><option value="12">轻量</option><option value="20" selected>均衡</option><option value="28">精细</option></select>
           <label for="view-distance">周围地形范围</label>
           <select id="view-distance" aria-describedby="view-distance-help"><option value="6">约 1.5 公里 · 轻量</option><option value="8" selected>约 2 公里 · 标准</option><option value="12">约 3 公里 · 开阔</option><option value="16">约 4 公里 · 远景</option></select>
           <p class="panel-help" id="view-distance-help">即时切换，保留当前位置。附近地形优先加载，后台提前准备前方地块与细节；远离的区域会回收。更远的视距需要更多显存，云雾仍会影响能见度。</p>
@@ -189,13 +191,13 @@
         <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
         <div class="vehicle-indicators"><span id="turn-left" aria-label="左转灯灭">◀</span><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span><span id="turn-right" aria-label="右转灯灭">▶</span></div>
       </section>
-      <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small></section>
+      <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small><small id="boarding-help" hidden>F 上车</small></section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
         <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
-        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
-        <div class="controls" id="walking-controls" hidden><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>F</kbd> 下车</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="walking-controls" hidden><span><kbd>F</kbd> 靠近车辆上车</span><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
       </footer>
       <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
       <dialog id="release-notes" aria-labelledby="release-title">

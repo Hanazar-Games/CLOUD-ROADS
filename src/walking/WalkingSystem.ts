@@ -12,16 +12,21 @@ export class WalkingSystem {
   private pitch = 0;
   private stride = 0;
   private jumpRequested = false;
+  private hudTime = 0;
+  private readonly canvas = element('world');
+  private readonly speedLabel = element('walking-speed');
+  private readonly statusLabel = element('walking-status');
 
   constructor(private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World) {}
 
-  start(): boolean {
+  start(position?: { x: number; y: number; z: number; heading: number }): boolean {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
     this.surface = new DrivingSurface(world);
-    const spawn = this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z);
+    const spawn = position ?? this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z);
     if (!spawn) return false;
-    this.person.reset(spawn.x, this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);
+    this.person.reset(spawn.x, position?.y ?? this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);
+    this.hudTime = 1;
     this.pitch = this.stride = 0; this.jumpRequested = false; this.input.clear(); this.active = true;
     this.setUI();
     element('explorer').hidden = true;
@@ -52,7 +57,7 @@ export class WalkingSystem {
   update(dt: number, frozen: boolean): void {
     if (!this.active || !this.surface) return;
     const world = this.getWorld(), person = this.person, look = this.input.consumeLook();
-    const focused = document.activeElement === element('world') && document.hasFocus();
+    const focused = document.activeElement === this.canvas && document.hasFocus();
     const held = frozen || !world.roadReady || !focused;
     if (held) { this.jumpRequested = false; person.releaseInput(); }
     else {
@@ -73,9 +78,15 @@ export class WalkingSystem {
     if (this.camera.near !== 0.08 || this.camera.fov !== 70) {
       this.camera.near = 0.08; this.camera.fov = 70; this.camera.updateProjectionMatrix();
     }
-    element('walking-speed').textContent = `${(person.speed * 3.6).toFixed(1)} km/h`;
-    element('walking-status').textContent = frozen ? '已暂停' : !world.roadReady ? '等待地形生成' : !focused ? '点击画面继续步行'
-      : !person.grounded ? '腾空' : person.speed > 5 ? '疾跑' : person.speed > 2.5 ? '跑步' : person.speed > 0.1 ? '行走' : '站立';
+    this.hudTime += dt;
+    if (this.hudTime >= 0.1) {
+      this.hudTime = 0;
+      const speed = `${(person.speed * 3.6).toFixed(1)} km/h`;
+      const status = frozen ? '已暂停' : !world.roadReady ? '等待地形生成' : !focused ? '点击画面继续步行'
+        : !person.grounded ? '腾空' : person.speed > 5 ? '疾跑' : person.speed > 2.5 ? '跑步' : person.speed > 0.1 ? '行走' : '站立';
+      if (this.speedLabel.textContent !== speed) this.speedLabel.textContent = speed;
+      if (this.statusLabel.textContent !== status) this.statusLabel.textContent = status;
+    }
   }
 
   sync(): void {

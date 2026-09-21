@@ -5,6 +5,7 @@ export interface WalkingSurface {
   ceiling?(x: number, z: number, feet: number): number;
 }
 const STEP = 1 / 120, RADIUS = 0.32;
+const FOOTPRINT = [[0, 0], [-RADIUS, 0], [RADIUS, 0], [0, -RADIUS], [0, RADIUS]];
 
 export class WalkingPhysics {
   x = 0; y = 0; z = 0; heading = 0;
@@ -12,6 +13,7 @@ export class WalkingPhysics {
   private vx = 0; private vz = 0; private vy = 0;
   private accumulator = 0;
   private jumpHeld = false; private jumpQueued = false;
+  private floorX = NaN; private floorZ = NaN; private floorCeiling = NaN; private floorHeight = 0;
   get speed(): number { return Math.hypot(this.vx, this.vz); }
 
   reset(x: number, y: number, z: number, heading: number): void {
@@ -24,6 +26,7 @@ export class WalkingPhysics {
 
   update(dt: number, input: WalkingInput, surface: WalkingSurface): void {
     if (!Number.isFinite(dt) || dt <= 0) return;
+    this.floorX = NaN;
     this.jumpQueued ||= input.jump && !this.jumpHeld;
     this.jumpHeld = input.jump;
     this.accumulator += Math.min(dt, 0.1);
@@ -34,10 +37,13 @@ export class WalkingPhysics {
   }
 
   private floor(surface: WalkingSurface, x: number, z: number): number {
+    const ceiling = this.y + 0.45;
+    if (x === this.floorX && z === this.floorZ && ceiling === this.floorCeiling) return this.floorHeight;
     let height = -Infinity;
-    for (const [dx, dz] of [[0, 0], [-RADIUS, 0], [RADIUS, 0], [0, -RADIUS], [0, RADIUS]]) {
-      height = Math.max(height, surface.sample(x + dx, z + dz, this.y + 0.45).height);
+    for (const [dx, dz] of FOOTPRINT) {
+      height = Math.max(height, surface.sample(x + dx, z + dz, ceiling).height);
     }
+    this.floorX = x; this.floorZ = z; this.floorCeiling = ceiling; this.floorHeight = height;
     return height;
   }
 
@@ -54,6 +60,7 @@ export class WalkingPhysics {
     if (this.jumpQueued && this.grounded) { this.vy = 6.4; this.grounded = false; }
     this.jumpQueued = false;
     for (const axis of ['x', 'z'] as const) {
+      if ((axis === 'x' ? this.vx : this.vz) === 0) continue;
       const beforeX = this.x, beforeZ = this.z;
       this[axis] += (axis === 'x' ? this.vx : this.vz) * STEP;
       if (this.floor(surface, this.x, this.z) > this.y + (this.grounded ? 0.42 : 0.05)

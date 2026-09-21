@@ -14,10 +14,12 @@ export class DrivingSystem {
   readonly systems = new VehicleSystems();
   readonly cameraRig;
   active = false;
+  parked = false;
   private mesh;
   private readonly events = new AbortController();
   private surface: DrivingSurface | undefined;
   private collisionTime = 0;
+  private exitBlockedTime = 0;
   private hudTime = 0;
   private systemsDt = 0;
 
@@ -86,13 +88,17 @@ export class DrivingSystem {
     element('view-reset').addEventListener('click', () => { this.cameraRig.reset(); element('world').focus(); }, options);
   }
 
-  start(): boolean {
+  start(resume = false): boolean {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
+    if (resume && !this.parked) return false;
     this.surface = new DrivingSurface(world);
-    const spawn = this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z, this.car.profile);
-    if (!spawn) { this.explainSpace(); return false; }
-    this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
+    if (!resume) {
+      const spawn = this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z, this.car.profile);
+      if (!spawn) { this.explainSpace(); return false; }
+      this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
+    }
+    this.parked = false; this.exitBlockedTime = 0;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
     this.setUI();
     element('explorer').hidden = true;
@@ -103,12 +109,30 @@ export class DrivingSystem {
     return true;
   }
 
-  stop(): void {
-    if (!this.active) return;
+  stop(park = false): void {
+    if (!this.active && !this.parked) return;
+    this.parked = park;
+    if (park) this.car.park();
     this.active = false; this.input.clear(); this.surface = undefined;
     this.camera.fov = 65; this.camera.near = 0.5; this.camera.updateProjectionMatrix();
-    this.mesh.root.visible = false; this.setUI();
+    this.mesh.root.visible = park; this.setUI();
   }
+
+  exitLocation() {
+    if (!this.active || !this.getWorld().roadReady || this.getWorld().searching) return undefined;
+    const point = this.surface?.exit(this.car);
+    if (!point) this.exitBlockedTime = 3;
+    return point;
+  }
+
+  canBoard(person: { x: number; y: number; z: number }): boolean {
+    return this.parked && this.getWorld().roadReady && !this.getWorld().searching
+      && Math.hypot(person.x - this.car.x, person.z - this.car.z) < Math.max(4, this.car.profile.chassisLength / 2 + 1)
+      && Math.abs(person.y - this.car.y) < 3;
+  }
+
+  get glassWater(): number { return this.mesh.glassWater; }
+  get sweptWater(): number { return this.mesh.sweptWater; }
 
   reset(): void {
     if (!this.active || !this.surface || !this.getWorld().roadReady) return;
@@ -153,6 +177,7 @@ export class DrivingSystem {
       this.car.update(dt, { throttle: Number(this.input.down('KeyW')) - Number(this.input.down('KeyS')),
         steer: Number(this.input.down('KeyD')) - Number(this.input.down('KeyA')), handbrake: this.input.down('Space') }, this.surface.sample);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
+      this.exitBlockedTime = Math.max(0, this.exitBlockedTime - dt);
       if (this.surface.constrain(this.car, x, z, dt)) {
         this.collisionTime = 1.2;
         this.car.trip = trip + Math.min(this.car.trip - trip, Math.hypot(this.car.x - x, this.car.z - z));
@@ -166,6 +191,7 @@ export class DrivingSystem {
       element('vehicle-gear').textContent = this.car.parked ? 'P' : this.car.speed < -0.1 ? 'R' : this.car.speed > 0.1 ? 'D' : 'N';
       element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续驾驶'
+        : this.exitBlockedTime > 0 ? '车旁空间不足，请移到平缓路段再下车'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
       element('speed-line').style.transform = `scaleX(${Math.min(1, Math.abs(this.car.speed) / this.car.profile.maxSpeed)})`;
@@ -177,6 +203,11 @@ export class DrivingSystem {
 
   sync(night: number, rain: number): void {
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
+    if (this.parked) {
+      const world = this.getWorld();
+      this.mesh.root.visible = Math.hypot(this.car.x - world.origin.x - this.camera.position.x, this.car.z - world.origin.z - this.camera.position.z) < 250;
+      if (this.mesh.root.visible) this.mesh.sync(this.car, world.origin, this.systems, 0);
+    }
     if (this.active) {
       const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
       this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered, this.car.steering);
@@ -205,6 +236,7 @@ export class DrivingSystem {
       }
       next.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
     }
+    this.parked = false;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
     this.applyPaint();
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();

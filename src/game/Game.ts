@@ -75,7 +75,10 @@ export class Game {
     this.input.onAction = (code) => {
       if (code === 'F3') this.debug.toggle();
       if (code === 'KeyP') this.setPaused(!this.paused);
-      if (!this.paused && !this.releaseNotes.open) { this.driving.action(code); this.walking.action(code); }
+      if (!this.paused && !this.releaseNotes.open) {
+        if (code === 'KeyF') this.interactVehicle();
+        else { this.driving.action(code); this.walking.action(code); }
+      }
     };
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
@@ -84,7 +87,8 @@ export class Game {
     }, { signal: this.events.signal });
     element('walk-toggle').addEventListener('click', () => {
       if (this.walking.active) this.stopWalking();
-      else { this.stopDriving(); this.walking.start(); }
+      else if (this.driving.active) this.interactVehicle();
+      else this.walking.start();
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
     for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'crossing-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
@@ -187,11 +191,11 @@ export class Game {
     element('graphics-preset').addEventListener('change', () => {
       const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
       if (!preset) return;
-      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail]] as const)
+      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail], ['cloud-quality', preset.cloudSteps]] as const)
         element<HTMLSelectElement>(id).value = String(value);
       this.setClouds(preset.clouds); this.applyGraphics();
     }, { signal: this.events.signal });
-    for (const id of ['render-scale', 'shadow-quality', 'antialiasing', 'map-detail']) element(id).addEventListener('change', () => {
+    for (const id of ['render-scale', 'shadow-quality', 'antialiasing', 'map-detail', 'cloud-quality']) element(id).addEventListener('change', () => {
       this.applyGraphics(); this.customGraphics();
     }, { signal: this.events.signal });
     element('frame-limit').addEventListener('change', () => this.loop.setFrameLimit(Number(element<HTMLSelectElement>('frame-limit').value)), { signal: this.events.signal });
@@ -392,7 +396,7 @@ export class Game {
   }
 
   private stopDriving(): void {
-    if (!this.driving.active) return;
+    if (!this.driving.active) { this.driving.stop(); return; }
     this.driving.stop();
     this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
   }
@@ -404,6 +408,16 @@ export class Game {
   }
 
   private stopTravel(): void { this.stopDriving(); this.stopWalking(); }
+
+  private interactVehicle(): void {
+    if (this.driving.active) {
+      const point = this.driving.exitLocation();
+      if (!point) return;
+      this.driving.stop(true); this.walking.start(point);
+    } else if (this.walking.active && this.driving.canBoard(this.walking.person)) {
+      this.stopWalking(); this.driving.start(true);
+    }
+  }
 
   private setError(message: string | null): void {
     const panel = element('error');
@@ -455,7 +469,9 @@ export class Game {
       this.sky.light.shadow.mapSize.set(size, size);
     }
     element('shadows').setAttribute('aria-pressed', String(size > 0));
-    const samples = Number(element<HTMLSelectElement>('antialiasing').value);
+    const antialias = Number(element<HTMLSelectElement>('antialiasing').value), samples = antialias > 1 ? Math.min(antialias, this.renderer.capabilities.maxSamples) : 0;
+    this.clouds.material.uniforms.antialias.value = antialias > 0;
+    this.clouds.material.uniforms.cloudSteps.value = Number(element<HTMLSelectElement>('cloud-quality').value);
     if (this.clouds.target.samples !== samples) { this.clouds.target.dispose(); this.clouds.target.samples = samples; }
     this.viewRadius = Number(element<HTMLSelectElement>('view-distance').value);
     this.world.chunks.setViewRadius(this.viewRadius);
@@ -487,7 +503,7 @@ export class Game {
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: this.input.down('KeyW') && moving, mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
-      signal: this.driving.systems.leftSignal || this.driving.systems.rightSignal, wiper: this.driving.systems.sweep,
+      signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
       walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
@@ -505,6 +521,7 @@ export class Game {
       const stats = chunks.stats;
       this.hudTime = 0;
       this.syncAudioUI();
+      element('boarding-help').hidden = !this.walking.active || !this.driving.canBoard(this.walking.person);
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight), cold = season.temperature(y) < 2;
       const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
@@ -564,6 +581,7 @@ export class Game {
         'Render scale': `${Math.round(this.renderScale * 100)}%`, 'Frame limit': element<HTMLSelectElement>('frame-limit').value,
         'Map detail': element<HTMLSelectElement>('map-detail').value,
         'Scene samples': this.clouds.target.samples,
+        'FXAA': this.clouds.material.uniforms.antialias.value ? 'on' : 'off', 'Cloud steps': this.clouds.material.uniforms.cloudSteps.value,
         'Valley crossings': this.world.crossings.map(site => site.kind).join(', ') || 'none',
         'Audio state': this.audio.state,
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
@@ -610,6 +628,8 @@ export class Game {
         'Light power': `${Math.round(this.driving.systems.lightPower * 100)}%`, 'Light range': `${this.driving.systems.lightRange} m`,
         'Wiper sweep': this.driving.systems.sweep.toFixed(3),
         'Wiper rate': this.driving.systems.wiperRate.toFixed(1),
+        'Glass water': `${Math.round(this.driving.glassWater * 100)}%`, 'Wiped water': `${Math.round(this.driving.sweptWater * 100)}%`,
+        'Parked vehicle': this.driving.parked ? 'yes' : 'no',
         'Driving camera': this.driving.cameraRig.view,
         'Camera FOV': `${this.camera.fov}°`, 'Camera height': `${Math.round(this.driving.cameraRig.height * 100)} cm`,
         'Cloud region': this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '关闭',
