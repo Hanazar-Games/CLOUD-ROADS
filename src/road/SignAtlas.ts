@@ -1,6 +1,6 @@
 import { DataTexture, LinearFilter, LinearMipmapLinearFilter, SRGBColorSpace } from 'three';
 
-export const signLabels = ['SERVICE\n500 M', 'SERVICE\nEXIT', 'P', 'FUEL', 'WC', 'TUNNEL', '40', '80', 'KM', '<', '>', 'EXIT >', ...'0123456789', 'PASS', 'REST', 'STEEP', 'SLOW', '20', '< ROUTE', 'ROUTE >', 'LOOP >', 'MAIN'];
+export const signLabels = ['SERVICE\n500 M', 'SERVICE\nEXIT', 'P', 'FUEL', 'WC', 'TUNNEL', '40', '80', 'KM', '<', '>', 'EXIT >', ...'0123456789', 'PASS', 'REST', 'STEEP', 'SLOW', '20', '< ROUTE', 'ROUTE >', 'LOOP >', 'MAIN', 'EXIT >\n500 M', 'EXIT >\n200 M'];
 export const SIGN_ROWS = Math.ceil(signLabels.length / 4);
 const glyphs: Record<string, number[]> = {
   A: [14,17,17,31,17,17,17], C: [14,17,16,16,16,17,14], E: [31,16,16,30,16,16,31], F: [31,16,16,30,16,16,16],

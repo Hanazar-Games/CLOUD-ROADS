@@ -240,6 +240,11 @@ export class Game {
       element(id).addEventListener('click', () => {
         const view = inspect();
         if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
+        if (id === 'junction-view' && this.world.searching) {
+          element<HTMLButtonElement>(id).disabled = true;
+          element(id).textContent = '定位中 · 0%';
+          this.setPaused(false);
+        }
         this.canvas.focus();
       }, { signal: this.events.signal });
     }
@@ -523,8 +528,12 @@ export class Game {
       element('pass-view').textContent = passSearch === null ? '下一垭口' : `定位中 · ${Math.round(passSearch * 100)}%`;
       element('route-stage').textContent = this.world.routeStage;
       const junction = this.world.nextJunction;
-      element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || !junction;
-      element('junction-status').textContent = junction ? `${junction.kind === 'stack' ? '环形立交 · 右侧出口' : '三向岔路 · 左 / 直行 / 右'} · ${Math.max(0, Math.round((junction.distance - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m` : '沿当前路线继续探索';
+      const junctions = this.world.options.roadType === 'highway' ? this.world.options.interchanges : this.world.options.junctions;
+      const junctionSearch = this.world.junctionSearchProgress;
+      element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || this.world.searching || !junctions;
+      element('junction-view').textContent = junctionSearch === null ? '下一匝道' : `定位中 · ${Math.round(junctionSearch * 100)}%`;
+      element('junction-status').textContent = junction ? `${junction.kind === 'stack' ? '环形立交' : '平面出口'} · 右侧单出口 · ${Math.max(0, Math.round((junction.distance - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
+        : junctions ? '每 20 km 一处 · 每处一条右侧出口' : '出口关闭 · 主线双向延伸';
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;

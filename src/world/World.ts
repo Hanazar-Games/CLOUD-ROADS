@@ -28,6 +28,8 @@ import { CrossingPlanner } from '../road/CrossingPlanner';
 import { CrossingMesh } from '../road/CrossingMesh';
 import { SeasonState, type Season } from '../season/SeasonState';
 import { seasonMaterial } from '../season/SeasonMaterial';
+import { JUNCTION_INTERVAL, junctionsEnabled } from '../road/JunctionSchedule';
+import { JunctionMesh } from '../road/JunctionMesh';
 
 export interface GroundSample {
   height: number;
@@ -50,6 +52,7 @@ export class World {
   readonly serviceMesh: ServiceMesh;
   readonly signs: RoadSigns;
   readonly crossingMesh: CrossingMesh;
+  readonly junctionMesh: JunctionMesh;
   crossings: Crossing[] = [];
   private readonly crossingPlanner: CrossingPlanner;
   services: readonly ServiceArea[] = [];
@@ -64,7 +67,7 @@ export class World {
   private renderTunnels: TunnelSpan[] = [];
   private renderServices: ServiceArea[] = [];
   private renderSamples: RoadSample[] = [];
-  private scout: { road: RoadSpine; kind: 'service' | 'pass'; id: number; progress: number } | undefined;
+  private scout: { road: RoadSpine; kind: 'service' | 'pass' | 'junction'; id: number; progress: number } | undefined;
   private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
   roadReady = false;
@@ -86,6 +89,7 @@ export class World {
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
+    this.junctionMesh = new JunctionMesh(scene, options);
     this.season = new SeasonState(options.terrain);
     this.chunks.setSeason(this.season);
     this.roadMesh.setSeason(this.season);
@@ -93,8 +97,8 @@ export class World {
     for (const mesh of [this.tunnelMesh.portals, this.crossingMesh.tunnels.portals, this.crossingMesh.parts,
       this.bridgeMesh.piers, this.bridgeMesh.details, this.bridgeMesh.railings, this.furniture.rails, this.furniture.poles,
       this.serviceMesh.structures, this.serviceMesh.railings, this.serviceMesh.buildings,
-      this.serviceMesh.roofs]) seasonMaterial(mesh.material, this.season, 'structure');
-    for (const mesh of [this.serviceMesh.pavement, this.serviceMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
+      this.serviceMesh.roofs, this.junctionMesh.parts]) seasonMaterial(mesh.material, this.season, 'structure');
+    for (const mesh of [this.serviceMesh.pavement, this.serviceMesh.markings, this.junctionMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
     seasonMaterial(this.serviceMesh.landscaping.material, this.season, 'foliage');
   }
 
@@ -151,6 +155,7 @@ export class World {
     this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
     this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z);
+    this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
     if (explore && this.scout) this.advanceServiceView(camera);
@@ -163,9 +168,13 @@ export class World {
   }
 
   inspectJunction(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
-    if (!this.roadReady) return undefined;
+    if (!this.roadReady || this.scout || !junctionsEnabled(this.options)) return undefined;
     const junction = this.nextJunction;
-    if (!junction) return undefined;
+    if (!junction) {
+      const id = Math.max(1, Math.ceil(((this.roadSample?.distance ?? 0) + 200) / JUNCTION_INTERVAL));
+      this.scout = { road: this.road.fork(), kind: 'junction', id, progress: 0 };
+      return undefined;
+    }
     const segment = this.road.segments.find(s => s.start.distance <= junction.distance - 100 && s.end.distance >= junction.distance - 100);
     if (!segment) return undefined;
     const sample = segment.atDistance(junction.distance - 100);
@@ -214,6 +223,7 @@ export class World {
     for (const [id, mesh] of this.extraRoads) if (!this.renderRoutes.slice(1).some(route => route.id === id)) { mesh.dispose(); this.extraRoads.delete(id); }
   }
   get serviceSearchProgress(): number | null { return this.scout?.kind === 'service' ? this.scout.progress : null; }
+  get junctionSearchProgress(): number | null { return this.scout?.kind === 'junction' ? this.scout.progress : null; }
 
   inspectCrossing(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     const site = this.crossings[0];
@@ -248,6 +258,18 @@ export class World {
 
   private advanceServiceView(camera: PerspectiveCamera): void {
     const scout = this.scout!;
+    if (scout.kind === 'junction') {
+      const target = scout.id * JUNCTION_INTERVAL;
+      const ready = scout.road.advanceToDistance(target + 1400);
+      scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / (target + 1400));
+      if (!ready) return;
+      const sample = scout.road.segments.find(s => s.start.distance <= target - 100 && s.end.distance >= target - 100)!.atDistance(target - 100);
+      this.placeOnRoad(camera, sample, 6);
+      this.roadReady = false;
+      this.serviceView = { heading: sample.heading, pitch: -0.04 };
+      this.scout = undefined;
+      return;
+    }
     if (scout.kind === 'pass') {
       const z = this.height.ranges.passZ(scout.id), ready = scout.road.update(z, 4, 1000);
       scout.progress = Math.min(1, (128 - (scout.road.segments.at(-1)?.end.position.z ?? 128)) / (1128 - z));
@@ -396,5 +418,6 @@ export class World {
     this.serviceMesh.dispose(); this.scout = undefined;
     this.signs.dispose();
     this.crossingMesh.dispose(); this.crossingPlanner.clear();
+    this.junctionMesh.dispose();
   }
 }

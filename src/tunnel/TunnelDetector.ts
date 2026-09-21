@@ -42,7 +42,7 @@ export class TunnelDetector {
       let covered = this.covered.get(sample.distance);
       if (covered === undefined) {
         const { right } = roadFrame(sample), { x, y, z } = sample.position;
-        covered = !(this.options.routeStyle >= 2 && sample.mountain) && Math.abs(sample.curvature) < 0.0035 && [-this.profile.outerHalfWidth, 0, this.profile.outerHalfWidth]
+        covered = !sample.junction && !(this.options.routeStyle >= 2 && sample.mountain) && Math.abs(sample.curvature) < 0.0035 && [-this.profile.outerHalfWidth, 0, this.profile.outerHalfWidth]
           .every(offset => this.terrain.sample(x + right.x * offset, z + right.z * offset) > y + right.y * offset + 11);
         this.covered.set(sample.distance, covered);
       }

@@ -6,6 +6,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { MountainGuide } from '../terrain/MountainRanges';
 import { serviceTarget } from '../service/ServiceSchedule';
 import { StructurePlanner } from './StructurePlanner';
+import { junctionApproach, junctionsEnabled, junctionTarget } from './JunctionSchedule';
 
 export interface RoadTerrain { sample(x: number, z: number): number; route?(z: number): MountainGuide | undefined }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -24,6 +25,15 @@ export class RoadGenerator {
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    const junction = junctionsEnabled(this.options) && junctionApproach(start.distance);
+    start = { ...start, junction: junction || undefined };
+    if (junction) {
+      const grade = this.options.elevationMode === 'cycles' ? this.nextGrade(start, 0) : start.grade - clamp(start.grade, this.structures.gradeStep);
+      const segment = new RoadSegment({ ...start, mountain: undefined, structure: undefined }, start.heading, grade);
+      segment.end.nextMountain = junctionTarget(start.distance) + 1200;
+      segment.end.nextStructure = segment.end.nextMountain;
+      return segment;
+    }
     let structure = start.structure;
     if (structure && start.distance >= structure.finish) structure = undefined;
     if (!structure && start.distance >= (start.nextStructure ?? 0) && !this.serviceApproach(start.distance)) {
@@ -31,6 +41,8 @@ export class RoadGenerator {
       if (structure) {
         const service = serviceTarget(this.seed, Math.max(1, Math.round((start.distance + structure.finish) / 30000)));
         if (structure.finish > service - 1000 && start.distance < service + 800) structure = undefined;
+        const junction = junctionTarget(start.distance);
+        if (structure && junctionsEnabled(this.options) && structure.finish > junction - 1800 && start.distance < junction + 1200) structure = undefined;
       }
       start = { ...start, nextStructure: start.distance + 192 };
     }

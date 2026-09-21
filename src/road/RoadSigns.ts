@@ -42,11 +42,19 @@ export class RoadSigns {
       this.version = version; this.anchorX = samples[0]?.position.x ?? 0; this.anchorZ = samples[0]?.position.z ?? 0;
       this.boards.count = this.posts.count = 0;
       for (const junction of junctions) {
-        const approach = samples.reduce((best, p) => Math.abs(p.distance - junction.distance + 120) < Math.abs(best.distance - junction.distance + 120) ? p : best);
         const sample = junction.sample, offset = this.profile.outerHalfWidth + 3;
-        this.add(this.position(approach, offset, 4.2), approach.heading, 5, 2, junction.kind === 'stack' ? 29 : 28, 4.4);
+        for (const [ahead, tile] of [[500, 31], [200, 32]]) {
+          const approach = samples.find(p => p.distance >= junction.distance - ahead);
+          if (approach && Math.abs(approach.distance - junction.distance + ahead) < 16) this.add(this.position(approach, offset, 4.2), approach.heading, 5, 2, tile, 4.4);
+        }
         this.add(this.position(sample, offset, 3.5), sample.heading, 4.4, 1.6, junction.kind === 'stack' ? 29 : 28, 3.7);
-        if (junction.kind === 'fork') this.add(this.position(sample, -offset, 3.5), sample.heading, 4.4, 1.6, 27, 3.7);
+        this.add(this.position(sample, -offset, 3.5), sample.heading, 3, 1.6, 30, 3.7);
+        const gantry = samples.find(p => p.distance >= junction.distance - 90);
+        if (gantry && Math.abs(gantry.distance - junction.distance + 90) < 3) {
+          const center = this.profile.centers.at(-1)!;
+          this.add(this.position(gantry, center - 1.8, 6.1), gantry.heading, 3.2, 1.1, 30);
+          this.add(this.position(gantry, center + 1.8, 6.1), gantry.heading, 3.2, 1.1, 28);
+        }
       }
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1];
@@ -69,6 +77,7 @@ export class RoadSigns {
         }
       }
       for (const span of tunnels) for (const [sample, flip] of [[span.start, false], [span.end, true]] as const) for (const center of this.profile.centers) {
+        if (flip ? span.openEnd : span.openStart) continue;
         const p = this.position(sample, center, 8.7), sign = flip ? 1 : -1;
         p.x += sample.tangent.x * sign * 2.7; p.z += sample.tangent.z * sign * 2.7;
         this.add(p, sample.heading + (flip ? Math.PI : 0), 6, 0.55, 5);

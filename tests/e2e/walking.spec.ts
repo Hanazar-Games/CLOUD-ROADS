@@ -33,7 +33,10 @@ test('walks, accelerates into running and sprinting, jumps once and freezes safe
   await page.keyboard.up('Space');
   await page.keyboard.down('KeyW'); await page.keyboard.press('KeyP');
   await expect(page.locator('#walking-status')).toHaveText('已暂停');
-  const paused = await metric(page, 'Walking position').textContent();
+  const paused = await metric(page, 'Walking position').evaluate(field => new Promise<string>(resolve => {
+    const observer = new MutationObserver(() => { observer.disconnect(); resolve(field.textContent!); });
+    observer.observe(field, { childList: true });
+  }));
   await page.keyboard.press('KeyP'); await page.waitForTimeout(350);
   await expect(metric(page, 'Walking position')).toHaveText(paused!);
   await page.keyboard.up('KeyW'); await page.keyboard.down('KeyW');

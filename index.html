@@ -75,8 +75,8 @@
             <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
             <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。斜拉桥保持直线，坡度不超过 1%。全直道方向固定，仍可上下起伏。</p>
             <label for="junctions"><input id="junctions" type="checkbox" checked /> 山路岔路 · 可转入支路</label>
-            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 高速立交 · 含进出匝道</label>
-            <p class="panel-help">按道路类型启用；关闭后沿主路双向无限延伸。受地形限制的高速立交仅在岔路也开启时改为普通岔路。应用后重新生成。</p>
+            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 环形立交 · 高速出口 / 山路升级</label>
+            <p class="panel-help">每 20 km 一处，每处仅一条右侧出口。山路开启岔路后可升级立交；高速由立交开关控制。坡度低于 2.5% 或净空不足时采用平面出口。应用后重新生成。</p>
             <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
@@ -149,10 +149,10 @@
         <div class="actions road-actions"><button id="hairpin-view" type="button" disabled>发卡弯视角</button><button id="bridge-view" type="button" disabled>桥梁视角</button></div>
         <div class="actions road-actions"><button id="tunnel-view" type="button" disabled>隧道入口</button><button id="lights-view" type="button" disabled>灯光路段</button></div>
         <div class="actions road-actions"><button id="lights-toggle" type="button" aria-pressed="true">路灯</button></div>
-        <div class="actions road-actions"><button id="junction-view" type="button" disabled>下一岔路</button></div>
+        <div class="actions road-actions"><button id="junction-view" type="button" disabled>下一匝道</button></div>
         <div class="actions road-actions"><button id="crossing-view" type="button" disabled>桥下交通景观</button></div>
         <p class="panel-help">深谷大桥下可遇到山谷公路或铁路高架，两端连接山体隧道。它们是沿途景观，驾驶路线请沿主路和岔路探索。</p>
-        <p class="panel-help">起点前后都有道路；驶入岔路后，沿所选路线继续生成。高速路段可遇到环形立交，跟随右侧出口进入。</p>
+        <p class="panel-help">起点前后都有道路；主线每 20 km 一处右侧单出口。驶入支路后按该路线里程继续生成。「下一匝道」可定位远处出口，环形立交跨越主线，入弯请减速。</p>
         <div class="actions road-actions"><button id="service-view" type="button" disabled>下一服务区</button></div>
         <div class="actions road-actions"><button id="pass-view" type="button" disabled>下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>

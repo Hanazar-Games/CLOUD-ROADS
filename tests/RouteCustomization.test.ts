@@ -6,7 +6,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../src/world/WorldOptions';
 it.each(['mountain', 'highway'] as const)('offers five increasingly winding %s routes, ending in continuous hairpins', roadType => {
   const counts: number[] = [];
   for (const routeStyle of [1, 2, 3, 4, 5] as const) {
-    const options = { ...DEFAULT_OPTIONS, roadType, routeStyle, maxGrade: 0 } as WorldOptions;
+    const options = { ...DEFAULT_OPTIONS, roadType, routeStyle, maxGrade: 0, junctions: false, interchanges: false } as WorldOptions;
     const generator = new RoadGenerator('five-levels', { sample: () => 400 }, options);
     let point = generator.start, turns = 0, hairpinLength = 0;
     while (point.distance < 20000) {

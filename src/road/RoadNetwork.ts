@@ -1,13 +1,13 @@
 import { BridgeDetector, type BridgeSpan } from '../bridge/BridgeDetector';
 import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
 import { ServicePlanner, type ServiceArea } from '../service/ServicePlanner';
-import { serviceTarget } from '../service/ServiceSchedule';
 import { hashSeed } from '../world/WorldSeed';
 import type { WorldOptions } from '../world/WorldOptions';
 import type { RoadTerrain } from './RoadGenerator';
 import { RoadSegment, type RoadControlPoint, type RoadSample } from './RoadSegment';
 import { RoadSpine } from './RoadSpine';
 import { roadProfile } from './RoadProfile';
+import { JUNCTION_INTERVAL, junctionsEnabled } from './JunctionSchedule';
 
 export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack'; exits: string[] }
 interface RouteDefinition { id: string; seed: string; origin?: RoadControlPoint; prefix: RoadSegment[]; parent?: RouteDefinition; openings?: RoadSpine['openings'] }
@@ -106,60 +106,42 @@ export class RoadNetwork {
   }
 
   private planJunctions(x: number, z: number): void {
-    if (this.options.roadType === 'highway' ? !this.options.interchanges : !this.options.junctions) return;
+    if (!junctionsEnabled(this.options)) return;
     const route = this.active, current = route.road.nearest(x, z)!;
-    const first = Math.max(0, Math.floor((current.distance - 2400) / 7200));
+    const first = Math.max(1, Math.floor((current.distance - 2400) / JUNCTION_INTERVAL));
     for (let index = first; index <= first + 1; index++) {
       const id = `${route.id}/${index}`, seed = `${route.seed}:junction:${index}`;
       const existing = this.junctions.find(junction => junction.id === id);
       if (existing && existing.exits.every(exit => this.cache.has(exit))) continue;
-      let distance = Math.max(route.road.generator.start.distance + 1200, index * 7200 + 1000 + hashSeed(seed) % 1200);
-      const service = serviceTarget(route.seed, Math.max(1, Math.round(distance / 15000)));
-      if (Math.abs(service - distance) < 1300) distance += 2300;
+      const distance = index * JUNCTION_INTERVAL;
       if (distance > current.distance + 2800 || distance < current.distance - 1400) continue;
-      const segment = route.road.segments.find(s => s.start.distance >= distance && s.start.distance < distance + 1200
-        && !s.start.structure && !s.end.structure && Math.abs(s.start.grade) < 0.075
-        && !route.tunnels.some(span => s.start.distance > span.start.distance - 200 && s.start.distance < span.end.distance + 200)
-        && !route.services.some(site => Math.abs(site.sample.distance - s.start.distance) < 1300));
+      const segment = route.road.segments.find(s => s.start.distance <= distance && s.end.distance >= distance);
       if (!segment) continue;
-      distance = segment.start.distance;
-      const sample = segment.sample(0);
-      let kind: Junction['kind'] = this.options.roadType === 'highway' && this.options.maxGrade >= 0.025 ? 'stack' : 'fork';
-      const ramps = (kind: Junction['kind']) => [-1, 1].map(side => {
-        const entryDistance = distance + (kind === 'stack' && side > 0 ? 480 : 0);
-        const entry = route.road.segments.find(s => s.start.distance <= entryDistance && s.end.distance >= entryDistance)?.atDistance(entryDistance) ?? sample;
-        const childId = `branch-${hashSeed(`${seed}:${side}`).toString(36)}-${hashSeed(`${seed}:${side}:id`).toString(36)}`;
-        const prefix = this.ramp(entry, childId, side, kind);
-        return { side, entry, childId, prefix };
-      });
-      let exits = ramps(kind);
-      if (kind === 'stack' && exits.some(exit => !this.clearance(exit.prefix, route.road)
-        || exit.entry.structure || route.tunnels.some(span => exit.entry.distance > span.start.distance - 200 && exit.entry.distance < span.end.distance + 200))) { kind = 'fork'; exits = ramps(kind); }
-      if (kind === 'fork' && !this.options.junctions) continue;
-      const junction: Junction = { id, route: route.id, distance, sample, kind, exits: [] };
+      const sample = segment.atDistance(distance);
+      const childId = `branch-${hashSeed(seed).toString(36)}-${hashSeed(`${seed}:id`).toString(36)}`;
+      let kind: Junction['kind'] = this.options.interchanges && this.options.maxGrade >= 0.025 ? 'stack' : 'fork';
+      let prefix = this.ramp(sample, childId, kind);
+      if (kind === 'stack' && !this.clearance(prefix, route.road)) { kind = 'fork'; prefix = this.ramp(sample, childId, kind); }
+      const junction: Junction = { id, route: route.id, distance, sample, kind, exits: [childId] };
       route.road.openings.splice(0, route.road.openings.length, ...route.road.openings.filter(range => range.end >= current.distance - 8000));
-      for (const { side, childId, entry, prefix } of exits) {
-        const start = prefix.at(-1)!.end;
-        const child = this.add({ id: childId, seed: childId, origin: { ...start, elevated: undefined, nextMountain: start.distance + 600 }, prefix, parent: route.definition });
-        child.road.openings.splice(0, 1, { start: 0, end: kind === 'stack' ? 190 : 150, side: kind === 'stack' ? -1 : -side });
-        child.road.version++;
-        const openingSide = kind === 'stack' ? 1 : side;
-        if (!route.road.openings.some(range => range.start === entry.distance - 12 && range.side === openingSide)) route.road.openings.push({ start: entry.distance - 12, end: entry.distance + (kind === 'stack' ? 190 : 150), side: openingSide });
-        junction.exits.push(childId);
-      }
+      const start = prefix.at(-1)!.end;
+      const child = this.add({ id: childId, seed: childId, origin: { ...start, junction: undefined, elevated: undefined, nextMountain: start.distance + 600 }, prefix, parent: route.definition });
+      child.road.openings.splice(0, 1, { start: 0, end: 280, side: -1 });
+      child.road.version++;
+      if (!route.road.openings.some(range => range.start === distance - 12)) route.road.openings.push({ start: distance - 12, end: distance + 280, side: 1 });
       if (existing) this.junctions.splice(this.junctions.indexOf(existing), 1);
       this.junctions.push(junction); route.road.version++; this.version++;
     }
   }
 
-  private ramp(entry: RoadSample, id: string, side: number, kind: Junction['kind']): RoadSegment[] {
+  private ramp(entry: RoadSample, id: string, kind: Junction['kind']): RoadSegment[] {
     const prefix: RoadSegment[] = [];
     let start: RoadControlPoint = { ...entry, position: { ...entry.position, y: entry.position.y + 0.015 }, distance: 0, routeId: id,
-      mountain: undefined, climb: undefined, structure: undefined, nextStructure: undefined, opening: undefined, bank: 0 };
-    const turns = kind === 'stack' ? side < 0 ? [Math.PI / 2, Math.PI, Math.PI * 1.5, Math.PI * 1.5] : [Math.PI / 2, Math.PI / 2] : [side * 0.7, side * 0.85];
-    for (const [i, turn] of turns.entries()) {
-      const grade = kind === 'stack' ? Math.min(this.options.maxGrade, 0.06) * (i === 0 ? 1 : i === 1 && side < 0 ? 0.8 : 0) : 0;
-      const piece = new RoadSegment({ ...start, elevated: kind === 'stack' && i > 0 }, entry.heading + turn, grade, kind === 'stack' ? 420 : 260);
+      mountain: undefined, climb: undefined, structure: undefined, nextStructure: undefined, opening: undefined, junction: true, bank: 0 };
+    const grade = Math.min(this.options.maxGrade, 0.06);
+    const pieces = kind === 'stack' ? [[0.32, 260, 0], [Math.PI / 2, 360, grade], [Math.PI, 480, grade * 0.8], [Math.PI * 1.5, 480, 0], [Math.PI * 1.5, 600, 0]] : [[0.32, 260, 0], [0.85, 300, 0]];
+    for (const [i, [turn, length, grade]] of pieces.entries()) {
+      const piece = new RoadSegment({ ...start, elevated: kind === 'stack' && i > 0 }, entry.heading + turn, grade, length);
       prefix.push(piece); start = piece.end;
     }
     return prefix;

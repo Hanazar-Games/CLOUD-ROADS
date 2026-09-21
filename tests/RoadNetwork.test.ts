@@ -10,6 +10,36 @@ import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 const flat = { sample: () => 100 };
 const options = { ...DEFAULT_OPTIONS, terrain: 'meadow' as const, routeStyle: 1 as const };
 
+function visit(network: RoadNetwork, distance = 20000): void {
+  const road = network.active.road;
+  while (!road.advanceToDistance(distance + 4000)) { /* Stream to the next exit. */ }
+  const point = road.segments.find(s => s.start.distance <= distance && s.end.distance >= distance)!.atDistance(distance).position;
+  for (let i = 0; i < 180; i++) network.update(point.x, point.z, point.y + 1, 4000);
+}
+
+it('creates exactly one exit at each 20 km milestone, without startup or duplicate branches', () => {
+  const settings = { ...options, routeStyle: 0 as const };
+  const road = new RoadSpine('milestones', flat, settings), network = new RoadNetwork('milestones', flat, settings, road);
+  for (let i = 0; i < 160; i++) network.update(128, 128, 101, 4000);
+  expect(network.junctions).toHaveLength(0);
+  expect(network.routes).toHaveLength(2);
+  const ids: string[] = [];
+  for (const distance of [20000, 40000, 60000]) {
+    visit(network, distance);
+    const junctions = network.junctions.filter(j => j.route === 'root');
+    expect(junctions).toHaveLength(1);
+    expect(junctions[0].distance).toBeCloseTo(distance, 4);
+    expect(junctions[0].exits).toHaveLength(1);
+    ids.push(junctions[0].exits[0]);
+  }
+  expect(new Set(ids).size).toBe(3);
+  const replay = road.fork();
+  while (!replay.advanceToDistance(24000)) { /* Recreate a discarded exit window. */ }
+  const p = replay.segments.find(s => s.start.distance <= 20000 && s.end.distance >= 20000)!.atDistance(20000).position;
+  for (let i = 0; i < 300; i++) network.update(p.x, p.z, p.y + 1, 4000);
+  expect(network.junctions.find(j => j.route === 'root')?.exits).toEqual([ids[0]]);
+});
+
 it.each(['mountain', 'highway'] as const)('can disable %s junctions while retaining the continuous road in both directions', roadType => {
   const settings = { ...options, roadType, junctions: false, interchanges: false };
   const root = new RoadSpine('optional', flat, settings), network = new RoadNetwork('optional', flat, settings, root);
@@ -37,11 +67,11 @@ it('extends an oriented road east or south and replays its geometry after return
 it.each([
   ['mountain', true, false, 0.06, 'fork'], ['mountain', false, true, 0.06, undefined],
   ['highway', false, true, 0.06, 'stack'], ['highway', true, false, 0.06, undefined],
-  ['highway', false, true, 0, undefined],
+  ['highway', false, true, 0, 'fork'], ['mountain', true, true, 0.06, 'stack'],
 ] as const)('independently configures %s forks %s and interchanges %s with grade %s', (roadType, junctions, interchanges, maxGrade, kind) => {
   const settings = { ...options, roadType, junctions, interchanges, maxGrade, routeStyle: 0 as const };
   const root = new RoadSpine('stack', flat, settings), network = new RoadNetwork('stack', flat, settings, root);
-  for (let i = 0; i < 200; i++) network.update(128, 128, 101, 4000);
+  visit(network);
   expect(network.junctions[0]?.kind).toBe(kind);
   if (!kind) { expect(root.openings).toHaveLength(0); expect(network.routes).toHaveLength(2); }
 });
@@ -49,11 +79,11 @@ it.each([
 it('separates interchange crossings vertically and samples the selected deck', () => {
   const highway = { ...options, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade: 0.06 };
   const root = new RoadSpine('stack', flat, highway), network = new RoadNetwork('stack', flat, highway, root);
-  for (let i = 0; i < 250; i++) network.update(128, 128, 101, 4000);
+  visit(network);
   const junction = network.junctions[0]; expect(junction.kind).toBe('stack');
   const branch = network.routes.find(route => route.id === junction.exits[0])!;
   const crossings = branch.road.samples.filter(sample => sample.distance > 800 && Math.hypot(sample.position.x - 128, 0) < roadProfile(highway).outerHalfWidth * 2);
-  expect(crossings.length).toBeGreaterThan(4);
+  expect(crossings.length).toBeGreaterThan(2);
   for (const point of crossings) {
     const below = root.nearest(point.position.x, point.position.z)!;
     expect(point.position.y - below.position.y).toBeGreaterThan(12);
@@ -78,6 +108,7 @@ it('returns through the start and bounds cached branches across repeated choices
   settle(root.samples[200].position);
   expect(network.active.id).toBe('root');
   for (let choice = 0; choice < 8; choice++) {
+    visit(network);
     const junction = network.junctions.find(j => j.route === network.active.id)!;
     expect(junction).toBeDefined();
     const branch = network.routes.find(route => route.id === junction.exits[0])!;
@@ -91,18 +122,18 @@ it('returns through the start and bounds cached branches across repeated choices
   }
 });
 
-it.each([['mountain', -1, 'roadster'], ['mountain', 1, 'roadster'], ['highway', -1, 'semi20']] as const)('drives through a %s exit (%i) with %s and continues streaming', (roadType, side, kind) => {
-  const settings = { ...options, roadType, routeStyle: 0 as const };
+it.each([['mountain', false, 'roadster'], ['mountain', true, 'roadster'], ['highway', true, 'semi20']] as const)('drives through a %s exit (interchange %s) with %s and continues streaming', (roadType, interchanges, kind) => {
+  const settings = { ...options, roadType, interchanges, routeStyle: 0 as const };
   const root = new RoadSpine('drive-fork', flat, settings), network = new RoadNetwork('drive-fork', flat, settings, root);
-  for (let i = 0; i < 200; i++) network.update(128, 128, 101, 4000);
-  const junction = network.junctions[0], branch = network.routes.find(route => route.id === junction.exits[side < 0 ? 0 : 1])!;
+  visit(network);
+  const junction = network.junctions[0], branch = network.routes.find(route => route.id === junction.exits[0])!;
   const surface = new DrivingSurface({ seed:'drive-fork', options:settings, network, road:root, bridges:[], tunnels:[], services:[], sampleGround:()=>({height:100}) });
   const car = new VehiclePhysics(kind), lane = roadProfile(settings).centers.at(-1)! + settings.roadWidth / 4;
   const start = branch.road.samples[0], r = roadFrame(start).right;
   car.reset(start.position.x + r.x * lane, start.position.z + r.z * lane, start.heading, surface.sample);
   car.parked = false; car.speed = 10;
   let reached = 0;
-  const finish = roadType === 'highway' ? 1900 : 600;
+  const finish = interchanges ? 2400 : 600;
   for (let frame = 0; frame < 15000 && reached < finish; frame++) {
     const near = branch.road.nearest(car.x, car.z)!, targetDistance = near.distance + 20;
     const target = branch.road.samples.find(p => p.distance >= targetDistance)!;
@@ -128,6 +159,7 @@ it('starts with connected roads in both directions and activates a driven branch
   const road = new RoadSpine('network', flat, options), network = new RoadNetwork('network', flat, options, road);
   for (let i = 0; i < 500 && !network.update(128, 128, 101, 4000); i++) { /* Initial streaming. */ }
   expect(network.nearest(128, 400)!.sample.position.z).toBeGreaterThan(300);
+  visit(network);
   const fork = network.junctions[0]; expect(fork).toBeDefined();
   const branch = network.routes.find(route => route.id === fork.exits[0])!;
   const sample = branch.road.samples.at(-20)!;

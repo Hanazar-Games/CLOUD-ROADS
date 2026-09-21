@@ -67,7 +67,7 @@ export class RoadFurniture {
             if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.posts, sample, offset, 0.48, 0.16, 0.95, 0.16);
           }
         }
-        if (!onBridge && !serviceAccess && Math.floor(distance / 32) !== Math.floor(previous.distance / 32)) {
+        if (!onBridge && !serviceAccess && sample.opening === undefined && Math.floor(distance / 32) !== Math.floor(previous.distance / 32)) {
           for (const side of [-1, 1]) for (const [height, tall, width, depth, color] of [
             [0.5, 1, 0.18, 0.18, 0xe3e5dc], [0.82, 0.3, 0.2, 0.22, 0x29383b], [0.83, 0.13, 0.12, 0.24, side > 0 ? 0xe7b14d : 0xe6e7df],
           ]) {
@@ -75,7 +75,7 @@ export class RoadFurniture {
             this.markers.setColorAt(this.markers.count - 1, this.markerColor.setHex(color));
           }
         }
-        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
+        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || !sample.junction && hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
         for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
           const offset = side * (this.profile.outerHalfWidth + (onBridge ? 0.15 : 0.9));
           this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);

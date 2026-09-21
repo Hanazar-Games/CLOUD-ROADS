@@ -8,6 +8,7 @@ export interface RoadControlPoint {
   routeId?: string;
   opening?: number;
   elevated?: boolean;
+  junction?: boolean;
   position: RoadVector;
   heading: number;
   grade: number;
