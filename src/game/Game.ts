@@ -13,7 +13,7 @@ import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { routeNames, terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
 import { WalkingSystem } from '../walking/WalkingSystem';
-import { graphicsPresets } from './GraphicsSettings';
+import { graphicsPresets, renderPixelRatio } from './GraphicsSettings';
 import { AudioSystem } from '../audio/AudioSystem';
 import { seasonNames, type Season } from '../season/SeasonState';
 
@@ -187,11 +187,11 @@ export class Game {
     element('graphics-preset').addEventListener('change', () => {
       const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
       if (!preset) return;
-      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius]] as const)
+      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail]] as const)
         element<HTMLSelectElement>(id).value = String(value);
       this.setClouds(preset.clouds); this.applyGraphics();
     }, { signal: this.events.signal });
-    for (const id of ['render-scale', 'shadow-quality', 'antialiasing']) element(id).addEventListener('change', () => {
+    for (const id of ['render-scale', 'shadow-quality', 'antialiasing', 'map-detail']) element(id).addEventListener('change', () => {
       this.applyGraphics(); this.customGraphics();
     }, { signal: this.events.signal });
     element('frame-limit').addEventListener('change', () => this.loop.setFrameLimit(Number(element<HTMLSelectElement>('frame-limit').value)), { signal: this.events.signal });
@@ -325,6 +325,7 @@ export class Game {
       this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
       this.world.chunks.vegetation.enabled = element('vegetation-toggle').getAttribute('aria-pressed') === 'true';
+      this.world.chunks.vegetation.setDetailLevel(Number(element<HTMLSelectElement>('map-detail').value));
       this.world.roadDebug.enabled = element('road-debug').getAttribute('aria-pressed') === 'true';
       this.world.furniture.enabled = element('lights-toggle').getAttribute('aria-pressed') === 'true';
       element<HTMLInputElement>('seed').value = seed;
@@ -421,12 +422,17 @@ export class Game {
   }
 
   private readonly resize = (): void => {
+    if (this.contextLost) return;
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * this.renderScale);
+    const gl = this.renderer.getContext(), viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
+    const limit = Math.min(this.renderer.capabilities.maxTextureSize, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number, ...viewport);
+    const ratio = renderPixelRatio(window.innerWidth, window.innerHeight, window.devicePixelRatio, this.renderScale, limit);
+    this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.clouds.resize(this.canvas.width, this.canvas.height);
-    element('graphics-status').textContent = `3D 画面 ${this.canvas.width} × ${this.canvas.height} · ${Math.round(this.renderScale * 100)}%`;
+    element('graphics-status').textContent = `3D 画面 ${this.canvas.width} × ${this.canvas.height} · ${Math.round(this.renderScale * 100)}%`
+      + (ratio + 0.001 < Math.min(window.devicePixelRatio, 1.5) * this.renderScale ? ' · 已按显卡尺寸上限缩减' : '');
   };
 
   private customGraphics(): void { element<HTMLSelectElement>('graphics-preset').value = 'custom'; }
@@ -440,6 +446,7 @@ export class Game {
 
   private applyGraphics(): void {
     this.renderScale = Number(element<HTMLSelectElement>('render-scale').value);
+    this.world.chunks.vegetation.setDetailLevel(Number(element<HTMLSelectElement>('map-detail').value));
     const size = Number(element<HTMLSelectElement>('shadow-quality').value);
     this.sky.light.castShadow = size > 0;
     this.renderer.shadowMap.enabled = size > 0;
@@ -555,6 +562,7 @@ export class Game {
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
         'Render scale': `${Math.round(this.renderScale * 100)}%`, 'Frame limit': element<HTMLSelectElement>('frame-limit').value,
+        'Map detail': element<HTMLSelectElement>('map-detail').value,
         'Scene samples': this.clouds.target.samples,
         'Valley crossings': this.world.crossings.map(site => site.kind).join(', ') || 'none',
         'Audio state': this.audio.state,

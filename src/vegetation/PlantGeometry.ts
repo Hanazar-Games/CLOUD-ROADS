@@ -115,6 +115,11 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
   } else if (kind === 'rock') {
     pieces = [crown(1.75, '#c1c0ab').scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0),
       colored(new IcosahedronGeometry(0.65, 0).scale(1, 0.7, 1).translate(1.3, 0.25, 0.7), '#989e8e')];
+    for (let i = 0; i < 5; i++) {
+      const angle = i * 2.4, radius = 1.5 + i % 2 * 0.3;
+      pieces.push(colored(new IcosahedronGeometry(0.18 + i % 3 * 0.08, 0).scale(1.2, 0.55, 0.8).rotateY(angle)
+        .translate(Math.cos(angle) * radius, 0.06, Math.sin(angle) * radius * 0.72), i % 2 ? '#b3ad96' : '#969b88'));
+    }
   } else if (kind === 'seedheads') {
     pieces = [];
     for (let i = 0; i < 5; i++) {

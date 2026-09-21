@@ -4,6 +4,18 @@ import { GameLoop } from '../src/game/GameLoop';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GameLoop', () => {
+  it.each([90, 120, 144, 165, 240, 0])('supports a %i fps cap without changing elapsed simulation time', fps => {
+    let callback: FrameRequestCallback = () => {};
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callback = cb; return 1; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const update = vi.fn(), loop = new GameLoop(update);
+    loop.setFrameLimit(fps); loop.start();
+    for (let frame = 0; frame <= 720; frame++) callback(frame * 1000 / 720);
+    expect(update.mock.calls.length).toBeGreaterThanOrEqual((fps || 720));
+    expect(update.mock.calls.length).toBeLessThanOrEqual((fps || 720) + 1);
+    expect(update.mock.calls.reduce((sum, [dt]) => sum + dt, 0)).toBeCloseTo(1, 2);
+    loop.stop();
+  });
   it('caps work at 30 fps without slowing simulation and resets when the cap changes', () => {
     let callback: FrameRequestCallback = () => {};
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callback = cb; return 1; });

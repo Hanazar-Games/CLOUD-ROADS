@@ -4,8 +4,8 @@ import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, 
 import { Windshield } from './Windshield';
 import type { VehicleSystems } from './VehicleSystems';
 import { mergeVehicleParts, tireGeometry } from './VehicleGeometry';
+import { flatbedDetails, vehicleDetails, type VehicleBlock as Block } from './VehicleDetails';
 
-type Block = (w: number, h: number, l: number, x: number, y: number, z: number, material?: MeshStandardMaterial, parent?: Group) => Mesh;
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
 
 export class VehicleMesh {
@@ -21,11 +21,12 @@ export class VehicleMesh {
   private readonly tail;
   private readonly lamp;
   private readonly signals: MeshStandardMaterial[] = [];
+  private readonly paint: MeshStandardMaterial;
   private windshield?: Windshield;
   private readonly headlight = new SpotLight(0xffeed0, 0, 100, 0.6, 0.65, 1.6);
 
   constructor(scene: Scene, private readonly profile: VehicleProfile = vehicleProfiles.roadster) {
-    const paint = this.material(profile.paint, 0.4, 0.25), trim = this.material(0x202b2c), rubber = this.material(0x171c1d);
+    const paint = this.paint = this.material(profile.paint, 0.4, 0.25), trim = this.material(0x202b2c), rubber = this.material(0x171c1d);
     const metal = this.material(0xaeb9b5, 0.35, 0.7), leather = this.material(0x675447);
     const glass = this.material(profile.shape === 'roadster' ? 0xc3e2e4 : 0x627e88, 0.15, 0.15);
     glass.transparent = true; glass.opacity = profile.shape === 'roadster' ? 0.16 : 0.58; glass.depthWrite = false;
@@ -37,6 +38,12 @@ export class VehicleMesh {
       const mesh = new Mesh(box, material); mesh.scale.set(w, h, l); mesh.position.set(x, y, z);
       mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh;
     };
+    const amber = this.material(0xe6a02d, 0.3); amber.emissive.setHex(0xd57516); amber.emissiveIntensity = 0.25;
+    const kit = { block, paint, trim, metal, glass, lamp, amber, wood: this.material(0x8b7859, 0.95),
+      cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group) => {
+        const mesh = new Mesh(this.geometry(new CylinderGeometry(radius, radius, length, 12)), material);
+        mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh;
+      } };
     if (profile.shape === 'roadster') {
     const shape = new Shape();
     shape.moveTo(-0.74, -2.05); shape.lineTo(0.74, -2.05); shape.lineTo(0.92, -1.65);
@@ -72,6 +79,7 @@ export class VehicleMesh {
     block(0.27, 0.027, 0.025, 0, 0, 0, metal, this.steering);
     block(0.035, 0.14, 0.03, 0, -0.065, 0, metal, this.steering);
     } else this.buildBody(block, paint, trim, metal, glass, leather, lamp);
+    vehicleDetails(profile, this.chassis, kit);
     for (const side of [-1, 1]) {
       const signal = this.material(0xa96b20, 0.3); signal.emissive.setHex(0xff9b19); signal.emissiveIntensity = 0;
       this.signals.push(signal);
@@ -112,10 +120,11 @@ export class VehicleMesh {
       const trailer = profile.trailer, center = trailer.length / 2 - trailer.front;
       const cargo = this.material(0xd4dbd9, 0.67, 0.18), top = profile.height - this.rideHeight;
       block(profile.width - 0.06, 0.24, trailer.length, 0, 0, center, trim, this.trailerBody);
-      block(profile.width, top - 0.24, trailer.length, 0, (top + 0.24) / 2, center, cargo, this.trailerBody);
+      if (trailer.body === 'flatbed') flatbedDetails(profile.width, -trailer.front, trailer.length - trailer.front, this.trailerBody, kit);
+      else block(profile.width, top - 0.24, trailer.length, 0, (top + 0.24) / 2, center, cargo, this.trailerBody);
       for (const side of [-1, 1]) {
         block(0.04, 0.13, trailer.length - 0.2, side * profile.width / 2, 0.35, center, paint, this.trailerBody);
-        for (let z = -trailer.front + 0.4; z < trailer.length - trailer.front; z += 0.65)
+        if (trailer.body === 'box') for (let z = -trailer.front + 0.4; z < trailer.length - trailer.front; z += 0.65)
           block(0.025, top - 0.48, 0.035, side * (profile.width / 2 + 0.005), (top + 0.34) / 2, z, metal, this.trailerBody);
         block(0.12, 0.6, 0.12, side * 0.82, -0.25, 1.7, metal, this.trailerBody);
         block(0.22, 0.08, 0.3, side * 0.82, -0.55, 1.7, trim, this.trailerBody);
@@ -125,8 +134,10 @@ export class VehicleMesh {
           block(0.035, 0.07, 0.16, side * (profile.width / 2 + 0.025), 0.18, z, lamp, this.trailerBody);
       }
       const back = trailer.length - trailer.front + 0.025;
-      block(0.045, top - 0.28, 0.04, 0, (top + 0.24) / 2, back, trim, this.trailerBody);
-      for (const side of [-1, 1]) block(0.045, top - 0.5, 0.055, side * 0.55, (top + 0.24) / 2, back, metal, this.trailerBody);
+      if (trailer.body === 'box') {
+        block(0.045, top - 0.28, 0.04, 0, (top + 0.24) / 2, back, trim, this.trailerBody);
+        for (const side of [-1, 1]) block(0.045, top - 0.5, 0.055, side * 0.55, (top + 0.24) / 2, back, metal, this.trailerBody);
+      }
       block(profile.width - 0.1, 0.1, 0.1, 0, -0.48, back, metal, this.trailerBody);
       addWheels(trailer.wheels, this.trailerRoot, this.trailerWheels);
     }
@@ -144,6 +155,8 @@ export class VehicleMesh {
     for (const parent of [this.chassis, this.trailerBody, this.steering, ...this.wheels.map(wheel => wheel.spin), ...this.trailerWheels.map(wheel => wheel.spin)])
       this.geometries.push(...mergeVehicleParts(parent));
   }
+
+  setPaint(color: number): void { this.paint.color.setHex(color); }
 
   sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0): void {
     this.root.position.set(car.x - origin.x, car.y, car.z - origin.z);
@@ -212,7 +225,7 @@ export class VehicleMesh {
       const shell = new Mesh(this.geometry(new ExtrudeGeometry(shape, { depth: sill + 0.42, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.035, bevelSegments: 1, steps: 1 })), paint);
       shell.rotation.x = -Math.PI / 2; shell.position.y = -0.42;
       shell.castShadow = shell.receiveShadow = true; this.chassis.add(shell);
-    } else if (p.shape === 'tractor') {
+    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane') {
       block(w, sill + 0.55, cabLength, 0, (sill - 0.55) / 2, cabCenter);
       block(1.35, 0.22, length - cabLength, 0, -0.3, (cabBack + length / 2) / 2, trim);
     } else block(w, sill + 0.55, length, 0, (sill - 0.55) / 2, 0);
@@ -311,7 +324,7 @@ export class VehicleMesh {
     meshes.forEach(({ pivot, spin, spring, point }, i) => {
       const offset = vehicleOffset(point.x, point.along, pitch, roll);
       pivot.position.set(offset.x, states[i].height - y, offset.z);
-      pivot.rotation.y = point.steer ? -Math.atan(Math.tan(car.steering) / (1 - point.x * Math.tan(car.steering) / car.wheelbase)) : 0;
+      pivot.rotation.y = -car.wheelSteering(point);
       pivot.rotation.z = car.kind === 'motorcycle' ? roll : 0;
       spin.rotation.x = -car.wheelAngle;
       spring.position.set(offset.x * 0.85, pivot.position.y, offset.z);

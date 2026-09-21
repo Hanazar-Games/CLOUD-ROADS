@@ -1,4 +1,4 @@
-import { suspensionTuning, vehicleOffset, vehicleProfiles, type Suspension, type VehicleKind, type VehicleProfile } from './VehicleConfig';
+import { suspensionTuning, vehicleOffset, vehicleProfiles, type Suspension, type VehicleKind, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 export interface VehicleInput { throttle: number; steer: number; handbrake: boolean }
 export interface SurfaceContact { height: number; grip: number }
 export type SurfaceSampler = (x: number, z: number) => SurfaceContact;
@@ -18,12 +18,14 @@ export class VehiclePhysics {
   braking = false; parked = true; jackknifed = false;
   suspension: Suspension = 3;
   damping = 1;
+  powerScale = 1; brakeScale = 1; steeringScale = 1;
   readonly wheels: WheelState[];
   readonly trailer?: TrailerState;
   private vy = 0; private pitchVelocity = 0; private rollVelocity = 0; private accumulator = 0;
   private readonly pitchInertia: number;
   private readonly rollInertia: number;
   readonly wheelbase: number;
+  private readonly rearAxle: number;
   private previousHeading = 0;
   private previousPose = { y: 0, pitch: 0, roll: 0, wheelAngle: 0 };
   private previousWheels: WheelState[] = [];
@@ -34,11 +36,16 @@ export class VehiclePhysics {
     this.pitchInertia = this.profile.wheels.reduce((sum, p) => sum + p.along ** 2, 0) / this.wheels.length;
     this.rollInertia = Math.max(0.3, this.profile.wheels.reduce((sum, p) => sum + p.x ** 2, 0) / this.wheels.length);
     const front = this.profile.wheels.filter(p => p.steer), rear = this.profile.wheels.filter(p => !p.steer);
-    this.wheelbase = front.reduce((s, p) => s + p.along, 0) / front.length - rear.reduce((s, p) => s + p.along, 0) / rear.length;
+    this.rearAxle = rear.reduce((s, p) => s + p.along, 0) / rear.length;
+    this.wheelbase = front.reduce((s, p) => s + p.along, 0) / front.length - this.rearAxle;
     if (this.profile.trailer) this.trailer = { x: 0, y: 0, z: 0, heading: 0, pitch: 0, roll: 0, wheels: this.profile.trailer.wheels.map(wheel) };
   }
 
   get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
+  wheelSteering(point: WheelPoint): number {
+    const curvature = Math.tan(this.steering) / this.wheelbase;
+    return point.steer ? Math.atan((point.along - this.rearAxle) * curvature / (1 - point.x * curvature)) : 0;
+  }
   hitch(): { x: number; y: number; z: number } {
     const along = this.profile.trailer?.hitchAlong ?? 0;
     const offset = vehicleOffset(0, along, this.pitch, this.roll);
@@ -136,10 +143,10 @@ export class VehiclePhysics {
     const slopeForce = GRAVITY * grade / Math.hypot(1, grade);
     this.braking = input.handbrake || throttle * this.speed < 0;
     if (input.handbrake || this.parked || this.braking) {
-      const deceleration = Math.min((input.handbrake || this.parked ? config.brake * 1.2 : config.brake), GRAVITY * 0.94) * brakingGrip;
+      const deceleration = Math.min(config.brake * (input.handbrake || this.parked ? 1.2 : clamp(this.brakeScale, 0.5, 1.5)), GRAVITY * 0.94) * brakingGrip;
       this.speed = approach(this.speed - slopeForce * STEP, 0, deceleration * STEP);
     } else {
-      const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) / config.mass;
+      const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) * clamp(this.powerScale, 0.5, 1.5) / config.mass;
       const drive = throttle * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : 1);
       this.speed += (drive - slopeForce) * STEP;
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + (1 - grip) * 0.5) * STEP);
@@ -147,7 +154,7 @@ export class VehiclePhysics {
     this.speed = clamp(this.speed, -config.reverseSpeed, config.maxSpeed);
     const stability = this.kind === 'motorcycle' ? 8 : Math.min(8, GRAVITY * config.width / (2 * config.cg) * 0.7);
     const speed = Math.abs(this.speed), blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
-    const lowSpeedLock = config.steer / (1 + speed / 28);
+    const lowSpeedLock = Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4)) / (1 + speed / 28);
     const highSpeedLock = Math.min(lowSpeedLock, Math.atan(this.wheelbase * stability * 1.15 / Math.max(1, speed * speed)));
     const steeringLock = lowSpeedLock + (highSpeedLock - lowSpeedLock) * smooth;
     this.steering = approach(this.steering, clamp(input.steer, -1, 1) * steeringLock,

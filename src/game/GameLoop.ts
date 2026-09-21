@@ -6,7 +6,7 @@ export class GameLoop {
   private next = 0;
 
   setFrameLimit(fps: number): void {
-    if (![0, 30, 60].includes(fps)) throw new Error('Invalid frame limit');
+    if (![0, 30, 60, 90, 120, 144, 165, 240].includes(fps)) throw new Error('Invalid frame limit');
     this.interval = fps ? 1000 / fps : 0;
     this.next = 0;
   }

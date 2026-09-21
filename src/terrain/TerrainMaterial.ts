@@ -33,7 +33,12 @@ export function createTerrainMaterial(origin: Vector2): MeshStandardMaterial {
         diffuseColor.rgb *= 0.96 + terrainPatch * 0.08 + (rock - 0.5) * cliff * 0.13 * rockDetail + (grain - 0.5) * 0.09 * closeDetail;
         float strata = sin(vTerrainPosition.y * 0.18 + terrainPatch * 5.0 + rock * 0.8);
         diffuseColor.rgb *= 1.0 + strata * cliff * 0.025 * rockDetail;
-        float surfaceRelief = (rock * 0.11 * rockDetail + grain * 0.025 * closeDetail) * (0.25 + cliff);
+        float veinPhase = vTerrainPosition.y * 0.7 + rock * 5.0 + terrainPatch * 3.0;
+        float veinWidth = max(0.06, fwidth(veinPhase));
+        float vein = 1.0 - smoothstep(0.04, 0.04 + veinWidth, abs(sin(veinPhase)));
+        float soil = smoothstep(0.54, 0.76, terrainPatch * 0.6 + rock * 0.4) * (1.0 - cliff);
+        diffuseColor.rgb *= 1.0 - vein * cliff * 0.12 * rockDetail - soil * 0.09;
+        float surfaceRelief = (rock * 0.11 * rockDetail + grain * 0.025 * closeDetail - vein * cliff * 0.018 * rockDetail) * (0.25 + cliff);
       `).replace('#include <normal_fragment_maps>', `
         #include <normal_fragment_maps>
         vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);

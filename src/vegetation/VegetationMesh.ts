@@ -30,6 +30,16 @@ export class VegetationMesh {
   private readonly color = new Color();
   private centerX = 0; private centerZ = 0;
   enabled = true;
+  private detailSetting = 1;
+
+  setDetailLevel(level: number): void {
+    if (![0, 1, 2].includes(level) || level === this.detailSetting) return;
+    this.detailSetting = level;
+    for (const chunk of this.chunks.values()) this.dirty.add(chunk);
+  }
+
+  private get meadowRadius(): number { return MEADOW_DETAIL_RADIUS + this.detailSetting - 1; }
+  private get fineRadius(): number { return TREE_FINE_RADIUS + this.detailSetting - 1; }
 
   constructor(private readonly scene: Scene) {}
 
@@ -78,8 +88,8 @@ export class VegetationMesh {
   setViewCenter(x: number, z: number): void {
     if (x === this.centerX && z === this.centerZ) return;
     this.centerX = x; this.centerZ = z;
-    for (const chunk of this.chunks.values()) if (this.detail(chunk) !== chunk.ring || this.within(chunk, MEADOW_DETAIL_RADIUS) !== chunk.near
-      || this.within(chunk, TREE_FINE_RADIUS) !== chunk.fine) this.dirty.add(chunk);
+    for (const chunk of this.chunks.values()) if (this.detail(chunk) !== chunk.ring || this.within(chunk, this.meadowRadius) !== chunk.near
+      || this.within(chunk, this.fineRadius) !== chunk.fine) this.dirty.add(chunk);
   }
 
   private within(chunk: PlantChunk, radius: number): boolean {
@@ -135,7 +145,7 @@ export class VegetationMesh {
   update(originX: number, originZ: number): void {
     for (const chunk of this.dirty) this.removeInstances(chunk);
     for (const chunk of this.dirty) {
-      chunk.ring = this.detail(chunk); chunk.near = this.within(chunk, MEADOW_DETAIL_RADIUS); chunk.fine = this.within(chunk, TREE_FINE_RADIUS);
+      chunk.ring = this.detail(chunk); chunk.near = this.within(chunk, this.meadowRadius); chunk.fine = this.within(chunk, this.fineRadius);
       if (chunk.ring === 3) continue;
       for (let i = 0; i < chunk.plants.length; i += 7) {
         const kind = chunk.plants[i + 5], far = chunk.ring === 2;

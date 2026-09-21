@@ -37,7 +37,7 @@ it('shares wet-road grip between braking and turning and includes trailer tires'
 
 it('provides five suspension levels and distinct cars, trucks, buses, articulated rigs and a motorcycle', () => {
   expect(suspensionLevels).toEqual([1, 2, 3, 4, 5]);
-  expect(Object.keys(vehicleProfiles)).toHaveLength(10);
+  expect(Object.keys(vehicleProfiles)).toHaveLength(13);
   for (const [kind, length] of [['truck5', 5], ['truck8', 8], ['semi15', 15], ['semi20', 20]] as const) expect(vehicleProfiles[kind].length).toBe(length);
   expect(vehicleProfiles.motorcycle.wheels).toHaveLength(2);
   expect(vehicleProfiles.semi20.trailer!.wheelbase).toBeGreaterThan(vehicleProfiles.semi15.trailer!.wheelbase);
@@ -58,10 +58,13 @@ it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settl
   car.reset(0, 0, 0, flat);
   const scene = new Scene(), mesh = new VehicleMesh(scene, car.profile);
   mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems()); scene.updateMatrixWorld(true);
-  const size = new Box3().setFromObject(mesh.root).getSize(new Vector3());
+  const bounds = new Box3(); mesh.root.visible = true;
+  mesh.root.traverseVisible(object => { if (object instanceof Mesh) bounds.union(new Box3().setFromObject(object)); });
+  const size = bounds.getSize(new Vector3());
   expect(size.z).toBeGreaterThan(car.profile.length - 0.3);
   expect(size.z).toBeLessThan(car.profile.length + 0.6);
   expect(size.y).toBeGreaterThan(0.8);
+  expect(size.y).toBeLessThan(car.profile.height + 0.2);
   let parts = 0;
   mesh.root.traverse(object => { if (object instanceof Mesh) parts++; });
   expect(parts).toBeLessThan(100);
@@ -82,9 +85,12 @@ it('gives heavy rigs slower acceleration and longer wet braking distances', () =
   expect(stopping(0.55)).toBeGreaterThan(stopping(1) * 1.25);
 });
 
-it.each(['semi15', 'semi20'] as const)('keeps %s hitched through turns, reverse and variable frame rates', kind => {
+it.each(['semi15', 'semi20', 'heavySemi'] as const)('keeps %s hitched through turns, reverse and variable frame rates', kind => {
   const a = new VehiclePhysics(kind), b = new VehiclePhysics(kind);
-  for (const car of [a, b]) car.reset(30000, -40000, 0, flat);
+  for (const car of [a, b]) {
+    car.powerScale = 1.25; car.brakeScale = 0.75; car.steeringScale = 1.2;
+    car.reset(30000, -40000, 0, flat);
+  }
   drive(a, 12, 0.4, 1, flat, 30); drive(b, 12, 0.4, 1, flat, 144);
   expect(a.trailer!.heading).not.toBeCloseTo(a.heading, 2);
   expect(a.trailer!.heading).toBeCloseTo(b.trailer!.heading, 8);
@@ -105,7 +111,7 @@ it('leans a motorcycle into a turn and balances at rest', () => {
   expect(car.speed).toBe(0); expect(Math.abs(car.roll)).toBeLessThan(0.01);
 });
 
-it.each(['semi15', 'semi20'] as const)('keeps every %s trailer tire on a steep road and allows recovery from a tight reverse', kind => {
+it.each(['semi15', 'semi20', 'heavySemi'] as const)('keeps every %s trailer tire on a steep road and allows recovery from a tight reverse', kind => {
   const slope: SurfaceSampler = (x, z) => ({ height: 100 + x * 0.05 - z * 0.4, grip: 1 });
   const car = new VehiclePhysics(kind); car.reset(0, 0, 0, slope);
   drive(car, 5, 0, 0, slope);
@@ -117,4 +123,41 @@ it.each(['semi15', 'semi20'] as const)('keeps every %s trailer tire on a steep r
   drive(car, 8, 0, 1);
   expect(car.speed).toBeGreaterThan(1);
   expect(Math.abs(car.articulation)).toBeLessThan(angle);
+});
+
+it('adds a four-axle flatbed, five-axle crane and a heavy-haul flatbed semi', () => {
+  expect(vehicleProfiles.flatbed12.length).toBe(12);
+  expect(vehicleProfiles.flatbed12.wheels).toHaveLength(8);
+  expect(vehicleProfiles.crane.wheels).toHaveLength(10);
+  expect(vehicleProfiles.crane.wheels.filter(w => w.steer)).toHaveLength(4);
+  expect(vehicleProfiles.heavySemi.power).toBeGreaterThan(735500);
+  expect(vehicleProfiles.heavySemi.trailer.body).toBe('flatbed');
+});
+
+it('tunes acceleration and service braking without bypassing traction or parking brakes', () => {
+  const low = new VehiclePhysics('flatbed12'), high = new VehiclePhysics('flatbed12');
+  low.powerScale = 0.5; high.powerScale = 1.5;
+  for (const car of [low, high]) car.reset(0, 0, 0, flat);
+  drive(low, 6); drive(high, 6);
+  expect(high.speed).toBeGreaterThan(low.speed * 1.3);
+  low.brakeScale = 0.5; high.brakeScale = 1.5;
+  for (const car of [low, high]) { car.reset(0, 0, 0, flat); car.parked = false; car.speed = 15; }
+  drive(low, 0.2, 0, -1); drive(high, 0.2, 0, -1);
+  expect(high.speed).toBeLessThan(low.speed - 0.7);
+  expect((15 - high.speed) / 0.2).toBeLessThanOrEqual(9.81 * 0.94 + 0.001);
+  const slope: SurfaceSampler = (_x, z) => ({ height: -z * 0.4, grip: 1 });
+  low.reset(0, 0, 0, slope); drive(low, 2, 0, 0, slope);
+  expect(low.speed).toBe(0);
+});
+
+it('steers multiple axles around the same center and retains high-speed protection with tuning', () => {
+  const car = new VehiclePhysics('crane'); car.steering = 0.4;
+  const front = car.profile.wheels[1], second = car.profile.wheels[3];
+  expect(car.wheelSteering(front)).toBeGreaterThan(car.wheelSteering(second));
+  expect(car.wheelSteering(car.profile.wheels[0])).toBeLessThan(car.wheelSteering(front));
+  expect(car.wheelSteering(car.profile.wheels.at(-1)!)).toBe(0);
+  const sedan = new VehiclePhysics('sedan'); sedan.steeringScale = 1.4;
+  sedan.reset(0, 0, 0, flat); sedan.speed = 40; sedan.parked = false;
+  drive(sedan, 0.5, 1, 1);
+  expect(sedan.steering).toBeLessThan(0.025);
 });

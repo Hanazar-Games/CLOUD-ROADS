@@ -13,10 +13,10 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   await page.locator('#max-grade').fill('0');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
-  await expect(page.locator('#vehicle-kind option')).toHaveCount(10);
+  await expect(page.locator('#vehicle-kind option')).toHaveCount(13);
   await expect(page.locator('#suspension option')).toHaveCount(5);
   await page.locator('#drive-toggle').click();
-  for (const kind of ['sedan', 'suv', 'truck5', 'truck8', 'semi15', 'semi20', 'minibus', 'coach', 'motorcycle', 'roadster']) {
+  for (const kind of ['sedan', 'suv', 'truck5', 'truck8', 'flatbed12', 'crane', 'semi15', 'semi20', 'heavySemi', 'minibus', 'coach', 'motorcycle', 'roadster']) {
     await page.locator('#controls-toggle').click();
     await page.locator('#vehicle-kind').selectOption(kind);
     await expect(page.locator('#vehicle-kind')).toHaveValue(kind);

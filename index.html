@@ -29,6 +29,19 @@
           <label for="vehicle-kind">载具</label>
           <select id="vehicle-kind" aria-describedby="vehicle-summary"></select>
           <p id="vehicle-summary" class="panel-help" aria-live="polite"></p>
+          <details class="world-options">
+            <summary>动力与外观</summary>
+            <label class="speed-label" for="vehicle-power">发动机输出 <output id="vehicle-power-value">100%</output></label>
+            <input id="vehicle-power" type="range" min="50" max="150" step="5" value="100" aria-describedby="vehicle-tuning-help" />
+            <label class="speed-label" for="vehicle-brake">行车制动力 <output id="vehicle-brake-value">100%</output></label>
+            <input id="vehicle-brake" type="range" min="50" max="150" step="5" value="100" aria-describedby="vehicle-tuning-help" />
+            <label class="speed-label" for="vehicle-steering">低速转向幅度 <output id="vehicle-steering-value">100%</output></label>
+            <input id="vehicle-steering" type="range" min="60" max="140" step="5" value="100" aria-describedby="vehicle-tuning-help" />
+            <p id="vehicle-tuning-help" class="panel-help">100% 为车型默认值。动力和制动受路面抓地力限制；手刹保持原强度，高速转向自动收小。</p>
+            <button id="vehicle-tuning-reset" type="button">恢复默认动力与转向</button>
+            <label for="vehicle-paint">车身配色</label>
+            <select id="vehicle-paint"><option value="default">车型原色</option><option value="d8dedb">冰川白</option><option value="29485e">深海蓝</option><option value="377d78">山谷青</option><option value="a73d32">赤焰红</option><option value="dca632">工程黄</option><option value="353d43">石墨灰</option></select>
+          </details>
           <label for="driving-view">驾驶视角 · C 切换</label>
           <select id="driving-view"><option value="chase">跟车</option><option value="cockpit">驾驶舱</option><option value="hood">引擎盖</option></select>
           <label class="speed-label" for="driving-fov">视野角度 <output id="driving-fov-value">65°</output></label>
@@ -103,9 +116,13 @@
           <label for="graphics-preset">画质预设</label>
           <select id="graphics-preset"><option value="economy">节能 · 降低 GPU 负载</option><option value="balanced" selected>均衡</option><option value="quality">精细 · 更远视距</option><option value="custom" disabled>自定义</option></select>
           <label for="render-scale">3D 渲染比例</label>
-          <select id="render-scale"><option value="0.5">50%</option><option value="0.65">65%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select>
+          <select id="render-scale" aria-describedby="render-scale-help"><option value="0.5">50%</option><option value="0.65">65%</option><option value="0.75">75%</option><option value="1" selected>100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="1.75">175%</option><option value="2">200% · 超采样</option></select>
+          <p id="render-scale-help" class="panel-help">200% 为宽高各两倍，像素量为 100% 的四倍；文字保持清晰。超出显卡尺寸限制时自动缩减，实际分辨率显示在下方。</p>
           <label for="frame-limit">帧率上限</label>
-          <select id="frame-limit"><option value="30">30 FPS · 节能</option><option value="60" selected>60 FPS</option><option value="0">跟随屏幕刷新率</option></select>
+          <select id="frame-limit"><option value="30">30 FPS · 节能</option><option value="60" selected>60 FPS</option><option value="90">90 FPS</option><option value="120">120 FPS</option><option value="144">144 FPS</option><option value="165">165 FPS</option><option value="240">240 FPS</option><option value="0">不限帧率 · 跟随屏幕刷新率</option></select>
+          <label for="map-detail">近景植被细节</label>
+          <select id="map-detail" aria-describedby="map-detail-help"><option value="0">轻量 · 身边花草</option><option value="1" selected>标准 · 近景树冠与花草</option><option value="2">丰富 · 扩大精细植被范围</option></select>
+          <p id="map-detail-help" class="panel-help">即时调整精细树冠、草叶和野花的显示范围。植被随地貌与季节变化；远景树木继续保留。</p>
           <label for="shadow-quality">山体投影精度</label>
           <select id="shadow-quality"><option value="0">关闭</option><option value="1024">标准 · 1024</option><option value="2048" selected>精细 · 2048</option></select>
           <label for="antialiasing">边缘抗锯齿</label>
@@ -114,7 +131,7 @@
           <select id="view-distance" aria-describedby="view-distance-help"><option value="6">约 1.5 公里 · 轻量</option><option value="8" selected>约 2 公里 · 标准</option><option value="12">约 3 公里 · 开阔</option><option value="16">约 4 公里 · 远景</option></select>
           <p class="panel-help" id="view-distance-help">即时切换，保留当前位置。附近地形优先加载，后台提前准备前方地块与细节；远离的区域会回收。更远的视距需要更多显存，云雾仍会影响能见度。</p>
           <p id="graphics-status" class="panel-help" role="status"></p>
-          <p class="panel-help">渲染比例只影响 3D 画面，文字保持清晰。预设同时调整投影、抗锯齿、云层和视距；帧率上限独立保留。切到后台后停止渲染，返回时继续。</p>
+          <p class="panel-help">预设同时调整渲染比例、投影、抗锯齿、云层、视距和近景细节；帧率上限独立保留。不限帧率取消游戏内限帧，实际帧率取决于设备和屏幕刷新率。切到后台后停止渲染，返回时继续。</p>
         </details>
         <details class="world-options">
           <summary>声音与音乐</summary>

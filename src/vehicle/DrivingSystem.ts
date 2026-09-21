@@ -32,6 +32,19 @@ export class DrivingSystem {
       if (Object.hasOwn(vehicleProfiles, selector.value)) this.selectVehicle(selector.value as VehicleKind);
     }, options);
     this.describeVehicle();
+    const tuning = [['vehicle-power', 'powerScale'], ['vehicle-brake', 'brakeScale'], ['vehicle-steering', 'steeringScale']] as const;
+    for (const [id, field] of tuning) element(id).addEventListener('input', () => {
+      this.car[field] = Number(element<HTMLInputElement>(id).value) / 100;
+      element(`${id}-value`).textContent = `${Math.round(this.car[field] * 100)}%`;
+      this.describeVehicle();
+    }, options);
+    element('vehicle-tuning-reset').addEventListener('click', () => {
+      for (const [id, field] of tuning) {
+        this.car[field] = 1; element<HTMLInputElement>(id).value = '100'; element(`${id}-value`).textContent = '100%';
+      }
+      this.describeVehicle();
+    }, options);
+    element('vehicle-paint').addEventListener('change', () => this.applyPaint(), options);
     element('driving-view').addEventListener('change', () => {
       const view = element<HTMLSelectElement>('driving-view').value as DrivingView;
       if (drivingViews.includes(view)) { this.cameraRig.view = view; this.cameraRig.reset(); }
@@ -183,6 +196,7 @@ export class DrivingSystem {
     if (kind === this.car.kind) return;
     const next = new VehiclePhysics(kind);
     next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
+    next.powerScale = this.car.powerScale; next.brakeScale = this.car.brakeScale; next.steeringScale = this.car.steeringScale;
     if (this.active && this.surface) {
       const spawn = this.getWorld().roadReady ? this.surface.spawn(this.car.x, this.car.z, next.profile) : undefined;
       if (!spawn) {
@@ -192,6 +206,7 @@ export class DrivingSystem {
       next.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
     }
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
+    this.applyPaint();
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();
   }
 
@@ -201,9 +216,17 @@ export class DrivingSystem {
     element<HTMLSelectElement>('vehicle-wipers').disabled = !this.systems.hasWindshield;
     element('vehicle-wipers-help').textContent = this.systems.hasWindshield ? '自动按雨量调速；间歇每次刮动后停顿。关闭后完成当前刮动并归位。' : '此摩托车没有挡风玻璃，不提供雨刮。';
     this.describeSuspension();
-    element('vehicle-summary').textContent = `${p.length} m · ${(p.mass / 1000).toLocaleString('zh-CN')} 吨 · ${p.wheels.length + (p.trailer?.wheels.length ?? 0)} 轮 · ${Math.round(p.power / 1000)} kW。`
-      + (p.trailer ? '半挂有内轮差和倒车折叠，窄弯请放慢并留足外侧空间。' : p.shape === 'motorcycle' ? '两轮独立悬挂，转弯自动侧倾，低速自动平衡。' : p.mass > 4000 ? '重车加速较慢，陡坡与湿路请提前减速。' : '五档弹簧与阻尼按车型匹配。');
+    const power = p.power * this.car.powerScale;
+    element('vehicle-summary').textContent = `${p.length} m · ${(p.mass / 1000).toLocaleString('zh-CN')} 吨 · ${p.wheels.length + (p.trailer?.wheels.length ?? 0)} 轮 · ${Math.round(power / 1000)} kW / ${Math.round(power / 735.5)} 马力。`
+      + (p.shape === 'crane' ? '五轴底盘、双前轴转向，吊臂与支腿收拢行驶；当前不支持吊装操作。'
+        : p.shape === 'flatbed' ? '四轴底盘、双前轴转向，开放货台与折叠坡板，窄弯留足车尾空间。'
+          : p.trailer ? '半挂有内轮差和倒车折叠，窄弯请放慢并留足外侧空间。' : p.shape === 'motorcycle' ? '两轮独立悬挂，转弯自动侧倾，低速自动平衡。' : p.mass > 4000 ? '重车加速较慢，陡坡与湿路请提前减速。' : '五档弹簧与阻尼按车型匹配。');
     element('camera-distance-value').textContent = `${Number(this.cameraRig.distanceFor(this.car).toFixed(1))} m`;
+  }
+
+  private applyPaint(): void {
+    const value = element<HTMLSelectElement>('vehicle-paint').value;
+    this.mesh.setPaint(value === 'default' ? this.car.profile.paint : parseInt(value, 16));
   }
 
   private describeSuspension(): void {
