@@ -391,9 +391,9 @@ export class Game {
     const { origin, chunks } = this.world;
     const x = this.camera.position.x + origin.x, z = this.camera.position.z + origin.z;
     const y = this.camera.position.y;
-    const stats = chunks.stats;
     this.hudTime += dt;
     if (this.hudTime >= 0.15) {
+      const stats = chunks.stats;
       this.hudTime = 0;
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
@@ -421,6 +421,7 @@ export class Game {
       element('cloud-region').textContent = this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '云层关闭';
     }
     this.debug.update(() => {
+      const stats = chunks.stats;
       const ground = this.world.roadReady ? this.world.sampleGround(x, z) : undefined;
       return {
         Coordinates: `${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}`,
@@ -453,7 +454,7 @@ export class Game {
         'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
         'Carriageway width': `${this.world.options.roadWidth} m`,
         'Route style': routeNames[this.world.options.routeStyle], 'Maximum grade': `${Math.round(this.world.options.maxGrade * 100)}%`, 'Route checkpoints': this.world.road.checkpointCount,
-        'Roadside grass': chunks.vegetation.meadow.count, 'Wildflowers': chunks.vegetation.flowers.count + chunks.vegetation.flowerSpikes.count,
+        'Roadside grass': chunks.vegetation.meadowCount, 'Wildflowers': chunks.vegetation.flowerCount,
         'Vegetation instances': chunks.vegetation.enabled ? chunks.vegetation.count : 0,
         'Tree canopies': chunks.vegetation.enabled ? chunks.vegetation.canopyCount : 0,
         'Distant canopies': chunks.vegetation.enabled ? chunks.vegetation.distantCount : 0,

@@ -1,4 +1,4 @@
-import { Box3, Scene, Vector3 } from 'three';
+import { Box3, Mesh, Scene, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { vehicleProfiles, suspensionLevels, suspensionTuning } from '../src/vehicle/VehicleConfig';
 import { VehiclePhysics, type SurfaceSampler } from '../src/vehicle/VehiclePhysics';
@@ -62,6 +62,9 @@ it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settl
   expect(size.z).toBeGreaterThan(car.profile.length - 0.3);
   expect(size.z).toBeLessThan(car.profile.length + 0.6);
   expect(size.y).toBeGreaterThan(0.8);
+  let parts = 0;
+  mesh.root.traverse(object => { if (object instanceof Mesh) parts++; });
+  expect(parts).toBeLessThan(100);
   mesh.dispose(); expect(scene.children).toHaveLength(0);
 });
 

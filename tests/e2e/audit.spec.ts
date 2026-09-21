@@ -108,8 +108,10 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.20');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('岔路星途 · 双向路网与夜行灯光');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.21');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('近景拾光 · 模型细化与渲染优化');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.20');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('岔路星途 · 双向路网与夜行灯光');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.19');
   await expect(dialog.locator('[data-release="history"]')).toContainText('雨行秋野 · 车灯雨刮与悬挂调校');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.18');

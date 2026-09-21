@@ -3,6 +3,7 @@ import { CHUNK_SIZE } from '../world/ChunkPlanner';
 export const PLANT_GRID = 20;
 export const PLANT_SPACING = CHUNK_SIZE / PLANT_GRID;
 export const TREE_DETAIL_RADIUS = 4;
+export const TREE_FINE_RADIUS = 1;
 export const GROUND_DETAIL_RADIUS = 3;
 export const MEADOW_GRID = 64;
 export const MEADOW_DETAIL_RADIUS = 1;

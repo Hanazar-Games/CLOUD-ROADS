@@ -1,4 +1,5 @@
-import { BoxGeometry, Color, CylinderGeometry, DynamicDrawUsage, InstancedMesh, Matrix4, MeshStandardMaterial, Vector2, type Scene } from 'three';
+import { BoxGeometry, Color, CylinderGeometry, DynamicDrawUsage, ExtrudeGeometry, InstancedMesh, Matrix4, MeshStandardMaterial, Shape, Vector2, type BufferGeometry, type Scene } from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MAX_ROAD_SEGMENTS } from '../road/RoadSpine';
 import { ROAD_SAMPLES, type RoadSample } from '../road/RoadSegment';
 import { roadFrame } from '../road/RoadFrame';
@@ -25,8 +26,8 @@ export class BridgeMesh {
   readonly cableBridges: CableBridgeMesh;
   readonly parapets: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly piers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
-  readonly columns: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
-  readonly roundPiers = new InstancedMesh(new CylinderGeometry(0.5, 0.5, 1, 10), this.material, CAPACITY);
+  readonly columns: InstancedMesh<BufferGeometry, MeshStandardMaterial>;
+  readonly roundPiers = new InstancedMesh(new CylinderGeometry(0.5, 0.5, 1, 16), this.material, CAPACITY);
   readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly railings: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   private readonly heights = new Map<string, number>();
@@ -43,7 +44,12 @@ export class BridgeMesh {
     this.cableBridges = new CableBridgeMesh(scene, this.material, options);
     this.parapets = new InstancedMesh(this.geometry, this.material, CAPACITY * 3);
     this.piers = new InstancedMesh(this.geometry, this.material, CAPACITY * this.profile.centers.length * 2);
-    const column = new BoxGeometry(), vertices = column.getAttribute('position');
+    const outline = new Shape();
+    [[-0.38, -0.5], [0.38, -0.5], [0.5, -0.38], [0.5, 0.38], [0.38, 0.5], [-0.38, 0.5], [-0.5, 0.38], [-0.5, -0.38]]
+      .forEach(([x, z], i) => { if (i) outline.lineTo(x, z); else outline.moveTo(x, z); });
+    outline.closePath();
+    const shape = new ExtrudeGeometry(outline, { depth: 1, bevelEnabled: false, steps: 1 }).rotateX(-Math.PI / 2).translate(0, -0.5, 0);
+    const column = mergeVertices(shape), vertices = column.getAttribute('position'); shape.dispose();
     for (let i = 0; i < vertices.count; i++) {
       const taper = vertices.getY(i) > 0 ? 0.7 : 1;
       vertices.setXYZ(i, vertices.getX(i) * taper, vertices.getY(i), vertices.getZ(i) * taper);
@@ -220,8 +226,21 @@ export class BridgeMesh {
     }
     if (tall) {
       this.box(this.details, x, y - 8, z, deckWidth + 1.2, 0.2, width + 2, upright);
-      for (const side of [-1, 1]) this.box(this.details, x + verticalFrame.right.x * side * (deckWidth / 2 + 0.5), y - 7.4,
-        z + verticalFrame.right.z * side * (deckWidth / 2 + 0.5), 0.1, 1.2, width + 2, upright);
+      const along = { x: -Math.sin(sample.heading), z: Math.cos(sample.heading) };
+      for (const side of [-1, 1]) {
+        for (const level of [-7.4, -6.8]) {
+          this.box(this.details, x + verticalFrame.right.x * side * (deckWidth / 2 + 0.5), y + level,
+            z + verticalFrame.right.z * side * (deckWidth / 2 + 0.5), 0.09, 0.09, width + 2, upright);
+          this.box(this.details, x + along.x * side * (width / 2 + 0.95), y + level,
+            z + along.z * side * (width / 2 + 0.95), deckWidth + 1.2, 0.09, 0.09, upright);
+        }
+        const posts = Math.ceil((deckWidth + 1) / 1.8);
+        for (let i = 0; i <= posts; i++) {
+          const offset = (i / posts - 0.5) * (deckWidth + 1);
+          this.box(this.details, x + verticalFrame.right.x * offset + along.x * side * (width / 2 + 0.95), y - 7.35,
+            z + verticalFrame.right.z * offset + along.z * side * (width / 2 + 0.95), 0.085, 1.3, 0.085, upright);
+        }
+      }
     }
     this.box(this.details, x + normal.x * 0.015, y + normal.y * 0.015, z + normal.z * 0.015,
       deckWidth - 0.8, 0.02, 0.09, sample);

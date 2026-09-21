@@ -1,4 +1,4 @@
-import { MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
+import { Frustum, InstancedMesh, Matrix4, MeshStandardMaterial, PerspectiveCamera, Raycaster, Scene, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
@@ -8,6 +8,9 @@ import { generateVegetation } from '../src/vegetation/VegetationGenerator';
 import { createTerrainLayout } from '../src/terrain/TerrainTopology';
 import { BiomeSystem } from '../src/biome/BiomeSystem';
 import { RoadCorridor } from '../src/road/RoadCorridor';
+
+const batches = (scene: Scene, name: string) => scene.children.filter(child => child.name === `vegetation-${name}`) as InstancedMesh[];
+const count = (scene: Scene, name: string) => batches(scene, name).reduce((sum, mesh) => sum + mesh.count, 0);
 
 function flatPlants(cells: 8 | 16 | 64, terrain: 'forest' | 'autumn' = 'forest') {
   const coordinates = createTerrainLayout(cells).coordinates;
@@ -22,9 +25,9 @@ describe('streamed vegetation', () => {
     const far = flatPlants(8, 'autumn');
     expect(Array.from({ length: far.length / 7 }, (_, i) => far[i * 7 + 5])).toContain(10);
     mesh.setChunk('0,0', 0, 0, plants); mesh.update(0, 0);
-    expect(mesh.autumn.count).toBeGreaterThan(50);
+    expect(count(scene, 'autumn')).toBeGreaterThan(50);
     mesh.setViewCenter(6, 0); mesh.update(0, 0);
-    expect(mesh.autumn.count).toBe(0); expect(mesh.autumnDistant.count).toBeGreaterThan(10);
+    expect(count(scene, 'autumn')).toBe(0); expect(count(scene, 'autumn-distant')).toBeGreaterThan(10);
     mesh.removeChunk('0,0'); mesh.update(0, 0); expect(mesh.count).toBe(0); mesh.dispose();
     expect(scene.children).toHaveLength(0);
   });
@@ -87,13 +90,14 @@ describe('streamed vegetation', () => {
     mesh.update(0, 0);
     expect(mesh.count).toBe(2);
     expect(scene.children.length).toBeLessThanOrEqual(14);
-    const before = mesh.trees.instanceMatrix.array.slice();
+    const trees = batches(scene, 'pine')[0], before = trees.instanceMatrix.array.slice();
     mesh.update(5120, -5120);
-    expect(mesh.trees.instanceMatrix.array).toEqual(before);
-    expect(mesh.trees.position.x).toBe(-5120);
+    expect(trees.instanceMatrix.array).toEqual(before);
+    expect(trees.position.x).toBe(-5120);
     mesh.update(32768, -32768);
-    expect(mesh.trees.instanceMatrix.array[12] + mesh.trees.position.x + 32768).toBe(10);
-    expect(mesh.trees.instanceMatrix.array[14] + mesh.trees.position.z - 32768).toBe(20);
+    expect(trees.instanceMatrix.array).toEqual(before);
+    expect(trees.instanceMatrix.array[12] + trees.position.x + 32768).toBe(10);
+    expect(trees.instanceMatrix.array[14] + trees.position.z - 32768).toBe(20);
     mesh.removeChunk('0,0');
     mesh.update(5120, -5120);
     expect(mesh.count).toBe(0);
@@ -126,11 +130,61 @@ describe('streamed vegetation', () => {
     mesh.setChunk('0,0', 0, 0, plants(8)); mesh.setChunk('1,0', 1, 0, plants(12)); mesh.update(0, 0);
     for (let i = 0; i < 30; i++) { mesh.setChunk('0,0', 0, 0, plants(8 + i)); mesh.update(0, 0); }
     expect(mesh.count).toBe(4);
-    expect(mesh.trees.instanceMatrix.updateRanges.length).toBeLessThanOrEqual(1);
+    expect(batches(scene, 'pine')[0].instanceMatrix.updateRanges.length).toBeLessThanOrEqual(1);
     mesh.removeChunk('0,0'); mesh.update(0, 0);
-    expect(mesh.count).toBe(2); expect(mesh.trees.instanceMatrix.array[12]).toBe(268);
+    expect(mesh.count).toBe(2); expect(batches(scene, 'pine')[0].instanceMatrix.array[12]).toBe(268);
     mesh.setViewCenter(30, 30); mesh.update(0, 0); expect(mesh.count).toBe(0);
     mesh.setViewCenter(0, 0); mesh.update(0, 0); expect(mesh.count).toBe(2);
+    mesh.dispose();
+  });
+
+  it('culls separate woodland regions and keeps their bounds correct after replacement and rebasing', () => {
+    const scene = new Scene(), mesh = new VegetationMesh(scene);
+    const plants = (height: number) => new Float32Array([20, height, 20, 1, 0, 0, 1]);
+    mesh.setChunk('0,-1', 0, -1, plants(0)); mesh.setChunk('0,1', 0, 1, plants(0)); mesh.update(0, 0);
+    const camera = new PerspectiveCamera(65, 1, 0.1, 2000), frustum = new Frustum();
+    const visible = () => {
+      camera.updateMatrixWorld(); scene.updateMatrixWorld(true);
+      frustum.setFromProjectionMatrix(new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      return batches(scene, 'pine').filter(batch => frustum.intersectsObject(batch));
+    };
+    camera.position.set(20, 8, 0); camera.lookAt(20, 8, -500);
+    expect(batches(scene, 'pine').every(batch => batch.frustumCulled)).toBe(true);
+    expect(visible()).toHaveLength(1);
+    camera.lookAt(20, 8, 500); expect(visible()).toHaveLength(1);
+    mesh.setChunk('0,1', 0, 100, plants(1500)); mesh.update(32768, -32768);
+    camera.position.set(20 - 32768, 1508, 32768); camera.lookAt(20 - 32768, 1508, 32768 + 532);
+    // The replacement is outside the detail radius and must leave no stale instances.
+    expect(visible()).toHaveLength(0);
+    mesh.setChunk('0,1', 0, 1, plants(1500)); mesh.update(32768, -32768);
+    expect(visible()).toHaveLength(1);
+    mesh.dispose(); expect(scene.children).toHaveLength(0);
+  });
+
+  it('releases empty regional buffers during long travel instead of retaining past tiles', () => {
+    const scene = new Scene(), mesh = new VegetationMesh(scene);
+    const plants = new Float32Array([20, 100, 20, 1, 0, 0, 1]);
+    let released = 0;
+    for (let x = -20; x < 20; x++) {
+      mesh.setViewCenter(x, 0); mesh.setChunk('moving', x, 0, plants); mesh.update(x * 256, 0);
+      expect(mesh.count).toBe(1); expect(scene.children).toHaveLength(1);
+      const batch = batches(scene, 'pine')[0];
+      if (x % 2 === 0) batch.addEventListener('dispose', () => released++);
+      expect(batch.instanceMatrix.count).toBeLessThanOrEqual(1600);
+    }
+    mesh.dispose(); expect(released).toBe(20); expect(scene.children).toHaveLength(0);
+  });
+
+  it('uses lighter middle-distance crowns without reducing density or moving their roots', () => {
+    const scene = new Scene(), mesh = new VegetationMesh(scene), matrix = new Matrix4();
+    mesh.setChunk('0,0', 0, 0, new Float32Array([20, 100, 20, 1, 0, 2, 1])); mesh.update(0, 0);
+    const close = batches(scene, 'broadleaf')[0], triangles = close.geometry.index!.count / 3;
+    close.getMatrixAt(0, matrix); const root = new Vector3().setFromMatrixPosition(matrix);
+    mesh.setViewCenter(3, 0); mesh.update(0, 0);
+    const middle = batches(scene, 'broadleaf-middle')[0]; middle.getMatrixAt(0, matrix);
+    expect(mesh.count).toBe(1); expect(close.parent).toBeNull();
+    expect(new Vector3().setFromMatrixPosition(matrix)).toEqual(root);
+    expect(middle.geometry.index!.count / 3).toBeLessThan(triangles * 0.4);
     mesh.dispose();
   });
 });
