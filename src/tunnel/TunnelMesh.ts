@@ -84,7 +84,7 @@ export class TunnelMesh {
 
   update(spans: readonly TunnelSpan[], corridor: RoadCorridor, terrain: RoadTerrain, version: number,
     originX: number, originZ: number, nearRoute: boolean): void {
-    const spanKey = this.version === version ? this.spanKey : spans.map(span => `${span.start.distance}:${span.end.distance}`).join(',');
+    const spanKey = this.version === version ? this.spanKey : spans.map(span => `${span.start.routeId ?? ''}:${span.start.distance}:${span.end.distance}`).join(',');
     this.version = version;
     if (this.spanKey !== spanKey) {
       this.spanKey = spanKey;

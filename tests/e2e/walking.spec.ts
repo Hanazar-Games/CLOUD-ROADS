@@ -11,7 +11,7 @@ async function start(page: Page) {
 
 test('walks, accelerates into running and sprinting, jumps once and freezes safely', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/'); await start(page);
+  await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
   const home = await metric(page, 'Walking position').textContent();
   await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric(page, 'Walking speed').textContent())!)).toBeGreaterThan(7);
@@ -46,7 +46,7 @@ test('walks, accelerates into running and sprinting, jumps once and freezes safe
 test('switches walking, driving and flight on a tall bridge and survives settings, context loss and world changes', async ({ page }) => {
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.locator('#route-style').selectOption('5');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
@@ -97,7 +97,7 @@ test('switches walking, driving and flight on a tall bridge and survives setting
 
 test('keeps walking controls reachable in a short narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 520 });
-  await page.goto('/'); await start(page);
+  await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
   await page.locator('#controls-toggle').click();
   await page.getByText('步行与跑跳', { exact: true }).click();
   await expect(page.getByText('右上角「开始步行」进入第一人称', { exact: false })).toBeVisible();
@@ -108,7 +108,7 @@ test('keeps walking controls reachable in a short narrow window', async ({ page 
 test('walks at a distant highway service area after rebasing and resets cleanly with a new world', async ({ page }) => {
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#road-type').selectOption('highway');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   await expect(metric(page, 'Road ready')).toHaveText('yes', { timeout: 30000 });

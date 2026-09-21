@@ -11,7 +11,7 @@ test('customizes all winding levels and grades, renders roadside flowers and dri
     await expect(metric('Active chunks')).toHaveText('289', { timeout: 30000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   };
-  await page.goto('/'); await ready();
+  await page.goto('/?seed=CLOUD-ROAD-001'); await ready();
   const route = page.locator('#route-style'), grade = page.locator('#max-grade');
   await expect(route.locator('option')).toHaveCount(6);
   await expect(grade).toHaveAttribute('min', '0');

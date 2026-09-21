@@ -39,3 +39,14 @@ it('starts continuous wiping immediately when leaving the intermittent pause', (
   systems.wipers = 'high'; tick(systems, 0.15);
   expect(systems.sweep).toBeGreaterThan(0.2);
 });
+
+it('blinks left, right and hazard lamps in phase, freezes when paused and cancels after a turn', () => {
+  const systems = new VehicleSystems();
+  systems.signal = 'left'; systems.update(0.1, 0, 0, 0, -0.3);
+  expect(systems.leftSignal).toBe(true); expect(systems.rightSignal).toBe(false);
+  const lit = systems.leftSignal; systems.update(0, 0, 0, 0, -0.3); expect(systems.leftSignal).toBe(lit);
+  systems.update(0.1, 0, 0, 0, 0); expect(systems.signal).toBe('off');
+  systems.signal = 'hazard'; tick(systems, 0.15);
+  expect(systems.leftSignal).toBe(systems.rightSignal);
+  tick(systems, 0.3); expect(systems.leftSignal).toBe(false);
+});

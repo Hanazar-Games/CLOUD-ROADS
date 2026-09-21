@@ -18,13 +18,13 @@ export class RoadMesh {
   private anchorZ = 0;
   private readonly access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1));
 
-  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS, capacity = MAX_ROAD_SEGMENTS) {
     this.profile = roadProfile(options);
     this.barriers = new InstancedMesh(barrierGeometry(), new MeshStandardMaterial({ color: 0xb6b5a9, roughness: 0.9 }),
-      options.roadType === 'highway' ? MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 2 : 1);
+      options.roadType === 'highway' ? capacity * ROAD_SAMPLES * 2 : 1);
     this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access));
     const strips = this.profile.centers.length, stride = strips * 2;
-    const rows = MAX_ROAD_SEGMENTS * ROAD_SAMPLES + 1;
+    const rows = capacity * ROAD_SAMPLES + 1;
     for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2]] as const) {
       this.mesh.geometry.setAttribute(name, new BufferAttribute(new Float32Array(rows * stride * size), size).setUsage(DynamicDrawUsage));
     }
@@ -44,7 +44,7 @@ export class RoadMesh {
     scene.add(this.mesh, this.barriers);
   }
 
-  update(spine: RoadSpine, originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
+  update(spine: Pick<RoadSpine, 'version' | 'segments' | 'samples'>, originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
     if (this.version !== spine.version && spine.segments.length) {
       this.version = spine.version;
       const first = spine.segments[0].start;
@@ -69,7 +69,7 @@ export class RoadMesh {
           normals.setXYZ(index, normal.x, normal.y, normal.z);
           uv.setXY(index, offset, sample.distance - cycleStart);
         }
-        if (centers.length === 2 && i > 0) {
+        if (centers.length === 2 && i > 0 && sample.opening === undefined) {
           const previous = spine.samples[i - 1];
           const length = sample.distance - previous.distance + 0.08;
           const scale = Math.hypot(1, sample.grade);

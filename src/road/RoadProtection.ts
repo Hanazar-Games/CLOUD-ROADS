@@ -11,9 +11,10 @@ interface ProtectionContext {
 }
 
 export function hasRoadBarrier(context: ProtectionContext, sample: RoadSample, side: number): boolean {
+  if (sample.opening === 0 || sample.opening === side) return false;
   const distance = sample.distance;
   if (isServiceAccess(context.options, context.services, distance, side)) return false;
-  if ([context.bridges, context.tunnels].some(spans => spans.some(span => distance >= span.start.distance && distance <= span.end.distance))) return true;
+  if ([context.bridges, context.tunnels].some(spans => spans.some(span => span.start.routeId === sample.routeId && distance >= span.start.distance && distance <= span.end.distance))) return true;
   if (Math.abs(sample.curvature) > 0.002 || Math.abs(sample.grade) > 0.035) return true;
   return hashSeed(`${context.seed}:guardrail:${Math.floor(distance / 160)}:${side}`) % 4 !== 0;
 }

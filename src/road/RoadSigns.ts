@@ -7,6 +7,7 @@ import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
 import type { RoadSample } from './RoadSegment';
 import { createSignAtlas, SIGN_ROWS } from './SignAtlas';
+import type { Junction } from './RoadNetwork';
 
 const CAPACITY = 2048;
 
@@ -36,10 +37,17 @@ export class RoadSigns {
     scene.add(this.boards, this.posts);
   }
 
-  update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], services: readonly ServiceArea[], version: number, originX: number, originZ: number, passes: readonly RoadSample[] = []): void {
+  update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], services: readonly ServiceArea[], version: number, originX: number, originZ: number, passes: readonly RoadSample[] = [], junctions: readonly Junction[] = []): void {
     if (version !== this.version) {
       this.version = version; this.anchorX = samples[0]?.position.x ?? 0; this.anchorZ = samples[0]?.position.z ?? 0;
       this.boards.count = this.posts.count = 0;
+      for (const junction of junctions) {
+        const approach = samples.reduce((best, p) => Math.abs(p.distance - junction.distance + 120) < Math.abs(best.distance - junction.distance + 120) ? p : best);
+        const sample = junction.sample, offset = this.profile.outerHalfWidth + 3;
+        this.add(this.position(approach, offset, 4.2), approach.heading, 5, 2, junction.kind === 'stack' ? 29 : 28, 4.4);
+        this.add(this.position(sample, offset, 3.5), sample.heading, 4.4, 1.6, junction.kind === 'stack' ? 29 : 28, 3.7);
+        if (junction.kind === 'fork') this.add(this.position(sample, -offset, 3.5), sample.heading, 4.4, 1.6, 27, 3.7);
+      }
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1];
         if (tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) || services.some(site => sample.distance >= site.start && sample.distance <= site.end)) continue;

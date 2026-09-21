@@ -11,7 +11,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
     if (/\.(js|css)(\?|$)/.test(response.url())) assets.push(new URL(response.url()).pathname);
   });
-  await page.goto('./');
+  await page.goto('./?seed=CLOUD-ROAD-001');
   // Let software CI stream terrain before drawing the full forest.
   if (process.env.CI) {
     await page.locator('#shadows').click();

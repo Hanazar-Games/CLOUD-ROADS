@@ -45,7 +45,7 @@ export class BridgeDetector {
           - this.terrain.sample(x + right.x * offset, z + right.z * offset)));
         this.clearance.set(sample.distance, gap);
       }
-      const bridge = gap > 5;
+      const bridge = gap > 5 || sample.elevated;
       if (bridge) {
         if (first < 0) first = i;
         depth = Math.max(depth, gap);

@@ -6,7 +6,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#road-type').selectOption('highway');
   await page.locator('#route-style').selectOption('0');
   await page.locator('#max-grade').fill('0');
@@ -56,7 +56,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
 
 test('previews weather and fog while paused and keeps the vehicle stationary', async ({ page }) => {
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
   await page.locator('#vehicle-kind').selectOption('motorcycle');
   await page.locator('#drive-toggle').click();

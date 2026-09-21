@@ -22,7 +22,7 @@ export class RoadDebug {
     scene.add(this.group);
   }
 
-  update(spine: RoadSpine, originX: number, originZ: number, nearRoute: boolean): void {
+  update(spine: Pick<RoadSpine, 'version' | 'segments' | 'samples'>, originX: number, originZ: number, nearRoute: boolean): void {
     if (this.version !== spine.version && spine.segments.length) {
       this.version = spine.version;
       const first = spine.segments[0].start.position;

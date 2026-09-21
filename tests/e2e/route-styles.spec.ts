@@ -10,7 +10,7 @@ test('applies winding levels, drives them and preserves choices during far strea
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   };
-  await page.goto('/'); await ready();
+  await page.goto('/?seed=CLOUD-ROAD-001'); await ready();
   await page.locator('#terrain-kind').selectOption('forest');
   await page.locator('#route-style').selectOption('3');
   await page.getByRole('button', { name: '应用并返回起点' }).click();

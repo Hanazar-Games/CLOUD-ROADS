@@ -8,7 +8,7 @@ import { DebugUI, element } from '../debug/DebugUI';
 import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
-import { DEFAULT_SEED } from '../world/WorldSeed';
+import { randomSeed, startingSeed } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { routeNames, terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
@@ -18,12 +18,13 @@ const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine:
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
 
 export class Game {
+  private readonly initialSeed = startingSeed(location.search);
   private readonly canvas = element<HTMLCanvasElement>('world');
   private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
   private readonly sky = new SkySystem(this.scene);
   private readonly weather = new WeatherSystem(new Scene());
-  private readonly clouds = new CloudSystem(DEFAULT_SEED, this.sky.sun, this.renderer.extensions.has('EXT_color_buffer_float'));
+  private readonly clouds = new CloudSystem(this.initialSeed, this.sky.sun, this.renderer.extensions.has('EXT_color_buffer_float'));
   private readonly camera = new PerspectiveCamera(65, 1, 0.5, 7000);
   private readonly input = new InputManager(this.canvas);
   private readonly flight = new FreeCamera(this.camera, this.input);
@@ -42,7 +43,8 @@ export class Game {
 
   constructor() {
     this.scene.background = this.sky.sun.haze;
-    this.world = new World(this.scene, DEFAULT_SEED);
+    this.world = new World(this.scene, this.initialSeed);
+    element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world);
     this.world.resetCamera(this.camera);
@@ -69,7 +71,7 @@ export class Game {
       else { this.stopDriving(); this.walking.start(); }
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
-    for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
+    for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
       element(id).addEventListener('click', () => this.stopTravel(), { signal: this.events.signal });
     }
     element('debug-close').addEventListener('click', () => {
@@ -116,6 +118,7 @@ export class Game {
       this.loadSeed(seed);
     }, { signal: this.events.signal });
     element('retry-world').addEventListener('click', () => this.loadSeed(this.world.seed), { signal: this.events.signal });
+    element('random-world').addEventListener('click', () => this.loadSeed(randomSeed()), { signal: this.events.signal });
     element('world-options').addEventListener('submit', (event) => {
       event.preventDefault();
       const terrain = element<HTMLSelectElement>('terrain-kind').value as TerrainKind;
@@ -190,7 +193,7 @@ export class Game {
       if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
       this.canvas.focus();
     }, { signal: this.events.signal });
-    for (const [id, inspect] of [['tunnel-view', () => this.world.inspectTunnel(this.camera)], ['lights-view', () => this.world.inspectLights(this.camera)]] as const) {
+    for (const [id, inspect] of [['tunnel-view', () => this.world.inspectTunnel(this.camera)], ['lights-view', () => this.world.inspectLights(this.camera)], ['junction-view', () => this.world.inspectJunction(this.camera)]] as const) {
       element(id).addEventListener('click', () => {
         const view = inspect();
         if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
@@ -365,7 +368,7 @@ export class Game {
     else if (this.walking.active) this.walking.update(dt, frozen);
     else this.flight.update(dt, frozen);
     this.world.update(this.camera, !frozen, this.driving.active ? this.driving.car.heading + (this.driving.car.speed < -0.1 ? Math.PI : 0)
-      : this.walking.active ? this.walking.person.heading : undefined);
+      : this.walking.active ? this.walking.person.heading : undefined, this.driving.active ? this.driving.car : this.walking.active ? this.walking.person : undefined);
     if (this.world.serviceView) {
       this.stopTravel();
       this.flight.reset(this.world.serviceView.heading, this.world.serviceView.pitch);
@@ -406,9 +409,12 @@ export class Game {
       element<HTMLButtonElement>('service-view').disabled = this.world.searching || !this.world.roadReady;
       element('service-view').textContent = searching === null ? '下一服务区' : `定位中 · ${Math.round(searching * 100)}%`;
       const passSearch = this.world.passSearchProgress;
-      element<HTMLButtonElement>('pass-view').disabled = this.world.searching || !this.world.roadReady || this.world.options.terrain !== 'alpine';
+      element<HTMLButtonElement>('pass-view').disabled = this.world.searching || !this.world.roadReady || this.world.options.terrain !== 'alpine' || this.world.network.active.id !== 'root';
       element('pass-view').textContent = passSearch === null ? '下一垭口' : `定位中 · ${Math.round(passSearch * 100)}%`;
       element('route-stage').textContent = this.world.routeStage;
+      const junction = this.world.nextJunction;
+      element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || !junction;
+      element('junction-status').textContent = junction ? `${junction.kind === 'stack' ? '环形立交 · 右侧出口' : '三向岔路 · 左 / 直行 / 右'} · ${Math.max(0, Math.round((junction.distance - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m` : '沿当前路线继续探索';
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;
@@ -439,6 +445,8 @@ export class Game {
         'Elevated services': this.world.services.filter(site => site.ground.elevated).length,
         'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',
         'Street lamps': this.world.furniture.lampPositions.length,
+        'Active route': this.world.network.active.id, 'Loaded routes': this.world.network.routes.length,
+        Junctions: this.world.network.junctions.length,
         'Local lights': this.world.furniture.localLights.filter(light => light.intensity > 0).length,
         'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',
         Landscape: terrainNames[this.world.options.terrain],
@@ -462,6 +470,8 @@ export class Game {
         'Vehicle suspension': `${this.driving.car.suspension} · ${this.driving.car.wheels.map(wheel => (wheel.compression * 100).toFixed(1)).join(' / ')} cm`,
         'Suspension damping': `${Math.round(this.driving.car.damping * 100)}%`,
         'Vehicle lights': this.driving.systems.beam,
+        'Vehicle signal': this.driving.systems.signal,
+        'Light power': `${Math.round(this.driving.systems.lightPower * 100)}%`, 'Light range': `${this.driving.systems.lightRange} m`,
         'Wiper sweep': this.driving.systems.sweep.toFixed(3),
         'Wiper rate': this.driving.systems.wiperRate.toFixed(1),
         'Driving camera': this.driving.cameraRig.view,

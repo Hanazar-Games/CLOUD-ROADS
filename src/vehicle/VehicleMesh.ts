@@ -19,6 +19,7 @@ export class VehicleMesh {
   private readonly steering = new Group();
   private readonly tail;
   private readonly lamp;
+  private readonly signals: MeshStandardMaterial[] = [];
   private windshield?: Windshield;
   private readonly headlight = new SpotLight(0xffeed0, 0, 100, 0.6, 0.65, 1.6);
 
@@ -70,6 +71,13 @@ export class VehicleMesh {
     block(0.27, 0.027, 0.025, 0, 0, 0, metal, this.steering);
     block(0.035, 0.14, 0.03, 0, -0.065, 0, metal, this.steering);
     } else this.buildBody(block, paint, trim, metal, glass, leather, lamp);
+    for (const side of [-1, 1]) {
+      const signal = this.material(0xa96b20, 0.3); signal.emissive.setHex(0xff9b19); signal.emissiveIntensity = 0;
+      this.signals.push(signal);
+      const bike = profile.shape === 'motorcycle', x = side * profile.width * (bike ? 0.29 : 0.42);
+      for (const end of [-1, 1]) block(bike ? 0.08 : 0.18, 0.08, 0.05, x, bike ? 0.31 : 0.19, end * (profile.chassisLength / 2 + 0.035), signal);
+      if (!bike) block(0.04, 0.075, 0.16, side * (profile.width / 2 + 0.02), 0.15, -profile.chassisLength / 2 + 0.75, signal);
+    }
     const tireWidth = profile.shape === 'motorcycle' ? 0.15 : profile.width > 2.3 ? 0.3 : 0.24;
     const tireGeometry = this.geometry(new CylinderGeometry(profile.radius, profile.radius, tireWidth, 20));
     const rimGeometry = this.geometry(new CylinderGeometry(profile.radius * 0.62, profile.radius * 0.62, tireWidth + 0.012, 16));
@@ -99,6 +107,7 @@ export class VehicleMesh {
         block(0.12, 0.6, 0.12, side * 0.82, -0.25, 1.7, metal, this.trailerBody);
         block(0.22, 0.08, 0.3, side * 0.82, -0.55, 1.7, trim, this.trailerBody);
         block(0.34, 0.14, 0.06, side * 0.84, -0.12, trailer.length - trailer.front + 0.02, this.tail, this.trailerBody);
+        block(0.18, 0.1, 0.065, side * 1.1, -0.12, trailer.length - trailer.front + 0.035, this.signals[side < 0 ? 0 : 1], this.trailerBody);
         for (let z = 0; z < trailer.length - trailer.front; z += 2)
           block(0.035, 0.07, 0.16, side * (profile.width / 2 + 0.025), 0.18, z, lamp, this.trailerBody);
       }
@@ -129,9 +138,12 @@ export class VehicleMesh {
     const on = systems.beam !== 'off', high = systems.beam === 'high';
     this.tail.emissiveIntensity = car.braking ? 2 : on ? 0.75 : 0;
     this.lamp.emissiveIntensity = on ? high ? 1.5 : 0.8 : 0;
-    this.headlight.intensity = on ? high ? 280 : 160 : 0;
-    this.headlight.distance = high ? 180 : 90; this.headlight.angle = high ? 0.32 : 0.6;
-    this.headlight.target.position.set(0, high ? -0.4 : -1.1, high ? -75 : -32);
+    const range = Math.max(80, Math.min(800, systems.lightRange)), power = Math.max(0.25, Math.min(2, systems.lightPower));
+    this.headlight.intensity = on ? (high ? 280 : 160) * power * Math.sqrt(range / 180) : 0;
+    this.headlight.distance = high ? range : range * 0.55; this.headlight.angle = high ? 0.32 : 0.6;
+    this.headlight.target.position.set(0, high ? -1 : -1.1, high ? -range * 0.6 : -32);
+    this.signals[0].emissiveIntensity = systems.leftSignal ? 3 : 0;
+    this.signals[1].emissiveIntensity = systems.rightSignal ? 3 : 0;
     this.windshield?.update(dt, systems, car.speed);
   }
 

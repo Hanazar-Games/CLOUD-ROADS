@@ -78,6 +78,11 @@ export class VehiclePhysics {
     this.speed = this.vy = this.pitchVelocity = this.rollVelocity = 0;
   }
 
+  slideMotion(x: number, z: number, heading: number, speed: number, surface: SurfaceSampler): void {
+    this.x = x; this.z = z; this.heading = heading; this.speed = speed;
+    this.syncWheels(this.contacts(surface)); this.updateTrailer(0, surface);
+  }
+
   bodies(x = this.x, z = this.z, previous = false): VehicleBody[] {
     const body = previous ? { ...this.previousPose, heading: this.previousHeading } : this;
     const bodies: VehicleBody[] = [{ x, z, y: body.y, heading: body.heading, pitch: body.pitch, roll: body.roll,

@@ -12,6 +12,7 @@ import { ROAD_SAMPLES } from './RoadSegment';
 import type { ServiceArea } from '../service/ServicePlanner';
 import { guardrailGeometry } from './RoadHardwareGeometry';
 import { hasRoadBarrier } from './RoadProtection';
+import { LampGlow } from './LampGlow';
 
 export class RoadFurniture {
   readonly rails = new InstancedMesh(guardrailGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
@@ -23,6 +24,7 @@ export class RoadFurniture {
   readonly localLights = Array.from({ length: 4 }, () => new PointLight(0xffd4a0, 0, 45, 2));
   readonly lampPositions: (TunnelLamp & { sample: RoadSample })[] = [];
   enabled = true;
+  readonly glow = new LampGlow();
   private readonly profile;
   private readonly matrix = new Matrix4();
   private version = -1;
@@ -36,6 +38,7 @@ export class RoadFurniture {
       scene.add(mesh);
     }
     scene.add(...this.localLights);
+    scene.add(this.glow.halos, this.glow.pools);
   }
 
   update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], bridges: readonly BridgeSpan[], version: number,
@@ -46,17 +49,20 @@ export class RoadFurniture {
       this.anchorZ = samples[0]?.position.z ?? 0;
       this.rails.count = this.posts.count = this.poles.count = this.heads.count = this.markers.count = 0;
       this.lampPositions.length = 0;
+      this.glow.pools.count = 0;
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1], distance = sample.distance;
-        if (tunnels.some(span => distance >= span.start.distance - 8 && distance <= span.end.distance + 8)) continue;
+        if (sample.routeId !== previous.routeId) continue;
+        if (tunnels.some(span => span.start.routeId === sample.routeId && distance >= span.start.distance - 8 && distance <= span.end.distance + 8)) continue;
         const sides = [-this.profile.outerHalfWidth - 0.3, this.profile.outerHalfWidth + 0.3];
-        const serviceAccess = services.some(site => distance >= site.start && distance <= site.end);
-        const onBridge = bridges.some(span => distance >= span.start.distance && distance <= span.end.distance);
+        const routeServices = services.filter(site => site.sample.routeId === sample.routeId);
+        const serviceAccess = routeServices.some(site => distance >= site.start && distance <= site.end);
+        const onBridge = bridges.some(span => span.start.routeId === sample.routeId && distance >= span.start.distance && distance <= span.end.distance);
         if (!onBridge) {
           const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,
             y: (sample.position.y + previous.position.y) / 2, z: (sample.position.z + previous.position.z) / 2 } };
           for (const offset of sides) {
-            if (!hasRoadBarrier({ seed: this.seed, options: this.options, bridges, tunnels, services }, sample, Math.sign(offset))) continue;
+            if (!hasRoadBarrier({ seed: this.seed, options: this.options, bridges, tunnels, services: routeServices }, sample, Math.sign(offset))) continue;
             this.box(this.rails, mid, offset, 0.85, 0.16, 0.28, distance - previous.distance + 0.08);
             if (Math.floor(distance / 8) !== Math.floor(previous.distance / 8)) this.box(this.posts, sample, offset, 0.48, 0.16, 0.95, 0.16);
           }
@@ -69,7 +75,7 @@ export class RoadFurniture {
             this.markers.setColorAt(this.markers.count - 1, this.markerColor.setHex(color));
           }
         }
-        if (serviceAccess || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
+        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
         for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
           const offset = side * (this.profile.outerHalfWidth + (onBridge ? 0.15 : 0.9));
           this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);
@@ -78,15 +84,23 @@ export class RoadFurniture {
           const { right, normal } = roadFrame(sample), p = sample.position, lateral = offset - side * 2.4;
           this.lampPositions.push({ x: p.x + right.x * lateral + normal.x * 8.65,
             y: p.y + right.y * lateral + normal.y * 8.65, z: p.z + right.z * lateral + normal.z * 8.65, sample });
+          this.box(this.glow.pools, sample, side * (this.profile.outerHalfWidth - this.profile.halfWidth), 0.035, this.profile.halfWidth * 2, 1, 32);
         }
       }
-      for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
+      const positions = this.glow.halos.geometry.getAttribute('position');
+      for (const [i, lamp] of this.lampPositions.entries()) positions.setXYZ(i, lamp.x - this.anchorX, lamp.y, lamp.z - this.anchorZ);
+      positions.needsUpdate = true; this.glow.halos.geometry.setDrawRange(0, this.lampPositions.length);
+      this.glow.halos.geometry.computeBoundingSphere();
+      for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers, this.glow.pools]) {
         mesh.instanceMatrix.clearUpdateRanges();
         mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         if (mesh.count) mesh.computeBoundingSphere();
       }
+    }
+    for (const mesh of [this.glow.halos, this.glow.pools]) {
+      mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ); mesh.visible = nearRoute && this.enabled;
     }
     for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
@@ -96,6 +110,8 @@ export class RoadFurniture {
 
   illuminate(camera: PerspectiveCamera, night: number, tunnelLamps: readonly TunnelLamp[], originX: number, originZ: number, serviceLamps: readonly TunnelLamp[] = []): void {
     this.heads.material.emissiveIntensity = night * 3;
+    this.glow.halos.material.opacity = this.enabled ? night * 0.85 : 0;
+    this.glow.pools.material.opacity = this.enabled ? night * 0.24 : 0;
     const x = camera.position.x + originX, z = camera.position.z + originZ;
     const nearest: { point: TunnelLamp; distance: number; intensity: number }[] = [];
     const collect = (points: readonly TunnelLamp[], intensity: number) => {
@@ -128,6 +144,7 @@ export class RoadFurniture {
   }
 
   dispose(): void {
+    this.glow.dispose();
     for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
     for (const mesh of [this.rails, this.poles, this.heads, this.markers]) mesh.material.dispose();
     for (const light of this.localLights) { light.removeFromParent(); light.dispose(); }

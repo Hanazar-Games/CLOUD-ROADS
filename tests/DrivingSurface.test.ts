@@ -17,6 +17,37 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it.each([30, 60, 120])('keeps a continuous scrape inside the bridge at %i Hz', fps => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+    const sample = scene.road.samples[300], { right } = roadFrame(sample);
+    car.reset(sample.position.x + right.x * 3.7, sample.position.z + right.z * 3.7, sample.heading + 0.12, surface.sample);
+    car.parked = false; car.speed = 18;
+    for (let i = 0; i < fps * 3; i++) {
+      const x = car.x, z = car.z;
+      car.update(1 / fps, { throttle: 0.4, steer: 0.1, handbrake: false }, surface.sample);
+      surface.constrain(car, x, z, 1 / fps);
+      expect(car.speed).toBeGreaterThan(10);
+      for (const body of car.bodies()) for (const along of [body.front, body.rear]) {
+        const x = body.x + Math.sin(body.heading) * along, z = body.z - Math.cos(body.heading) * along;
+        const road = scene.road.nearest(x, z)!;
+        const lateral = (x - road.position.x) * Math.cos(road.heading) + (z - road.position.z) * Math.sin(road.heading);
+        expect(Math.abs(lateral) + car.profile.width / 2).toBeLessThan(5.3);
+      }
+    }
+  });
+  it('slides along a guardrail after a grazing hit instead of stopping immediately', () => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+    const sample = scene.road.samples[300], { right } = roadFrame(sample);
+    car.reset(sample.position.x + right.x * 3.8, sample.position.z + right.z * 3.8, sample.heading + 0.12, surface.sample);
+    car.parked = false; car.speed = 18;
+    const x = car.x, z = car.z;
+    car.update(1 / 60, { throttle: 0, steer: 0, handbrake: false }, surface.sample);
+    expect(surface.constrain(car, x, z)).toBe(true);
+    expect(car.speed).toBeGreaterThan(16);
+    expect(Math.hypot(car.x - x, car.z - z)).toBeGreaterThan(0.15);
+  });
   it('spawns long rigs with room behind the tractor and detects trailer rear swing', () => {
     const scene = world(true), surface = new DrivingSurface(scene), car = new VehiclePhysics('semi20');
     const start = scene.road.samples[0].position, spawn = surface.spawn(start.x, start.z, car.profile)!;
@@ -112,6 +143,7 @@ describe('DrivingSurface', () => {
 
   it('spawns away from the route endpoint with all four wheels supported', () => {
     const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+    surface.level = -50;
     const start = scene.road.samples[0].position, spawn = surface.spawn(start.x, start.z)!;
     car.reset(spawn.x, spawn.z, spawn.heading, surface.sample);
     expect(car.wheels.every(wheel => wheel.height > 99)).toBe(true);

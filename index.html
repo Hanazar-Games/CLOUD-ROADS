@@ -45,6 +45,12 @@
           <p id="suspension-compression" class="panel-help">开始驾驶后显示轮端压缩量</p>
           <label for="vehicle-lights">车灯 · L 切换</label>
           <select id="vehicle-lights" aria-describedby="vehicle-lights-help"></select>
+          <label class="speed-label" for="light-power">车灯亮度 <output id="light-power-value">100%</output></label>
+          <input id="light-power" type="range" min="25" max="200" step="5" value="100" />
+          <label class="speed-label" for="light-range">远光照射范围 <output id="light-range-value">180 m</output></label>
+          <input id="light-range" type="range" min="80" max="800" step="20" value="180" />
+          <label for="vehicle-signals">转向灯 · Q 左 / E 右 / H 双闪</label>
+          <select id="vehicle-signals"></select>
           <p id="vehicle-lights-help" class="panel-help">自动在夜间、隧道和低能见度时开启近光；远光照得更远。关闭车灯仍保留制动灯。</p>
           <label for="vehicle-wipers">雨刮 · B 切换</label>
           <select id="vehicle-wipers" aria-describedby="vehicle-wipers-help"></select>
@@ -54,7 +60,9 @@
         </details>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
-          <div class="seed-entry"><input id="seed" value="CLOUD-ROAD-001" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
+          <div class="seed-entry"><input id="seed" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
+          <div class="actions"><button id="random-world" type="button">随机新旅程</button></div>
+          <p class="panel-help">每次打开随机生成新起点；记录种子可重现同一片世界。</p>
         </form>
         <details class="world-options" open>
           <summary>地貌与道路</summary>
@@ -112,6 +120,8 @@
         <div class="actions road-actions"><button id="hairpin-view" type="button" disabled>发卡弯视角</button><button id="bridge-view" type="button" disabled>桥梁视角</button></div>
         <div class="actions road-actions"><button id="tunnel-view" type="button" disabled>隧道入口</button><button id="lights-view" type="button" disabled>灯光路段</button></div>
         <div class="actions road-actions"><button id="lights-toggle" type="button" aria-pressed="true">路灯</button></div>
+        <div class="actions road-actions"><button id="junction-view" type="button" disabled>下一岔路</button></div>
+        <p class="panel-help">起点前后都有道路；驶入岔路后，沿所选路线继续生成。高速路段可遇到环形立交，跟随右侧出口进入。</p>
         <div class="actions road-actions"><button id="service-view" type="button">下一服务区</button></div>
         <div class="actions road-actions"><button id="pass-view" type="button">下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>
@@ -127,14 +137,15 @@
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
-        <div class="vehicle-indicators"><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span></div>
+        <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
+        <div class="vehicle-indicators"><span id="turn-left" aria-label="左转灯灭">◀</span><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span><span id="turn-right" aria-label="右转灯灭">▶</span></div>
       </section>
       <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small></section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
         <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
-        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
         <div class="controls" id="walking-controls" hidden><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
       </footer>
       <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>

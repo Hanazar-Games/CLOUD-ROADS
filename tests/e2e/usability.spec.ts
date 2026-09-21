@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('requires a fresh movement key after focus loss or keyboard pause', async ({ page }) => {
   const coordinates = page.locator('[data-metric="Coordinates"]');
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   await page.locator('#world').focus();
   await page.keyboard.down('KeyW');
@@ -31,7 +31,7 @@ test('requires a fresh movement key after focus loss or keyboard pause', async (
 });
 
 test('keeps pause and debug shortcuts available on buttons without hijacking editing or dialogs', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#controls-toggle').click();
   await page.keyboard.press('KeyP');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
@@ -65,7 +65,7 @@ test('blocks exploration during a terrain failure and restores controls and pref
       }
     };
   });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   await page.locator('#daylight').fill('90');
@@ -110,7 +110,7 @@ test('blocks exploration during a terrain failure and restores controls and pref
 
 test('keeps the release close button reachable while reading the oldest announcement', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#release-open').click();
   await page.getByText('历史公告', { exact: true }).click();
   await page.locator('#release-history article').last().locator('li').last().scrollIntoViewIfNeeded();
@@ -122,7 +122,7 @@ test('keeps the release close button reachable while reading the oldest announce
 
 test('closes overlapping debug telemetry with a visible control in a narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#world').focus();
   await page.keyboard.press('F3');
   await expect(page.locator('#debug')).toBeVisible();

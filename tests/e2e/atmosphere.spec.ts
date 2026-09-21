@@ -5,7 +5,7 @@ test('changes the sky and lighting continuously without moving terrain or losing
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   await page.locator('#pause').click();
@@ -58,7 +58,7 @@ test('renders shadows and restores the sunset sky after a context loss and resiz
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   await page.locator('#pause').click();

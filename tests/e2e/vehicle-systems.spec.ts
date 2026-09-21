@@ -5,7 +5,7 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#vehicle-kind').selectOption('sedan');
   await page.locator('#driving-view').selectOption('cockpit');
   await page.locator('#weather-kind').selectOption('storm');

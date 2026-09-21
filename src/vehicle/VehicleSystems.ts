@@ -2,6 +2,8 @@ export const lightNames = { auto: '自动', off: '关闭', low: '近光', high: 
 export const wiperNames = { auto: '自动', off: '关闭', intermittent: '间歇', low: '低速', high: '高速' } as const;
 export type LightMode = keyof typeof lightNames;
 export type WiperMode = keyof typeof wiperNames;
+export const signalNames = { off: '关闭', left: '左转', right: '右转', hazard: '双闪' } as const;
+export type SignalMode = keyof typeof signalNames;
 
 export class VehicleSystems {
   lights: LightMode = 'auto';
@@ -11,12 +13,28 @@ export class VehicleSystems {
   sweep = 0;
   wiperRate = 0;
   rain = 0;
+  signal: SignalMode = 'off';
+  lightPower = 1;
+  lightRange = 180;
+  private blink = 0;
+  private lastSignal: SignalMode = 'off';
+  private turned = false;
+  get leftSignal(): boolean { return this.blink < 0.4 && (this.signal === 'left' || this.signal === 'hazard'); }
+  get rightSignal(): boolean { return this.blink < 0.4 && (this.signal === 'right' || this.signal === 'hazard'); }
   private phase = 0;
   private waiting = 0;
   private cycleRate = 1;
   private cycling = false;
 
-  update(dt: number, darkness: number, rain: number, shelter: number): void {
+  update(dt: number, darkness: number, rain: number, shelter: number, steering = 0): void {
+    if (this.lastSignal !== this.signal) { this.blink = 0; this.turned = false; this.lastSignal = this.signal; }
+    if (dt > 0 && Number.isFinite(dt)) {
+      this.blink = (this.blink + Math.min(dt, 0.1)) % 0.8;
+      if (this.signal === 'left' || this.signal === 'right') {
+        this.turned ||= steering * (this.signal === 'left' ? -1 : 1) > 0.18;
+        if (this.turned && Math.abs(steering) < 0.04) this.signal = 'off';
+      }
+    }
     this.beam = this.lights === 'auto' ? darkness > (this.beam === 'off' ? 0.2 : 0.12) ? 'low' : 'off' : this.lights;
     this.rain = Math.max(0, Math.min(1, rain * (1 - shelter)));
     this.wiperRate = !this.hasWindshield || this.wipers === 'off' ? 0 : this.wipers === 'high' ? 1.6

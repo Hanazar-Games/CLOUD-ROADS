@@ -10,7 +10,7 @@ test('changes viewing distance in place, streams repeated passes and preserves s
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   };
-  await page.goto('/'); await ready();
+  await page.goto('/?seed=CLOUD-ROAD-001'); await ready();
   const home = await metric('Coordinates').textContent();
   await expect(metric('Mountain stage')).toHaveText('山谷');
   for (const radius of [6, 16, 8]) {

@@ -4,20 +4,21 @@ import { TerrainWorkers } from '../terrain/TerrainWorkers';
 import { ChunkManager } from './ChunkManager';
 import { FloatingOrigin } from './FloatingOrigin';
 import { RoadSpine } from '../road/RoadSpine';
+import { RoadNetwork } from '../road/RoadNetwork';
 import { RoadDebug } from '../road/RoadDebug';
 import type { RoadSample } from '../road/RoadSegment';
 import { RoadMesh } from '../road/RoadMesh';
 import { RoadCorridor } from '../road/RoadCorridor';
-import { BridgeDetector, type BridgeSpan } from '../bridge/BridgeDetector';
+import type { BridgeSpan } from '../bridge/BridgeDetector';
 import { BridgeMesh } from '../bridge/BridgeMesh';
 import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
 import { DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
-import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
+import type { TunnelSpan } from '../tunnel/TunnelDetector';
 import { TunnelMesh } from '../tunnel/TunnelMesh';
 import { RoadFurniture } from '../road/RoadFurniture';
-import { ServicePlanner, type ServiceArea } from '../service/ServicePlanner';
+import type { ServiceArea } from '../service/ServicePlanner';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule';
 import { ServiceMesh } from '../service/ServiceMesh';
 import { padPoint } from '../service/ServiceTerrain';
@@ -33,7 +34,8 @@ export class World {
   readonly origin = new FloatingOrigin();
   readonly chunks: ChunkManager;
   readonly height: HeightFunction;
-  readonly road: RoadSpine;
+  readonly network: RoadNetwork;
+  get road(): RoadSpine { return this.network.active.road; }
   readonly roadDebug: RoadDebug;
   readonly roadMesh: RoadMesh;
   readonly bridgeMesh: BridgeMesh;
@@ -47,9 +49,12 @@ export class World {
   tunnels: readonly TunnelSpan[] = [];
   shelter = 0;
   bridges: readonly BridgeSpan[] = [];
-  private readonly bridgeDetector: BridgeDetector;
-  private readonly tunnelDetector: TunnelDetector;
-  private readonly servicePlanner: ServicePlanner;
+  private readonly extraRoads = new Map<string, RoadMesh>();
+  private renderRoutes: { id: string; source: Pick<RoadSpine, 'version' | 'samples' | 'segments'>; services: readonly ServiceArea[] }[] = [];
+  private renderBridges: BridgeSpan[] = [];
+  private renderTunnels: TunnelSpan[] = [];
+  private renderServices: ServiceArea[] = [];
+  private renderSamples: RoadSample[] = [];
   private scout: { road: RoadSpine; kind: 'service' | 'pass'; id: number; progress: number } | undefined;
   private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
@@ -58,24 +63,22 @@ export class World {
   private corridor = new RoadCorridor([]);
   private corridorVersion = -1;
 
-  constructor(scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(private readonly scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.height = new HeightFunction(seed, options.terrain, options.roadType);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
-    this.road = new RoadSpine(seed, this.height, options);
+    this.network = new RoadNetwork(seed, this.height, options, new RoadSpine(seed, this.height, options));
     this.roadDebug = new RoadDebug(scene);
     this.roadMesh = new RoadMesh(scene, options);
-    this.bridgeDetector = new BridgeDetector(this.height, options);
     this.bridgeMesh = new BridgeMesh(scene, options);
-    this.tunnelDetector = new TunnelDetector(this.height, options);
     this.tunnelMesh = new TunnelMesh(scene, seed, options);
     this.furniture = new RoadFurniture(scene, seed, options);
-    this.servicePlanner = new ServicePlanner(seed, this.height, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.signs = new RoadSigns(scene, options);
   }
 
   resetCamera(camera: PerspectiveCamera): void {
+    this.network.reset();
     this.scout = undefined; this.serviceView = undefined;
     this.roadReady = false;
     this.origin.reset();
@@ -83,19 +86,19 @@ export class World {
     camera.position.set(128, this.height.sample(128, 128) + 450, 128);
   }
 
-  update(camera: PerspectiveCamera, explore = true, travelHeading?: number): void {
+  update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }): void {
     if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
     if (travelHeading !== undefined) this.forward.set(Math.sin(travelHeading), 0, -Math.cos(travelHeading));
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
-    this.roadReady = this.road.update(z, 4, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
-    if (this.roadReady && this.corridorVersion !== this.road.version) {
-      this.services = this.servicePlanner.detect(this.road.samples);
-      const clear = (span: { start: RoadSample; end: RoadSample }) => !this.services.some(site => site.start < span.end.distance && site.end > span.start.distance);
-      this.bridges = this.bridgeDetector.detect(this.road.samples);
-      this.tunnels = this.tunnelDetector.detect(this.road.samples, this.bridges).filter(clear);
+    const position = travelPosition ?? { x, y: camera.position.y, z };
+    this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
+    if (this.roadReady && this.corridorVersion !== this.network.version) {
+      this.services = this.network.active.services;
+      this.bridges = this.network.active.bridges;
+      this.tunnels = this.network.active.tunnels;
       const passes: RoadSample[] = [], samples = this.road.samples;
-      if (this.options.terrain === 'alpine') {
+      if (this.options.terrain === 'alpine' && this.network.active.id === 'root') {
         const first = this.height.ranges.sample(samples[0].position.z).id, last = this.height.ranges.sample(samples.at(-1)!.position.z).id;
         for (let id = first; id <= last; id++) {
           const z = this.height.ranges.passZ(id);
@@ -106,33 +109,87 @@ export class World {
         }
       }
       this.passes = passes;
-      this.corridor = RoadCorridor.fromSamples(this.road.samples, this.bridges, this.options, this.tunnels, this.services.map(site => site.ground));
-      this.corridorVersion = this.road.version;
+      this.corridorVersion = this.network.version;
+      this.prepareRoutes(position.x, position.z);
     }
     this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
-    this.roadSample = this.road.nearest(x, z);
+    this.roadSample = this.road.nearest(position.x, position.z);
     const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < this.chunks.viewRadius * 256 + 1500;
-    this.roadDebug.update(this.road, this.origin.x, this.origin.z, nearRoute);
-    this.roadMesh.update(this.road, this.origin.x, this.origin.z, nearRoute, this.services);
-    this.bridgeMesh.update(this.bridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.services);
-    this.tunnelMesh.update(this.tunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
-    this.furniture.update(this.road.samples, this.tunnels, this.bridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.services);
-    this.serviceMesh.update(this.services, this.corridorVersion, this.origin.x, this.origin.z);
-    this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes);
+    this.roadDebug.update({ version: this.corridorVersion, segments: this.road.segments, samples: this.road.samples }, this.origin.x, this.origin.z, nearRoute);
+    for (const [i, route] of this.renderRoutes.entries()) {
+      let mesh = i === 0 ? this.roadMesh : this.extraRoads.get(route.id);
+      if (!mesh) { mesh = new RoadMesh(this.scene, this.options, 64); this.extraRoads.set(route.id, mesh); }
+      mesh.update(route.source, this.origin.x, this.origin.z, nearRoute, route.services);
+      mesh.mesh.material.roughness = this.roadMesh.mesh.material.roughness;
+    }
+    this.bridgeMesh.update(this.renderBridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
+    this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
+    this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
+    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z);
+    this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
     if (explore && this.scout) this.advanceServiceView(camera);
   }
 
   get searching(): boolean { return !!this.scout; }
+
+  get nextJunction() {
+    return this.network.junctions.filter(j => j.route === this.network.active.id && j.distance > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
+  }
+
+  inspectJunction(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    if (!this.roadReady) return undefined;
+    const junction = this.nextJunction;
+    if (!junction) return undefined;
+    const segment = this.road.segments.find(s => s.start.distance <= junction.distance - 100 && s.end.distance >= junction.distance - 100);
+    if (!segment) return undefined;
+    const sample = segment.atDistance(junction.distance - 100);
+    this.placeOnRoad(camera, sample, 6);
+    return { heading: sample.heading, pitch: -0.04 };
+  }
+
+  private prepareRoutes(x: number, z: number): void {
+    const routes = [this.network.active, ...this.network.routes.filter(route => route !== this.network.active && route.ready).sort((a, b) => {
+      const distance = (road: RoadSpine) => { const p = road.nearest(x, z)!.position; return Math.hypot(p.x - x, p.z - z); };
+      return distance(a.road) - distance(b.road);
+    })];
+    this.renderRoutes = []; this.renderSamples = []; this.renderBridges = []; this.renderTunnels = []; this.renderServices = [];
+    const corridors: RoadCorridor[] = [];
+    let remaining = 256;
+    for (const [i, route] of routes.entries()) {
+      if (!remaining) break;
+      const nearest = route.road.nearest(x, z)!, all = route.road.segments;
+      const at = Math.max(0, all.findIndex(s => s.end.distance >= nearest.distance));
+      const count = Math.min(remaining, i === 0 ? 192 : 64), first = Math.max(0, Math.min(all.length - count, at - Math.floor(count / 3)));
+      const segments = all.slice(first, first + count);
+      if (!segments.length) continue;
+      const min = segments[0].start.distance, max = segments.at(-1)!.end.distance;
+      const samples = route.road.samples.filter(p => p.distance >= min - 1e-6 && p.distance <= max + 1e-6);
+      const bridges = route.bridges.flatMap(span => {
+        const points = span.samples.filter(p => p.distance >= min && p.distance <= max);
+        return points.length < 2 ? [] : [{ ...span, start: points[0], end: points.at(-1)!, samples: points,
+          openStart: span.openStart || span.start.distance < min, openEnd: span.openEnd || span.end.distance > max }];
+      });
+      const tunnels = route.tunnels.filter(span => span.start.distance >= min && span.end.distance <= max);
+      const services = route.services.filter(site => site.start >= min && site.end <= max);
+      this.renderRoutes.push({ id: route.id, source: { version: this.corridorVersion, samples, segments }, services });
+      this.renderSamples.push(...samples); this.renderBridges.push(...bridges); this.renderTunnels.push(...tunnels); this.renderServices.push(...services);
+      corridors.push(RoadCorridor.fromSamples(samples, bridges, this.options, tunnels, services.map(site => site.ground)));
+      remaining -= segments.length;
+    }
+    this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, this.renderServices.map(site => site.ground));
+    for (const [id, mesh] of this.extraRoads) if (!this.renderRoutes.slice(1).some(route => route.id === id)) { mesh.dispose(); this.extraRoads.delete(id); }
+  }
   get serviceSearchProgress(): number | null { return this.scout?.kind === 'service' ? this.scout.progress : null; }
   get passSearchProgress(): number | null { return this.scout?.kind === 'pass' ? this.scout.progress : null; }
   get routeStage(): string {
+    if (this.network.active.id !== 'root') return this.network.active.id === 'back' ? '反向路线' : '岔路探索';
     const stage = this.height.route(this.roadSample?.position.z ?? 128)?.stage;
     return stage ? { valley: '山谷', climb: '上山', pass: '垭口', descent: '下山' }[stage] : '自由路线';
   }
 
   requestPassView(): void {
-    if (this.scout || !this.roadReady || this.options.terrain !== 'alpine') return;
+    if (this.scout || !this.roadReady || this.options.terrain !== 'alpine' || this.network.active.id !== 'root') return;
     const z = this.roadSample?.position.z ?? 128;
     let id = this.height.ranges.sample(z).id;
     while (this.height.ranges.passZ(id) > z - 1000) id++;
@@ -142,7 +199,7 @@ export class World {
   requestServiceView(): void {
     if (this.scout || !this.roadReady) return;
     let id = Math.max(1, Math.floor((this.roadSample?.distance ?? 0) / 15000));
-    while (serviceTarget(this.seed, id) < (this.roadSample?.distance ?? 0) + 1000) id++;
+    while (serviceTarget(this.network.active.seed, id) < (this.roadSample?.distance ?? 0) + 1000) id++;
     this.scout = { road: this.road.fork(), kind: 'service', id, progress: 0 };
   }
 
@@ -163,11 +220,11 @@ export class World {
       this.scout = undefined;
       return;
     }
-    const target = serviceTarget(this.seed, scout.id) + SERVICE_SEARCH_RADIUS + 4;
+    const target = serviceTarget(this.network.active.seed, scout.id) + SERVICE_SEARCH_RADIUS + 4;
     const ready = scout.road.advanceToDistance(target);
     scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / target);
     if (!ready) return;
-    const site = this.servicePlanner.detect(scout.road.samples).find(site => site.id === scout.id);
+    const site = this.network.active.servicePlanner.detect(scout.road.samples).find(site => site.id === scout.id);
     if (!site) throw new Error('Service area search did not produce a complete site');
     const pad = site.ground.pads.at(-1)!, point = padPoint(pad, -pad.side * 75, -110, 75);
     const ground = this.height.sample(point.x, point.z);
@@ -289,6 +346,7 @@ export class World {
   }
 
   dispose(): void {
+    for (const mesh of this.extraRoads.values()) mesh.dispose(); this.extraRoads.clear();
     this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
     this.tunnelMesh.dispose(); this.furniture.dispose();
     this.serviceMesh.dispose(); this.scout = undefined;

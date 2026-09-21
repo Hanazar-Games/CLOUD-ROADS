@@ -8,7 +8,7 @@ import { roadProfile } from './RoadProfile';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
 import { ServiceTerrain, type ServiceGround } from '../service/ServiceTerrain';
 
-interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number; tunnel?: boolean }
+interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number; tunnel?: boolean; routeId?: string; distance?: number }
 export type CorridorEdge = RoadEdge<CorridorPoint>;
 const RADIUS = 64;
 
@@ -34,7 +34,7 @@ export class RoadCorridor {
       const span = bridges[bridgeIndex];
       const elevated = span && (sample.distance > span.start.distance || span.openStart)
         && (sample.distance < span.end.distance || span.openEnd);
-      return { ...sample.position, nx: normal.x, ny: normal.y, nz: normal.z, ground: elevated ? 0 : 1,
+      return { ...sample.position, routeId: sample.routeId, distance: sample.distance, nx: normal.x, ny: normal.y, nz: normal.z, ground: elevated ? 0 : 1,
         tunnel: tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) };
     });
     return new RoadCorridor(points.slice(1).map((b, i) => ({ a: points[i], b })), options, services);
@@ -54,14 +54,37 @@ export class RoadCorridor {
     return nearest ? Math.sqrt(nearest.distanceSquared) : Infinity;
   }
 
+  crossesBelow(sample: RoadSample, radius: number): boolean {
+    const { x, y, z } = sample.position;
+    for (const index of this.index.within(x - radius, z - radius, x + radius, z + radius)) {
+      const { a, b } = this.edges[index], dx = b.x - a.x, dz = b.z - a.z;
+      if (a.routeId === sample.routeId && Math.abs((a.distance ?? sample.distance) - sample.distance) < 80) continue;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+      if (y - (a.y + (b.y - a.y) * t) > 6 && Math.hypot(x - a.x - dx * t, z - a.z - dz * t) < radius) return true;
+    }
+    return false;
+  }
+
   tunnelCover(x: number, z: number): boolean {
     const nearest = this.index.nearest(x, z, this.roadHalfWidth + 130);
     return !!nearest && !!(this.edges[nearest.index].a.tunnel || this.edges[nearest.index].b.tunnel);
   }
 
   height(x: number, z: number, natural: number): number {
-    const nearest = this.index.nearest(x, z, RADIUS);
+    let nearest = this.index.nearest(x, z, RADIUS);
     if (!nearest) return Math.min(natural + 5, this.services.height(x, z, natural, Infinity, this.roadHalfWidth));
+    const selected = this.edges[nearest.index];
+    if (selected.a.ground < 0.5 && nearest.distanceSquared < this.bedHalfWidth ** 2) {
+      let lowest = selected.a.y + (selected.b.y - selected.a.y) * nearest.t;
+      for (const index of this.index.within(x - this.bedHalfWidth, z - this.bedHalfWidth, x + this.bedHalfWidth, z + this.bedHalfWidth)) {
+        const { a, b } = this.edges[index];
+        if (a.routeId === selected.a.routeId) continue;
+        const dx = b.x - a.x, dz = b.z - a.z;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+        const distanceSquared = (x - a.x - dx * t) ** 2 + (z - a.z - dz * t) ** 2, height = a.y + (b.y - a.y) * t;
+        if (height < lowest && distanceSquared < this.bedHalfWidth ** 2) { nearest = { index, t, distanceSquared }; lowest = height; }
+      }
+    }
     const { index, t, distanceSquared } = nearest, { a, b } = this.edges[index];
     const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
     const nx = a.nx + (b.nx - a.nx) * t, ny = a.ny + (b.ny - a.ny) * t, nz = a.nz + (b.nz - a.nz) * t;

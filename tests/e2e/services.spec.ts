@@ -10,7 +10,7 @@ test('visits highway services 10–20 km apart and cancels search when returning
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
   };
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.locator('#road-type').selectOption('highway');
   await page.getByRole('button', { name: '应用并返回起点' }).click();

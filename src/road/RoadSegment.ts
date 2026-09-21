@@ -4,6 +4,9 @@ export interface RoadVector { x: number; y: number; z: number }
 export interface MountainPlan { stage: number; side: number; grade: number }
 export interface ClimbPlan { cycle: number; base: number; target: number; ascending: boolean }
 export interface RoadControlPoint {
+  routeId?: string;
+  opening?: number;
+  elevated?: boolean;
   position: RoadVector;
   heading: number;
   grade: number;

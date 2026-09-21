@@ -14,10 +14,10 @@ export class RoadGenerator {
   private readonly noise: Noise;
   private readonly terrain: RoadTerrain;
 
-  constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS, origin?: RoadControlPoint) {
     this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType);
     this.noise = new Noise(hashSeed(`${seed}:road`));
-    this.start = { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
+    this.start = origin ?? { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
   }
 
   next(start: RoadControlPoint): RoadSegment {
@@ -51,7 +51,7 @@ export class RoadGenerator {
     if (this.options.routeStyle >= 2 || this.options.maxGrade > 0.06) {
       const target = serviceTarget(this.seed, Math.max(1, Math.round(start.distance / 15000)));
       if (this.serviceApproach(start.distance)) {
-        const heading = this.options.routeStyle === 0 ? 0 : start.heading + clamp(-start.heading, Math.PI / 10);
+        const heading = this.options.routeStyle === 0 ? this.start.heading : start.heading + clamp(this.start.heading - start.heading, Math.PI / 10);
         const grade = this.nextGrade(start, clamp(this.desiredGrade(start, heading), 0.02));
         const segment = new RoadSegment(start, heading, grade);
         segment.end.mountain = undefined; segment.end.nextMountain = target + 800;
@@ -59,7 +59,7 @@ export class RoadGenerator {
       }
     }
     if (this.options.routeStyle === 0) return this.highwaySegment(start, true);
-    const guide = this.terrain.route?.(start.position.z - 900);
+    const guide = this.start.heading === 0 ? this.terrain.route?.(start.position.z - 900) : undefined;
     let mountain = start.mountain;
     if (this.options.routeStyle >= 2 && !mountain && start.distance >= (this.options.routeStyle === 5 ? 0 : start.nextMountain)) {
       mountain = {
@@ -69,7 +69,7 @@ export class RoadGenerator {
     if (mountain) return this.mountainSegment(start, mountain);
     if (this.options.roadType === 'highway') return this.highwaySegment(start);
     const desiredHeading = guide ? clamp(Math.atan2(guide.x - start.position.x, 900) + this.noise.sample(start.distance / 1300, 17) * 0.16, 0.85)
-      : this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
+      : this.start.heading + this.noise.fractal(start.distance / 2400, 17, 2) * 1.1;
     let best: RoadSegment | undefined;
     let bestScore = Infinity;
     const gradeLimit = this.options.maxGrade;
@@ -77,7 +77,7 @@ export class RoadGenerator {
     const grades = new Set([-1, -0.5, 0, 0.5, 1].map(grade => this.nextGrade(start, grade * gradeLimit)));
     for (const turn of [-18, -12, -6, 0, 6, 12, 18]) {
       const heading = start.heading + turn * Math.PI / 180;
-      if (Math.abs(heading) > 1) continue;
+      if (Math.abs(heading - this.start.heading) > 1) continue;
       for (const grade of grades) {
         const segment = new RoadSegment(start, heading, grade);
         let terrainCost = 0, cliffCost = 0, scenicReward = 0;
@@ -115,10 +115,10 @@ export class RoadGenerator {
 
   private highwaySegment(start: RoadControlPoint, straight = false): RoadSegment {
     const { x, y, z } = start.position;
-    const guide = straight ? undefined : this.terrain.route?.(z - 700), behind = this.terrain.route?.(z + 700);
+    const guide = straight || this.start.heading !== 0 ? undefined : this.terrain.route?.(z - 700), behind = this.terrain.route?.(z + 700);
     const direction = guide && behind ? Math.atan2(guide.x - behind.x, 1400) : this.noise.fractal(start.distance / 12000, 17, 2) * 0.28;
-    const desired = clamp(guide ? direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
-    const heading = straight ? 0 : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60);
+    const desired = this.start.heading + clamp(guide ? direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
+    const heading = straight ? this.start.heading : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60);
     let targetHeight = guide?.height;
     if (targetHeight === undefined) {
       targetHeight = 0;
@@ -133,7 +133,7 @@ export class RoadGenerator {
     const level = this.options.routeStyle;
     const angle = plan.side * (65 + (level - 2) * 3.3) * Math.PI / 180;
     const last = [0, 0, 3, 7, 15, Infinity][level], exiting = plan.stage > last;
-    const target = exiting ? 0 : angle * (Math.ceil(plan.stage / 2) % 2 ? -1 : 1);
+    const target = this.start.heading + (exiting ? 0 : angle * (Math.ceil(plan.stage / 2) % 2 ? -1 : 1));
     const hairpin = !exiting && plan.stage % 2 === 1;
     const heading = hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10);
     const desired = hairpin || plan.stage === 0 ? this.desiredGrade(start, heading) : plan.grade;

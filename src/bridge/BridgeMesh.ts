@@ -12,6 +12,7 @@ import { BridgeDeck } from './BridgeDeck';
 import { createConcreteMaterial } from './ConcreteMaterial';
 import { isServiceAccess } from '../road/RoadProtection';
 import { CABLE_SPACING, CableBridgeMesh } from './CableBridgeMesh';
+import type { ServiceArea } from '../service/ServicePlanner';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
 const RAIL_COLORS = [new Color(0x81949e), new Color(0xb0bec6), new Color(0xbb302b)];
@@ -28,7 +29,7 @@ export class BridgeMesh {
   readonly roundPiers = new InstancedMesh(new CylinderGeometry(0.5, 0.5, 1, 10), this.material, CAPACITY);
   readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly railings: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
-  private readonly heights = new Map<number, number>();
+  private readonly heights = new Map<string, number>();
   private readonly profile;
   private readonly matrix = new Matrix4();
   private version = -1;
@@ -50,7 +51,7 @@ export class BridgeMesh {
     column.computeVertexNormals();
     this.columns = new InstancedMesh(column, this.material, CAPACITY * this.profile.centers.length);
     this.details = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0x586a71, metalness: 0.45, roughness: 0.6 }), CAPACITY * 8);
-    this.railings = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.44 }), CAPACITY * 12);
+    this.railings = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.44 }), CAPACITY * 24);
     this.deck.visible = false;
     this.deck.castShadow = this.deck.receiveShadow = true;
     scene.add(this.deck);
@@ -66,7 +67,7 @@ export class BridgeMesh {
   get pierCount(): number { return this.supports + this.cableBridges.towerCount; }
 
   update(spans: readonly BridgeSpan[], corridor: RoadCorridor, terrain: RoadTerrain, version: number,
-    originX: number, originZ: number, nearRoute: boolean, services: readonly { start: number; end: number }[] = []): void {
+    originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
     const changed = this.version !== version;
     if (changed) {
       this.version = version;
@@ -75,19 +76,21 @@ export class BridgeMesh {
       this.cableBridges.reset(this.anchorX, this.anchorZ);
       this.parapets.count = this.piers.count = this.columns.count = this.roundPiers.count = this.details.count = this.railings.count = this.supports = 0;
       this.deck.rebuild(spans, this.anchorX, this.anchorZ);
-      const active = new Set<number>();
+      const active = new Set<string>();
       const heightAt = (sample: RoadSample) => {
-        active.add(sample.distance);
-        let height = this.heights.get(sample.distance);
+        const key = `${sample.routeId ?? ''}:${sample.distance}`;
+        active.add(key);
+        let height = this.heights.get(key);
         if (height === undefined) {
           const { right } = roadFrame(sample), { x, y, z } = sample.position;
           height = Math.max(...this.profile.centers.map(center => y + right.y * center - terrain.sample(x + right.x * center, z + right.z * center)));
-          this.heights.set(sample.distance, height);
+          this.heights.set(key, height);
         }
         return height;
       };
       const deckWidth = this.profile.halfWidth * 2 + 0.8;
       for (const span of spans) {
+        const routeServices = services.filter(site => site.sample.routeId === span.start.routeId);
         for (let i = 1; i < span.samples.length; i++) {
           const a = span.samples[i - 1], b = span.samples[i], sample = this.between(a, b, 0.5);
           const { right, normal } = roadFrame(sample), { x, y, z } = sample.position;
@@ -98,7 +101,8 @@ export class BridgeMesh {
             const sides = this.profile.centers.length === 1 ? [-deckWidth / 2 + 0.15, deckWidth / 2 - 0.15]
               : [center + Math.sign(center) * (deckWidth / 2 - 0.15)];
             for (const side of sides) {
-              if (isServiceAccess(this.options, services, sample.distance, Math.sign(side))) continue;
+              if (sample.opening === 0 || sample.opening === Math.sign(side)) continue;
+              if (isServiceAccess(this.options, routeServices, sample.distance, Math.sign(side))) continue;
               const base = tier ? 0.12 : 0.45;
               this.box(this.parapets, x + right.x * side + normal.x * base,
                 y + right.y * side + normal.y * base, z + right.z * side + normal.z * base, 0.35, tier ? 0.2 : 0.8, length, sample);
@@ -168,6 +172,7 @@ export class BridgeMesh {
   }
 
   private support(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain): void {
+    if (corridor.crossesBelow(sample, this.profile.outerHalfWidth + 12)) return;
     const { right } = roadFrame(sample);
     for (const offset of this.profile.centers) this.supportCarriageway({ ...sample, position: {
       x: sample.position.x + right.x * offset, y: sample.position.y + right.y * offset, z: sample.position.z + right.z * offset,
@@ -206,6 +211,18 @@ export class BridgeMesh {
     for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
       x + right.x * offset - normal.x * 3.2, y + right.y * offset - normal.y * 3.2, z + right.z * offset - normal.z * 3.2,
       1.2, 0.5, 1.4, sample);
+    for (const side of [-1, 1]) {
+      const offset = side * deckWidth * 0.36;
+      this.box(this.piers, x + right.x * offset - normal.x * 4.6, y + right.y * offset - normal.y * 4.6,
+        z + right.z * offset - normal.z * 4.6, deckWidth * 0.2, 0.85, 3.6, sample);
+      this.box(this.details, x + right.x * offset - normal.x * 3.5, y + right.y * offset - normal.y * 3.5,
+        z + right.z * offset - normal.z * 3.5, 1.8, 0.16, 1.9, sample);
+    }
+    if (tall) {
+      this.box(this.details, x, y - 8, z, deckWidth + 1.2, 0.2, width + 2, upright);
+      for (const side of [-1, 1]) this.box(this.details, x + verticalFrame.right.x * side * (deckWidth / 2 + 0.5), y - 7.4,
+        z + verticalFrame.right.z * side * (deckWidth / 2 + 0.5), 0.1, 1.2, width + 2, upright);
+    }
     this.box(this.details, x + normal.x * 0.015, y + normal.y * 0.015, z + normal.z * 0.015,
       deckWidth - 0.8, 0.02, 0.09, sample);
     this.supports++;

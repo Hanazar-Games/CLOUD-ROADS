@@ -11,7 +11,7 @@ test('streams distant forest and undergrowth, restores visibility and releases f
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
   };
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   await expect(metric('Landscape')).toHaveText('森林山谷'); await ready();
@@ -49,7 +49,7 @@ test('switches landscape, width and divided highway, preserving lighting and veg
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
   };
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await ready();
   await page.locator('#daylight').fill('90');
   await page.locator('#terrain-kind').selectOption('forest');
@@ -98,7 +98,7 @@ test('switches landscape, width and divided highway, preserving lighting and veg
 
 test('applies world choices in a narrow window without leaking movement from selectors', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('desert');
   await page.locator('#road-type').selectOption('highway');
   await page.locator('#road-width').selectOption('8');
@@ -124,7 +124,7 @@ test('replaces in-flight worlds and restores dunes and highway geometry after co
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   for (const terrain of ['forest', 'desert', 'dunes']) {
     await page.locator('#terrain-kind').selectOption(terrain);
     await page.locator('#road-type').selectOption('highway');

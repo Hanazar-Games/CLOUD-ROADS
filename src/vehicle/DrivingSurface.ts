@@ -6,10 +6,11 @@ import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
 import { hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels'> & { sampleGround(x: number, z: number): { height: number } };
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels'> & Partial<Pick<World, 'network'>> & { sampleGround(x: number, z: number): { height: number } };
 
 export class DrivingSurface {
   wet = 0;
+  level: number | undefined;
   private readonly profile;
   private sites;
   private access;
@@ -27,15 +28,20 @@ export class DrivingSurface {
   }
 
   readonly sample = (x: number, z: number, ceiling = Infinity): SurfaceContact => {
-    const sample = this.world.road.nearest(x, z);
-    if (sample) {
+    const reference = Number.isFinite(ceiling) ? ceiling : this.level;
+    const samples = (this.world.network?.routes ?? [this.world]).map(route => route.road.nearest(x, z)).filter(sample => sample !== undefined);
+    samples.sort((a, b) => {
+      const error = (p: typeof a) => Math.hypot(x - p.position.x, z - p.position.z) + (reference === undefined ? 0 : Math.abs(p.position.y - reference) * 1.5);
+      return error(a) - error(b);
+    });
+    for (const sample of samples) {
       const dx = x - sample.position.x, dz = z - sample.position.z;
       const lateral = dx * Math.cos(sample.heading) + dz * Math.sin(sample.heading);
       const along = dx * Math.sin(sample.heading) - dz * Math.cos(sample.heading);
       if (Math.abs(along) < 1 && this.profile.centers.some(center => Math.abs(lateral - center) <= this.profile.halfWidth)) {
         const { normal } = roadFrame(sample);
         const height = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
-        if (height <= ceiling) return { height, grip: 1 - this.wet * 0.38 };
+        if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9)) return { height, grip: 1 - this.wet * 0.38 };
       }
     }
     this.refreshServices();
@@ -90,18 +96,18 @@ export class DrivingSurface {
         }
         return true;
       });
-      if (fits) return { ...spawn, trailerHeading };
+      if (fits) { this.level = road.nearest(spawn.x, spawn.z)!.position.y; return { ...spawn, trailerHeading }; }
     }
     return undefined;
   }
 
   inTunnel(x: number, z: number, margin = 0): boolean {
-    const sample = this.world.road.nearest(x, z);
+    const route = this.route(x, z), sample = route.road.nearest(x, z);
     return !!sample && Math.hypot(x - sample.position.x, z - sample.position.z) < this.profile.outerHalfWidth + 1
-      && this.world.tunnels.some(span => sample.distance >= span.start.distance - margin && sample.distance <= span.end.distance + margin);
+      && route.tunnels.some(span => sample.distance >= span.start.distance - margin && sample.distance <= span.end.distance + margin);
   }
 
-  constrain(car: VehiclePhysics, previousX: number, previousZ: number): boolean {
+  constrain(car: VehiclePhysics, previousX: number, previousZ: number, dt = 1 / 60): boolean {
     const bodies = car.bodies(), before = car.bodies(previousX, previousZ, true);
     for (let b = 0; b < bodies.length; b++) {
       const body = bodies[b], previous = before[b], steps = Math.ceil((body.front - body.rear) / 1.25);
@@ -111,8 +117,18 @@ export class DrivingSurface {
         const point = { x: body.x - Math.sin(body.heading) * offset.z, y: body.y + offset.y,
           z: body.z + Math.cos(body.heading) * offset.z };
         const px = previous.x - Math.sin(previous.heading) * old.z, pz = previous.z + Math.cos(previous.heading) * old.z;
+        const ox = point.x, oz = point.z;
         if (this.constrainBody(point, px, pz, car.profile.width / 2, car.profile.radius + car.profile.rest)) {
-          car.restoreMotion(previousX, previousZ); return true;
+          const length = Math.hypot(point.x - ox, point.z - oz);
+          const nx = length > 1e-8 ? (point.x - ox) / length : 0, nz = length > 1e-8 ? (point.z - oz) / length : 0;
+          const fx = Math.sin(car.heading), fz = -Math.cos(car.heading), incidence = fx * nx + fz * nz;
+          const tx = fx - nx * incidence, tz = fz - nz * incidence;
+          const dx = car.x - previousX, dz = car.z - previousZ, normalMotion = dx * nx + dz * nz;
+          const speed = car.speed * Math.hypot(tx, tz) * Math.exp(-0.08 * Math.min(0.1, Math.max(0, dt)));
+          const heading = Math.hypot(tx, tz) > 0.05 ? Math.atan2(tx, -tz) : car.heading;
+          car.restoreMotion(previousX, previousZ);
+          car.slideMotion(previousX + dx - nx * normalMotion, previousZ + dz - nz * normalMotion, heading, speed, this.sample);
+          return true;
         }
       }
     }
@@ -121,7 +137,7 @@ export class DrivingSurface {
 
   private constrainBody(car: { x: number; y: number; z: number }, previousX: number, previousZ: number, width: number, ride: number): boolean {
     if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride)) return true;
-    const sample = this.world.road.nearest(car.x, car.z);
+    const route = this.route(car.x, car.z, car.y - ride), sample = route.road.nearest(car.x, car.z);
     if (!sample) return false;
     if (car.y < sample.position.y - 2 || car.y > sample.position.y + 3) return false;
     const cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
@@ -129,11 +145,12 @@ export class DrivingSurface {
     const previous = (previousX - sample.position.x) * cos + (previousZ - sample.position.z) * sin;
     const center = this.profile.centers.reduce((best, c) => Math.abs(previous - c) < Math.abs(previous - best) ? c : best);
     const limit = Math.max(0.8, this.profile.halfWidth - width - 0.3);
-    const road = this.world.road;
+    const road = route.road;
     const along = (car.x - sample.position.x) * sin - (car.z - sample.position.z) * cos;
-    const endpoint = sample.distance < road.samples[0].distance + 2 && along < 2;
+    const endpoint = !road.openStart && sample.distance < road.samples[0].distance + 2 && along < 2;
     const side = Math.sign(lateral - center) || 1;
-    if (!endpoint && !(center && side * center < 0) && !hasRoadBarrier(this.world, sample, side)) return false;
+    if (sample.opening !== undefined && this.connectedSurface(car.x, car.z, car.y - ride, width)) return false;
+    if (!endpoint && !(center && side * center < 0) && !hasRoadBarrier({ ...route, options: this.world.options }, sample, side)) return false;
     if (!endpoint && (Math.abs(lateral - center) <= limit || Math.abs(previous - center) > this.profile.halfWidth + 1)) return false;
     if (!endpoint && Math.abs(lateral - center) < Math.abs(previous - center) - 0.00001) return false;
     const offset = Math.max(-limit, Math.min(limit, lateral - center)) + center;
@@ -144,20 +161,21 @@ export class DrivingSurface {
 
   constrainWalker(body: { x: number; y: number; z: number }, previousX: number, previousZ: number): boolean {
     if (this.constrainService(body, previousX, previousZ, 0.42, body.y)) return true;
-    const sample = this.world.road.nearest(body.x, body.z);
+    const route = this.route(body.x, body.z, body.y), sample = route.road.nearest(body.x, body.z);
     if (!sample) return false;
     const { x, y, z } = sample.position, cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
     const along = (body.x - x) * sin - (body.z - z) * cos;
     const { normal } = roadFrame(sample);
     const roadHeight = y - (normal.x * (body.x - x) + normal.z * (body.z - z)) / normal.y;
     if (Math.abs(along) > 2 || body.y + 1.75 < roadHeight - 0.2) return false;
-    const bridge = this.world.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
-    const tunnel = this.inTunnel(body.x, body.z);
+    const bridge = route.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
+    const tunnel = route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
     const previous = (previousX - x) * cos + (previousZ - z) * sin;
     let lateral = (body.x - x) * cos + (body.z - z) * sin, hit = false;
     for (const center of this.profile.centers) for (const side of [-1, 1]) {
       const inner = center !== 0 && side * center < 0;
-      if (!inner && !hasRoadBarrier(this.world, sample, side)) continue;
+      if (sample.opening !== undefined && this.connectedSurface(body.x, body.z, body.y, 0.42)) continue;
+      if (!inner && !hasRoadBarrier({ ...route, options: this.world.options }, sample, side)) continue;
       if (body.y > roadHeight + (tunnel ? 7 : inner ? 0.85 : bridge ? 1.55 : 1.02)) continue;
       const rail = center + side * (this.profile.halfWidth + (inner ? 0 : 0.2));
       const before = previous - rail, after = lateral - rail;
@@ -186,14 +204,32 @@ export class DrivingSurface {
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
       if (feet < height - 0.15) ceiling = Math.min(ceiling, height - 1.45);
     }
-    const sample = this.world.road.nearest(x, z);
-    if (!sample) return ceiling;
+    for (const route of this.world.network?.routes ?? [this.world]) {
+    const sample = route.road.nearest(x, z);
+    if (!sample) continue;
     const dx = x - sample.position.x, dz = z - sample.position.z;
     const lateral = dx * Math.cos(sample.heading) + dz * Math.sin(sample.heading);
-    if (!this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + 0.4)) return ceiling;
+    if (!this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + 0.4)) continue;
     const { normal } = roadFrame(sample), road = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
-    if (feet < road - 0.15 && this.world.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) return Math.min(ceiling, road - 3);
-    return this.inTunnel(x, z) ? Math.min(ceiling, road + 4.5) : ceiling;
+    if (feet < road - 0.15 && route.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) ceiling = Math.min(ceiling, road - 3);
+    if (feet >= road - 0.15 && route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) ceiling = Math.min(ceiling, road + 4.5);
+    }
+    return ceiling;
+  }
+
+  private route(x: number, z: number, height = this.level) {
+    return this.world.network?.nearest(x, z, height === undefined ? undefined : height + 1)?.route ?? this.world;
+  }
+
+  private connectedSurface(x: number, z: number, y: number, margin: number): boolean {
+    return this.world.network?.routes.some(route => {
+      const sample = route.road.nearest(x, z);
+      if (!sample || Math.abs(sample.position.y - y) > 1.2) return false;
+      const dx = x - sample.position.x, dz = z - sample.position.z;
+      const lateral = dx * Math.cos(sample.heading) + dz * Math.sin(sample.heading);
+      return Math.abs(dx * Math.sin(sample.heading) - dz * Math.cos(sample.heading)) < 2
+        && this.profile.centers.some(center => Math.abs(lateral - center) + margin < this.profile.halfWidth);
+    }) ?? false;
   }
 
   private refreshServices(): void {

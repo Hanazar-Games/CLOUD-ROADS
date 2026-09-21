@@ -3,7 +3,7 @@ import { BiomeSystem } from '../../src/biome/BiomeSystem';
 import { HeightFunction } from '../../src/terrain/HeightFunction';
 
 test('stops held movement when focus leaves the canvas and consumes flight shortcuts', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await page.locator('#world').focus();
   await page.keyboard.down('KeyW');
@@ -23,7 +23,7 @@ test('stops held movement when focus leaves the canvas and consumes flight short
 
 test('keeps ground readings aligned with the displayed coordinates during fast flight', async ({ page }) => {
   const terrain = new HeightFunction('CLOUD-ROAD-001'), biomes = new BiomeSystem('CLOUD-ROAD-001');
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await page.locator('#speed').fill('1200');
   await page.locator('#world').focus();
@@ -45,7 +45,7 @@ test('keeps ground readings aligned with the displayed coordinates during fast f
 
 test('keeps all controls reachable in a short desktop window', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   for (const id of ['sun-view', 'shadows', 'bridge-view', 'cloud-view', 'cloud-toggle', 'pause']) {
@@ -70,7 +70,7 @@ test('recovers from a failed terrain worker without reloading the page', async (
       }
     };
   });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#error')).toContainText('Injected worker failure');
   await page.getByRole('button', { name: '重试当前世界' }).click();
   await expect(page.locator('#error')).toBeHidden();
@@ -79,7 +79,7 @@ test('recovers from a failed terrain worker without reloading the page', async (
 });
 
 test('restores rendering after context loss and clears held flight keys', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   await page.locator('#world').focus();
@@ -103,13 +103,15 @@ test('restores rendering after context loss and clears held flight keys', async 
 });
 
 test('shows the current release, archives the previous baseline and isolates dialog controls', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.19');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('雨行秋野 · 车灯雨刮与悬挂调校');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.20');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('岔路星途 · 双向路网与夜行灯光');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.19');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('雨行秋野 · 车灯雨刮与悬挂调校');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.18');
   await expect(dialog.locator('[data-release="history"]')).toContainText('百变旅途 · 载具车队与雨雾');
   await dialog.getByText('历史公告', { exact: true }).click();
@@ -141,7 +143,7 @@ test('shows the current release, archives the previous baseline and isolates dia
 
 test('retains release access and a reload action when WebGL cannot start', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { value: () => null }));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#error')).toContainText('无法启动 3D 世界');
   await expect(page.locator('#explorer')).toHaveAttribute('inert', '');
   await expect(page.locator('#controls-toggle')).toBeDisabled();
@@ -161,7 +163,7 @@ test('releases workers through repeated seed changes and keeps display preferenc
       terminate() { live.delete(this); super.terminate(); }
     };
   });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   const workerCount = await page.evaluate(() => Reflect.get(window, 'activeTerrainWorkers'));
   await page.locator('#wireframe').click();
@@ -177,12 +179,12 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   expect(Number(await page.locator('[data-metric="Allocated meshes"]').textContent())).toBe(289);
-  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('7');
+  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('8');
   expect(errors).toEqual([]);
 });
 
 test('collapses the panel and keeps pause button and keyboard state in sync', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.getByRole('button', { name: '收起面板' }).click();
   await expect(page.locator('#explorer')).toBeHidden();
   await page.getByRole('button', { name: '展开面板' }).click();
@@ -197,7 +199,7 @@ test('collapses the panel and keeps pause button and keyboard state in sync', as
 test('explains pointer lock rejection and keeps drag controls available', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#world').evaluate((canvas) => {
     (canvas as HTMLCanvasElement).requestPointerLock = () => Promise.reject(new Error('Pointer lock denied'));
   });

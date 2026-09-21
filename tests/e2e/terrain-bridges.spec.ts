@@ -10,7 +10,7 @@ test('renders continuous concrete bridges and elevated services through distant 
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 45000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 45000 });
   };
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#seed').fill('ROAD-TEST-002');
   await page.getByRole('button', { name: '加载种子' }).click();
   await expect(metric('Seed')).toHaveText('ROAD-TEST-002'); await ready();

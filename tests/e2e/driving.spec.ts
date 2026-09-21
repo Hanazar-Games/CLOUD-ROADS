@@ -11,7 +11,7 @@ async function start(page: Page) {
 
 test('drives, steers, brakes, reverses and recovers safely without losing trip distance', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/'); await start(page);
+  await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
   await expect(page.locator('#explorer')).toBeHidden();
   await expect(page.locator('#drive-hud')).toBeVisible();
   const home = await metric(page, 'Vehicle position').textContent();
@@ -40,7 +40,7 @@ test('drives, steers, brakes, reverses and recovers safely without losing trip d
 });
 
 test('switches views and tuning, isolates settings and announcements, and resumes with fresh keys', async ({ page }) => {
-  await page.goto('/'); await start(page);
+  await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
   for (const view of ['cockpit', 'hood', 'chase']) {
     await page.keyboard.press('KeyC');
     await expect(metric(page, 'Driving camera')).toHaveText(view);
@@ -90,7 +90,7 @@ test('switches views and tuning, isolates settings and announcements, and resume
 
 test('drives into a lit tunnel and keeps all camera modes inside the bore', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#tunnel-view')).toBeEnabled({ timeout: 25_000 });
   await page.locator('#tunnel-view').click();
   await page.locator('#weather-kind').selectOption('rain');
@@ -117,7 +117,7 @@ test('drives into a lit tunnel and keeps all camera modes inside the bore', asyn
 });
 
 test('keeps driving controls and instruments reachable in small windows', async ({ page }) => {
-  await page.goto('/'); await start(page);
+  await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
   for (const size of [{ width: 390, height: 844 }, { width: 1024, height: 450 }]) {
     await page.setViewportSize(size);
     await expect(page.locator('#drive-toggle')).toBeInViewport();
@@ -126,6 +126,10 @@ test('keeps driving controls and instruments reachable in small windows', async 
     await page.locator('#suspension').scrollIntoViewIfNeeded();
     await page.locator('#suspension').selectOption('5');
     await expect(page.locator('#suspension')).toBeInViewport();
+    if (size.width < 620) {
+      const panel = await page.locator('#explorer').boundingBox(), hud = await page.locator('#drive-hud').boundingBox();
+      expect(panel!.y + panel!.height).toBeLessThan(hud!.y);
+    }
     await page.locator('#controls-toggle').click();
   }
   await page.locator('#drive-toggle').click();
@@ -136,7 +140,7 @@ test('keeps driving controls and instruments reachable in small windows', async 
 test('boards on a bridge and a distant highway service area after origin rebasing', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   await expect(page.locator('#bridge-view')).toBeEnabled({ timeout: 30_000 });

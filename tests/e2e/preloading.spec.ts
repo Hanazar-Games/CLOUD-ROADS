@@ -9,7 +9,7 @@ test('preloads the next view, continues streaming and rebuilds the preload after
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
     await expect.poll(async () => Number(await metric('Prefetched chunks').textContent()), { timeout: 30000 }).toBeGreaterThan(0);
   };
-  await page.goto('/'); await ready();
+  await page.goto('/?seed=CLOUD-ROAD-001'); await ready();
   await expect(metric('Active chunks')).toHaveText('289');
   const completed = Number(await metric('Generated chunks').textContent());
   await page.locator('#world').focus(); await page.keyboard.down('KeyW');

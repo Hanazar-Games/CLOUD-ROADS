@@ -7,7 +7,7 @@ import { DrivingSurface } from './DrivingSurface';
 import { VehicleMesh } from './VehicleMesh';
 import { VehiclePhysics } from './VehiclePhysics';
 import { vehicleProfiles, suspensionLevels, suspensionNames, suspensionTuning, type Suspension, type VehicleKind } from './VehicleConfig';
-import { VehicleSystems, lightNames, wiperNames, type LightMode, type WiperMode } from './VehicleSystems';
+import { VehicleSystems, lightNames, wiperNames, signalNames, type LightMode, type WiperMode, type SignalMode } from './VehicleSystems';
 
 export class DrivingSystem {
   car = new VehiclePhysics();
@@ -61,6 +61,14 @@ export class DrivingSystem {
     wipers.replaceChildren(...Object.entries(wiperNames).map(([value, name]) => new Option(name, value)));
     lights.addEventListener('change', () => { if (Object.hasOwn(lightNames, lights.value)) this.systems.lights = lights.value as LightMode; }, options);
     wipers.addEventListener('change', () => { if (Object.hasOwn(wiperNames, wipers.value)) this.systems.wipers = wipers.value as WiperMode; }, options);
+    const signals = element<HTMLSelectElement>('vehicle-signals');
+    signals.replaceChildren(...Object.entries(signalNames).map(([value, name]) => new Option(name, value)));
+    signals.addEventListener('change', () => { if (Object.hasOwn(signalNames, signals.value)) this.systems.signal = signals.value as SignalMode; }, options);
+    for (const [id, field, unit, scale] of [['light-power', 'lightPower', '%', 0.01], ['light-range', 'lightRange', ' m', 1]] as const)
+      element(id).addEventListener('input', () => {
+        const value = Number(element<HTMLInputElement>(id).value); this.systems[field] = value * scale;
+        element(`${id}-value`).textContent = `${value}${unit}`;
+      }, options);
     element('vehicle-reset').addEventListener('click', () => { this.reset(); element('world').focus(); }, options);
     element('view-reset').addEventListener('click', () => { this.cameraRig.reset(); element('world').focus(); }, options);
   }
@@ -100,6 +108,8 @@ export class DrivingSystem {
   action(code: string): void {
     if (!this.active) return;
     if (code === 'KeyR') this.reset();
+    const signal: SignalMode | undefined = code === 'KeyQ' ? 'left' : code === 'KeyE' ? 'right' : code === 'KeyH' ? 'hazard' : undefined;
+    if (signal) this.systems.signal = this.systems.signal === signal ? 'off' : signal;
     if (code === 'KeyL') {
       const modes = Object.keys(lightNames) as LightMode[];
       this.systems.lights = modes[(modes.indexOf(this.systems.lights) + 1) % modes.length];
@@ -124,12 +134,13 @@ export class DrivingSystem {
     const held = frozen || waiting || !focused;
     this.systemsDt = held ? 0 : dt;
     this.surface.wet = wet;
+    this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
     if (!held) {
       const x = this.car.x, z = this.car.z, trip = this.car.trip;
       this.car.update(dt, { throttle: Number(this.input.down('KeyW')) - Number(this.input.down('KeyS')),
         steer: Number(this.input.down('KeyD')) - Number(this.input.down('KeyA')), handbrake: this.input.down('Space') }, this.surface.sample);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
-      if (this.surface.constrain(this.car, x, z)) {
+      if (this.surface.constrain(this.car, x, z, dt)) {
         this.collisionTime = 1.2;
         this.car.trip = trip + Math.min(this.car.trip - trip, Math.hypot(this.car.x - x, this.car.z - z));
       }
@@ -155,7 +166,12 @@ export class DrivingSystem {
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
     if (this.active) {
       const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
-      this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered);
+      this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered, this.car.steering);
+      element<HTMLSelectElement>('vehicle-signals').value = this.systems.signal;
+      element('turn-left').classList.toggle('lit', this.systems.leftSignal);
+      element('turn-right').classList.toggle('lit', this.systems.rightSignal);
+      element('turn-left').setAttribute('aria-label', this.systems.leftSignal ? '左转灯亮' : '左转灯灭');
+      element('turn-right').setAttribute('aria-label', this.systems.rightSignal ? '右转灯亮' : '右转灯灭');
       this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt);
       element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯`;
       element('vehicle-lights-status').classList.toggle('high-beam', this.systems.beam === 'high');

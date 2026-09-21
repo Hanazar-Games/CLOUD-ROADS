@@ -1,4 +1,6 @@
 export const DEFAULT_SEED = 'CLOUD-ROAD-001';
+export const randomSeed = (): string => `ROAD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+export const startingSeed = (search: string): string => new URLSearchParams(search).get('seed')?.trim().slice(0, 80) || randomSeed();
 
 export function hashSeed(seed: string): number {
   let hash = 2166136261;

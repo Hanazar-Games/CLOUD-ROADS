@@ -4,7 +4,7 @@ test('reports ground biomes independently of flight altitude and reproduces them
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   const names = ['Ground biome', 'Ground altitude', 'Ground slope', 'Snow cover', 'Snow line', 'Temperature', 'Humidity'];
   const values = () => Promise.all(names.map((name) => metric(name).textContent()));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   await expect(metric('Ground biome')).toHaveText(/^(山谷|森林|岩石|高山|雪区)$/);
@@ -31,7 +31,7 @@ test('reports ground biomes independently of flight altitude and reproduces them
 test('renders WebGL, resizes, flies, pauses and exposes debug telemetry', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await expect(page.locator('#error')).toBeHidden();
   await page.locator('#world').focus();
@@ -58,7 +58,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   await expect(metric('Active chunks')).toHaveText('289');
@@ -98,7 +98,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
 });
 
 test('clears held keys on blur and ignores flight keys while editing the seed', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await page.locator('#world').focus();
   await page.keyboard.down('KeyW');

@@ -10,7 +10,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
     await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   };
-  await page.goto('/'); await ready();
+  await page.goto('/?seed=CLOUD-ROAD-001'); await ready();
   await page.locator('#road-type').selectOption('highway');
   await page.locator('#route-style').selectOption('1');
   await page.locator('#max-grade').fill('3');

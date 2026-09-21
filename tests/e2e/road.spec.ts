@@ -4,7 +4,7 @@ test('shows a streamed road spine, inspects it and preserves display settings ac
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   const highDetail = Number((await page.locator('[data-metric="LOD 0 / 1 / 2"]').textContent())!.split('/')[0]);
@@ -32,7 +32,7 @@ test('extends the road during 30 km of northbound flight and replays it on retur
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   const initialBridges = await metric('Bridges').textContent();
@@ -63,7 +63,7 @@ test('inspects generated hairpins and continues streaming the coupled terrain', 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   const button = page.getByRole('button', { name: '发卡弯视角' });
   await page.locator('#route-style').selectOption('3');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
@@ -84,7 +84,7 @@ test('renders viaducts, inspects a bridge and rebuilds the same bridges after ch
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.goto('/');
+  await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   const button = page.getByRole('button', { name: '桥梁视角' });
