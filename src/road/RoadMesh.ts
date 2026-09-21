@@ -23,7 +23,7 @@ export class RoadMesh {
 
   constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS, capacity = MAX_ROAD_SEGMENTS) {
     this.profile = roadProfile(options);
-    this.barriers = new InstancedMesh(barrierGeometry(), new MeshStandardMaterial({ color: 0xb6b5a9, roughness: 0.9 }),
+    this.barriers = new InstancedMesh(barrierGeometry(), new MeshStandardMaterial({ color: 0xbfc2c1, roughness: 0.94 }),
       options.roadType === 'highway' ? capacity * ROAD_SAMPLES * 2 : 1);
     this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access));
     const strips = this.profile.centers.length, stride = strips * 2;

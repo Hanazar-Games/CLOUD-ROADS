@@ -576,6 +576,7 @@ export class Game {
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
         'Service areas': this.world.services.length,
         'Arch bays': this.world.bridgeMesh.archBridges.bayCount, 'Arch ribs': this.world.bridgeMesh.archBridges.ribs.count,
+        'Cable spans': this.world.bridgeMesh.cableBridges.spanCount, 'Bridgeheads': this.world.bridgeMesh.abutments.endCount,
         'Climb range': this.world.options.elevationMode === 'cycles' ? `${this.world.options.climbMin}–${this.world.options.climbMax} m` : 'natural',
         'Elevated services': this.world.services.filter(site => site.ground.elevated).length,
         'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',

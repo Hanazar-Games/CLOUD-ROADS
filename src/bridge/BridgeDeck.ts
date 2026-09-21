@@ -3,13 +3,16 @@ import type { BridgeSpan } from './BridgeDetector';
 import { roadFrame } from '../road/RoadFrame';
 import { roadProfile } from '../road/RoadProfile';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { bridgeDeckDepth } from './BridgeProfile';
 
 export class BridgeDeck extends Mesh<BufferGeometry, MeshStandardMaterial> {
   private readonly profile;
+  private readonly depth;
 
   constructor(material: MeshStandardMaterial, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     super(new BufferGeometry(), material);
     this.profile = roadProfile(options);
+    this.depth = bridgeDeckDepth(options);
     for (const name of ['position', 'normal']) this.geometry.setAttribute(name, new BufferAttribute(new Float32Array(0), 3).setUsage(DynamicDrawUsage));
     this.geometry.setIndex(new BufferAttribute(new Uint32Array(0), 1).setUsage(DynamicDrawUsage));
     this.geometry.setDrawRange(0, 0);
@@ -18,7 +21,7 @@ export class BridgeDeck extends Mesh<BufferGeometry, MeshStandardMaterial> {
   rebuild(spans: readonly BridgeSpan[], anchorX: number, anchorZ: number): void {
     const width = this.profile.halfWidth * 2 + 0.8;
     const section = [[-width / 2, -0.04], [width / 2, -0.04], [width / 2, -0.55],
-      [width * 0.32, -2.94], [-width * 0.32, -2.94], [-width / 2, -0.55]];
+      [width * 0.32, -this.depth], [-width * 0.32, -this.depth], [-width / 2, -0.55]];
     const vertices = spans.reduce((sum, span) => sum + span.samples.length * 12 + 12, 0) * this.profile.centers.length;
     const indices = spans.reduce((sum, span) => sum + (span.samples.length - 1) * 36 + 24, 0) * this.profile.centers.length;
     const vertexCapacity = this.geometry.getAttribute('position').count, indexCapacity = this.geometry.getIndex()!.count;

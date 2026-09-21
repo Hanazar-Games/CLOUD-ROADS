@@ -1,7 +1,7 @@
 import { MeshStandardMaterial, type Vector2 } from 'three';
 
 export function createConcreteMaterial(origin: Vector2): MeshStandardMaterial {
-  const material = new MeshStandardMaterial({ color: 0xb7b8af, roughness: 0.9 });
+  const material = new MeshStandardMaterial({ color: 0xbfc2c1, roughness: 0.94 });
   material.onBeforeCompile = shader => {
     shader.uniforms.concreteOrigin = { value: origin };
     shader.vertexShader = `uniform vec2 concreteOrigin; varying vec3 vConcretePosition;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
@@ -35,8 +35,8 @@ export function createConcreteMaterial(origin: Vector2): MeshStandardMaterial {
         vec3 formLine = 1.0 - smoothstep(vec3(0.012), vec3(0.028) + fwidth(vConcretePosition), formDistance);
         float forms = dot(vec3(max(formLine.y, formLine.z), max(formLine.x, formLine.z), max(formLine.x, formLine.y)), concreteWeights);
         float streak = concreteNoise(vec2(vConcretePosition.x + vConcretePosition.z, vConcretePosition.y * 0.0625));
-        diffuseColor.rgb *= 0.93 + concretePatch * 0.13 + (concreteGrain - 0.5) * 0.055 * concreteNear
-          - concretePores * 0.07 - forms * 0.055 - streak * (1.0 - concreteWeights.y) * 0.025;
+        diffuseColor.rgb *= 0.96 + concretePatch * 0.07 + (concreteGrain - 0.5) * 0.035 * concreteNear
+          - concretePores * 0.045 - forms * 0.035 - streak * (1.0 - concreteWeights.y) * 0.018;
         float concreteRelief = (concreteGrain - concretePores) * 0.006 * concreteNear;
       `).replace('#include <normal_fragment_maps>', `
         #include <normal_fragment_maps>

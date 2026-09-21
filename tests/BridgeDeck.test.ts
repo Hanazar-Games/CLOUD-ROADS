@@ -4,6 +4,15 @@ import { BridgeDeck } from '../src/bridge/BridgeDeck';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { roadFrame } from '../src/road/RoadFrame';
+import { bridgeDeckDepth } from '../src/bridge/BridgeProfile';
+import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
+
+it('scales box girders to each carriageway while keeping a substantial slab', () => {
+  const depths = [6, 8, 10].map(roadWidth => bridgeDeckDepth({ ...DEFAULT_OPTIONS, roadWidth }));
+  expect(depths[0]).toBeGreaterThan(1.5); expect(depths[2]).toBeLessThan(2.7);
+  expect(depths[0]).toBeLessThan(depths[1]); expect(depths[1]).toBeLessThan(depths[2]);
+  expect(bridgeDeckDepth({ ...DEFAULT_OPTIONS, roadType: 'highway' })).toBe(depths[1]);
+});
 
 it('follows banked bend joints without cracks, overlap ridges or missing soffits', () => {
   const start = new RoadGenerator('joint', { sample: () => 200 }).start;

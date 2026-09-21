@@ -3,6 +3,7 @@ import type { RoadSample } from '../road/RoadSegment';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
 import type { WorldOptions } from '../world/WorldOptions';
+import { bridgeDeckDepth } from './BridgeProfile';
 
 export const archAlignment = (samples: readonly RoadSample[]): boolean => samples.length > 1 && samples.every(sample =>
   Math.abs(sample.grade) <= 0.01 && Math.abs(sample.curvature) <= 0.0002
@@ -15,11 +16,13 @@ export class ArchBridgeMesh {
   private readonly geometry = new BoxGeometry();
   private readonly matrix = new Matrix4();
   private readonly profile;
+  private readonly depth;
   private anchorX = 0;
   private anchorZ = 0;
 
   constructor(scene: Scene, material: MeshStandardMaterial, options: Readonly<WorldOptions>) {
     this.profile = roadProfile(options);
+    this.depth = bridgeDeckDepth(options);
     this.ribs = new InstancedMesh(this.geometry, material, 32768);
     this.posts = new InstancedMesh(this.geometry, material, 32768);
     for (const mesh of [this.ribs, this.posts]) {
@@ -39,7 +42,7 @@ export class ArchBridgeMesh {
     const lateral = Math.min(1.5, this.profile.halfWidth * 0.4);
     const point = (t: number, offset: number, arch: boolean) => {
       const sample = samples[Math.round(t * (samples.length - 1))], p = sample.position, { right: r, normal: n } = roadFrame(sample);
-      const depth = arch ? 3.5 : 2.94;
+      const depth = this.depth + (arch ? 0.56 : 0);
       return new Vector3(p.x + r.x * offset - n.x * depth,
         p.y + r.y * offset - n.y * depth - (arch ? rise * (2 * t - 1) ** 2 : 0), p.z + r.z * offset - n.z * depth);
     };

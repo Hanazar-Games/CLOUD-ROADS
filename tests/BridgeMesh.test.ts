@@ -108,7 +108,7 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(9);
+    expect(scene.children).toHaveLength(12);
     expect(mesh.railings.count).toBeGreaterThan(mesh.parapets.count);
     expect(mesh.parapets.count).toBe((bridges[0].samples.length - 1) * 2);
     expect(mesh.pierCount).toBeGreaterThan(5);

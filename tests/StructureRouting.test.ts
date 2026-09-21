@@ -3,6 +3,8 @@ import { RoadGenerator } from '../src/road/RoadGenerator';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { BridgeDetector } from '../src/bridge/BridgeDetector';
 import { TunnelDetector } from '../src/tunnel/TunnelDetector';
+import { RoadCorridor } from '../src/road/RoadCorridor';
+import { cableSpans } from '../src/bridge/CableBridgeMesh';
 
 describe('terrain-led structure alignments', () => {
   it.each([4900, 5000])('retains a complete %i m bore close to the tunnel length limit', length => {
@@ -35,6 +37,9 @@ describe('terrain-led structure alignments', () => {
     }
     const span = new BridgeDetector(terrain, options).detect(samples).find(span => span.depth > 200)!;
     expect(span).toBeDefined();
+    const cables = cableSpans([span], terrain, RoadCorridor.fromSamples(samples, [span], options), options);
+    expect(cables).toHaveLength(1);
+    expect(cables[0].towers.every(s => s.position.y - terrain.sample(s.position.x, s.position.z) > 200)).toBe(true);
     for (const sample of span.samples) {
       expect(Math.abs(sample.curvature)).toBeLessThan(1e-8);
       expect(Math.abs(sample.grade)).toBeLessThanOrEqual(0.01);

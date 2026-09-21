@@ -2,6 +2,7 @@ import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
 import type { TerrainKind, WorldOptions } from '../world/WorldOptions';
 import { MountainRanges } from './MountainRanges';
+import { mountainIncision } from './MountainErosion';
 
 export class HeightFunction {
   readonly noise: Noise;
@@ -81,6 +82,6 @@ export class HeightFunction {
     const gorge = Math.max(0, 1 - drainage / 0.16) ** 2 * (90 + guide.level * 230) * (1 - relief * 0.65) * saddle;
     return guide.height + relief * (180 + ranges * (0.12 + guide.level * (0.65 + region * 0.25)) + macro * 0.12
       + crests ** 3 * (240 + guide.level * 650) + (ribs - 0.45) * (55 + guide.level * 135))
-      + medium * (0.1 + saddle * 0.3) + detail * 0.45 - gorge;
+      + medium * (0.1 + saddle * 0.3) + detail * 0.45 - gorge - mountainIncision(this.noise, wx, wz, relief, guide.level);
   }
 }
