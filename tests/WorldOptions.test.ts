@@ -50,7 +50,7 @@ describe('landscape and road choices', () => {
   });
 
   it.each([6, 8, 10])('builds separate highway carriageways and a matching roadbed at %i m per direction', (roadWidth) => {
-    const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, roadWidth };
+    const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, roadWidth, maxGrade: 0.04 };
     const profile = roadProfile(options);
     const spine = new RoadSpine('choices', new HeightFunction('choices'), options);
     while (!spine.update(128, 8)) { /* Complete the route. */ }

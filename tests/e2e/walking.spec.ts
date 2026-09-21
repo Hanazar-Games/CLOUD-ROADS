@@ -49,7 +49,7 @@ test('walks, accelerates into running and sprinting, jumps once and freezes safe
 test('switches walking, driving and flight on a tall bridge and survives settings, context loss and world changes', async ({ page }) => {
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/?seed=CLOUD-ROAD-001');
+  await page.goto('/?seed=VALLEY-22');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.locator('#route-style').selectOption('5');
   await page.getByRole('button', { name: '应用并返回起点' }).click();

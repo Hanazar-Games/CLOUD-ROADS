@@ -47,7 +47,7 @@ describe('BridgeMesh', () => {
     mesh.dispose();
   });
 
-  it('widens tall spans through cable-stayed heights and gives high bridges red steel railings', () => {
+  it('keeps the same pier spacing at every height and gives high bridges red steel railings', () => {
     const counts: number[] = [];
     for (const height of [50, 50.01, 100, 100.01, 350]) {
       const terrain = { sample: () => 200 - height };
@@ -64,7 +64,7 @@ describe('BridgeMesh', () => {
       else expect(Math.abs(color.r - color.g)).toBeLessThan(0.15);
       mesh.dispose();
     }
-    expect(counts).toEqual([48, 24, 24, 12, 6]);
+    expect(counts).toEqual([48, 48, 48, 48, 48]);
   });
 
   it('anchors tall piers to absolute mileage when either bridge end is outside the loaded window', () => {
@@ -87,9 +87,9 @@ describe('BridgeMesh', () => {
       return result;
     };
     const before = foundations(samples, 1);
-    expect(before.length).toBeGreaterThan(8);
-    expect(before.length).toBeLessThan(12);
-    expect(mesh.columns.count).toBe(mesh.pierCount * 2);
+    expect(before.length).toBeGreaterThan(35);
+    expect(before.length).toBeLessThan(40);
+    expect(mesh.columns.count).toBe(mesh.pierCount);
     const shaft = new Matrix4();
     mesh.columns.getMatrixAt(0, shaft);
     expect(shaft.elements[5] / shaft.elements[0]).toBeLessThan(90);

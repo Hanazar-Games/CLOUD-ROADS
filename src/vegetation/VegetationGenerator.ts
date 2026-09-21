@@ -60,7 +60,8 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       const w = biome.weights, patch = 0.65 + groves.sample(wx / 38, wz / 38) * 0.35;
       if (w.desert > 0.2 || w.snow > 0.15 || chance > (w.valley + w.forest + w.alpine * 0.25) * patch) continue;
       if (!clear(wx, wz, 1.1)) continue;
-      plants.push(x, height - 0.04, z, 0.7 + size * 0.65, rotation, species < 0.12 ? 8 : species < 0.24 ? 9 : 7, 0.85 + size * 0.25);
+      const flowers = 0.16 + Math.max(0, groves.sample(wx / 24 + 71, wz / 24)) * 0.4;
+      plants.push(x, height - 0.04, z, 0.7 + size * 0.65, rotation, species < flowers / 2 ? 8 : species < flowers ? 9 : 7, 0.85 + size * 0.25);
     }
   }
   return new Float32Array(plants);

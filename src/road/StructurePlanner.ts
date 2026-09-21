@@ -9,7 +9,7 @@ export class StructurePlanner {
   private readonly halfWidth: number;
   readonly gradeStep: number;
 
-  constructor(private readonly terrain: RoadTerrain, options: Readonly<WorldOptions>) {
+  constructor(private readonly terrain: RoadTerrain, private readonly options: Readonly<WorldOptions>) {
     this.halfWidth = roadProfile(options).outerHalfWidth;
     this.gradeStep = options.roadType === 'highway' || options.routeStyle === 0
       ? 0.002 * Math.max(1, options.maxGrade / 0.03) : Math.max(0.002, options.maxGrade / 3);
@@ -22,6 +22,8 @@ export class StructurePlanner {
     const ahead = [192, 384, 576, 768].map(d => ground(d) - y);
     const kind = ahead.some(gap => gap < -100) ? 'bridge' : ahead.some(gap => gap > 35) ? 'tunnel' : undefined;
     if (!kind) return;
+    if (kind === 'tunnel' && [192, 384, 576, 768].every(d =>
+      Math.abs(ground(d) - ground(d - 192)) / 192 <= this.options.maxGrade * 0.8)) return;
     const limit = kind === 'bridge' ? 0.01 : 0.03, grade = Math.max(-limit, Math.min(limit, start.grade));
     const approach: RoadSegment[] = [];
     let point = start;
@@ -53,8 +55,6 @@ export class StructurePlanner {
         if (kind === 'bridge' ? peak <= 200 || gap(end + 32) < -25 : peak < 35 || distance(end) - distance(entry) < 120) return;
         if (kind === 'tunnel' && (distance(end) - distance(entry) > MAX_TUNNEL_LENGTH
           || gap(entry - 24) > 5 || gap(end + 24) > 5)) return;
-        if (start.climb && (start.climb.ascending ? height(end + ROAD_STEP * 2) > start.climb.target + 0.1
-          : height(end + ROAD_STEP * 2) < start.climb.target - 0.1)) return;
         return { kind, start: distance(entry), end: distance(end), finish: distance(end + ROAD_STEP), grade, heading: start.heading };
       }
     }

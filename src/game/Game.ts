@@ -339,7 +339,7 @@ export class Game {
       element<HTMLSelectElement>('elevation-mode').value = options.elevationMode;
       element<HTMLInputElement>('climb-min').value = String(options.climbMin); element<HTMLInputElement>('climb-max').value = String(options.climbMax);
       this.syncClimbControls();
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.elevationMode === 'cycles' ? ` · 单次爬升 ${options.climbMin}–${options.climbMax} 米` : ''} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`;
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.elevationMode === 'cycles' ? ` · 目标爬升 ${options.climbMin}–${options.climbMax} 米` : ''} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`;
       this.setError(null);
       this.resetCamera();
     } catch (error) {
@@ -567,7 +567,7 @@ export class Game {
         'Road wetness': `${Math.round(this.weather.wetness * 100)}%`,
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
         'Service areas': this.world.services.length,
-        'Cable towers': this.world.bridgeMesh.cableBridges.towerCount, 'Stay cables': this.world.bridgeMesh.cableBridges.cables.count,
+        'Arch bays': this.world.bridgeMesh.archBridges.bayCount, 'Arch ribs': this.world.bridgeMesh.archBridges.ribs.count,
         'Climb range': this.world.options.elevationMode === 'cycles' ? `${this.world.options.climbMin}–${this.world.options.climbMax} m` : 'natural',
         'Elevated services': this.world.services.filter(site => site.ground.elevated).length,
         'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',

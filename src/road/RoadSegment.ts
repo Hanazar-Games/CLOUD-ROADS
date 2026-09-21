@@ -1,7 +1,7 @@
 export const ROAD_STEP = 96;
 export const ROAD_SAMPLES = 48;
 export interface RoadVector { x: number; y: number; z: number }
-export interface MountainPlan { stage: number; side: number; grade: number }
+export interface MountainPlan { stage: number; side: number }
 export interface ClimbPlan { cycle: number; base: number; target: number; ascending: boolean }
 export interface StructurePlan { kind: 'bridge' | 'tunnel'; start: number; end: number; finish: number; grade: number; heading: number }
 export interface RoadControlPoint {

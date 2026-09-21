@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { bridgeTier, bridgeSpacing } from '../src/bridge/BridgeProfile';
+import { bridgeTier, BRIDGE_SPACING } from '../src/bridge/BridgeProfile';
 import { hasRoadBarrier } from '../src/road/RoadProtection';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
@@ -7,7 +7,7 @@ import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 it('upgrades span size strictly above 50 m and 100 m', () => {
   expect([5, 50, 50.01, 100, 100.01, 350].map(bridgeTier)).toEqual([0, 0, 1, 1, 2, 2]);
-  expect([20, 75, 150, 350].map(bridgeSpacing)).toEqual([48, 96, 192, 192]);
+  expect(BRIDGE_SPACING).toBe(48);
 });
 
 it('leaves repeatable openings on ground roads and always protects bridges and tunnels', () => {

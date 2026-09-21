@@ -73,7 +73,7 @@
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">蜿蜒程度</label>
             <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
-            <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。斜拉桥保持直线，坡度不超过 1%。全直道方向固定，仍可上下起伏。</p>
+            <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。超过 150 米的高桥在平缓桥段使用连续拱结构；急弯、陡坡保留实心墩。全直道方向固定，仍可上下起伏。</p>
             <label for="junctions"><input id="junctions" type="checkbox" checked /> 山路岔路 · 可转入支路</label>
             <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 环形立交 · 高速出口 / 山路升级</label>
             <p class="panel-help">每 20 km 一处，每处仅一条右侧出口。山路开启岔路后可升级立交；高速由立交开关控制。坡度低于 2.5% 或净空不足时采用平面出口。应用后重新生成。</p>
@@ -81,12 +81,12 @@
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
             <label for="elevation-mode">上下坡节奏</label>
-            <select id="elevation-mode" aria-describedby="climb-help"><option value="natural">自然起伏 · 跟随地形</option><option value="cycles">反复上下山 · 自选爬升高度</option></select>
+            <select id="elevation-mode" aria-describedby="climb-help"><option value="natural">自然起伏 · 跟随地形</option><option value="cycles">上下山偏好 · 目标爬升</option></select>
             <div class="climb-range">
-              <label for="climb-min">单次爬升下限 · 米<input id="climb-min" type="number" min="50" max="2000" step="50" value="300" disabled required /></label>
-              <label for="climb-max">单次爬升上限 · 米<input id="climb-max" type="number" min="50" max="2000" step="50" value="900" disabled required /></label>
+              <label for="climb-min">目标爬升下限 · 米<input id="climb-min" type="number" min="50" max="2000" step="50" value="300" disabled required /></label>
+              <label for="climb-max">目标爬升上限 · 米<input id="climb-max" type="number" min="50" max="2000" step="50" value="900" disabled required /></label>
             </div>
-            <p id="climb-help" class="panel-help">每次从范围内选取净爬升高度，到山顶后下山，再开始下一次爬升；不是绝对海拔。仍遵守最大坡度，0% 时保持水平。服务区附近会减缓坡度。</p>
+            <p id="climb-help" class="panel-help">目标影响上下山选线，实际爬升以山体走势为准；到垭口可提前下山，平地不会强行抬高。目标不是绝对海拔，也不保证每次达到。仍遵守最大坡度，0% 时保持水平；服务区附近缓坡过渡。</p>
             <div class="actions"><button id="eighteen-bends" type="button">山路十八弯预设</button></div>
             <p class="panel-help">预设选择 5 档山路、25% 坡度及反复上下山，保留有效爬升范围；点击下方应用后生成。</p>
             <label for="road-width">车行道宽度</label>

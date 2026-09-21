@@ -100,7 +100,7 @@ test('keeps exploration available when audio initialization fails', async ({ pag
 });
 
 test('shows bridge and railway scenery while retaining the active route', async ({ page }) => {
-  await page.goto('/?seed=CLOUD-ROAD-001');
+  await page.goto('/?seed=VALLEY-28');
   await page.locator('#terrain-kind').selectOption('forest');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
   await expect(page.locator('[data-metric="Landscape"]')).toHaveText('森林山谷');

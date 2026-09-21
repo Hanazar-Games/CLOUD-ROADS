@@ -18,11 +18,11 @@ test('validates climb ranges, applies the eighteen-bend preset and restores natu
   await expect(min).toBeDisabled();
   await page.locator('#eighteen-bends').click();
   await min.fill('350'); await max.fill('750'); await apply.click();
-  await expect(page.locator('#settings-status')).toContainText('单次爬升 350–750 米');
+  await expect(page.locator('#settings-status')).toContainText('目标爬升 350–750 米');
   await expect(page.locator('[data-metric="Climb range"]')).toHaveText('350–750 m');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20000 });
-  await expect(page.locator('[data-metric="Cable towers"]')).toHaveText('0');
-  await expect(page.locator('[data-metric="Stay cables"]')).toHaveText('0');
+  await expect(page.locator('[data-metric="Arch bays"]')).toHaveText('0');
+  await expect(page.locator('[data-metric="Arch ribs"]')).toHaveText('0');
   await expect.poll(async () => Number(await page.locator('[data-metric="Bridge piers"]').textContent())).toBeGreaterThan(0);
   await page.locator('#seed').fill('CLIMB-OPTIONS');
   await page.getByRole('button', { name: '加载种子' }).click();

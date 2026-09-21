@@ -8,11 +8,11 @@ import type { RoadTerrain } from '../road/RoadGenerator';
 import type { BridgeSpan } from './BridgeDetector';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
-import { bridgeSpacing, bridgeTier } from './BridgeProfile';
+import { ARCH_HEIGHT, BRIDGE_SPACING, bridgeTier } from './BridgeProfile';
 import { BridgeDeck } from './BridgeDeck';
 import { createConcreteMaterial } from './ConcreteMaterial';
 import { isServiceAccess } from '../road/RoadProtection';
-import { cableAlignment, CABLE_SPACING, CableBridgeMesh } from './CableBridgeMesh';
+import { archAlignment, ArchBridgeMesh } from './ArchBridgeMesh';
 import type { ServiceArea } from '../service/ServicePlanner';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
@@ -23,7 +23,7 @@ export class BridgeMesh {
   private readonly materialOrigin = new Vector2();
   private readonly material = createConcreteMaterial(this.materialOrigin);
   readonly deck: BridgeDeck;
-  readonly cableBridges: CableBridgeMesh;
+  readonly archBridges: ArchBridgeMesh;
   readonly parapets: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly piers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly columns: InstancedMesh<BufferGeometry, MeshStandardMaterial>;
@@ -41,7 +41,7 @@ export class BridgeMesh {
   constructor(scene: Scene, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
     this.deck = new BridgeDeck(this.material, options);
-    this.cableBridges = new CableBridgeMesh(scene, this.material, options);
+    this.archBridges = new ArchBridgeMesh(scene, this.material, options);
     this.parapets = new InstancedMesh(this.geometry, this.material, CAPACITY * 3);
     this.piers = new InstancedMesh(this.geometry, this.material, CAPACITY * this.profile.centers.length * 2);
     const outline = new Shape();
@@ -70,7 +70,7 @@ export class BridgeMesh {
     }
   }
 
-  get pierCount(): number { return this.supports + this.cableBridges.towerCount; }
+  get pierCount(): number { return this.supports; }
 
   update(spans: readonly BridgeSpan[], corridor: RoadCorridor, terrain: RoadTerrain, version: number,
     originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
@@ -79,7 +79,7 @@ export class BridgeMesh {
       this.version = version;
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
-      this.cableBridges.reset(this.anchorX, this.anchorZ);
+      this.archBridges.reset(this.anchorX, this.anchorZ);
       this.parapets.count = this.piers.count = this.columns.count = this.roundPiers.count = this.details.count = this.railings.count = this.supports = 0;
       this.deck.rebuild(spans, this.anchorX, this.anchorZ);
       const active = new Set<string>();
@@ -124,37 +124,27 @@ export class BridgeMesh {
           }
         }
         if (!span.openStart) this.support(span.start, true, corridor, terrain);
-        let index = 1;
         const first = span.start.distance + (span.openStart ? 0 : 12), last = span.end.distance - (span.openEnd ? 0 : 12);
         const at = (distance: number) => {
-          const index = Math.max(1, span.samples.findIndex(s => s.distance >= distance));
+          let low = 1, high = span.samples.length - 1;
+          while (low < high) {
+            const middle = (low + high) >>> 1;
+            if (span.samples[middle].distance < distance) low = middle + 1; else high = middle;
+          }
+          const index = low;
           const a = span.samples[index - 1], b = span.samples[index];
           return this.between(a, b, (distance - a.distance) / (b.distance - a.distance));
         };
-        const towers: RoadSample[] = [];
-        if (span.depth > 200 && cableAlignment(span)) {
-          for (let distance = Math.ceil(first / CABLE_SPACING) * CABLE_SPACING; distance < last - 1e-6; distance += CABLE_SPACING) {
-            if (span.samples.some(s => Math.abs(s.distance - distance) <= CABLE_SPACING / 2 && heightAt(s) > 200)) towers.push(at(distance));
+        let previous: RoadSample | undefined;
+        for (let distance = Math.ceil(first / BRIDGE_SPACING) * BRIDGE_SPACING; distance < last - 1e-6; distance += BRIDGE_SPACING) {
+          const point = at(distance), clear = !corridor.crossesBelow(point, this.profile.outerHalfWidth + 12);
+          if (clear) this.support(point, false, corridor, terrain);
+          if (previous && clear && archAlignment([previous, point]) && heightAt(previous) > ARCH_HEIGHT && heightAt(point) > ARCH_HEIGHT) {
+            const bay = [previous, ...Array.from({ length: 15 }, (_, i) => at(distance - BRIDGE_SPACING * (1 - (i + 1) / 16))), point];
+            if (archAlignment(bay) && bay.every(s => heightAt(s) > ARCH_HEIGHT && !corridor.crossesBelow(s, this.profile.outerHalfWidth + 12)))
+              this.archBridges.add(bay);
           }
-          if (!towers.length && !span.openStart && !span.openEnd) towers.push(at((first + last) / 2));
-        }
-        for (let i = towers.length - 1; i >= 0; i--) {
-          if (corridor.crossesBelow(towers[i], this.profile.outerHalfWidth + 12)) {
-            const replacement = [-32, 32, -64, 64].map(offset => towers[i].distance + offset)
-              .filter(distance => distance > first && distance < last).map(at)
-              .find(point => !corridor.crossesBelow(point, this.profile.outerHalfWidth + 12));
-            if (!replacement) { towers.splice(i, 1); continue; }
-            towers[i] = replacement;
-          }
-          this.cableBridges.add(towers[i], span, terrain);
-        }
-        for (let distance = Math.ceil(first / 48) * 48; distance < last - 1e-6; distance += 48) {
-          while (span.samples[index].distance < distance) index++;
-          const a = span.samples[index - 1], b = span.samples[index];
-          const point = this.between(a, b, (distance - a.distance) / (b.distance - a.distance));
-          if (towers.some(tower => Math.abs(tower.distance - distance) <= CABLE_SPACING / 2)) continue;
-          if (distance % bridgeSpacing(heightAt(point)) !== 0) continue;
-          this.support(point, false, corridor, terrain);
+          previous = clear ? point : undefined;
         }
         if (!span.openEnd) this.support(span.end, true, corridor, terrain);
       }
@@ -168,7 +158,7 @@ export class BridgeMesh {
       }
     }
     this.materialOrigin.set(originX % 4096, originZ % 4096);
-    this.cableBridges.update(originX, originZ, nearRoute, changed);
+    this.archBridges.update(originX, originZ, nearRoute, changed);
     this.deck.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
     this.deck.visible = nearRoute && this.deck.geometry.drawRange.count > 0;
     for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) {
@@ -203,8 +193,8 @@ export class BridgeMesh {
     const deckWidth = this.profile.halfWidth * 2 + 0.8;
     const height = y - ground(x, z), tier = bridgeTier(height), tall = !abutment && tier > 0;
     const round = !abutment && tier === 0 && Math.round(sample.distance / 48) % 2 === 1;
-    const width = abutment ? deckWidth : Math.min(deckWidth * (tier === 2 ? 0.58 : 0.48), Math.max(tier === 2 ? 3.2 : 2.4, height * (tier === 2 ? 0.024 : 0.016)));
-    const separation = tall ? deckWidth * (tier === 2 ? 0.31 : 0.27) : round ? deckWidth * 0.22 : 0;
+    const width = abutment ? deckWidth : 2.2 + Math.sqrt(Math.max(0, height)) * 0.32;
+    const separation = round ? deckWidth * 0.22 : 0;
     const footing = width + separation * 2 + 2;
     let bottom = Math.min(ground(x, z), y - 5);
     for (const dx of [-footing / 2, footing / 2]) for (const dz of [-footing / 2, footing / 2]) bottom = Math.min(bottom, ground(x + dx, z + dz));
@@ -212,15 +202,12 @@ export class BridgeMesh {
     const base = bottom + 2;
     this.box(this.piers, x, bottom + 1.5, z, footing, 3, footing);
     const upright = { ...sample, grade: 0, bank: 0 }, verticalFrame = roadFrame(upright), { right, normal } = roadFrame(sample);
-    for (const offset of tall || round ? [-separation, separation] : [0]) {
+    for (const offset of round ? [-separation, separation] : [0]) {
       const dx = verticalFrame.right.x * offset, dz = verticalFrame.right.z * offset;
       const top = y - (4.65 + normal.x * dx + normal.z * dz) / normal.y
         + (Math.abs(normal.x) + Math.abs(normal.z)) * width / (2 * normal.y) + 0.02;
       this.box(round ? this.roundPiers : this.columns, x + dx, (base + top) / 2, z + dz, width, top - base, abutment ? 4 : width, upright);
     }
-    const bracing = tier === 2 ? 28 : 38;
-    if (tall) for (let level = base + bracing; level < y - 22.65; level += bracing) this.box(this.piers,
-      x, level, z, separation * 2 + width * 0.75, tier === 2 ? 2.2 : 1.5, width * 0.85, upright);
     this.box(this.piers, x - normal.x * 4.05, y - normal.y * 4.05, z - normal.z * 4.05,
       Math.max(deckWidth, separation * 2 + width * 0.7 + 1), 1.2, tier === 2 ? 6 : 4, sample);
     for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
@@ -277,7 +264,7 @@ export class BridgeMesh {
   }
 
   dispose(): void {
-    this.cableBridges.dispose();
+    this.archBridges.dispose();
     this.deck.removeFromParent(); this.deck.geometry.dispose();
     for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) { mesh.removeFromParent(); mesh.dispose(); }
     this.heights.clear(); this.railings.material.dispose();

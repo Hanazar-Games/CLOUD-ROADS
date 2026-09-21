@@ -22,7 +22,7 @@ const load = (world: World, camera: PerspectiveCamera) => {
 };
 
 it('streams a reproducible valley crossing and keeps its viewing control safe during loading', () => {
-  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest' });
+  const scene = new Scene(), world = new World(scene, 'VALLEY-1', { ...DEFAULT_OPTIONS, terrain: 'forest' });
   const camera = new PerspectiveCamera(); world.resetCamera(camera);
   expect(world.inspectCrossing(camera)).toBeUndefined();
   load(world, camera);

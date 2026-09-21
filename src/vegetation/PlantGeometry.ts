@@ -22,6 +22,29 @@ function crown(radius: number, color: string): BufferGeometry {
   return geometry;
 }
 
+function leaf(height: number, width: number, bend: number, color: string): BufferGeometry {
+  const vertices: number[] = [], indices: number[] = [], colors: number[] = [], base = new Color(color);
+  for (let row = 0; row < 3; row++) {
+    const t = row / 2, half = width * (row === 1 ? 0.5 : row === 0 ? 0.18 : 0.015);
+    for (const side of [-1, 0, 1]) {
+      vertices.push(side * half, height * t, bend * t * t + (side === 0 ? width * 0.15 * Math.sin(t * Math.PI) : 0));
+      const tint = base.clone().multiplyScalar(0.72 + t * 0.32 + (side === 0 ? 0.06 : 0));
+      colors.push(tint.r, tint.g, tint.b);
+    }
+  }
+  for (let row = 0; row < 2; row++) for (let col = 0; col < 2; col++) {
+    const a = row * 3 + col, b = a + 1, c = a + 3, d = c + 1;
+    indices.push(a, b, c, b, d, c, c, b, a, c, d, b);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(vertices), 3));
+  geometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
+  geometry.setAttribute('uv', new BufferAttribute(new Float32Array(vertices.length / 3 * 2), 2));
+  geometry.setIndex(indices);
+  const faces = geometry.toNonIndexed(); geometry.dispose(); faces.computeVertexNormals();
+  return faces;
+}
+
 export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant' = 'near'): BufferGeometry {
   let pieces: BufferGeometry[];
   if (kind === 'bare') {
@@ -83,6 +106,12 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
     pieces = [colored(new IcosahedronGeometry(1.2, 0).scale(1, 0.7, 1).translate(0, 0.7, 0), '#ffffff'),
       colored(new IcosahedronGeometry(0.85, 0).scale(1, 0.8, 1).translate(0.8, 0.5, 0.4), '#d4dfbd'),
       colored(new IcosahedronGeometry(0.8, 0).scale(1, 0.75, 1).translate(-0.6, 0.5, -0.6), '#c0cda9')];
+    for (let i = 0; i < 5; i++) {
+      const angle = i * 2.4;
+      pieces.push(colored(new CylinderGeometry(0.025, 0.07, 1.1, 4).rotateZ(0.5).rotateY(angle).translate(0, 0.45, 0), '#827654'));
+      for (let j = 0; j < 3; j++) pieces.push(leaf(0.3, 0.14, 0.1, j % 2 ? '#dee6c7' : '#aebf93')
+        .rotateZ(0.8 + j * 0.2).rotateY(angle + j).translate(Math.cos(angle) * 0.8, 0.65 + j * 0.17, Math.sin(angle) * 0.8));
+    }
   } else if (kind === 'rock') {
     pieces = [crown(1.75, '#c1c0ab').scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0),
       colored(new IcosahedronGeometry(0.65, 0).scale(1, 0.7, 1).translate(1.3, 0.25, 0.7), '#989e8e')];
@@ -100,41 +129,35 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       pieces.push(colored(new CylinderGeometry(0.013, 0.025, h, 3).translate(x, h / 2, z), '#668246'));
       for (let j = 0; j < 4; j++) pieces.push(colored(new IcosahedronGeometry(0.085 - j * 0.012, 0).scale(1, 1.35, 1)
         .translate(x, h - 0.18 + j * 0.07, z), i % 2 ? '#b8a3ce' : '#817bb1'));
-      for (const side of [-1, 1]) pieces.push(colored(new ConeGeometry(0.09, 0.3, 3).rotateZ(side * 0.8).rotateY(angle)
-        .translate(x + side * 0.05, 0.22, z), '#829855'));
+      for (const side of [-1, 1]) pieces.push(leaf(0.3, 0.09, 0.06, '#829855').rotateZ(side * 0.8).rotateY(angle)
+        .translate(x + side * 0.02, 0.18, z));
     }
   } else if (kind === 'meadow' || kind === 'flowers') {
-    const vertices: number[] = [];
+    pieces = [];
     for (let i = 0; i < (kind === 'flowers' ? 8 : 22); i++) {
       const angle = i * 2.4, radius = 0.18 + (i % 4) * 0.15, x = Math.sin(angle) * radius, z = Math.cos(angle) * radius;
-      const h = 0.24 + (i % 5) * 0.065, dx = Math.cos(angle), dz = -Math.sin(angle);
-      const a = [x - dx * 0.045, 0, z - dz * 0.045], b = [x + dx * 0.045, 0, z + dz * 0.045];
-      const c = [x + dx * 0.025, h * 0.6, z + dz * 0.025], d = [x - dx * 0.07, h, z - dz * 0.07];
-      vertices.push(...a, ...b, ...c, ...b, ...a, ...c, ...a, ...c, ...d, ...c, ...a, ...d);
+      const h = 0.24 + (i % 5) * 0.065;
+      pieces.push(leaf(h, 0.075, 0.08 + i % 3 * 0.04, i % 3 ? '#71954b' : '#96a65b').rotateY(angle).translate(x, 0, z));
     }
-    const blades = new BufferGeometry(); blades.setAttribute('position', new BufferAttribute(new Float32Array(vertices), 3)); blades.computeVertexNormals();
-    blades.setAttribute('uv', new BufferAttribute(new Float32Array(vertices.length / 3 * 2), 2));
-    pieces = [colored(blades, '#71954b')];
     if (kind === 'flowers') for (let i = 0; i < 4; i++) {
       const x = Math.sin(i * 2.4) * 0.42, z = Math.cos(i * 2.4) * 0.42, height = 0.35 + i * 0.075;
       pieces.push(colored(new CylinderGeometry(0.012, 0.02, height, 3).translate(x, height / 2, z), '#668246'));
       for (let petal = 0; petal < 5; petal++) {
         const angle = petal * Math.PI * 2 / 5;
-        pieces.push(colored(new IcosahedronGeometry(0.08, 0).scale(1, 0.35, 1.6).rotateY(angle)
-          .translate(x + Math.sin(angle) * 0.07, height, z + Math.cos(angle) * 0.07), ['#f2e5c5', '#e6ba48', '#b3a3d2', '#eee7d4'][i]));
+        pieces.push(leaf(0.16, 0.11, 0.025, ['#f2e5c5', '#e6ba48', '#b3a3d2', '#eee7d4'][i])
+          .rotateX(Math.PI / 2 - 0.2).rotateY(angle).translate(x, height, z));
       }
       pieces.push(colored(new IcosahedronGeometry(0.037, 0).translate(x, height + 0.02, z), '#b48b31'));
+      for (const side of [-1, 1]) pieces.push(leaf(0.18, 0.07, 0.045, '#829855')
+        .rotateZ(side * 0.9).rotateY(i * 2.4).translate(x, height * 0.45, z));
+      pieces.push(colored(new ConeGeometry(0.038, 0.06, 5).rotateX(Math.PI).translate(x, height - 0.025, z), '#668246'));
     }
   } else {
-    const vertices: number[] = [];
+    pieces = [];
     for (let i = 0; i < 7; i++) {
       const angle = i * 2.4, x = Math.sin(angle) * 0.52, z = Math.cos(angle) * 0.52, h = 0.55 + (i % 3) * 0.18;
-      const a = [x - 0.1, 0.08, z], b = [x + 0.1, 0.08, z], c = [x + Math.cos(angle) * 0.2, h, z + Math.sin(angle) * 0.18];
-      vertices.push(...a, ...b, ...c, ...b, ...a, ...c);
+      pieces.push(leaf(h, 0.13, 0.18 + i % 3 * 0.08, '#ffffff').rotateY(angle).translate(x, 0, z));
     }
-    const blades = new BufferGeometry(); blades.setAttribute('position', new BufferAttribute(new Float32Array(vertices), 3)); blades.computeVertexNormals();
-    blades.setAttribute('uv', new BufferAttribute(new Float32Array(vertices.length / 3 * 2), 2));
-    pieces = [colored(blades, '#ffffff')];
   }
   if (detail === 'near' && (kind === 'pine' || kind === 'broadleaf' || kind === 'autumn')) for (let i = 0; i < 4; i++) {
     const angle = i * 2.4;

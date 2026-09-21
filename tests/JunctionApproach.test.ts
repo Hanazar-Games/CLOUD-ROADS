@@ -6,7 +6,7 @@ import { RoadNetwork } from '../src/road/RoadNetwork';
 import { HeightFunction } from '../src/terrain/HeightFunction';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 
-it.each([50, 100, 300, 900, 2000])('resumes %i m climb cycles after a highway exit without overshooting and getting stuck', gain => {
+it.each([50, 100, 300, 900, 2000])('keeps flat highway exits grounded even with a %i m climb target', gain => {
   const generator = new RoadGenerator('short-cycles', { sample: () => 100 }, { ...DEFAULT_OPTIONS,
     roadType: 'highway', routeStyle: 0, elevationMode: 'cycles', maxGrade: 0.4, climbMin: gain, climbMax: gain });
   let point = generator.start, minimum = Infinity, maximum = -Infinity;
@@ -15,14 +15,14 @@ it.each([50, 100, 300, 900, 2000])('resumes %i m climb cycles after a highway ex
     for (const t of [0, 0.5, 1]) {
       const sample = segment.sample(t);
       expect(sample.position.y).toBeGreaterThanOrEqual(100.75);
-      expect(sample.position.y).toBeLessThanOrEqual(101.25 + gain);
+      expect(sample.position.y).toBeLessThanOrEqual(101.25);
       if (sample.distance > 22000 && sample.distance < 30000) {
         minimum = Math.min(minimum, sample.position.y); maximum = Math.max(maximum, sample.position.y);
       }
     }
     point = segment.end;
   }
-  expect(maximum - minimum).toBeGreaterThan(45);
+  expect(maximum - minimum).toBeLessThan(0.1);
 });
 
 it.each([
