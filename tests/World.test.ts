@@ -21,6 +21,22 @@ const load = (world: World, camera: PerspectiveCamera) => {
   throw new Error('World did not finish its terrain and preloading corridor');
 };
 
+it('streams a reproducible valley crossing and keeps its viewing control safe during loading', () => {
+  const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest' });
+  const camera = new PerspectiveCamera(); world.resetCamera(camera);
+  expect(world.inspectCrossing(camera)).toBeUndefined();
+  load(world, camera);
+  expect(world.crossings.length).toBeGreaterThan(0);
+  expect(world.crossings.length).toBeLessThanOrEqual(3);
+  const site = world.crossings[0];
+  expect(world.inspectCrossing(camera)).toBeDefined();
+  load(world, camera);
+  expect(world.crossings.some(candidate => candidate.id === site.id)).toBe(true);
+  world.resetCamera(camera); load(world, camera);
+  expect(world.crossings[0].samples).toEqual(site.samples);
+  world.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it('preloads along the driving direction even when the camera looks the other way', () => {
   const world = new World(new Scene(), 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
   world.resetCamera(camera);

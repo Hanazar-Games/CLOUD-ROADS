@@ -4,6 +4,22 @@ import { GameLoop } from '../src/game/GameLoop';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GameLoop', () => {
+  it('caps work at 30 fps without slowing simulation and resets when the cap changes', () => {
+    let callback: FrameRequestCallback = () => {};
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callback = cb; return 1; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const update = vi.fn(), loop = new GameLoop(update);
+    loop.setFrameLimit(30);
+    loop.start();
+    for (let frame = 0; frame <= 120; frame++) callback(frame * 1000 / 120);
+    expect(update).toHaveBeenCalledTimes(31);
+    expect(update.mock.calls.reduce((sum, [dt]) => sum + dt, 0)).toBeCloseTo(1);
+    loop.setFrameLimit(0);
+    callback(1010); callback(1020);
+    expect(update).toHaveBeenCalledTimes(33);
+    loop.stop();
+  });
+
   it('starts once, clamps background-tab gaps, and resets timing after restart', () => {
     let callback: FrameRequestCallback = () => {};
     const request = vi.fn((cb: FrameRequestCallback) => { callback = cb; return 1; });

@@ -96,10 +96,32 @@
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
         <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
         <details class="world-options" open>
-          <summary>渲染距离</summary>
+          <summary>性能与画质</summary>
+          <label for="graphics-preset">画质预设</label>
+          <select id="graphics-preset"><option value="economy">节能 · 降低 GPU 负载</option><option value="balanced" selected>均衡</option><option value="quality">精细 · 更远视距</option><option value="custom" disabled>自定义</option></select>
+          <label for="render-scale">3D 渲染比例</label>
+          <select id="render-scale"><option value="0.5">50%</option><option value="0.65">65%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select>
+          <label for="frame-limit">帧率上限</label>
+          <select id="frame-limit"><option value="30">30 FPS · 节能</option><option value="60" selected>60 FPS</option><option value="0">跟随屏幕刷新率</option></select>
+          <label for="shadow-quality">山体投影精度</label>
+          <select id="shadow-quality"><option value="0">关闭</option><option value="1024">标准 · 1024</option><option value="2048" selected>精细 · 2048</option></select>
+          <label for="antialiasing">边缘抗锯齿</label>
+          <select id="antialiasing"><option value="0">关闭</option><option value="2" selected>2×</option><option value="4">4×</option></select>
           <label for="view-distance">周围地形范围</label>
           <select id="view-distance" aria-describedby="view-distance-help"><option value="6">约 1.5 公里 · 轻量</option><option value="8" selected>约 2 公里 · 标准</option><option value="12">约 3 公里 · 开阔</option><option value="16">约 4 公里 · 远景</option></select>
           <p class="panel-help" id="view-distance-help">即时切换，保留当前位置。附近地形优先加载，后台提前准备前方地块与细节；远离的区域会回收。更远的视距需要更多显存，云雾仍会影响能见度。</p>
+          <p id="graphics-status" class="panel-help" role="status"></p>
+          <p class="panel-help">渲染比例只影响 3D 画面，文字保持清晰。预设同时调整投影、抗锯齿、云层和视距；帧率上限独立保留。切到后台后停止渲染，返回时继续。</p>
+        </details>
+        <details class="world-options">
+          <summary>声音与音乐</summary>
+          <button id="audio-toggle" type="button" aria-pressed="false">开启声音</button>
+          <label class="speed-label" for="sfx-volume">驾驶与环境音 <output id="sfx-volume-value">60%</output></label>
+          <input id="sfx-volume" type="range" min="0" max="100" value="60" />
+          <label class="speed-label" for="music-volume">背景音乐 <output id="music-volume-value">25%</output></label>
+          <input id="music-volume" type="range" min="0" max="100" value="25" />
+          <p id="audio-status" class="panel-help" role="status">声音未开启</p>
+          <p class="panel-help">轻环境音乐、引擎、风雨、脚步、雨刮与转向灯音效。暂停、打开公告或离开窗口时静音；设置只在本次页面内保留。</p>
         </details>
         <details class="world-options" open>
           <summary>天气与时间</summary>
@@ -121,6 +143,8 @@
         <div class="actions road-actions"><button id="tunnel-view" type="button" disabled>隧道入口</button><button id="lights-view" type="button" disabled>灯光路段</button></div>
         <div class="actions road-actions"><button id="lights-toggle" type="button" aria-pressed="true">路灯</button></div>
         <div class="actions road-actions"><button id="junction-view" type="button" disabled>下一岔路</button></div>
+        <div class="actions road-actions"><button id="crossing-view" type="button" disabled>桥下交通景观</button></div>
+        <p class="panel-help">深谷大桥下可遇到山谷公路或铁路高架，两端连接山体隧道。它们是沿途景观，驾驶路线请沿主路和岔路探索。</p>
         <p class="panel-help">起点前后都有道路；驶入岔路后，沿所选路线继续生成。高速路段可遇到环形立交，跟随右侧出口进入。</p>
         <div class="actions road-actions"><button id="service-view" type="button">下一服务区</button></div>
         <div class="actions road-actions"><button id="pass-view" type="button">下一垭口</button><span id="route-stage">山谷</span></div>

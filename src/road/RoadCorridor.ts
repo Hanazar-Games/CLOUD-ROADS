@@ -8,12 +8,13 @@ import { roadProfile } from './RoadProfile';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
 import { ServiceTerrain, type ServiceGround } from '../service/ServiceTerrain';
 
-interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number; tunnel?: boolean; routeId?: string; distance?: number }
+interface CorridorPoint { x: number; y: number; z: number; nx: number; ny: number; nz: number; ground: number; tunnel?: boolean; routeId?: string; distance?: number; halfWidth?: number }
 export type CorridorEdge = RoadEdge<CorridorPoint>;
 const RADIUS = 64;
 
 export class RoadCorridor {
   private readonly index: RoadIndex;
+  private readonly signatures = new Map<string, string>();
   readonly roadHalfWidth: number;
   private readonly bedHalfWidth: number;
   readonly services: ServiceTerrain;
@@ -46,6 +47,18 @@ export class RoadCorridor {
   }
 
   needsDetail(cx: number, cz: number): boolean { return this.forChunk(cx, cz, this.bedHalfWidth + 24).length > 0 || this.services.forChunk(cx, cz).length > 0; }
+
+  signature(cx: number, cz: number): string {
+    const key = `${cx},${cz}`;
+    let value = this.signatures.get(key);
+    if (value === undefined) {
+      value = JSON.stringify([this.forChunk(cx, cz).map(edge => JSON.stringify(edge)).sort(),
+        this.services.forChunk(cx, cz).map(site => JSON.stringify(site)).sort()]);
+      this.signatures.set(key, value);
+      if (this.signatures.size > 2048) this.signatures.delete(this.signatures.keys().next().value!);
+    }
+    return value;
+  }
 
   serviceCover(x: number, z: number): boolean { return this.services.contains(x, z); }
 
@@ -86,11 +99,12 @@ export class RoadCorridor {
       }
     }
     const { index, t, distanceSquared } = nearest, { a, b } = this.edges[index];
+    const roadHalfWidth = a.halfWidth ?? this.roadHalfWidth, bedHalfWidth = roadHalfWidth + 6.8;
     const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
     const nx = a.nx + (b.nx - a.nx) * t, ny = a.ny + (b.ny - a.ny) * t, nz = a.nz + (b.nz - a.nz) * t;
     const surface = a.y + (b.y - a.y) * t - (nx * (x - px) + nz * (z - pz)) / ny - 0.08;
-    const width = Math.min(RADIUS, this.bedHalfWidth + 18 + Math.min(12, Math.abs(natural - surface) * 0.65));
-    const blend = Math.max(0, Math.min(1, (Math.sqrt(distanceSquared) - this.bedHalfWidth) / (width - this.bedHalfWidth)));
+    const width = Math.min(RADIUS, bedHalfWidth + 18 + Math.min(12, Math.abs(natural - surface) * 0.65));
+    const blend = Math.max(0, Math.min(1, (Math.sqrt(distanceSquared) - bedHalfWidth) / (width - bedHalfWidth)));
     const ground = a.ground + (b.ground - a.ground) * t;
     const bed = surface - (1 - ground) * 3.2;
     const height = natural + Math.min(5, bed - natural) * (1 - blend * blend * (3 - 2 * blend)) * (natural > bed ? 1 : ground);

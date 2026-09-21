@@ -23,6 +23,8 @@ import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule
 import { ServiceMesh } from '../service/ServiceMesh';
 import { padPoint } from '../service/ServiceTerrain';
 import { RoadSigns } from '../road/RoadSigns';
+import { clearCrossing, planCrossings, type Crossing } from '../road/Crossings';
+import { CrossingMesh } from '../road/CrossingMesh';
 
 export interface GroundSample {
   height: number;
@@ -43,6 +45,9 @@ export class World {
   readonly furniture: RoadFurniture;
   readonly serviceMesh: ServiceMesh;
   readonly signs: RoadSigns;
+  readonly crossingMesh: CrossingMesh;
+  crossings: Crossing[] = [];
+  private readonly crossingCache = new Map<string, Crossing[]>();
   services: readonly ServiceArea[] = [];
   serviceView: { heading: number; pitch: number } | undefined;
   passes: readonly RoadSample[] = [];
@@ -75,6 +80,7 @@ export class World {
     this.furniture = new RoadFurniture(scene, seed, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.signs = new RoadSigns(scene, options);
+    this.crossingMesh = new CrossingMesh(scene, seed, options);
   }
 
   resetCamera(camera: PerspectiveCamera): void {
@@ -123,6 +129,7 @@ export class World {
       mesh.mesh.material.roughness = this.roadMesh.mesh.material.roughness;
     }
     this.bridgeMesh.update(this.renderBridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
+    this.crossingMesh.update(this.crossings, this.corridor, this.height, this.origin.x, this.origin.z, nearRoute);
     this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
     this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z);
@@ -178,9 +185,31 @@ export class World {
       remaining -= segments.length;
     }
     this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, this.renderServices.map(site => site.ground));
+    const candidates: Crossing[] = [], keys = new Set<string>();
+    for (const route of this.renderRoutes) {
+      const key = `${route.id}:${route.source.samples[0]?.distance}:${route.source.samples.at(-1)?.distance}`;
+      keys.add(key);
+      let crossings = this.crossingCache.get(key);
+      if (!crossings) { crossings = planCrossings(this.seed, route.source.samples, this.height, new RoadCorridor([])); this.crossingCache.set(key, crossings); }
+      candidates.push(...crossings);
+    }
+    for (const key of this.crossingCache.keys()) if (!keys.has(key)) this.crossingCache.delete(key);
+    this.crossings = candidates.filter(site => clearCrossing(site, this.corridor)).sort((a, b) => Math.hypot(a.anchor.position.x - x, a.anchor.position.z - z) - Math.hypot(b.anchor.position.x - x, b.anchor.position.z - z))
+      .filter((site, i, all) => all.slice(0, i).every(other => Math.hypot(site.anchor.position.x - other.anchor.position.x, site.anchor.position.z - other.anchor.position.z) > 2000)).slice(0, 3);
+    this.corridor = new RoadCorridor([...this.corridor.edges, ...this.crossings.flatMap(site => site.edges)], this.options, this.renderServices.map(site => site.ground));
     for (const [id, mesh] of this.extraRoads) if (!this.renderRoutes.slice(1).some(route => route.id === id)) { mesh.dispose(); this.extraRoads.delete(id); }
   }
   get serviceSearchProgress(): number | null { return this.scout?.kind === 'service' ? this.scout.progress : null; }
+
+  inspectCrossing(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
+    const site = this.crossings[0];
+    if (!this.roadReady || !site) return undefined;
+    const p = site.anchor.position, heading = site.anchor.heading + Math.PI / 4;
+    const x = p.x + Math.cos(heading) * 180, z = p.z + Math.sin(heading) * 180;
+    const y = Math.max(p.y + 65, this.height.sample(x, z) + 40);
+    camera.position.set(x - this.origin.x, y, z - this.origin.z);
+    return { heading: Math.atan2(p.x - x, z - p.z), pitch: -Math.atan2(y - p.y + 20, 180) };
+  }
   get passSearchProgress(): number | null { return this.scout?.kind === 'pass' ? this.scout.progress : null; }
   get routeStage(): string {
     if (this.network.active.id !== 'root') return this.network.active.id === 'back' ? '反向路线' : '岔路探索';
@@ -351,5 +380,6 @@ export class World {
     this.tunnelMesh.dispose(); this.furniture.dispose();
     this.serviceMesh.dispose(); this.scout = undefined;
     this.signs.dispose();
+    this.crossingMesh.dispose(); this.crossingCache.clear();
   }
 }

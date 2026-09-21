@@ -25,6 +25,35 @@ class DeferredTerrain implements TerrainBackend {
 }
 
 describe('ChunkManager lifecycle', () => {
+  it('rejects terrain generated before a local road change, even without moving', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    const forward = { x: 0, z: -1 };
+    manager.update(128, 128, forward, emptyCorridor);
+    const point = { x: 0, y: 20, z: 0, nx: 0, ny: 1, nz: 0, ground: 1 };
+    const changed = new RoadCorridor([{ a: point, b: { ...point, x: 256 } }]);
+    manager.update(128, 128, forward, changed);
+    await backend.complete();
+    manager.update(128, 128, forward, changed);
+    expect(manager.stats.completed).toBe(0);
+    expect(backend.jobs.some(job => job.request.key === '0,0')).toBe(true);
+    manager.dispose();
+  });
+
+  it('refreshes only affected terrain and reuses equivalent corridor snapshots', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.setViewRadius(6);
+    const forward = { x: 0, z: -1 };
+    for (let frame = 0; frame < 220; frame++) { manager.update(128, 128, forward, emptyCorridor); await backend.complete(); }
+    const completed = manager.stats.completed;
+    const point = { x: 100, y: 20, z: 100, nx: 0, ny: 1, nz: 0, ground: 1 };
+    const changed = new RoadCorridor([{ a: point, b: { ...point, x: 150 } }]);
+    for (let frame = 0; frame < 12; frame++) { manager.update(128, 128, forward, changed); await backend.complete(); }
+    expect(manager.stats.completed - completed).toBe(1);
+    manager.update(128, 128, forward, new RoadCorridor([...changed.edges]));
+    expect(backend.jobs).toHaveLength(0);
+    manager.dispose();
+  }, 20000);
+
   it('prepares the next view while stationary and consumes it without regenerating visible terrain', async () => {
     const backend = new DeferredTerrain(), scene = new Scene(), manager = new ChunkManager(scene, 'test', backend);
     manager.setViewRadius(6);

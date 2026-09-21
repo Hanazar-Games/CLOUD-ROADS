@@ -8,22 +8,25 @@ import { VegetationMesh } from '../vegetation/VegetationMesh';
 import { createTerrainMaterial } from '../terrain/TerrainMaterial';
 
 const POOL_LIMITS: Record<TerrainCells, number> = { 64: 25, 16: 56, 8: 208 };
+interface TerrainRequest extends ChunkRequest { signature: string }
+const matches = (a: TerrainRequest | undefined, b: TerrainRequest): boolean => a?.cells === b.cells && a.signature === b.signature;
 
 export class ChunkManager {
   private readonly terrainOrigin = new Vector2();
   private readonly material = createTerrainMaterial(this.terrainOrigin);
   private readonly active = new Map<string, TerrainChunk>();
+  private readonly applied = new Map<string, TerrainRequest>();
   private readonly pooled: Record<TerrainCells, TerrainChunk[]> = { 8: [], 16: [], 64: [] };
   private readonly allocated = new Set<TerrainChunk>();
-  private readonly pending = new Map<string, TerrainCells>();
-  private readonly ready: { request: ChunkRequest; data: TerrainData }[] = [];
-  private readonly prefetched = new Map<string, { request: ChunkRequest; data: TerrainData }>();
-  private ahead = new Map<string, ChunkRequest>();
-  private desired = new Map<string, ChunkRequest>();
-  private plan: ChunkRequest[] = [];
-  private queue: ChunkRequest[] = [];
+  private readonly pending = new Map<string, TerrainRequest>();
+  private readonly ready: { request: TerrainRequest; data: TerrainData }[] = [];
+  private readonly prefetched = new Map<string, { request: TerrainRequest; data: TerrainData }>();
+  private ahead = new Map<string, TerrainRequest>();
+  private desired = new Map<string, TerrainRequest>();
+  private plan: TerrainRequest[] = [];
+  private queue: TerrainRequest[] = [];
   private center = '';
-  private plannedRoad = false;
+  private plannedRoad: RoadCorridor | null = null;
   private direction = NaN;
   private originX = 0;
   private originZ = 0;
@@ -46,9 +49,9 @@ export class ChunkManager {
       else if (chunk.cells === 16) medium++;
       else low++;
     }
-    const visiblePending = [...this.pending].filter(([key, cells]) => this.desired.get(key)?.cells === cells).length;
+    const visiblePending = [...this.pending].filter(([key, request]) => matches(this.desired.get(key), request)).length;
     return { active: this.active.size, target: (this.viewRadius * 2 + 1) ** 2, allocated: this.allocated.size, pooled: this.allocated.size - this.active.size,
-      pending: visiblePending + this.ready.length, queued: this.plan.filter((request) => this.active.get(request.key)?.cells !== request.cells).length,
+      pending: visiblePending + this.ready.length, queued: this.plan.filter((request) => !matches(this.applied.get(request.key), request)).length,
       prefetched: this.prefetched.size, preloading: this.pending.size - visiblePending,
       completed: this.completed, high, medium, low };
   }
@@ -57,36 +60,37 @@ export class ChunkManager {
     if (this.disposed) return;
     const center = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
     const direction = Math.round(Math.atan2(forward.x, -forward.z) * 4 / Math.PI);
-    if (center !== this.center || direction !== this.direction || corridor && !this.plannedRoad) {
+    if (center !== this.center || direction !== this.direction || corridor !== this.plannedRoad) {
       this.center = center;
-      this.direction = direction; this.plannedRoad = !!corridor;
-      this.plan = planChunks(x, z, forward, this.viewRadius);
-      if (corridor) for (const request of this.plan) if (corridor.needsDetail(request.x, request.z)) request.cells = 64;
+      this.direction = direction; this.plannedRoad = corridor;
+      const prepare = (requests: ChunkRequest[]): TerrainRequest[] => requests.map(request => ({ ...request,
+        cells: corridor?.needsDetail(request.x, request.z) ? 64 : request.cells, signature: corridor?.signature(request.x, request.z) ?? '' }));
+      this.plan = prepare(planChunks(x, z, forward, this.viewRadius));
       this.desired = new Map(this.plan.map((request) => [request.key, request]));
       const angle = direction * Math.PI / 4;
-      const next = corridor ? planChunks(x + Math.round(Math.sin(angle)) * CHUNK_SIZE, z - Math.round(Math.cos(angle)) * CHUNK_SIZE, forward, this.viewRadius) : [];
-      for (const request of next) if (corridor!.needsDetail(request.x, request.z)) request.cells = 64;
-      this.ahead = new Map(next.filter(request => this.desired.get(request.key)?.cells !== request.cells).slice(0, 128).map(request => [request.key, request]));
+      const next = corridor ? prepare(planChunks(x + Math.round(Math.sin(angle)) * CHUNK_SIZE, z - Math.round(Math.cos(angle)) * CHUNK_SIZE, forward, this.viewRadius)) : [];
+      this.ahead = new Map(next.filter(request => !matches(this.desired.get(request.key), request)).slice(0, 128).map(request => [request.key, request]));
       this.queue = [...this.plan, ...this.ahead.values()];
-      for (let i = this.ready.length - 1; i >= 0; i--) if (this.desired.get(this.ready[i].request.key)?.cells !== this.ready[i].request.cells) this.ready.splice(i, 1);
+      for (let i = this.ready.length - 1; i >= 0; i--) if (!matches(this.desired.get(this.ready[i].request.key), this.ready[i].request)) this.ready.splice(i, 1);
       for (const [key, result] of this.prefetched) {
-        if (this.desired.get(key)?.cells === result.request.cells) { this.ready.push(result); this.prefetched.delete(key); }
-        else if (this.ahead.get(key)?.cells !== result.request.cells) this.prefetched.delete(key);
+        if (matches(this.desired.get(key), result.request)) { this.ready.push(result); this.prefetched.delete(key); }
+        else if (!matches(this.ahead.get(key), result.request)) this.prefetched.delete(key);
       }
       for (const [key, chunk] of this.active) {
-        if (!this.desired.has(key)) { this.active.delete(key); this.vegetation.removeChunk(key); this.release(chunk); }
+        if (!this.desired.has(key)) { this.active.delete(key); this.applied.delete(key); this.vegetation.removeChunk(key); this.release(chunk); }
       }
     }
     const started = performance.now();
     let uploaded = 0;
     while (this.ready.length && uploaded < 2 && performance.now() - started < 2) {
       const result = this.ready.shift()!;
-      if (this.desired.get(result.request.key)?.cells !== result.request.cells) continue;
+      if (!matches(this.desired.get(result.request.key), result.request)) continue;
       const previous = this.active.get(result.request.key);
       if (previous) this.release(previous);
       const chunk = this.acquire(result.request.cells);
       chunk.apply(result.request, result.data, this.originX, this.originZ);
       this.active.set(result.request.key, chunk);
+      this.applied.set(result.request.key, result.request);
       this.vegetation.setChunk(result.request.key, result.request.x, result.request.z, result.data.vegetation);
       this.completed++;
       uploaded++;
@@ -96,14 +100,15 @@ export class ChunkManager {
     if (this.error || !corridor) return;
     for (const request of this.queue) {
       if (this.pending.size + this.ready.length >= this.backend.capacity) break;
-      if (this.active.get(request.key)?.cells === request.cells || this.pending.has(request.key) || this.prefetched.get(request.key)?.request.cells === request.cells
+      if (matches(this.applied.get(request.key), request) || this.pending.has(request.key) || matches(this.prefetched.get(request.key)?.request, request)
         || this.ready.some((result) => result.request.key === request.key)) continue;
-      this.pending.set(request.key, request.cells);
-      void this.backend.generate(request, this.seed, corridor.forChunk(request.x, request.z), corridor.services.forChunk(request.x, request.z)).then((data) => {
+      this.pending.set(request.key, request);
+      const chunkRequest: ChunkRequest = { key: request.key, x: request.x, z: request.z, cells: request.cells };
+      void this.backend.generate(chunkRequest, this.seed, corridor.forChunk(request.x, request.z), corridor.services.forChunk(request.x, request.z)).then((data) => {
         this.pending.delete(request.key);
         if (this.disposed) return;
-        if (this.desired.get(request.key)?.cells === request.cells) this.ready.push({ request, data });
-        else if (this.ahead.get(request.key)?.cells === request.cells && this.prefetched.size < 128) this.prefetched.set(request.key, { request, data });
+        if (matches(this.desired.get(request.key), request)) this.ready.push({ request, data });
+        else if (matches(this.ahead.get(request.key), request) && this.prefetched.size < 128) this.prefetched.set(request.key, { request, data });
       }, (error: unknown) => {
         this.pending.delete(request.key);
         if (!this.disposed) this.error = error instanceof Error ? error.message : String(error);
@@ -147,6 +152,7 @@ export class ChunkManager {
     this.vegetation.dispose();
     for (const chunk of this.allocated) chunk.dispose();
     this.active.clear();
+    this.applied.clear(); this.desired.clear(); this.plan = []; this.queue = []; this.plannedRoad = null;
     this.allocated.clear();
     this.pending.clear();
     this.ready.length = 0;

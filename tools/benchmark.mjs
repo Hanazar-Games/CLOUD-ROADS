@@ -8,6 +8,10 @@ try {
   const driving = process.argv.includes('--drive');
   const stationary = process.argv.includes('--stationary');
   await page.goto(process.argv.slice(2).find(arg => /^https?:/.test(arg)) || 'http://127.0.0.1:5173/?seed=CLOUD-ROAD-001');
+  for (const [flag, id] of [['quality', 'graphics-preset'], ['scale', 'render-scale'], ['fps', 'frame-limit']]) {
+    const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
+    if (value) await page.locator(`#${id}`).selectOption(value);
+  }
   if (process.argv.includes('--far')) await page.locator('#view-distance').selectOption('16');
   await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
   await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
@@ -23,6 +27,7 @@ try {
     if (route) await page.waitForFunction(style => document.querySelector('[data-metric="Route style"]')?.textContent === style,
       { 0: '全直道 · 零弯道', 1: '1 档 · 舒缓山路', 2: '2 档 · 蜿蜒山路', 3: '3 档 · 盘山折返', 4: '4 档 · 密集发卡弯', 5: '5 档 · 连续发卡弯' }[route]);
     if (highway) await page.waitForFunction(() => document.querySelector('[data-metric="Road layout"]')?.textContent === '双向四车道');
+    if (terrain) await page.waitForTimeout(300);
     await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
     await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
   }
@@ -58,8 +63,9 @@ try {
     return {
       renderer: extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
       resolution: `${canvas.width}×${canvas.height}`,
-      fps: Math.round(intervals.length * 1000 / intervals.reduce((a, b) => a + b)),
-      frameMs: { p50: sorted[Math.floor(sorted.length * 0.5)], p95: sorted[Math.floor(sorted.length * 0.95)], max: sorted.at(-1) },
+      fps: Number(document.querySelector('[data-metric="FPS"]').textContent),
+      displayRefreshFps: Math.round(intervals.length * 1000 / intervals.reduce((a, b) => a + b)),
+      displayFrameMs: { p50: sorted[Math.floor(sorted.length * 0.5)], p95: sorted[Math.floor(sorted.length * 0.95)], max: sorted.at(-1) },
       longTasksOver50ms: longTasks.filter((duration) => duration > 50),
       telemetry: Object.fromEntries([...document.querySelectorAll('[data-metric]')].map((node) => [node.dataset.metric, node.textContent])),
     };

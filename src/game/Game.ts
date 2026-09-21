@@ -13,6 +13,8 @@ import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { routeNames, terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
 import { WalkingSystem } from '../walking/WalkingSystem';
+import { graphicsPresets } from './GraphicsSettings';
+import { AudioSystem } from '../audio/AudioSystem';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -20,7 +22,7 @@ const cloudNames = { below: '云下', inside: '云中', above: '云上' };
 export class Game {
   private readonly initialSeed = startingSeed(location.search);
   private readonly canvas = element<HTMLCanvasElement>('world');
-  private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+  private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
   private readonly sky = new SkySystem(this.scene);
   private readonly weather = new WeatherSystem(new Scene());
@@ -40,6 +42,9 @@ export class Game {
   private hudTime = 0;
   private contextLost = false;
   private viewRadius = VIEW_RADIUS;
+  private renderScale = 1;
+  private readonly audio = new AudioSystem();
+  private windowFocused = true;
 
   constructor() {
     this.scene.background = this.sky.sun.haze;
@@ -54,8 +59,17 @@ export class Game {
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
+    this.clouds.target.samples = 2;
+    this.loop.setFrameLimit(60);
     this.resize();
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
+    element('audio-toggle').addEventListener('click', () => { this.audio.toggle(); this.syncAudioUI(); }, { signal: this.events.signal });
+    for (const [id, field] of [['sfx-volume', 'sfxVolume'], ['music-volume', 'musicVolume']] as const) element(id).addEventListener('input', () => {
+      const value = Number(element<HTMLInputElement>(id).value);
+      this.audio[field] = value / 100; element(`${id}-value`).textContent = `${value}%`;
+    }, { signal: this.events.signal });
+    window.addEventListener('blur', () => { this.windowFocused = false; this.audio.setActive(false); }, { signal: this.events.signal });
+    window.addEventListener('focus', () => { this.windowFocused = true; }, { signal: this.events.signal });
     this.input.onAction = (code) => {
       if (code === 'F3') this.debug.toggle();
       if (code === 'KeyP') this.setPaused(!this.paused);
@@ -71,7 +85,7 @@ export class Game {
       else { this.stopDriving(); this.walking.start(); }
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
-    for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
+    for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'crossing-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
       element(id).addEventListener('click', () => this.stopTravel(), { signal: this.events.signal });
     }
     element('debug-close').addEventListener('click', () => {
@@ -107,8 +121,8 @@ export class Game {
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('shadows').addEventListener('click', () => {
-      this.sky.light.castShadow = !this.sky.light.castShadow;
-      element('shadows').setAttribute('aria-pressed', String(this.sky.light.castShadow));
+      element<HTMLSelectElement>('shadow-quality').value = this.sky.light.castShadow ? '0' : '2048';
+      this.applyGraphics(); this.customGraphics();
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('seed-form').addEventListener('submit', (event) => {
@@ -161,6 +175,23 @@ export class Game {
       this.world.chunks.setViewRadius(radius);
       this.camera.far = Math.max(7000, radius * CHUNK_SIZE * 2);
       this.camera.updateProjectionMatrix();
+      this.customGraphics();
+    }, { signal: this.events.signal });
+    element('graphics-preset').addEventListener('change', () => {
+      const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
+      if (!preset) return;
+      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius]] as const)
+        element<HTMLSelectElement>(id).value = String(value);
+      this.setClouds(preset.clouds); this.applyGraphics();
+    }, { signal: this.events.signal });
+    for (const id of ['render-scale', 'shadow-quality', 'antialiasing']) element(id).addEventListener('change', () => {
+      this.applyGraphics(); this.customGraphics();
+    }, { signal: this.events.signal });
+    element('frame-limit').addEventListener('change', () => this.loop.setFrameLimit(Number(element<HTMLSelectElement>('frame-limit').value)), { signal: this.events.signal });
+    element('cloud-toggle').addEventListener('click', () => this.customGraphics(), { signal: this.events.signal });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { this.audio.setActive(false); this.loop.stop(); }
+      else if (!this.contextLost) this.loop.start();
     }, { signal: this.events.signal });
     element('pause').addEventListener('click', () => {
       this.setPaused(!this.paused);
@@ -173,6 +204,11 @@ export class Game {
       button.textContent = panel.hidden ? '展开面板' : '收起面板';
     }, { signal: this.events.signal });
     element('home').addEventListener('click', () => this.resetCamera(), { signal: this.events.signal });
+    element('crossing-view').addEventListener('click', () => {
+      const view = this.world.inspectCrossing(this.camera);
+      if (view) { this.flight.reset(view.heading, view.pitch); this.setPaused(false); }
+      this.canvas.focus();
+    }, { signal: this.events.signal });
     element('road-view').addEventListener('click', () => {
       const heading = this.world.inspectRoad(this.camera);
       if (heading !== undefined) { this.flight.reset(heading, -0.18); this.setPaused(false); }
@@ -240,6 +276,7 @@ export class Game {
     this.canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       this.contextLost = true;
+      this.audio.setActive(false);
       element<HTMLButtonElement>('retry-world').disabled = true;
       this.loop.stop();
       this.setError('图形上下文暂时丢失，正在等待浏览器恢复。');
@@ -249,7 +286,8 @@ export class Game {
       element<HTMLButtonElement>('retry-world').disabled = false;
       this.setError(this.world.chunks.error ? `地形生成失败，请重试当前世界。${this.world.chunks.error}` : null);
       if (this.input.enabled && !this.releaseNotes.open) this.canvas.focus();
-      this.loop.start();
+      this.resize();
+      if (!document.hidden) this.loop.start();
     }, { signal: this.events.signal });
     this.loop.start();
   }
@@ -288,6 +326,7 @@ export class Game {
   private setPaused(paused: boolean): void {
     this.paused = paused;
     this.input.clear();
+    if (paused) this.audio.setActive(false);
     element('pause').setAttribute('aria-pressed', String(paused));
     element('pause').textContent = paused ? '继续探索' : '暂停探索';
   }
@@ -302,6 +341,8 @@ export class Game {
   }
 
   private setClouds(enabled: boolean): void {
+    const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
+    if (preset && preset.clouds !== enabled) this.customGraphics();
     this.clouds.enabled = enabled;
     element('cloud-toggle').setAttribute('aria-pressed', String(enabled));
     element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留远景雾与所选天气。';
@@ -356,10 +397,38 @@ export class Game {
   private readonly resize = (): void => {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * this.renderScale);
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.clouds.resize(this.canvas.width, this.canvas.height);
+    element('graphics-status').textContent = `3D 画面 ${this.canvas.width} × ${this.canvas.height} · ${Math.round(this.renderScale * 100)}%`;
   };
+
+  private customGraphics(): void { element<HTMLSelectElement>('graphics-preset').value = 'custom'; }
+
+  private syncAudioUI(): void {
+    element('audio-toggle').setAttribute('aria-pressed', String(this.audio.enabled));
+    element('audio-toggle').textContent = this.audio.error ? '音频不可用' : this.audio.enabled ? '静音' : '开启声音';
+    element<HTMLButtonElement>('audio-toggle').disabled = !!this.audio.error;
+    element('audio-status').textContent = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.state === 'running' ? '声音已开启' : '声音已暂停');
+  }
+
+  private applyGraphics(): void {
+    this.renderScale = Number(element<HTMLSelectElement>('render-scale').value);
+    const size = Number(element<HTMLSelectElement>('shadow-quality').value);
+    this.sky.light.castShadow = size > 0;
+    this.renderer.shadowMap.enabled = size > 0;
+    if (size && this.sky.light.shadow.mapSize.x !== size) {
+      this.sky.light.shadow.map?.dispose(); this.sky.light.shadow.map = null;
+      this.sky.light.shadow.mapSize.set(size, size);
+    }
+    element('shadows').setAttribute('aria-pressed', String(size > 0));
+    const samples = Number(element<HTMLSelectElement>('antialiasing').value);
+    if (this.clouds.target.samples !== samples) { this.clouds.target.dispose(); this.clouds.target.samples = samples; }
+    this.viewRadius = Number(element<HTMLSelectElement>('view-distance').value);
+    this.world.chunks.setViewRadius(this.viewRadius);
+    this.camera.far = Math.max(7000, this.viewRadius * CHUNK_SIZE * 2);
+    this.resize();
+  }
 
   private update(dt: number): void {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
@@ -379,6 +448,13 @@ export class Game {
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
       Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.profile.rain);
     this.walking.sync();
+    const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
+    this.audio.setActive(!frozen && !document.hidden && this.windowFocused && document.hasFocus());
+    this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
+      throttle: this.input.down('KeyW') && moving, mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
+      rain: this.weather.profile.rain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
+      signal: this.driving.systems.leftSignal || this.driving.systems.rightSignal, wiper: this.driving.systems.sweep,
+      walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
@@ -395,6 +471,7 @@ export class Game {
     if (this.hudTime >= 0.15) {
       const stats = chunks.stats;
       this.hudTime = 0;
+      this.syncAudioUI();
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
       element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
@@ -403,6 +480,7 @@ export class Game {
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
       element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
+      element<HTMLButtonElement>('crossing-view').disabled = !this.world.roadReady || !this.world.crossings.length;
       element<HTMLButtonElement>('tunnel-view').disabled = !this.world.roadReady || !this.world.tunnels.length;
       element<HTMLButtonElement>('lights-view').disabled = !this.world.roadReady || !this.world.furniture.lampPositions.length;
       const searching = this.world.serviceSearchProgress;
@@ -435,6 +513,10 @@ export class Game {
         'Prefetched chunks': stats.prefetched, 'Preloading chunks': stats.preloading,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
+        'Render scale': `${Math.round(this.renderScale * 100)}%`, 'Frame limit': element<HTMLSelectElement>('frame-limit').value,
+        'Scene samples': this.clouds.target.samples,
+        'Valley crossings': this.world.crossings.map(site => site.kind).join(', ') || 'none',
+        'Audio state': this.audio.state,
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
         Weather: weatherNames[this.weather.kind], 'World time': this.sky.sun.clock,
         'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
@@ -500,6 +582,7 @@ export class Game {
   }
 
   dispose(): void {
+    this.audio.dispose();
     this.loop.stop();
     this.events.abort();
     this.input.dispose();

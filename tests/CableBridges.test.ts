@@ -54,6 +54,24 @@ it('buries the entire wide tower footing and keeps interior foundations stable w
   mesh.dispose();
 });
 
+it('moves a cable tower away from a lower railway and keeps the lower clearance open', () => {
+  const terrain = { sample: () => 0 }, start = new RoadGenerator('crossing-tower', terrain).start;
+  start.position = { x: 0, y: 300, z: 0 };
+  const segment = new RoadSegment(start, 0, 0, 768);
+  const samples = Array.from({ length: 385 }, (_, i) => segment.sample(i / 384));
+  const spans = new BridgeDetector(terrain).detect(samples), main = RoadCorridor.fromSamples(samples, spans);
+  const point = { x: -100, y: 100, z: -384, nx: 0, ny: 1, nz: 0, ground: 0, routeId: 'rail' };
+  const corridor = new RoadCorridor([...main.edges, { a: point, b: { ...point, x: 100 } }]);
+  const scene = new Scene(), mesh = new BridgeMesh(scene);
+  mesh.update(spans, corridor, terrain, 1, 0, 0, true); scene.updateMatrixWorld(true);
+  expect(mesh.cableBridges.towerCount).toBeGreaterThan(0);
+  for (const z of [-387, -384, -381]) {
+    const ray = new Raycaster(new Vector3(-100, 103, z), new Vector3(1, 0, 0), 0, 200);
+    expect(ray.intersectObject(mesh.cableBridges.towers)).toHaveLength(0);
+  }
+  mesh.dispose();
+});
+
 it.each([200, 200.01, 350])('uses long-span cable stays only above 200 m (%s)', height => {
   const terrain = { sample: () => 500 - height }, start = new RoadGenerator('cable', { sample: () => 499 }).start;
   start.position = { x: 0, y: 500, z: 0 };

@@ -138,7 +138,16 @@ export class BridgeMesh {
           }
           if (!towers.length && !span.openStart && !span.openEnd) towers.push(at((first + last) / 2));
         }
-        for (const tower of towers) this.cableBridges.add(tower, span, terrain);
+        for (let i = towers.length - 1; i >= 0; i--) {
+          if (corridor.crossesBelow(towers[i], this.profile.outerHalfWidth + 12)) {
+            const replacement = [-32, 32, -64, 64].map(offset => towers[i].distance + offset)
+              .filter(distance => distance > first && distance < last).map(at)
+              .find(point => !corridor.crossesBelow(point, this.profile.outerHalfWidth + 12));
+            if (!replacement) { towers.splice(i, 1); continue; }
+            towers[i] = replacement;
+          }
+          this.cableBridges.add(towers[i], span, terrain);
+        }
         for (let distance = Math.ceil(first / 48) * 48; distance < last - 1e-6; distance += 48) {
           while (span.samples[index].distance < distance) index++;
           const a = span.samples[index - 1], b = span.samples[index];
