@@ -99,7 +99,6 @@ export class BiomeSystem {
     if (this.terrain === 'badlands') { target.color[0] *= 1.13; target.color[1] *= 0.78; target.color[2] *= 0.75; }
     if (this.terrain === 'karst') for (let channel = 0; channel < 3; channel++) target.color[channel] += weights.rock * [0.055, 0.065, 0.07][channel];
     if (this.terrain === 'volcanic') for (let channel = 0; channel < 3; channel++) target.color[channel] *= 1 - weights.rock * [0.64, 0.62, 0.55][channel];
-    if (this.autumn) { target.color[0] += soilCover * 0.08; target.color[1] += soilCover * 0.025; }
     if (this.terrain === 'tundra') { target.color[0] += weights.alpine * 0.02; target.color[1] -= weights.alpine * 0.04; }
     return target;
   }

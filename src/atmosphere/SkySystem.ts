@@ -1,5 +1,6 @@
 import { DirectionalLight, HemisphereLight, Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { SunSystem } from './SunSystem';
+import type { SeasonState } from '../season/SeasonState';
 
 const SHADOW_RADIUS = 1800;
 const up = new Vector3(0, 1, 0);
@@ -26,10 +27,12 @@ export class SkySystem {
     scene.add(this.light, this.light.target, this.ambient);
   }
 
-  update(camera: PerspectiveCamera, origin: { x: number; z: number }, sunlight = 1, shelter = 0): void {
+  update(camera: PerspectiveCamera, origin: { x: number; z: number }, sunlight = 1, shelter = 0, season?: SeasonState): void {
     this.light.color.copy(this.sun.sunColor);
     this.light.intensity = this.sun.light.x * sunlight * (1 - shelter);
     this.ambient.color.copy(this.sun.ambient);
+    if (season?.kind === 'winter') { this.light.color.r *= 0.94; this.ambient.color.b *= 1.12; }
+    if (season?.kind === 'autumn') { this.light.color.b *= 0.93; this.ambient.color.r *= 1.05; }
     this.ambient.intensity = ((2.4 - Math.max(0, this.sun.time) * 0.6) * (1 - this.sun.night) + 0.5 * this.sun.night) * (1 - shelter * 0.72);
     this.focus.set(camera.position.x + origin.x, camera.position.y - 250, camera.position.z + origin.z);
     this.right.crossVectors(this.sun.direction, up).normalize();

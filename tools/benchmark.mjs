@@ -8,7 +8,7 @@ try {
   const driving = process.argv.includes('--drive');
   const stationary = process.argv.includes('--stationary');
   await page.goto(process.argv.slice(2).find(arg => /^https?:/.test(arg)) || 'http://127.0.0.1:5173/?seed=CLOUD-ROAD-001');
-  for (const [flag, id] of [['quality', 'graphics-preset'], ['scale', 'render-scale'], ['fps', 'frame-limit']]) {
+  for (const [flag, id] of [['quality', 'graphics-preset'], ['scale', 'render-scale'], ['fps', 'frame-limit'], ['season', 'season-kind']]) {
     const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
     if (value) await page.locator(`#${id}`).selectOption(value);
   }

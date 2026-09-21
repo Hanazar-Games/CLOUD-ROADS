@@ -13,8 +13,7 @@ export interface Crossing {
   bridges: BridgeSpan[]; tunnels: TunnelSpan[]; edges: readonly CorridorEdge[];
 }
 
-export function clearCrossing(site: Crossing, corridor: RoadCorridor): boolean {
-  const index = new RoadIndex(corridor.edges);
+export function clearCrossing(site: Crossing, corridor: RoadCorridor, index = new RoadIndex(corridor.edges)): boolean {
   return site.samples.every(p => {
     if (corridor.serviceCover(p.position.x, p.position.z)) return false;
     const radius = corridor.roadHalfWidth + 12;

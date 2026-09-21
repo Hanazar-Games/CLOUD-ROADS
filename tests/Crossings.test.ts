@@ -1,15 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { clearCrossing, planCrossings } from '../src/road/Crossings';
 import { CrossingMesh } from '../src/road/CrossingMesh';
 import { Matrix4, Scene } from 'three';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { RoadCorridor } from '../src/road/RoadCorridor';
+import { CrossingPlanner } from '../src/road/CrossingPlanner';
 
 const start = { position: { x: 0, y: 100, z: 0 }, heading: 0, grade: 0, distance: 1800, bank: 0, width: 8, nextMountain: 0, routeId: 'root' };
 const samples = Array.from({ length: 49 }, (_, i) => new RoadSegment(start, 0, 0).sample(i / 48));
 const valley = { sample: (x: number) => Math.abs(x) * 0.35 };
 
 describe('valley crossings', () => {
+  it('reuses stable anchors and rejected sites across moving windows while checking new route clearance', () => {
+    const terrain = { sample: vi.fn(valley.sample) }, planner = new CrossingPlanner('test', terrain);
+    const site = planner.plan([samples], new RoadCorridor([]))[0], calls = terrain.sample.mock.calls.length;
+    expect(site).toBeDefined();
+    expect(planner.plan([samples.slice(0, 30)], new RoadCorridor([]))[0]).toBe(site);
+    expect(terrain.sample.mock.calls.length).toBe(calls);
+    expect(planner.plan([samples], new RoadCorridor(site.edges))).toEqual([]);
+    expect(terrain.sample.mock.calls.length).toBe(calls);
+    const low = samples.map(p => ({ ...p, position: { ...p.position, y: 20 } }));
+    expect(planner.plan([low], new RoadCorridor([]))).toEqual([]);
+    const rejectedCalls = terrain.sample.mock.calls.length;
+    expect(planner.plan([low.slice(0, 30)], new RoadCorridor([]))).toEqual([]);
+    expect(terrain.sample.mock.calls.length).toBe(rejectedCalls);
+    planner.plan([], new RoadCorridor([]));
+    expect(planner.plan([samples], new RoadCorridor([]))[0]).toEqual(site);
+    expect(terrain.sample.mock.calls.length).toBeGreaterThan(rejectedCalls);
+  });
   it('anchors scenery to reproducible route locations with clearance and buried tunnel ends', () => {
     const sites = planCrossings('test', samples, valley, new RoadCorridor([]));
     expect(sites).toHaveLength(1);

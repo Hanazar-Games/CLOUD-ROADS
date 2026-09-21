@@ -8,6 +8,7 @@ import { ServicePlanner, type ServiceArea } from '../src/service/ServicePlanner'
 import { padPoint } from '../src/service/ServiceTerrain';
 import { hasRoadBarrier } from '../src/road/RoadProtection';
 import type { BridgeSpan } from '../src/bridge/BridgeDetector';
+import { SeasonState } from '../src/season/SeasonState';
 
 function world(highway = false) {
   const options = { ...DEFAULT_OPTIONS, roadType: highway ? 'highway' as const : 'mountain' as const };
@@ -17,6 +18,15 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('uses seasonal grip at each contact and exempts only the matching road tunnel', () => {
+    const scene = { ...world(), season: new SeasonState('forest') }, sample = scene.road.samples[100], outside = scene.road.samples[300];
+    const span = { start: scene.road.samples[90], end: scene.road.samples[110], samples: scene.road.samples.slice(90, 111) };
+    const surface = new DrivingSurface({ ...scene, tunnels: [span] });
+    scene.season.set('winter');
+    expect(surface.sample(sample.position.x, sample.position.z).grip).toBe(1);
+    expect(surface.sample(outside.position.x, outside.position.z).grip).toBeLessThan(0.7);
+    scene.season.set('summer'); expect(surface.sample(outside.position.x, outside.position.z).grip).toBe(1);
+  });
   it.each([30, 60, 120])('keeps a continuous scrape inside the bridge at %i Hz', fps => {
     const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
     scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];

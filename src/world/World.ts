@@ -23,8 +23,11 @@ import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule
 import { ServiceMesh } from '../service/ServiceMesh';
 import { padPoint } from '../service/ServiceTerrain';
 import { RoadSigns } from '../road/RoadSigns';
-import { clearCrossing, planCrossings, type Crossing } from '../road/Crossings';
+import type { Crossing } from '../road/Crossings';
+import { CrossingPlanner } from '../road/CrossingPlanner';
 import { CrossingMesh } from '../road/CrossingMesh';
+import { SeasonState, type Season } from '../season/SeasonState';
+import { seasonMaterial } from '../season/SeasonMaterial';
 
 export interface GroundSample {
   height: number;
@@ -33,6 +36,7 @@ export interface GroundSample {
 }
 
 export class World {
+  readonly season: SeasonState;
   readonly origin = new FloatingOrigin();
   readonly chunks: ChunkManager;
   readonly height: HeightFunction;
@@ -47,7 +51,7 @@ export class World {
   readonly signs: RoadSigns;
   readonly crossingMesh: CrossingMesh;
   crossings: Crossing[] = [];
-  private readonly crossingCache = new Map<string, Crossing[]>();
+  private readonly crossingPlanner: CrossingPlanner;
   services: readonly ServiceArea[] = [];
   serviceView: { heading: number; pitch: number } | undefined;
   passes: readonly RoadSample[] = [];
@@ -55,7 +59,7 @@ export class World {
   shelter = 0;
   bridges: readonly BridgeSpan[] = [];
   private readonly extraRoads = new Map<string, RoadMesh>();
-  private renderRoutes: { id: string; source: Pick<RoadSpine, 'version' | 'samples' | 'segments'>; services: readonly ServiceArea[] }[] = [];
+  private renderRoutes: { id: string; source: Pick<RoadSpine, 'version' | 'samples' | 'segments'>; services: readonly ServiceArea[]; tunnels: readonly TunnelSpan[] }[] = [];
   private renderBridges: BridgeSpan[] = [];
   private renderTunnels: TunnelSpan[] = [];
   private renderServices: ServiceArea[] = [];
@@ -70,6 +74,7 @@ export class World {
 
   constructor(private readonly scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.height = new HeightFunction(seed, options.terrain, options.roadType);
+    this.crossingPlanner = new CrossingPlanner(seed, this.height);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
     this.network = new RoadNetwork(seed, this.height, options, new RoadSpine(seed, this.height, options));
@@ -81,7 +86,19 @@ export class World {
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
+    this.season = new SeasonState(options.terrain);
+    this.chunks.setSeason(this.season);
+    this.roadMesh.setSeason(this.season);
+    for (const mesh of [this.tunnelMesh.cover, this.crossingMesh.tunnels.cover]) seasonMaterial(mesh.material, this.season, 'terrain');
+    for (const mesh of [this.tunnelMesh.portals, this.crossingMesh.tunnels.portals, this.crossingMesh.parts,
+      this.bridgeMesh.piers, this.bridgeMesh.details, this.bridgeMesh.railings, this.furniture.rails, this.furniture.poles,
+      this.serviceMesh.structures, this.serviceMesh.railings, this.serviceMesh.buildings,
+      this.serviceMesh.roofs]) seasonMaterial(mesh.material, this.season, 'structure');
+    for (const mesh of [this.serviceMesh.pavement, this.serviceMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
+    seasonMaterial(this.serviceMesh.landscaping.material, this.season, 'foliage');
   }
+
+  setSeason(kind: Season): void { this.season.set(kind); this.chunks.vegetation.setSeason(this.season); }
 
   resetCamera(camera: PerspectiveCamera): void {
     this.network.reset();
@@ -94,6 +111,7 @@ export class World {
 
   update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }): void {
     if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
+    this.season.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
     if (travelHeading !== undefined) this.forward.set(Math.sin(travelHeading), 0, -Math.cos(travelHeading));
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
@@ -124,8 +142,8 @@ export class World {
     this.roadDebug.update({ version: this.corridorVersion, segments: this.road.segments, samples: this.road.samples }, this.origin.x, this.origin.z, nearRoute);
     for (const [i, route] of this.renderRoutes.entries()) {
       let mesh = i === 0 ? this.roadMesh : this.extraRoads.get(route.id);
-      if (!mesh) { mesh = new RoadMesh(this.scene, this.options, 64); this.extraRoads.set(route.id, mesh); }
-      mesh.update(route.source, this.origin.x, this.origin.z, nearRoute, route.services);
+      if (!mesh) { mesh = new RoadMesh(this.scene, this.options, 64); mesh.setSeason(this.season); this.extraRoads.set(route.id, mesh); }
+      mesh.update(route.source, this.origin.x, this.origin.z, nearRoute, route.services, route.tunnels);
       mesh.mesh.material.roughness = this.roadMesh.mesh.material.roughness;
     }
     this.bridgeMesh.update(this.renderBridges, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
@@ -179,22 +197,14 @@ export class World {
       });
       const tunnels = route.tunnels.filter(span => span.start.distance >= min && span.end.distance <= max);
       const services = route.services.filter(site => site.start >= min && site.end <= max);
-      this.renderRoutes.push({ id: route.id, source: { version: this.corridorVersion, samples, segments }, services });
+      this.renderRoutes.push({ id: route.id, source: { version: this.corridorVersion, samples, segments }, services, tunnels });
       this.renderSamples.push(...samples); this.renderBridges.push(...bridges); this.renderTunnels.push(...tunnels); this.renderServices.push(...services);
       corridors.push(RoadCorridor.fromSamples(samples, bridges, this.options, tunnels, services.map(site => site.ground)));
       remaining -= segments.length;
     }
     this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, this.renderServices.map(site => site.ground));
-    const candidates: Crossing[] = [], keys = new Set<string>();
-    for (const route of this.renderRoutes) {
-      const key = `${route.id}:${route.source.samples[0]?.distance}:${route.source.samples.at(-1)?.distance}`;
-      keys.add(key);
-      let crossings = this.crossingCache.get(key);
-      if (!crossings) { crossings = planCrossings(this.seed, route.source.samples, this.height, new RoadCorridor([])); this.crossingCache.set(key, crossings); }
-      candidates.push(...crossings);
-    }
-    for (const key of this.crossingCache.keys()) if (!keys.has(key)) this.crossingCache.delete(key);
-    this.crossings = candidates.filter(site => clearCrossing(site, this.corridor)).sort((a, b) => Math.hypot(a.anchor.position.x - x, a.anchor.position.z - z) - Math.hypot(b.anchor.position.x - x, b.anchor.position.z - z))
+    this.crossings = this.crossingPlanner.plan(this.renderRoutes.map(route => route.source.samples), this.corridor)
+      .sort((a, b) => Math.hypot(a.anchor.position.x - x, a.anchor.position.z - z) - Math.hypot(b.anchor.position.x - x, b.anchor.position.z - z))
       .filter((site, i, all) => all.slice(0, i).every(other => Math.hypot(site.anchor.position.x - other.anchor.position.x, site.anchor.position.z - other.anchor.position.z) > 2000)).slice(0, 3);
     this.corridor = new RoadCorridor([...this.corridor.edges, ...this.crossings.flatMap(site => site.edges)], this.options, this.renderServices.map(site => site.ground));
     for (const [id, mesh] of this.extraRoads) if (!this.renderRoutes.slice(1).some(route => route.id === id)) { mesh.dispose(); this.extraRoads.delete(id); }
@@ -380,6 +390,6 @@ export class World {
     this.tunnelMesh.dispose(); this.furniture.dispose();
     this.serviceMesh.dispose(); this.scout = undefined;
     this.signs.dispose();
-    this.crossingMesh.dispose(); this.crossingCache.clear();
+    this.crossingMesh.dispose(); this.crossingPlanner.clear();
   }
 }

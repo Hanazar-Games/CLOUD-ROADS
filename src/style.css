@@ -87,6 +87,8 @@ dt { opacity: .55; } dd { margin: 0; text-align: right; overflow-wrap: anywhere;
 .trip-reading small { display: block; font-size: 8px; letter-spacing: 2px; opacity: .65; margin-bottom: 4px; }
 .trip-reading b { font-size: 14px; font-weight: 400; }
 #vehicle-status { text-align: center; font-size: 10px; letter-spacing: 1px; margin: 8px 0 0; min-height: 14px; color: #e1e9df; }
+#drive-condition { margin: 5px 0 0; text-align: center; font-size: 10px; color: #bfced7; }
+#drive-condition[data-snow="true"] { color: #ffd69b; }
 .vehicle-indicators { display: flex; justify-content: center; gap: 18px; margin-top: 7px; color: #c7d7be; font-size: 10px; }
 .route-guidance { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid #79e5ed25; text-align: center; color: var(--accent); font-size: 10px; line-height: 1.5; }
 .vehicle-indicators .high-beam { color: #8bd4ff; }
@@ -105,5 +107,5 @@ input[type=range] { accent-color: var(--accent); }
 @media (max-width: 1100px) { .phase { display: none; } }
 @media (max-height: 650px) { .masthead { top: 16px; } .explorer { top: 80px; max-height: calc(100dvh - 190px); } #debug { top: 80px; max-height: calc(100dvh - 190px); } #notice { right: 22px; left: auto; bottom: 105px; transform: none; max-width: calc(100vw - 330px); white-space: normal; } }
 @media (max-width: 620px) { .masthead { gap: 12px; align-items: flex-start; } .brand { font-size: 12px; letter-spacing: 1px; gap: 7px; } .brand svg { width: 28px; } .brand small { letter-spacing: 1px; font-size: 7px; } .header-actions { flex-direction: column; gap: 6px; align-items: flex-end; } .header-actions button { min-width: 90px; } .explorer { width: 230px; padding: 18px; } .controls { display: none; } .telemetry { gap: 16px; } .telemetry b { font-size: 14px; } .telemetry small { font-size: 7px; } #notice { right: 16px; left: 16px; bottom: 90px; max-width: none; transform: none; white-space: normal; text-align: center; } #debug { top: 105px; z-index: 1; max-width: calc(100vw - 44px); } }
-@media (max-width: 620px) { .masthead { flex-wrap: wrap; } .header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .header-actions button { min-width: 0; } .explorer { top: 148px; max-height: calc(100dvh - 290px); } .driving .explorer { max-height: calc(100dvh - 380px); } #drive-hud { bottom: 26px; } #walk-hud { bottom: 74px; } }
+@media (max-width: 620px) { .masthead { flex-wrap: wrap; } .header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .header-actions button { min-width: 0; } .explorer { top: 148px; max-height: calc(100dvh - 290px); } .driving .explorer { max-height: calc(100dvh - 410px); } #drive-hud { bottom: 26px; } #walk-hud { bottom: 74px; } }
 @media (max-height: 650px) and (min-width: 621px) { .driving #drive-hud { left: auto; right: 26px; bottom: 70px; transform: none; } .driving .explorer { max-height: calc(100dvh - 175px); } }

@@ -7,6 +7,9 @@ import { ROAD_SAMPLES } from './RoadSegment';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from './RoadProfile';
 import type { ServiceArea } from '../service/ServicePlanner';
+import type { TunnelSpan } from '../tunnel/TunnelDetector';
+import type { SeasonState } from '../season/SeasonState';
+import { seasonMaterial } from '../season/SeasonMaterial';
 
 export class RoadMesh {
   readonly mesh: Mesh<BufferGeometry, MeshStandardMaterial>;
@@ -25,7 +28,7 @@ export class RoadMesh {
     this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access));
     const strips = this.profile.centers.length, stride = strips * 2;
     const rows = capacity * ROAD_SAMPLES + 1;
-    for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2]] as const) {
+    for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['seasonExposure', 1]] as const) {
       this.mesh.geometry.setAttribute(name, new BufferAttribute(new Float32Array(rows * stride * size), size).setUsage(DynamicDrawUsage));
     }
     const indices = new Uint16Array((rows - 1) * strips * 6);
@@ -44,7 +47,12 @@ export class RoadMesh {
     scene.add(this.mesh, this.barriers);
   }
 
-  update(spine: Pick<RoadSpine, 'version' | 'segments' | 'samples'>, originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = []): void {
+  setSeason(season: SeasonState): void {
+    seasonMaterial(this.mesh.material, season, 'road');
+    seasonMaterial(this.barriers.material, season, 'structure');
+  }
+
+  update(spine: Pick<RoadSpine, 'version' | 'segments' | 'samples'>, originX: number, originZ: number, nearRoute: boolean, services: readonly ServiceArea[] = [], tunnels: readonly TunnelSpan[] = []): void {
     if (this.version !== spine.version && spine.segments.length) {
       this.version = spine.version;
       const first = spine.segments[0].start;
@@ -53,6 +61,7 @@ export class RoadMesh {
       const positions = this.mesh.geometry.getAttribute('position') as BufferAttribute;
       const normals = this.mesh.geometry.getAttribute('normal') as BufferAttribute;
       const uv = this.mesh.geometry.getAttribute('uv') as BufferAttribute;
+      const exposure = this.mesh.geometry.getAttribute('seasonExposure') as BufferAttribute;
       const cycleStart = Math.floor(first.distance / 78000) * 78000; // Shared period of 12 m dashes, 2 km arrows and 1.3 m grooves.
       this.access.forEach((range, i) => {
         const distance = services[i]?.sample.distance;
@@ -63,11 +72,14 @@ export class RoadMesh {
       this.barriers.count = 0;
       for (const [i, sample] of spine.samples.entries()) {
         const { right, normal } = roadFrame(sample);
+        const tunnel = tunnels.find(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
+        const cover = tunnel ? Math.max(0, Math.min(1, (sample.distance - tunnel.start.distance) / 8, (tunnel.end.distance - sample.distance) / 8)) : 0;
         for (const [strip, center] of centers.entries()) for (let side = 0; side < 2; side++) {
           const index = i * stride + strip * 2 + side, offset = center + (side === 0 ? -halfWidth : halfWidth);
           positions.setXYZ(index, sample.position.x - this.anchorX + right.x * offset, sample.position.y + right.y * offset, sample.position.z - this.anchorZ + right.z * offset);
           normals.setXYZ(index, normal.x, normal.y, normal.z);
           uv.setXY(index, offset, sample.distance - cycleStart);
+          exposure.setX(index, 1 - cover);
         }
         if (centers.length === 2 && i > 0 && sample.opening === undefined) {
           const previous = spine.samples[i - 1];
@@ -85,7 +97,7 @@ export class RoadMesh {
           }
         }
       }
-      for (const name of ['position', 'normal', 'uv']) this.mesh.geometry.getAttribute(name).needsUpdate = true;
+      for (const name of ['position', 'normal', 'uv', 'seasonExposure']) this.mesh.geometry.getAttribute(name).needsUpdate = true;
       this.mesh.geometry.setDrawRange(0, (spine.samples.length - 1) * centers.length * 6);
       this.mesh.geometry.computeBoundingSphere();
       this.barriers.instanceMatrix.needsUpdate = true;

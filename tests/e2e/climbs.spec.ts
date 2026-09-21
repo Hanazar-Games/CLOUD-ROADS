@@ -39,7 +39,7 @@ test('renders all new terrains and finds their service areas', async ({ page }) 
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#terrain-kind option')).toHaveCount(10);
-  for (const [terrain, name] of [['meadow', '草甸丘陵'], ['badlands', '红岩荒原'], ['karst', '喀斯特峰林'], ['volcanic', '火山高地'], ['tundra', '冰蚀苔原'], ['autumn', '秋色丘陵']]) {
+  for (const [terrain, name] of [['meadow', '草甸丘陵'], ['badlands', '红岩荒原'], ['karst', '喀斯特峰林'], ['volcanic', '火山高地'], ['tundra', '冰蚀苔原'], ['autumn', '阔叶丘陵']]) {
     await page.locator('#terrain-kind').selectOption(terrain);
     await page.getByRole('button', { name: '应用并返回起点' }).click();
     await expect(metric('Landscape')).toHaveText(name);

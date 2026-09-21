@@ -6,7 +6,7 @@ import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
 import { hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels'> & Partial<Pick<World, 'network'>> & { sampleGround(x: number, z: number): { height: number } };
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels'> & Partial<Pick<World, 'network' | 'season'>> & { sampleGround(x: number, z: number): { height: number } };
 
 export class DrivingSurface {
   wet = 0;
@@ -29,19 +29,24 @@ export class DrivingSurface {
 
   readonly sample = (x: number, z: number, ceiling = Infinity): SurfaceContact => {
     const reference = Number.isFinite(ceiling) ? ceiling : this.level;
-    const samples = (this.world.network?.routes ?? [this.world]).map(route => route.road.nearest(x, z)).filter(sample => sample !== undefined);
+    const samples = (this.world.network?.routes ?? [this.world]).flatMap(route => {
+      const sample = route.road.nearest(x, z); return sample ? [{ sample, route }] : [];
+    });
     samples.sort((a, b) => {
-      const error = (p: typeof a) => Math.hypot(x - p.position.x, z - p.position.z) + (reference === undefined ? 0 : Math.abs(p.position.y - reference) * 1.5);
+      const error = ({ sample: p }: typeof a) => Math.hypot(x - p.position.x, z - p.position.z) + (reference === undefined ? 0 : Math.abs(p.position.y - reference) * 1.5);
       return error(a) - error(b);
     });
-    for (const sample of samples) {
+    for (const { sample, route } of samples) {
       const dx = x - sample.position.x, dz = z - sample.position.z;
       const lateral = dx * Math.cos(sample.heading) + dz * Math.sin(sample.heading);
       const along = dx * Math.sin(sample.heading) - dz * Math.cos(sample.heading);
       if (Math.abs(along) < 1 && this.profile.centers.some(center => Math.abs(lateral - center) <= this.profile.halfWidth)) {
         const { normal } = roadFrame(sample);
         const height = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
-        if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9)) return { height, grip: 1 - this.wet * 0.38 };
+        if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9)) {
+          const sheltered = route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
+          return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height, sheltered) ?? 1) };
+        }
       }
     }
     this.refreshServices();
@@ -49,7 +54,8 @@ export class DrivingSurface {
       const dx = x - pad.x, dz = z - pad.z;
       const lateral = dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading);
       const along = dx * Math.sin(pad.heading) - dz * Math.cos(pad.heading);
-      if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength && pad.y + pad.grade * along <= ceiling) return { height: pad.y + pad.grade * along, grip: 1 - this.wet * 0.38 };
+      const height = pad.y + pad.grade * along;
+      if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength && height <= ceiling) return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
     }
     const access = this.accessIndex.nearest(x, z, 3.5);
     if (access) {
@@ -57,9 +63,10 @@ export class DrivingSurface {
       const height = a.y + (b.y - a.y) * t + 0.015
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      if (height <= ceiling) return { height, grip: 1 - this.wet * 0.38 };
+      if (height <= ceiling) return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
     }
-    return { height: this.world.sampleGround(x, z).height, grip: 0.58 - this.wet * 0.24 };
+    const height = this.world.sampleGround(x, z).height;
+    return { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
   };
 
   spawn(x: number, z: number, vehicle: VehicleProfile = vehicleProfiles.roadster): { x: number; z: number; heading: number; trailerHeading: number } | undefined {

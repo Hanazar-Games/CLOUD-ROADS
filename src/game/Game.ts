@@ -15,6 +15,7 @@ import { DrivingSystem } from '../vehicle/DrivingSystem';
 import { WalkingSystem } from '../walking/WalkingSystem';
 import { graphicsPresets } from './GraphicsSettings';
 import { AudioSystem } from '../audio/AudioSystem';
+import { seasonNames, type Season } from '../season/SeasonState';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -49,6 +50,7 @@ export class Game {
   constructor() {
     this.scene.background = this.sky.sun.haze;
     this.world = new World(this.scene, this.initialSeed);
+    this.weather.setSeason(this.world.season);
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world);
@@ -103,6 +105,10 @@ export class Game {
     element('time-preset').addEventListener('change', (event) => {
       const value = Number((event.target as HTMLSelectElement).value);
       if (Number.isFinite(value)) this.setTime(value);
+    }, { signal: this.events.signal });
+    element('season-kind').addEventListener('change', () => {
+      const kind = element<HTMLSelectElement>('season-kind').value as Season;
+      if (Object.hasOwn(seasonNames, kind)) this.world.setSeason(kind);
     }, { signal: this.events.signal });
     element('weather-kind').addEventListener('change', (event) => {
       const kind = (event.target as HTMLSelectElement).value as WeatherKind;
@@ -296,9 +302,11 @@ export class Game {
     if (this.contextLost) return;
     try {
       const world = new World(this.scene, seed, options);
+      world.setSeason(this.world.season.kind);
       this.stopTravel();
       this.world.dispose();
       this.world = world;
+      this.weather.setSeason(world.season);
       this.world.chunks.setViewRadius(this.viewRadius);
       this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
@@ -445,18 +453,18 @@ export class Game {
       this.input.clear();
       this.flight.update(0, false);
     }
+    this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
-      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.profile.rain);
+      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain);
     this.walking.sync();
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
     this.audio.setActive(!frozen && !document.hidden && this.windowFocused && document.hasFocus());
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: this.input.down('KeyW') && moving, mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
-      rain: this.weather.profile.rain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
+      rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.systems.leftSignal || this.driving.systems.rightSignal, wiper: this.driving.systems.sweep,
       walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
-    this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter);
-    this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
+    this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
     this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
     this.world.serviceMesh.windows.material.emissiveIntensity = this.sky.sun.night * 0.35;
@@ -472,6 +480,17 @@ export class Game {
       const stats = chunks.stats;
       this.hudTime = 0;
       this.syncAudioUI();
+      const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
+      const snow = season.snow(roadHeight), cold = season.temperature(y) < 2;
+      const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
+      const condition = this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
+      element('season-status').textContent = `${seasonNames[season.kind]} · ${season.temperature(y).toFixed(1)} °C · ${precipitation} · ${condition}`;
+      element('drive-condition').textContent = `${seasonNames[season.kind]} · ${season.temperature(roadHeight).toFixed(0)} °C · ${condition}`;
+      element('drive-condition').dataset.snow = String(snow > 0.15 && this.world.shelter < 0.9);
+      for (const [kind, warm, frozenName] of [['drizzle', '小雨', '小雪'], ['rain', '雨天', '雪天'], ['storm', '风雨', '风雪']]) {
+        const option = element<HTMLSelectElement>('weather-kind').querySelector(`option[value="${kind}"]`)!;
+        option.textContent = cold ? frozenName : warm;
+      }
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
       element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
@@ -519,6 +538,9 @@ export class Game {
         'Audio state': this.audio.state,
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
         Weather: weatherNames[this.weather.kind], 'World time': this.sky.sun.clock,
+        Season: seasonNames[this.world.season.kind], 'Air temperature': `${this.world.season.temperature(y).toFixed(1)} °C`,
+        'Seasonal snow': `${Math.round(this.world.season.snow(this.world.roadSample?.position.y ?? y) * 100)}%`,
+        'Snow visible': this.weather.snow.visible ? 'yes' : 'no', 'Liquid rain': this.weather.liquidRain.toFixed(2),
         'Rain visible': this.weather.rain.visible ? 'yes' : 'no',
         'Road wetness': `${Math.round(this.weather.wetness * 100)}%`,
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
@@ -566,9 +588,9 @@ export class Game {
         'Ground biome': ground ? biomeNames[ground.biome.kind] : '—',
         'Ground altitude': ground ? `${ground.height.toFixed(0)} m` : '—',
         'Ground slope': ground ? `${(Math.acos(ground.normalY) * 180 / Math.PI).toFixed(1)}°` : '—',
-        'Snow cover': ground ? `${(ground.biome.weights.snow * 100).toFixed(0)}%` : '—',
+        'Snow cover': ground ? `${(Math.max(ground.biome.weights.snow, this.world.season.snow(ground.height)) * 100).toFixed(0)}%` : '—',
         'Snow line': ground ? `${ground.biome.snowLine.toFixed(0)} m` : '—',
-        Temperature: ground ? `${ground.biome.temperature.toFixed(1)} °C` : '—',
+        Temperature: ground ? `${this.world.season.temperature(ground.height).toFixed(1)} °C` : '—',
         Humidity: ground ? `${(ground.biome.humidity * 100).toFixed(0)}%` : '—',
         'Road segments': this.world.road.segments.length, 'Road ready': this.world.roadReady ? 'yes' : 'generating',
         'Hairpins': this.world.road.segments.filter((segment) => segment.kind === 'hairpin').length,

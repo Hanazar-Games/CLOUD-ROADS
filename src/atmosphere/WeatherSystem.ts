@@ -1,5 +1,6 @@
-import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments, Vector2, type DepthTexture, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
+import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments, Points, PointsMaterial, Vector2, type DepthTexture, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import { createRng } from '../world/WorldSeed';
+import type { SeasonState } from '../season/SeasonState';
 
 export type WeatherKind = 'clear' | 'overcast' | 'drizzle' | 'rain' | 'storm' | 'fog';
 export interface WeatherProfile { cover: number; rain: number; near: number; far: number; sunlight: number; wind: number }
@@ -15,6 +16,9 @@ export const weatherProfiles: Record<WeatherKind, Readonly<WeatherProfile>> = {
 
 export class WeatherSystem {
   readonly rain: LineSegments<BufferGeometry, LineBasicMaterial>;
+  readonly snow: Points<BufferGeometry, PointsMaterial>;
+  private season?: SeasonState;
+  private frozenFraction = 0;
   private readonly time = { value: 0 };
   private readonly depth = { value: null as DepthTexture | null };
   private readonly resolution = { value: new Vector2() };
@@ -40,7 +44,12 @@ export class WeatherSystem {
     geometry.setAttribute('rainPhase', new BufferAttribute(phases, 1));
     geometry.setAttribute('rainSeed', new BufferAttribute(seeds, 2));
     const material = new LineBasicMaterial({ color: 0xb4c8d8, transparent: true, opacity: 0.42, depthWrite: false, depthTest: false });
-    material.onBeforeCompile = shader => {
+    const snowGeometry = new BufferGeometry();
+    snowGeometry.setAttribute('position', new BufferAttribute(positions.filter((_, i) => i % 6 < 3), 3));
+    snowGeometry.setAttribute('rainPhase', new BufferAttribute(phases.filter((_, i) => i % 2 === 0), 1));
+    snowGeometry.setAttribute('rainSeed', new BufferAttribute(seeds.filter((_, i) => i % 4 < 2), 2));
+    const snowMaterial = new PointsMaterial({ color: 0xe5edf5, size: 0.2, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false });
+    for (const [particleMaterial, snow] of [[material, false], [snowMaterial, true]] as const) particleMaterial.onBeforeCompile = shader => {
       shader.uniforms.rainTime = this.time;
       shader.uniforms.rainDepth = this.depth;
       shader.uniforms.rainResolution = this.resolution;
@@ -48,25 +57,28 @@ export class WeatherSystem {
       shader.uniforms.rainDrift = this.drift; shader.uniforms.rainWind = this.wind;
       shader.vertexShader = `uniform float rainTime, rainAltitude, rainWind;\nuniform vec2 rainAnchor, rainDrift;\nattribute float rainPhase;\nattribute vec2 rainSeed;\nvarying float rainDistance;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
         #include <begin_vertex>
-        transformed.y += mod(rainPhase - rainTime * 23.0 - rainAltitude, 70.0) - rainPhase;
+        transformed.y += mod(rainPhase - rainTime * ${snow ? '3.0' : '23.0'} - rainAltitude, 70.0) - rainPhase;
         transformed.xz += mod(rainSeed + rainDrift - rainAnchor + 50.0, 100.0) - 50.0 - rainSeed;
-        transformed.x -= (position.y - rainPhase + 25.0) * rainWind / 23.0;
+        ${snow ? 'transformed.xz += vec2(sin(rainTime * 0.62831853 + rainPhase), cos(rainTime * 0.44879895 + rainSeed.x)) * 0.6;' : 'transformed.x -= (position.y - rainPhase + 25.0) * rainWind / 23.0;'}
       `).replace('#include <project_vertex>', '#include <project_vertex>\nrainDistance = length(mvPosition.xyz);');
       shader.fragmentShader = `uniform sampler2D rainDepth;\nuniform vec2 rainResolution;\nvarying float rainDistance;\n${shader.fragmentShader}`
         .replace('#include <color_fragment>', `
           if (gl_FragCoord.z > texture2D(rainDepth, gl_FragCoord.xy / rainResolution).r) discard;
           #include <color_fragment>
           diffuseColor.a *= smoothstep(1.5, 5.0, rainDistance) * (1.0 - smoothstep(35.0, 65.0, rainDistance));
+          ${snow ? 'diffuseColor.a *= 1.0 - smoothstep(0.2, 0.5, length(gl_PointCoord - 0.5));' : ''}
         `);
     };
     this.rain = new LineSegments(geometry, material);
     this.rain.frustumCulled = false;
     this.rain.visible = false;
-    scene.add(this.rain);
+    this.snow = new Points(snowGeometry, snowMaterial);
+    this.snow.frustumCulled = false; this.snow.visible = false;
+    scene.add(this.rain, this.snow);
   }
 
   render(renderer: WebGLRenderer, camera: PerspectiveCamera, depth: DepthTexture): void {
-    if (!this.rain.visible) return;
+    if (!this.rain.visible && !this.snow.visible) return;
     this.depth.value = depth;
     renderer.getDrawingBufferSize(this.resolution.value);
     const clear = renderer.autoClear;
@@ -76,6 +88,9 @@ export class WeatherSystem {
   }
 
   get profile(): Readonly<WeatherProfile> { return this.current; }
+  get liquidRain(): number { return this.profile.rain * (1 - this.frozenFraction); }
+  get snowfall(): number { return this.profile.rain * this.frozenFraction; }
+  setSeason(season: SeasonState): void { this.season = season; }
   get phase(): number { return this.time.value; }
   setKind(kind: WeatherKind, immediate = false): void { this.kind = kind; if (immediate) this.transition(1); }
   setFogDensity(density: number, immediate = false): void {
@@ -94,7 +109,8 @@ export class WeatherSystem {
   update(dt: number, camera: PerspectiveCamera, shelter: number, origin = { x: 0, z: 0 }): void {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.1, dt)) : 0;
     this.transition(1 - Math.exp(-1.6 * dt));
-    const targetWetness = Math.min(1, this.profile.rain * 1.4);
+    this.frozenFraction = this.season ? Math.max(0, Math.min(1, (2 - this.season.temperature(camera.position.y)) / 3)) : 0;
+    const targetWetness = Math.min(1, this.liquidRain * 1.4);
     this.wetness += (targetWetness - this.wetness) * (1 - Math.exp(-dt / (targetWetness > this.wetness ? 3 : 45)));
     this.time.value = (this.time.value + dt) % 700;
     this.drift.value.x = (this.drift.value.x + dt * this.profile.wind) % 100;
@@ -103,10 +119,16 @@ export class WeatherSystem {
     this.anchor.value.set((camera.position.x + origin.x) % 100, (camera.position.z + origin.z) % 100);
     this.altitude.value = camera.position.y % 70;
     this.rain.position.copy(camera.position);
-    this.rain.material.opacity = (0.16 + 0.25 * this.profile.rain) * (1 - shelter);
-    this.rain.geometry.setDrawRange(0, Math.floor(1400 * this.profile.rain) * 2);
-    this.rain.visible = this.profile.rain > 0.015 && shelter < 0.99;
+    this.rain.material.opacity = (0.16 + 0.25 * this.liquidRain) * (1 - shelter);
+    this.rain.geometry.setDrawRange(0, Math.floor(1400 * this.liquidRain) * 2);
+    this.rain.visible = this.liquidRain > 0.015 && shelter < 0.99;
+    this.snow.position.copy(camera.position);
+    this.snow.material.opacity = 0.85 * (1 - shelter);
+    this.snow.geometry.setDrawRange(0, Math.floor(1400 * this.snowfall));
+    this.snow.visible = this.snowfall > 0.015 && shelter < 0.99;
   }
 
-  dispose(): void { this.rain.removeFromParent(); this.rain.geometry.dispose(); this.rain.material.dispose(); }
+  dispose(): void {
+    for (const particles of [this.rain, this.snow]) { particles.removeFromParent(); particles.geometry.dispose(); particles.material.dispose(); }
+  }
 }

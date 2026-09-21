@@ -3,6 +3,21 @@ import { expect, it } from 'vitest';
 import { SunSystem } from '../src/atmosphere/SunSystem';
 import { WeatherSystem, weatherProfiles } from '../src/atmosphere/WeatherSystem';
 import { CloudSystem } from '../src/atmosphere/CloudSystem';
+import { SeasonState } from '../src/season/SeasonState';
+
+it('uses snow in cold air without rain audio or accumulating liquid wetness, and shelters both particle types', () => {
+  const scene = new Scene(), weather = new WeatherSystem(scene), camera = new PerspectiveCamera(), season = new SeasonState('forest');
+  camera.position.y = 800; season.set('winter'); weather.setSeason(season); weather.setKind('rain', true);
+  weather.update(0.1, camera, 0);
+  expect(weather.snow.visible).toBe(true); expect(weather.rain.visible).toBe(false);
+  expect(weather.liquidRain).toBe(0); expect(weather.wetness).toBe(0);
+  const phase = weather.phase;
+  weather.update(0, camera, 0, { x: 8192, z: -8192 }); expect(weather.phase).toBe(phase);
+  weather.update(0, camera, 1); expect(weather.snow.visible).toBe(false);
+  season.set('summer'); weather.update(0.1, camera, 0);
+  expect(weather.snow.visible).toBe(false); expect(weather.rain.visible).toBe(true); expect(weather.wetness).toBeGreaterThan(0);
+  weather.dispose(); expect(scene.children).toHaveLength(0);
+});
 
 it('supports morning and night while keeping the sunset palette and shared values stable', () => {
   const sun = new SunSystem(), direction = sun.direction;

@@ -68,7 +68,7 @@
           <summary>地貌与道路</summary>
           <form id="world-options">
             <label for="terrain-kind">地貌</label>
-            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="autumn">秋色丘陵</option><option value="karst">喀斯特峰林</option><option value="volcanic">火山高地</option><option value="tundra">冰蚀苔原</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
+            <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="autumn">阔叶丘陵</option><option value="karst">喀斯特峰林</option><option value="volcanic">火山高地</option><option value="tundra">冰蚀苔原</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label for="route-style">蜿蜒程度</label>
@@ -124,7 +124,11 @@
           <p class="panel-help">轻环境音乐、引擎、风雨、脚步、雨刮与转向灯音效。暂停、打开公告或离开窗口时静音；设置只在本次页面内保留。</p>
         </details>
         <details class="world-options" open>
-          <summary>天气与时间</summary>
+          <summary>季节、天气与时间</summary>
+          <label for="season-kind">季节</label>
+          <select id="season-kind" aria-describedby="season-help"><option value="spring">春 · 新绿花开</option><option value="summer" selected>夏 · 林海繁茂</option><option value="autumn">秋 · 金叶山野</option><option value="winter">冬 · 霜雪归途</option></select>
+          <p id="season-status" class="panel-help">夏季 · 路面正常</p>
+          <p id="season-help" class="panel-help">四季即时切换，保留当前位置。树木、花草、路面与建筑积雪随季节变化；低温时雨转雪，雪路抓地力降低。炎热沙漠不会整片积雪。</p>
           <label for="weather-kind">天气</label>
           <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="drizzle">小雨</option><option value="rain">雨天</option><option value="storm">风雨</option><option value="fog">浓雾</option></select>
           <label class="speed-label" for="fog-density">雾气浓度 <output id="fog-density-value">100%</output></label>
@@ -146,8 +150,8 @@
         <div class="actions road-actions"><button id="crossing-view" type="button" disabled>桥下交通景观</button></div>
         <p class="panel-help">深谷大桥下可遇到山谷公路或铁路高架，两端连接山体隧道。它们是沿途景观，驾驶路线请沿主路和岔路探索。</p>
         <p class="panel-help">起点前后都有道路；驶入岔路后，沿所选路线继续生成。高速路段可遇到环形立交，跟随右侧出口进入。</p>
-        <div class="actions road-actions"><button id="service-view" type="button">下一服务区</button></div>
-        <div class="actions road-actions"><button id="pass-view" type="button">下一垭口</button><span id="route-stage">山谷</span></div>
+        <div class="actions road-actions"><button id="service-view" type="button" disabled>下一服务区</button></div>
+        <div class="actions road-actions"><button id="pass-view" type="button" disabled>下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>
         <p class="panel-help">服务区约 10–20 公里一处，深谷地段以架空平台连接匝道。点击可前往下一处，定位期间可继续探索，返回起点可取消。</p>
         <p class="panel-help" id="structure-help">路灯分段出现，入夜点亮；隧道在有山体覆盖的路段生成。</p>
@@ -161,6 +165,7 @@
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
+        <p id="drive-condition">夏季 · 路面正常</p>
         <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
         <div class="vehicle-indicators"><span id="turn-left" aria-label="左转灯灭">◀</span><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span><span id="turn-right" aria-label="右转灯灭">▶</span></div>
       </section>

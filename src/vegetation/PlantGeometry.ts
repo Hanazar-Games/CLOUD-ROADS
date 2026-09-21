@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, IcosahedronGeometry, SphereGeometry } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
-type Plant = 'pine' | 'cactus' | 'broadleaf' | 'autumn' | 'shrub' | 'rock' | 'grass' | 'meadow' | 'flowers' | 'flowerSpikes';
+type Plant = 'pine' | 'cactus' | 'broadleaf' | 'autumn' | 'bare' | 'blossom' | 'shrub' | 'rock' | 'grass' | 'meadow' | 'flowers' | 'flowerSpikes' | 'seedheads';
 function colored(geometry: BufferGeometry, color: string): BufferGeometry {
   const rgb = new Color(color), colors = new Float32Array(geometry.getAttribute('position').count * 3);
   for (let i = 0; i < colors.length; i += 3) rgb.toArray(colors, i);
@@ -24,9 +24,18 @@ function crown(radius: number, color: string): BufferGeometry {
 
 export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant' = 'near'): BufferGeometry {
   let pieces: BufferGeometry[];
-  if (detail === 'distant') {
+  if (kind === 'bare') {
+    pieces = [colored(new CylinderGeometry(0.13, 0.5, 9, detail === 'distant' ? 3 : 5, 1, detail === 'distant').rotateZ(0.045).translate(0, 4.5, 0), '#75634c')];
+    for (let i = 0; i < (detail === 'near' ? 7 : 3); i++) {
+      const angle = i * 2.4, y = 4.6 + i * 0.62;
+      pieces.push(colored(new CylinderGeometry(0.035, 0.17, 4.4, detail === 'distant' ? 3 : 4, 1, detail === 'distant').rotateZ(-0.7).rotateY(angle)
+        .translate(Math.cos(angle) * 1.2, y + 0.8, -Math.sin(angle) * 1.2), '#806b50'));
+      if (detail === 'near') pieces.push(colored(new CylinderGeometry(0.015, 0.065, 2.1, 3).rotateZ(0.45).rotateY(angle)
+        .translate(Math.cos(angle) * 2.1, y + 2, -Math.sin(angle) * 2.1), '#89735a'));
+    }
+  } else if (detail === 'distant') {
     pieces = kind === 'pine' ? [colored(new ConeGeometry(3.3, 11, 5).translate(0, 7.5, 0), '#51704a')]
-      : kind === 'broadleaf' || kind === 'autumn' ? [colored(new IcosahedronGeometry(3.9, 0).scale(1, 1.15, 1).translate(0, 8.5, 0), kind === 'autumn' ? '#c39743' : '#71894e')]
+      : kind === 'broadleaf' || kind === 'autumn' || kind === 'blossom' ? [colored(new IcosahedronGeometry(3.9, 0).scale(1, 1.15, 1).translate(0, 8.5, 0), kind === 'autumn' ? '#c39743' : '#71894e')]
         : [colored(new CylinderGeometry(0.4, 0.55, 6, 4).translate(0, 3, 0), '#82945e')];
   } else if (kind === 'pine' && detail === 'middle') {
     pieces = [colored(new CylinderGeometry(0.17, 0.46, 10.5, 5).translate(0, 5.25, 0), '#716048')];
@@ -43,7 +52,7 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       if (i < 4) pieces.push(colored(new ConeGeometry(0.85 - i * 0.1, 2, 5).scale(1, 1, 0.8).rotateZ(0.25).rotateY(angle)
         .translate(Math.cos(angle) * (2.4 - i * 0.35), 4.2 + i * 1.5, Math.sin(angle) * (2.4 - i * 0.35)), i % 2 ? '#577b45' : '#75915a'));
     }
-  } else if (kind === 'broadleaf' || kind === 'autumn') {
+  } else if (kind === 'broadleaf' || kind === 'autumn' || kind === 'blossom') {
     pieces = [colored(new CylinderGeometry(0.2, 0.5, 7, 6).rotateZ(0.045).translate(0, 3.5, 0), '#75634c')];
     for (let i = 0; i < 4; i++) {
       const angle = i * 2.4;
@@ -52,6 +61,12 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       const radius = i === 0 ? 3.3 : 2.4, tint = (kind === 'autumn' ? ['#c9903d', '#d8b354', '#ae6340', '#cba252'] : ['#728d49', '#839b56', '#607b43', '#8e9e5e'])[i];
       pieces.push((detail === 'near' ? crown(radius, tint) : colored(new IcosahedronGeometry(radius * 0.94, 0), tint))
         .scale(1, 1.12, 0.9).rotateY(angle).translate(Math.cos(angle) * (i ? 2 : 0), i ? 7.5 : 9.1, -Math.sin(angle) * (i ? 1.8 : 0)));
+      if (kind === 'blossom') for (let j = 0; j < (detail === 'near' ? 5 : 2); j++) {
+        const a = angle + j * 2.4;
+        pieces.push(colored(new IcosahedronGeometry(0.38, 0).scale(1, 0.7, 1)
+          .translate(Math.cos(angle) * (i ? 2 : 0) + Math.cos(a) * radius * 0.8, (i ? 7.5 : 9.1) + radius * 0.5,
+            -Math.sin(angle) * (i ? 1.8 : 0) + Math.sin(a) * radius * 0.65), j % 2 ? '#f1d8d7' : '#ead7b8'));
+      }
     }
   } else if (kind === 'cactus') {
     pieces = [
@@ -71,6 +86,13 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
   } else if (kind === 'rock') {
     pieces = [crown(1.75, '#c1c0ab').scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0),
       colored(new IcosahedronGeometry(0.65, 0).scale(1, 0.7, 1).translate(1.3, 0.25, 0.7), '#989e8e')];
+  } else if (kind === 'seedheads') {
+    pieces = [];
+    for (let i = 0; i < 5; i++) {
+      const angle = i * 2.4, x = Math.cos(angle) * 0.4, z = Math.sin(angle) * 0.4, h = 0.38 + i * 0.06;
+      pieces.push(colored(new CylinderGeometry(0.012, 0.02, h, 3).translate(x, h / 2, z), '#978252'),
+        colored(new IcosahedronGeometry(0.07, 0).scale(1, 1.4, 1).translate(x, h, z), '#b59a69'));
+    }
   } else if (kind === 'flowerSpikes') {
     pieces = [];
     for (let i = 0; i < 5; i++) {

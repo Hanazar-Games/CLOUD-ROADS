@@ -32,6 +32,13 @@ test('loads built scripts, styles, workers and the world under the Pages project
     await expect.poll(async () => Number(await page.locator('[data-metric="Tree canopies"]').textContent()), { timeout: 15_000 }).toBeGreaterThan(2000);
     await page.screenshot();
   }
+  await page.locator('#season-kind').selectOption('winter');
+  await page.locator('#pause').click();
+  await page.locator('#weather-kind').selectOption('rain');
+  await expect(page.locator('[data-metric="Season"]')).toHaveText('冬季');
+  await expect(page.locator('[data-metric="Snow visible"]')).toHaveText('yes');
+  await expect(page.locator('[data-metric="Rain visible"]')).toHaveText('no');
+  await page.screenshot();
   await expect(page.locator('#world')).toHaveCSS('position', 'fixed');
   await expect(page.locator('#error')).toBeHidden();
   expect(Number(await page.locator('[data-metric="Draw calls"]').textContent())).toBeGreaterThan(10);

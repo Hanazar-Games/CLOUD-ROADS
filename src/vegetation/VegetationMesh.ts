@@ -2,6 +2,8 @@ import { Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshStandardMaterial, 
 import { CHUNK_SIZE, VIEW_RADII } from '../world/ChunkPlanner';
 import { plantGeometry } from './PlantGeometry';
 import { distantPlant, GROUND_DETAIL_RADIUS, MEADOW_DETAIL_RADIUS, MEADOW_GRID, PLANT_GRID, TREE_DETAIL_RADIUS, TREE_FINE_RADIUS } from './VegetationConfig';
+import type { SeasonState } from '../season/SeasonState';
+import { seasonMaterial } from '../season/SeasonMaterial';
 
 interface PlantChunk { x: number; z: number; plants: Float32Array; entries: PlantInstance[]; ring: number; near: boolean; fine: boolean }
 interface PlantInstance { chunk: PlantChunk; offset: number; batch: PlantBatch; index: number }
@@ -11,10 +13,15 @@ interface PlantBatch {
 const KINDS = ['pine', 'cactus', 'broadleaf', 'shrub', 'rock', 'grass', 'pine', 'cactus', 'broadleaf', 'meadow', 'flowers', 'flowerSpikes', 'autumn', 'autumn', 'pine', 'cactus', 'broadleaf', 'autumn'] as const;
 const distantLayer = (layer: number) => layer >= 6 && layer <= 8 || layer === 13;
 const detailLevel = (layer: number) => distantLayer(layer) ? 'distant' : layer >= 14 ? 'middle' : 'near';
+const deciduous = (layer: number) => KINDS[layer] === 'broadleaf' || KINDS[layer] === 'autumn';
 
 export class VegetationMesh {
-  private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
-  private readonly geometries = KINDS.map((kind, layer) => plantGeometry(kind, detailLevel(layer)));
+  private readonly materials = KINDS.map(() => new MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+  private readonly geometries = KINDS.map((kind, layer) => plantGeometry(kind === 'autumn' ? 'broadleaf' : kind, detailLevel(layer)));
+  private readonly bare = KINDS.map((_, layer) => deciduous(layer) ? plantGeometry('bare', detailLevel(layer)) : null);
+  private readonly blossom = KINDS.map((_, layer) => deciduous(layer) ? plantGeometry('blossom', detailLevel(layer)) : null);
+  private readonly seedheads = plantGeometry('seedheads');
+  private season?: SeasonState;
   private readonly batches = new Map<string, PlantBatch>();
   private readonly chunks = new Map<string, PlantChunk>();
   private readonly dirty = new Set<PlantChunk>();
@@ -26,12 +33,29 @@ export class VegetationMesh {
 
   constructor(private readonly scene: Scene) {}
 
+  setSeason(season: SeasonState): void {
+    if (this.season !== season) this.materials.forEach((material, layer) => seasonMaterial(material, season,
+      deciduous(layer) ? 'foliage' : KINDS[layer] === 'pine' ? 'evergreen' : ['grass', 'meadow', 'shrub'].includes(KINDS[layer]) ? 'grass' : 'structure'));
+    this.season = season;
+    for (const batch of this.batches.values()) {
+      const geometry = this.geometry(batch.layer);
+      if (batch.mesh.geometry !== geometry) { batch.mesh.geometry = geometry; batch.mesh.computeBoundingSphere(); }
+    }
+  }
+
+  private geometry(layer: number) {
+    if (this.season?.kind === 'autumn' && (layer === 10 || layer === 11)) return this.seedheads;
+    return (this.season?.kind === 'winter' ? this.bare[layer] : this.season?.kind === 'spring' ? this.blossom[layer] : null) ?? this.geometries[layer];
+  }
+
+  private visible(layer: number): boolean { return this.enabled && !(this.season?.kind === 'winter' && (layer === 10 || layer === 11)); }
+
   get count(): number { return this.countLayers(() => true); }
   get distantCount(): number { return this.countLayers(distantLayer); }
   get canopyCount(): number { return this.countLayers(layer => layer < 3 || distantLayer(layer) || layer >= 12); }
   get groundCount(): number { return this.count - this.canopyCount; }
   get meadowCount(): number { return this.countLayers(layer => layer === 9); }
-  get flowerCount(): number { return this.countLayers(layer => layer === 10 || layer === 11); }
+  get flowerCount(): number { return this.season?.kind === 'winter' || this.season?.kind === 'autumn' ? 0 : this.countLayers(layer => layer === 10 || layer === 11); }
 
   private countLayers(include: (layer: number) => boolean): number {
     let total = 0;
@@ -74,7 +98,7 @@ export class VegetationMesh {
     let batch = this.batches.get(key);
     if (!batch) {
       const capacity = size ** 2 * (meadow ? MEADOW_GRID ** 2 : PLANT_GRID ** 2 / (far ? 4 : 1));
-      const mesh = new InstancedMesh(this.geometries[layer], this.material, capacity);
+      const mesh = new InstancedMesh(this.geometry(layer), this.materials[layer], capacity);
       mesh.name = `vegetation-${KINDS[layer]}${detailLevel(layer) === 'near' ? '' : `-${detailLevel(layer)}`}`;
       mesh.count = 0; mesh.visible = false;
       mesh.castShadow = layer < 5 || layer === 12 || layer >= 14; mesh.receiveShadow = layer < 6 || layer >= 9;
@@ -140,13 +164,16 @@ export class VegetationMesh {
     }
     this.changed.clear();
     for (const batch of this.batches.values()) {
-      batch.mesh.position.set(batch.x - originX, 0, batch.z - originZ); batch.mesh.visible = this.enabled;
+      batch.mesh.position.set(batch.x - originX, 0, batch.z - originZ); batch.mesh.visible = this.visible(batch.layer);
     }
   }
 
   dispose(): void {
     this.chunks.clear(); this.dirty.clear(); this.changed.clear();
     for (const { mesh } of this.batches.values()) { mesh.removeFromParent(); mesh.dispose(); }
-    this.batches.clear(); this.geometries.forEach(geometry => geometry.dispose()); this.material.dispose();
+    this.batches.clear();
+    [...this.geometries, ...this.bare, ...this.blossom].forEach(geometry => geometry?.dispose());
+    this.seedheads.dispose();
+    this.materials.forEach(material => material.dispose());
   }
 }

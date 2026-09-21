@@ -8,7 +8,7 @@ import type { WorldOptions } from '../world/WorldOptions';
 
 export class CrossingMesh {
   readonly parts = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.8 }), 16000);
-  private readonly tunnels;
+  readonly tunnels;
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
   private key = '';

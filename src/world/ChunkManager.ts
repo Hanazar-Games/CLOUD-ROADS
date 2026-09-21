@@ -6,6 +6,8 @@ import { CHUNK_SIZE, planChunks, VIEW_RADII, VIEW_RADIUS, type ChunkRequest, typ
 import type { RoadCorridor } from '../road/RoadCorridor';
 import { VegetationMesh } from '../vegetation/VegetationMesh';
 import { createTerrainMaterial } from '../terrain/TerrainMaterial';
+import type { SeasonState } from '../season/SeasonState';
+import { seasonMaterial } from '../season/SeasonMaterial';
 
 const POOL_LIMITS: Record<TerrainCells, number> = { 64: 25, 16: 56, 8: 208 };
 interface TerrainRequest extends ChunkRequest { signature: string }
@@ -41,6 +43,11 @@ export class ChunkManager {
   }
 
   get viewRadius(): number { return this.radius; }
+
+  setSeason(season: SeasonState): void {
+    seasonMaterial(this.material, season, 'terrain');
+    this.vegetation.setSeason(season);
+  }
 
   get stats() {
     let high = 0, medium = 0, low = 0;
