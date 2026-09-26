@@ -36,7 +36,7 @@ test('maps bus seats to real passenger cameras, prevents passenger driving and r
   await expect(page.locator('[data-metric="Seat adjustment"]')).toContainText('"height":0');
   await page.keyboard.down('KeyW'); await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(2);
   await page.keyboard.up('KeyW'); await page.keyboard.press('KeyP');
-  await expect(page.locator('[data-seat="front"]')).toBeDisabled();
+  await expect(page.locator('[data-seat="row-1-0"]')).toBeDisabled();
   await page.keyboard.press('Escape');
 });
 
@@ -71,7 +71,7 @@ test('keeps every coach seat and menu controls reachable in a short narrow windo
   const dialog = page.locator('#seat-dialog');
   const bounds = await dialog.boundingBox(); expect(bounds!.y).toBeGreaterThanOrEqual(0); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(450);
   await page.locator('#seat-map button').last().click();
-  await expect(page.locator('[data-metric="Cabin seat"]')).toHaveText('row-10-3');
+  await expect(page.locator('[data-metric="Cabin seat"]')).toHaveText('row-13-3');
   await page.keyboard.press('KeyM');
   await page.locator('#shortcut-list tr').last().scrollIntoViewIfNeeded();
   await page.locator('#controls-menu button[data-close]').click();

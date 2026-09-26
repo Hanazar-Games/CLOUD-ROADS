@@ -6,14 +6,15 @@ export function vehicleOffset(x: number, along: number, pitch: number, roll: num
   return { x: x * Math.cos(roll), y: x * Math.sin(roll) * Math.cos(pitch) + along * Math.sin(pitch),
     z: x * Math.sin(roll) * Math.sin(pitch) - along * Math.cos(pitch) };
 }
-export interface TrailerConfig { body: 'box' | 'flatbed'; length: number; wheelbase: number; hitchAlong: number; front: number; wheels: readonly WheelPoint[] }
+export interface TrailerConfig { body: 'box' | 'flatbed' | 'stake'; length: number; wheelbase: number; hitchAlong: number; front: number; wheels: readonly WheelPoint[] }
 export interface VehicleProfile {
-  name: string; shape: 'roadster' | 'sedan' | 'suv' | 'truck' | 'tractor' | 'bus' | 'motorcycle' | 'flatbed' | 'crane';
+  name: string; shape: 'roadster' | 'sedan' | 'supercar' | 'suv' | 'truck' | 'tractor' | 'bus' | 'motorcycle' | 'flatbed' | 'crane';
   length: number; chassisLength: number; width: number; height: number; mass: number;
   power: number; force: number; maxSpeed: number; reverseSpeed: number; brake: number; drag: number;
   radius: number; rest: number; travel: number; suspensionRate: number; cg: number; steer: number; steerRate: number;
   wheels: readonly WheelPoint[]; eye: { x: number; y: number; along: number }; paint: number;
   trailer?: TrailerConfig;
+  bus?: { rows: readonly number[]; deckHeight: number };
 }
 const axles = (track: number, positions: number[], steeringAxles = 1): WheelPoint[] => positions.flatMap((along, axle) =>
   [-1, 1].map(side => ({ x: side * track / 2, along, steer: axle < steeringAxles })));
@@ -32,6 +33,10 @@ export const vehicleProfiles = {
   roadster: { ...base, name: '敞篷跑车' },
   sedan: { ...base, name: '旅行轿车', shape: 'sedan', length: 4.7, chassisLength: 4.7, height: 1.65, mass: 1600,
     power: 150000, force: 8800, rest: 0.46, wheels: axles(1.6, [1.43, -1.43]), eye: { x: -0.43, y: 0.7, along: -0.2 }, paint: 0x769caf },
+  supercar: { ...base, name: '350 极速超级跑车', shape: 'supercar', length: 4.65, chassisLength: 4.65, width: 2.02, height: 1.3, mass: 1520,
+    power: 620000, force: 15000, maxSpeed: 350 / 3.6, brake: 12, drag: 0.4, rest: 0.33, travel: 0.18, cg: 0.39,
+    suspensionRate: 1.2, steer: 0.46, radius: 0.34, wheels: axles(1.82, [1.38, -1.38]),
+    eye: { x: -0.46, y: 0.55, along: -0.05 }, paint: 0xe26932 },
   suv: { ...base, name: '山地 SUV', shape: 'suv', length: 4.9, chassisLength: 4.9, width: 2, height: 2.05, mass: 2300,
     power: 185000, force: 12500, radius: 0.4, rest: 0.62, travel: 0.36, suspensionRate: 0.93, cg: 0.8, drag: 0.95,
     maxSpeed: 44, wheels: axles(1.72, [1.48, -1.48]), eye: { x: -0.46, y: 0.77, along: 0.05 }, paint: 0xc6ad73 },
@@ -52,15 +57,25 @@ export const vehicleProfiles = {
     power: 420000, force: 190000, maxSpeed: 25, wheels: axles(2.08, [2.3, -0.65, -1.65]), trailer: trailer(15), paint: 0x657caa },
   semi20: { ...heavy, name: '20 米超长半挂', shape: 'tractor', length: 20, chassisLength: 5.6, height: 3.9, mass: 43000,
     power: 480000, force: 215000, maxSpeed: 23.5, wheels: axles(2.08, [2.3, -0.65, -1.65]), trailer: trailer(20), paint: 0x9d5148 },
+  stake18: { ...heavy, name: '18 米高栏仓栅半挂', shape: 'tractor', length: 18, chassisLength: 5.6, height: 3.9, mass: 34000,
+    power: 460000, force: 195000, maxSpeed: 27, wheels: axles(2.08, [2.3, -0.65, -1.65]),
+    trailer: { ...trailer(18), body: 'stake', wheels: axles(2.08, [-9.6, -10.8, -12]).map(w => ({ ...w, steer: false })) }, paint: 0x51876a },
   heavySemi: { ...heavy, name: '1,020 马力重载半挂', shape: 'tractor', length: 20, chassisLength: 5.6, height: 3.9, mass: 50000,
     power: 750000, force: 310000, maxSpeed: 25, brake: 7, cg: 1.25, wheels: axles(2.08, [2.3, -0.65, -1.65]),
     trailer: { ...trailer(20), body: 'flatbed' }, paint: 0x974b3a },
   minibus: { ...heavy, name: '8 米小客车', shape: 'bus', length: 8, chassisLength: 8, width: 2.35, height: 3.05, mass: 7800,
     power: 160000, force: 35000, maxSpeed: 30, radius: 0.44, rest: 0.76, cg: 1.1, drag: 3.2,
-    wheels: axles(1.95, [2.25, -2.25]), eye: { x: -0.61, y: 1.35, along: 3.3 }, paint: 0xc0cbb2 },
+    wheels: axles(1.95, [2.25, -2.25]), eye: { x: -0.61, y: 1.35, along: 3.3 }, bus: { rows: [9], deckHeight: 0 }, paint: 0xc0cbb2 },
   coach: { ...heavy, name: '12 米长途客车', shape: 'bus', length: 12, chassisLength: 12, height: 3.65, mass: 18000,
     power: 300000, force: 80000, maxSpeed: 28, wheels: axles(2.08, [3.8, -1.3, -2.5]),
-    eye: { x: -0.65, y: 1.8, along: 5.2 }, paint: 0x76a8a2 },
+    eye: { x: -0.65, y: 1.8, along: 5.2 }, bus: { rows: [13], deckHeight: 0 }, paint: 0x76a8a2 },
+  coach15: { ...heavy, name: '15 米大型客车 · 18 排', shape: 'bus', length: 15, chassisLength: 15, height: 3.75, mass: 22000,
+    power: 355000, force: 105000, maxSpeed: 28, cg: 1.45, wheels: axles(2.08, [5.2, -1.9, -3.3]),
+    eye: { x: -0.65, y: 1.85, along: 6.7 }, bus: { rows: [18], deckHeight: 0 }, paint: 0x5379ac },
+  doubleDecker: { ...heavy, name: '13.5 米双层客车 · 1F / 2F', shape: 'bus', length: 13.5, chassisLength: 13.5, height: 4.5, mass: 23500,
+    power: 360000, force: 110000, maxSpeed: 25, radius: 0.45, rest: 0.72, cg: 1.9, steerRate: 0.75,
+    wheels: axles(2.08, [4.75, -1.65, -3.1]), eye: { x: -0.65, y: 1.12, along: 5.85 },
+    bus: { rows: [12, 14], deckHeight: 1.85 }, paint: 0xa13e46 },
   motorcycle: { ...base, name: '山路摩托车', shape: 'motorcycle', length: 2.15, chassisLength: 2.15, width: 0.8, height: 1.65, mass: 280,
     power: 48000, force: 2200, maxSpeed: 47, reverseSpeed: 1.5, brake: 9.5, drag: 0.3,
     radius: 0.32, rest: 0.47, travel: 0.22, suspensionRate: 1.12, cg: 0.62, steer: 0.5, steerRate: 2,

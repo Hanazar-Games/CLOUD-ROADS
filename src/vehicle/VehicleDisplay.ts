@@ -2,6 +2,7 @@ import { DataTexture, Group, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeomet
 import type { VehiclePhysics } from './VehiclePhysics';
 import type { VehicleSystems } from './VehicleSystems';
 import type { CraneSystems } from './CraneSystems';
+import type { VehicleOperations } from './VehicleOperations';
 
 const font: Record<string, number[]> = {
   '0':[14,17,19,21,25,17,14], '1':[4,12,4,4,4,4,14], '2':[14,17,1,2,4,8,31], '3':[30,1,1,14,1,1,30], '4':[2,6,10,18,31,2,2],
@@ -25,7 +26,7 @@ export class VehicleDisplay {
     this.root.name = 'vehicle-display'; this.root.add(new Mesh(this.geometry, this.material));
     this.texture.colorSpace = SRGBColorSpace; this.texture.magFilter = this.texture.minFilter = NearestFilter;
   }
-  update(car: VehiclePhysics, systems: VehicleSystems, dt: number, crane?: CraneSystems): void {
+  update(car: VehiclePhysics, systems: VehicleSystems, dt: number, crane?: CraneSystems, operations?: VehicleOperations): void {
     this.elapsed += dt;
     const lines = [
       `${systems.leftSignal ? '<' : ' '} ${Math.round(Math.abs(car.speed) * 3.6)} KM/H ${systems.rightSignal ? '>' : ' '}`,
@@ -35,6 +36,7 @@ export class VehicleDisplay {
       `L ${systems.beam === 'off' ? '-' : systems.beam === 'high' ? 'HI' : 'ON'} W ${systems.wiperRate ? 'ON' : '-'} G ${systems.washerSpray ? 'ON' : '-'}`,
       `AIR ${systems.fan} ${systems.ambientLight ? 'LED' : '---'} ${systems.cabinLight ? 'READ' : '----'}`,
     ];
+    if (operations && !operations.driveReady) lines[5] = operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
     if (crane) lines.splice(3, 3,
       `CRANE ${crane.stowed ? 'PARK' : crane.enabled ? 'ON' : 'STOW'}`,
       `ARM ${Math.round(crane.angle * 180 / Math.PI)} EXT ${crane.extension.toFixed(1)}`,

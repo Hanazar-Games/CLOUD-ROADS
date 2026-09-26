@@ -27,11 +27,18 @@ export class CabinDialogs {
       dialog.addEventListener('beforetoggle', this.clear, options);
     }
   }
-  showSeats(): void {
+  showSeats(floor = this.driving.cabin.selected.floor): void {
     if (!this.driving.active) { this.showMenu(); element('menu-status').textContent = '先进入车辆，再按 P 选择座位。'; return; }
     const cabin = this.driving.cabin, moving = Math.abs(this.driving.car.speed) > 0.1;
+    const decks = [...new Set(cabin.seats.map(s => s.floor))], nav = element('seat-decks'); nav.replaceChildren(); nav.hidden = decks.length < 2;
+    for (const deck of decks) {
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.deck = String(deck);
+      button.textContent = `${deck}F · ${deck === 1 ? '下层' : '上层'} ${cabin.seats.filter(s => s.floor === deck).length} 席`;
+      button.setAttribute('aria-pressed', String(deck === floor)); button.setAttribute('aria-controls', 'seat-map');
+      button.addEventListener('click', () => this.showSeats(deck)); nav.append(button);
+    }
     const map = element('seat-map'); map.replaceChildren();
-    for (const seat of cabin.seats) {
+    for (const seat of cabin.seats.filter(s => s.floor === floor)) {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.seat = seat.id;
       button.textContent = seat.label; button.style.gridColumn = String(seat.column + 1); button.style.gridRow = String(seat.row + 1);
       button.className = `seat ${seat.role}`; button.setAttribute('aria-pressed', String(cabin.selected.id === seat.id));
@@ -39,11 +46,12 @@ export class CabinDialogs {
       button.addEventListener('click', () => { if (this.driving.selectSeat(seat.id)) this.close(); });
       map.append(button);
     }
-    element('seat-status').textContent = moving ? '请先停车再换座；打开座位图会冻结行驶，但不会改变车速。' : `${this.driving.car.profile.name} · 当前：${cabin.selected.label} · 只有驾驶员可以开车`;
+    element('seat-status').textContent = moving ? '请先停车再换座；打开座位图会冻结行驶，但不会改变车速。' : `${this.driving.car.profile.name} · 当前：${cabin.selected.label} · ${cabin.seats.length} 席 · 只有驾驶员可以开车`;
     this.show(this.seats);
   }
   showMenu(): void { element('menu-status').textContent = '选择设置、座位或查看按键。关闭菜单后继续旅程。'; this.show(this.menu); }
   showVehicle(): void {
+    this.driving.describeEquipment();
     const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';
     element('vehicle-panel-title').textContent = p.name;
     element('vehicle-panel-state').textContent = active ? `${cabin.selected.label} · ${cabin.driver ? '驾驶权限' : '乘坐 / 设备操作'} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h · ${car.transmission.gear} 挡 / ${Math.round(car.transmission.rpm)} RPM · 行程 ${(car.trip / 1000).toFixed(2)} km` : '车型预览 · 开始驾驶后可选择座位';

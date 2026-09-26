@@ -11,12 +11,14 @@ import { VehicleSystems, lightNames, wiperNames, signalNames, type LightMode, ty
 import { CabinState } from './CabinState';
 import { CraneSystems } from './CraneSystems';
 import { radioStations } from '../audio/RadioStations';
+import { VehicleOperations, operationKeys, type VehicleOperation } from './VehicleOperations';
 
 export class DrivingSystem {
   car = new VehiclePhysics();
   readonly systems = new VehicleSystems();
   cabin = new CabinState(this.car.profile);
   crane = new CraneSystems();
+  operations = new VehicleOperations(this.car.profile);
   readonly cameraRig;
   active = false;
   parked = false;
@@ -54,6 +56,8 @@ export class DrivingSystem {
     element('cabin-light').addEventListener('click', () => { this.systems.cabinLight = !this.systems.cabinLight; this.describeEquipment(); }, options);
     element('ambient-light').addEventListener('click', () => { this.systems.ambientLight = !this.systems.ambientLight; this.describeEquipment(); }, options);
     element('crane-power').addEventListener('click', () => this.crane.toggle(this.active && this.cabin.selected.role === 'operator', this.car.speed), options);
+    for (const action of ['doors', 'cargo', 'aux'] as const) for (const prefix of ['vehicle', 'panel'])
+      element(`${prefix}-${action}`).addEventListener('click', () => this.operate(action), options);
     element('seat-reset').addEventListener('click', () => { this.cabin.resetAdjustment(); this.cameraRig.reset(); }, options);
     element('cabin-fan').addEventListener('change', () => { this.systems.fan = Number(element<HTMLSelectElement>('cabin-fan').value); }, options);
     element('vehicle-max-speed').addEventListener('input', () => {
@@ -130,6 +134,7 @@ export class DrivingSystem {
       if (!spawn) { this.explainSpace(); return false; }
       this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
       this.cabin = new CabinState(this.car.profile); this.crane = new CraneSystems();
+      this.operations = new VehicleOperations(this.car.profile);
     }
     this.parked = false; this.exitBlockedTime = 0; this.hudTime = 0.1;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
@@ -176,8 +181,18 @@ export class DrivingSystem {
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0;
   }
 
+  operate(action: VehicleOperation): void {
+    const label = this.operations.label(action);
+    if (!label) return;
+    const ok = this.operations.toggle(action, this.car.speed, this.active && this.cabin.driver);
+    element('operation-status').textContent = ok ? `${label}已${this.operations.target[action] ? '开启' : '关闭'}，关闭弹窗后继续动画。`
+      : '请先进入驾驶位；车门、舱门与驻车支架需要停车后操作。';
+    this.describeEquipment();
+  }
+
   action(code: string): void {
     if (!this.active) return;
+    for (const action of ['doors', 'cargo', 'aux'] as const) if (code === operationKeys[action]) this.operate(action);
     if (code === 'KeyN') this.systems.cycleFan();
     if (code === 'KeyK' && this.systems.hasWindows) this.systems.ambientLight = !this.systems.ambientLight;
     if (code === 'KeyU' && this.systems.hasWindows) this.systems.cabinLight = !this.systems.cabinLight;
@@ -223,13 +238,14 @@ export class DrivingSystem {
         axis('PageUp', 'PageDown') * dt * 0.08, axis('End', 'Home') * dt * 0.2);
       if (this.car.kind === 'crane') this.crane.update(dt, { slew: axis('KeyD', 'KeyA'), lift: axis('KeyW', 'KeyS'),
         extend: axis('KeyE', 'KeyQ'), hoist: axis('KeyX', 'KeyZ') }, operator, this.car.speed);
-      if (!this.cabin.driver || !this.crane.stowed) this.car.park();
+      this.operations.update(dt);
+      if (!this.cabin.driver || !this.crane.stowed || !this.operations.driveReady) this.car.park();
     }
     this.surface.wet = wet;
     this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
     if (!held) {
       const x = this.car.x, z = this.car.z, trip = this.car.trip;
-      const canDrive = this.cabin.driver && this.crane.stowed;
+      const canDrive = this.cabin.driver && this.crane.stowed && this.operations.driveReady;
       this.car.update(dt, { throttle: canDrive ? axis('KeyW', 'KeyS') : 0,
         steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') }, this.surface.sample);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
@@ -255,6 +271,7 @@ export class DrivingSystem {
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
         : !this.cabin.driver ? `${this.cabin.selected.label} · P 换座${operator ? ' · O 操作吊车' : ' · 不能驾驶'}`
         : !this.crane.stowed ? '吊车未收妥 · 请回操作席按 O 收车'
+        : !this.operations.driveReady ? '车门 / 舱门 / 支架未收妥 · J / Y / I 关闭'
         : this.exitBlockedTime > 0 ? '车旁空间不足，请移到平缓路段再下车'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
@@ -277,8 +294,9 @@ export class DrivingSystem {
       if (this.mesh.root.visible) {
         const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
         this.systems.update(dt, Math.max(night, sheltered), rain, sheltered, this.car.steering, this.car.speed);
+        this.operations.update(dt);
         if (this.car.kind === 'crane') this.crane.update(dt, { slew: 0, lift: 0, extend: 0, hoist: 0 }, false, 0);
-        this.mesh.sync(this.car, world.origin, this.systems, dt, this.crane);
+        this.mesh.sync(this.car, world.origin, this.systems, dt, this.crane, this.operations);
       }
     }
     if (this.active) {
@@ -289,7 +307,7 @@ export class DrivingSystem {
       element('turn-right').classList.toggle('lit', this.systems.rightSignal);
       element('turn-left').setAttribute('aria-label', this.systems.leftSignal ? '左转灯亮' : '左转灯灭');
       element('turn-right').setAttribute('aria-label', this.systems.rightSignal ? '右转灯亮' : '右转灯灭');
-      this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt, this.crane);
+      this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt, this.crane, this.operations);
       element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯`;
       element('vehicle-lights-status').classList.toggle('high-beam', this.systems.beam === 'high');
       element('vehicle-wipers-status').textContent = this.systems.hasWindshield ? `雨刮 · ${wiperNames[this.systems.wipers]}` : '无雨刮';
@@ -315,6 +333,7 @@ export class DrivingSystem {
     this.parked = false;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
     this.cabin = new CabinState(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
+    this.operations = new VehicleOperations(next.profile);
     this.systems.configure(next.profile.shape);
     this.applyPaint();
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();
@@ -355,6 +374,13 @@ export class DrivingSystem {
 
   describeEquipment(): void {
     const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
+    for (const action of ['doors', 'cargo', 'aux'] as const) for (const prefix of ['vehicle', 'panel']) {
+      const node = element<HTMLButtonElement>(`${prefix}-${action}`), label = this.operations.label(action);
+      node.hidden = !label; node.disabled = !this.active || !this.cabin.driver
+        || (action !== 'aux' || this.car.kind === 'motorcycle') && Math.abs(this.car.speed) > 0.1;
+      node.textContent = `${label} · ${this.operations.target[action] ? '收起 / 关闭' : '展开 / 开启'} · ${operationKeys[action].slice(3)}`;
+      node.setAttribute('aria-pressed', String(!!this.operations.target[action]));
+    }
     element<HTMLButtonElement>('vehicle-reset').disabled = !this.active || !this.cabin.driver || !this.crane.stowed;
     element<HTMLInputElement>('vehicle-windows').disabled = !glass;
     element<HTMLButtonElement>('vehicle-roof').disabled = !roof || Math.abs(this.car.speed) > 1.4;

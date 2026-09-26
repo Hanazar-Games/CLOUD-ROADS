@@ -37,7 +37,7 @@ it('shares wet-road grip between braking and turning and includes trailer tires'
 
 it('provides five suspension levels and distinct cars, trucks, buses, articulated rigs and a motorcycle', () => {
   expect(suspensionLevels).toEqual([1, 2, 3, 4, 5]);
-  expect(Object.keys(vehicleProfiles)).toHaveLength(13);
+  expect(Object.keys(vehicleProfiles)).toHaveLength(17);
   for (const [kind, length] of [['truck5', 5], ['truck8', 8], ['semi15', 15], ['semi20', 20]] as const) expect(vehicleProfiles[kind].length).toBe(length);
   expect(vehicleProfiles.motorcycle.wheels).toHaveLength(2);
   expect(vehicleProfiles.semi20.trailer!.wheelbase).toBeGreaterThan(vehicleProfiles.semi15.trailer!.wheelbase);
@@ -85,7 +85,7 @@ it('gives heavy rigs slower acceleration and longer wet braking distances', () =
   expect(stopping(0.55)).toBeGreaterThan(stopping(1) * 1.25);
 });
 
-it.each(['semi15', 'semi20', 'heavySemi'] as const)('keeps %s hitched through turns, reverse and variable frame rates', kind => {
+it.each(['semi15', 'semi20', 'stake18', 'heavySemi'] as const)('keeps %s hitched through turns, reverse and variable frame rates', kind => {
   const a = new VehiclePhysics(kind), b = new VehiclePhysics(kind);
   for (const car of [a, b]) {
     car.powerScale = 1.25; car.brakeScale = 0.75; car.steeringScale = 1.2;
@@ -111,7 +111,7 @@ it('leans a motorcycle into a turn and balances at rest', () => {
   expect(car.speed).toBe(0); expect(Math.abs(car.roll)).toBeLessThan(0.01);
 });
 
-it.each(['semi15', 'semi20', 'heavySemi'] as const)('keeps every %s trailer tire on a steep road and allows recovery from a tight reverse', kind => {
+it.each(['semi15', 'semi20', 'stake18', 'heavySemi'] as const)('keeps every %s trailer tire on a steep road and allows recovery from a tight reverse', kind => {
   const slope: SurfaceSampler = (x, z) => ({ height: 100 + x * 0.05 - z * 0.4, grip: 1 });
   const car = new VehiclePhysics(kind); car.reset(0, 0, 0, slope);
   drive(car, 5, 0, 0, slope);

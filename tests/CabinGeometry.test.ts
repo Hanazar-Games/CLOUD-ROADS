@@ -1,10 +1,56 @@
-import { Box3, Mesh, Scene } from 'three';
+import { Box3, Mesh, Raycaster, Scene, Vector3 } from 'three';
+import { cabinSeats } from '../src/vehicle/CabinState';
+import { VehicleOperations } from '../src/vehicle/VehicleOperations';
 import { expect, it, vi } from 'vitest';
 import { VehicleMesh } from '../src/vehicle/VehicleMesh';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
 import { CraneSystems } from '../src/vehicle/CraneSystems';
+
+it('keeps every bus eye below its own ceiling, including both double-decker floors', () => {
+  for (const kind of ['minibus', 'coach', 'coach15', 'doubleDecker'] as const) {
+    const p = vehicleProfiles[kind], mesh = new VehicleMesh(new Scene(), p);
+    mesh.root.updateMatrixWorld(true);
+    for (const seat of cabinSeats(p)) {
+      const ray = new Raycaster(new Vector3(seat.x, seat.y, -seat.along), new Vector3(0, 1, 0), 0, 1);
+      const roof = ray.intersectObject(mesh.chassis, true)[0];
+      expect(roof, `${kind} ${seat.id}`).toBeDefined(); expect(roof.distance).toBeGreaterThan(0.14);
+    }
+    mesh.dispose();
+  }
+});
+
+it('animates real bus doors, cargo gates and the supercar wing with operations state', () => {
+  for (const kind of ['doubleDecker', 'stake18', 'truck5', 'supercar'] as const) {
+    const car = new VehiclePhysics(kind), mesh = new VehicleMesh(new Scene(), car.profile), ops = new VehicleOperations(car.profile);
+    const action = kind === 'doubleDecker' ? 'doors' : kind === 'supercar' ? 'aux' : 'cargo';
+    const parts = mesh.root.getObjectsByProperty('name', `operation-${action}`); expect(parts.length).toBeGreaterThan(0);
+    ops.toggle(action, 0, true); for (let i = 0; i < 30; i++) ops.update(0.1);
+    mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems(), 0, undefined, ops);
+    expect(parts.every(p => Math.abs(p.rotation.x) + Math.abs(p.rotation.y) + Math.abs(p.rotation.z) > 0.2)).toBe(true);
+    mesh.dispose();
+  }
+});
+
+it('unfolds loading ramps behind the bed and lowers the motorcycle stand to the ground', () => {
+  for (const kind of ['flatbed12', 'heavySemi', 'motorcycle'] as const) {
+    const car = new VehiclePhysics(kind), mesh = new VehicleMesh(new Scene(), car.profile), ops = new VehicleOperations(car.profile);
+    const ground = () => ({ height: 0, grip: 1 });
+    car.reset(0, 0, 0, ground);
+    for (let i = 0; i < 600; i++) car.update(1 / 120, { throttle: 0, steer: 0, handbrake: true }, ground);
+    const action = kind === 'motorcycle' ? 'aux' : 'cargo';
+    ops.toggle(action, 0, true); for (let i = 0; i < 30; i++) ops.update(0.1);
+    mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems(), 0, undefined, ops);
+    mesh.root.updateMatrixWorld(true);
+    for (const part of mesh.root.getObjectsByProperty('name', `operation-${action}`)) {
+      const bounds = new Box3().setFromObject(part), hinge = part.getWorldPosition(new Vector3());
+      expect(Math.abs(bounds.min.y), kind).toBeLessThan(0.08);
+      if (action === 'cargo') expect(bounds.max.z - hinge.z, kind).toBeGreaterThan(1.5);
+    }
+    mesh.dispose();
+  }
+});
 
 it('shows trip, gear, turn signals and powered equipment on every vehicle display', () => {
   for (const kind of Object.keys(vehicleProfiles) as VehicleKind[]) {

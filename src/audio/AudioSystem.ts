@@ -5,6 +5,7 @@ export interface SoundState {
   rain: number; shelter: number; cockpit: boolean; signal: boolean; wiper: number; walkingSpeed: number;
   rpm: number; shifts: number; exposure: number; wet: number; nature: boolean; night: number;
   horn: boolean; fan: number; washer: number; motor: boolean;
+  supercar: boolean; braking: boolean; operations: number;
 }
 const chords = [[130.81, 164.81, 196, 293.66], [87.31, 130.81, 174.61, 261.63], [110, 164.81, 220, 329.63], [98, 146.83, 196, 293.66]];
 export const audioChannels = [
@@ -51,6 +52,16 @@ export class AudioSystem {
   private melody?: OscillatorNode;
   private melodyGain?: GainNode;
   private engineFilter?: BiquadFilterNode;
+  private harmonicGain?: GainNode;
+  private pneumaticGain?: GainNode;
+  private reverseGain?: GainNode;
+  private bass?: OscillatorNode;
+  private bassGain?: GainNode;
+  private rhythmGain?: GainNode;
+  private readonly pads: GainNode[] = [];
+  private radioFade = 1;
+  private lastBrake = false;
+  private lastOperation = 0;
   private lastShift = 0;
   private previewTime = 0;
   private previewKind = '';
@@ -73,7 +84,7 @@ export class AudioSystem {
   tune(channel: number): void {
     if (!Number.isInteger(channel) || channel < 1 || channel > radioStations.length) return;
     const station = radioStations[channel - 1];
-    this.station = channel; this.musicStyle = station.style; this.musicPace = station.pace; this.musicTime = 0;
+    this.station = channel; this.musicStyle = station.style; this.musicPace = station.pace; this.musicTime = 0; this.radioFade = 0;
   }
 
   toggle(): void {
@@ -98,7 +109,7 @@ export class AudioSystem {
       this.master!.gain.cancelScheduledValues(now); this.master!.gain.setValueAtTime(0, now); this.targets.delete(this.master!.gain);
       if (!audible) {
         this.previewTime = 0;
-        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain]) {
+        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain]) {
           channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.delete(channel!.gain);
         }
       }
@@ -144,30 +155,40 @@ export class AudioSystem {
     const oscillator = (type: OscillatorType, target: AudioNode) => {
       const node = context.createOscillator(); node.type = type; node.connect(target); node.start(); this.sources.push(node); return node;
     };
-    this.harmonic = oscillator('sawtooth', gain(filter, 0.16));
+    this.harmonicGain = gain(filter, 0.16); this.harmonic = oscillator('sawtooth', this.harmonicGain);
     this.horn = oscillator('triangle', this.hornGain); this.bird = oscillator('sine', this.natureGain);
     this.melodyGain = gain(this.music); this.melody = oscillator('sine', this.melodyGain);
     for (let i = 0; i < 4; i++) {
       const voice = context.createOscillator(); voice.type = 'sine'; voice.frequency.value = chords[0][i];
-      voice.connect(gain(this.music, 0.085)); voice.start(); this.sources.push(voice); this.voices.push(voice);
+      const pad = gain(this.music, 0.06); this.pads.push(pad);
+      voice.connect(pad); voice.start(); this.sources.push(voice); this.voices.push(voice);
     }
+    this.pneumaticGain = noiseChannel(1300, 'bandpass');
+    this.reverseGain = gain(this.sfx); const reverse = oscillator('sine', this.reverseGain); reverse.frequency.value = 880;
+    this.bassGain = gain(this.music); this.bass = oscillator('sine', this.bassGain);
+    const rhythm = context.createBiquadFilter(); rhythm.type = 'highpass'; rhythm.frequency.value = 2800;
+    this.rhythmGain = gain(this.music); noiseSource.connect(rhythm); rhythm.connect(this.rhythmGain);
   }
 
   update(dt: number, state: SoundState): void {
     this.sync();
     const context = this.context;
-    if (!context || context.state !== 'running' || !this.audible || this.disposed) { this.lastSignal = state.signal; this.lastWiper = state.wiper; this.lastShift = state.shifts; return; }
+    if (!context || context.state !== 'running' || !this.audible || this.disposed) {
+      this.lastSignal = state.signal; this.lastWiper = state.wiper; this.lastShift = state.shifts;
+      this.lastBrake = state.braking; this.lastOperation = state.operations; return;
+    }
     const now = context.currentTime;
     const set = (parameter: AudioParam, value: number, smooth = 0.08) => {
       if (this.targets.get(parameter) === value) return;
       this.targets.set(parameter, value); parameter.setTargetAtTime(value, now, smooth);
     };
-    const speed = Math.min(75, Math.abs(state.speed)), cabin = state.cockpit ? 0.22 + state.exposure * 0.78 : 1;
+    const speed = Math.min(110, Math.abs(state.speed)), cabin = state.cockpit ? 0.22 + state.exposure * 0.78 : 1;
     const preview = this.previewTime > 0; this.previewTime = Math.max(0, this.previewTime - dt);
     const rpm = preview && this.previewKind === 'engine' ? 2200 + Math.sin(this.time * 4) * 700 : state.rpm;
-    const frequency = Math.max(20, rpm / 60 * (state.motorcycle ? 1.4 : state.mass > 4000 ? 2 : 2.5));
+    const frequency = Math.max(20, rpm / 60 * (state.supercar ? 3.2 : state.motorcycle ? 1.4 : state.mass > 4000 ? 2 : 2.5));
     set(this.engine!.frequency, frequency, 0.025); set(this.harmonic!.frequency, frequency * 2.01, 0.025);
-    set(this.engineFilter!.frequency, 350 + (state.throttle ? 900 : 180) + state.exposure * 450);
+    set(this.harmonicGain!.gain, (state.supercar ? 0.22 : state.mass > 4000 ? 0.19 : 0.12) + (state.throttle ? 0.07 : 0));
+    set(this.engineFilter!.frequency, (state.supercar ? 700 : state.mass > 4000 ? 260 : 350) + (state.throttle ? 900 : 180) + state.exposure * 450);
     set(this.engineGain!.gain, (state.driving || preview && this.previewKind === 'engine' ? 0.085 + speed * 0.0012 + (state.throttle ? 0.045 : 0) : 0) * this.engineVolume);
     set(this.windGain!.gain, (0.045 + speed * 0.004) * cabin * (1 - state.shelter) * this.weatherVolume);
     set(this.rainGain!.gain, state.rain * 0.17 * (0.35 + cabin * 0.65) * (1 - state.shelter) * this.weatherVolume);
@@ -176,6 +197,10 @@ export class AudioSystem {
     set(this.cabinGain!.gain, state.driving ? (state.fan * 0.009 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);
     set(this.horn!.frequency, state.mass > 4000 ? 155 : state.motorcycle ? 490 : 350);
     set(this.hornGain!.gain, (state.horn || preview && this.previewKind === 'horn' ? 0.14 : 0) * this.effectsVolume, 0.015);
+    set(this.reverseGain!.gain, state.driving && state.mass > 4000 && state.speed < -0.4 && this.time % 0.9 < 0.35 ? 0.035 * this.effectsVolume * (0.4 + cabin * 0.6) : 0, 0.015);
+    if (state.driving && (this.lastBrake && !state.braking && state.mass > 4000 || state.operations > this.lastOperation))
+      this.pulse(this.pneumaticGain!, 0.09 * this.cabinVolume, 0.12);
+    this.lastBrake = state.braking; this.lastOperation = state.operations;
     const chirp = this.time % (state.night > 0.5 ? 1.4 : 8.7);
     set(this.bird!.frequency, state.night > 0.5 ? 3200 : 1700 + Math.sin(chirp * 19) * 650);
     set(this.natureGain!.gain, state.nature && state.rain < 0.3 && chirp < 0.55 ? 0.035 * Math.sin(chirp / 0.55 * Math.PI) ** 2 * cabin * (1 - state.shelter) * this.natureVolume : 0, 0.015);
@@ -191,14 +216,22 @@ export class AudioSystem {
     }
     this.lastSignal = state.signal; this.lastWiper = state.wiper;
     this.time += dt; this.musicTime += dt * this.musicPace;
+    this.radioFade = Math.min(1, this.radioFade + dt * 0.8);
     const station = radioStations[this.station - 1];
     const chord = Math.floor(this.musicTime / 12) % chords.length;
     const transpose = station.pitch * (this.musicStyle === 'night' ? 0.75 : this.musicStyle === 'motion' ? 1.12246 : 1);
     this.melody!.type = station.wave;
-    this.chord = chord; this.voices.forEach((voice, i) => set(voice.frequency, chords[chord][i] * transpose, 0.6));
+    this.chord = chord; this.voices.forEach((voice, i) => {
+      set(voice.frequency, chords[chord][i] * transpose, 0.6);
+      set(this.pads[i].gain, this.radioFade * (0.045 + 0.012 * Math.sin(this.musicTime * 0.22 + i)), 0.4);
+    });
     const beat = this.musicTime % (this.musicStyle === 'motion' ? 0.6 : 1.2), note = [0, 2, 1, 3, 2, 1, 0, 3][Math.floor(this.musicTime / (this.musicStyle === 'motion' ? 0.6 : 1.2)) % 8];
     set(this.melody!.frequency, chords[this.chord][note] * 2 * transpose, 0.025);
-    set(this.melodyGain!.gain, (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
+    const phrase = Math.floor(this.musicTime / 4.8) % 4;
+    set(this.melodyGain!.gain, this.radioFade * (phrase === 3 ? 0.3 : 1) * (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
+    set(this.bass!.frequency, chords[chord][phrase % 2 ? 2 : 0] * transpose / 2, 0.16);
+    set(this.bassGain!.gain, this.radioFade * (this.musicStyle === 'motion' ? 0.07 : 0.035) * (0.7 + 0.3 * Math.exp(-beat * 3)), 0.08);
+    set(this.rhythmGain!.gain, this.musicStyle === 'motion' ? this.radioFade * 0.014 * Math.exp(-(this.musicTime % 0.3) * 45) : 0, 0.012);
   }
 
   preview(kind: 'engine' | 'shift' | 'horn'): boolean {

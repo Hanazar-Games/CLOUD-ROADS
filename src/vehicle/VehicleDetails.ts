@@ -24,8 +24,6 @@ export function flatbedDetails(width: number, start: number, end: number, parent
     }
     block(0.55, 0.45, 1.25, side * (width / 2 - 0.3), -0.24, start + length * 0.38, metal, parent);
     block(0.018, 0.07, 0.18, side * (width / 2 - 0.012), -0.23, start + length * 0.38, trim, parent);
-    block(0.6, 0.18, 1.6, side * 0.75, 0.44, end - 0.82, metal, parent);
-    for (let z = end - 1.5; z < end; z += 0.2) block(0.62, 0.035, 0.055, side * 0.75, 0.55, z, trim, parent);
   }
   for (let z = start + 0.25; z < end; z += 1.2) block(width - 0.2, 0.12, 0.1, 0, 0.01, z, metal, parent);
   for (const x of [-width * 0.45, 0, width * 0.45]) block(0.075, 1.05, 0.075, x, 0.85, start + 0.08, paint, parent);
@@ -34,8 +32,26 @@ export function flatbedDetails(width: number, start: number, end: number, parent
 
 export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDetailKit): void {
   const { block, cylinder, paint, trim, metal, lamp, amber } = kit;
-  if (p.mass < 4000) return;
   const nose = -p.chassisLength / 2, end = p.chassisLength / 2;
+  if (p.mass < 4000) {
+    const bike = p.shape === 'motorcycle', sport = p.shape === 'supercar';
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 5; i++) block(bike ? 0.06 : 0.035, 0.018, bike ? 0.26 : 0.28, side * p.width * 0.47, 0.01 + i * 0.04, sport ? 0.85 : -0.9, trim, parent);
+      const exhaust = cylinder(bike ? 0.055 : sport ? 0.085 : 0.065, bike ? 0.65 : 0.22, side * p.width * 0.3, -0.22, end - 0.08, metal, parent); exhaust.rotation.x = Math.PI / 2;
+      block(bike ? 0.025 : 0.07, 0.06, p.length * 0.55, side * p.width * 0.47, -0.26, 0.08, trim, parent);
+      if (sport) {
+        block(0.18, 0.12, 0.9, side * p.width * 0.4, 0.17, 1.45, trim, parent);
+        block(0.035, 0.12, 0.55, side * 0.3, -0.3, end - 0.17, metal, parent);
+      }
+    }
+    if (!bike) {
+      block(0.13, 0.13, 0.42, 0, p.eye.y - 0.62, -p.eye.along + 0.07, trim, parent);
+      block(0.035, 0.13, 0.035, 0, p.eye.y - 0.52, -p.eye.along - 0.05, metal, parent);
+      for (const x of [-0.06, 0.08]) block(0.06, 0.018, 0.12, p.eye.x + x, p.eye.y - 1, -p.eye.along - 0.45, metal, parent);
+      block(p.width * 0.82, 0.035, 0.22, 0, -0.29, nose + 0.02, trim, parent);
+    }
+    return;
+  }
   for (const side of [-1, 1]) {
     block(0.12, 0.3, p.chassisLength - 0.3, side * 0.67, -0.34, 0, trim, parent);
     block(0.045, 0.045, p.chassisLength - 0.6, side * 0.48, -0.18, 0, metal, parent);

@@ -3,7 +3,8 @@ import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 
 const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
-  rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false };
+  rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
+  supercar: false, braking: false, operations: 0 };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
   setValueAtTime(value: number) { this.value = value; }, cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
@@ -12,7 +13,8 @@ class AudioContextStub {
   destination = {}; gains: ReturnType<typeof gain>[] = [];
   resumed: number[][] = [];
   createGain() { const node = gain(); this.gains.push(node); return node; }
-  createOscillator() { return { frequency: param(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; }
+  oscillators: { frequency: ReturnType<typeof param>; stop: ReturnType<typeof vi.fn> }[] = [];
+  createOscillator() { const node = { frequency: param(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; this.oscillators.push(node); return node; }
   createBiquadFilter() { return { frequency: param(), Q: param(), connect: vi.fn() }; }
   compressors = 0;
   createDynamicsCompressor() { this.compressors++; return { threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), connect: vi.fn() }; }
@@ -23,6 +25,23 @@ class AudioContextStub {
   async close() { this.state = 'closed'; }
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('voices the supercar separately and keeps music and operational effects on a bounded audio graph', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.update(0.1, { ...idle, driving: true, rpm: 5000 });
+  const touring = context.oscillators[0].frequency.value;
+  audio.update(0.1, { ...idle, driving: true, rpm: 5000, supercar: true });
+  expect(context.oscillators[0].frequency.value).toBeGreaterThan(touring);
+  const nodes = context.oscillators.length;
+  for (let i = 0; i < 500; i++) {
+    if (i % 25 === 0) audio.tune(i % 10 + 1);
+    audio.update(0.1, { ...idle, driving: true, mass: 18000, speed: -2, braking: i % 2 === 0, operations: i });
+  }
+  expect(context.oscillators).toHaveLength(nodes);
+  expect(context.gains.every(g => Number.isFinite(g.gain.value) && g.gain.value >= 0)).toBe(true);
+  audio.dispose(); expect(context.oscillators.every(o => o.stop.mock.calls.length === 1)).toBe(true);
+});
 
 it('selects ten radio presets without allocating an audio context and rejects invalid stations', () => {
   const audio = new AudioSystem();

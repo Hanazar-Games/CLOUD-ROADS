@@ -158,6 +158,8 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 #seat-map .operator { border-color: #ecc471; }
 #seat-map [aria-pressed=true] { background: #79e5ed; color: #08222c; }
 #seat-map button:disabled { opacity: .45; cursor: not-allowed; }
+#seat-decks { flex-shrink: 0; } #seat-decks button { flex: 1; }
+#seat-decks [aria-pressed=true] { background: #79e5ed; color: #08222c; }
 .shortcut-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .shortcut-table caption { text-align: left; padding: 8px 0 16px; color: #a6bfcb; }
 .shortcut-table th, .shortcut-table td { padding: 10px 6px; border-bottom: 1px solid #79e5ed22; text-align: left; }

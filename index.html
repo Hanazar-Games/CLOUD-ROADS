@@ -31,7 +31,7 @@
           <p class="panel-help">所有车型均可使用；速度表下方可打开当前载具面板，查看参数、设备及座位。</p>
           <label for="transmission-mode">变速箱</label>
           <select id="transmission-mode"><option value="auto">自动换挡</option><option value="manual">手动换挡 · [ 降挡 / ] 升挡</option></select>
-          <p class="panel-help">乘用车与摩托车 6 挡，重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
+          <p class="panel-help">普通乘用车与摩托车 6 挡，超跑与重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
           <details class="world-options">
             <summary>动力与外观</summary>
             <label class="speed-label" for="vehicle-max-speed">最高速度 <output id="vehicle-max-speed-value">车型默认</output></label>
@@ -92,6 +92,8 @@
           <label for="cabin-fan">空调风机 · N · 0–6 档</label>
           <select id="cabin-fan"><option value="0">关闭</option><option value="1">1 档 · 轻风</option><option value="2">2 档 · 标准</option><option value="3">3 档</option><option value="4">4 档</option><option value="5">5 档</option><option value="6">6 档 · 强风</option></select>
           <section id="crane-controls" hidden><button id="crane-power" type="button">启动吊车 · O</button><p id="crane-status" role="status"></p><p class="panel-help">停车按 P 进入后部操作席。O 展开支腿，W/S 升降吊臂、A/D 回转、Q/E 伸缩、Z/X 收放吊钩；再次 O 自动收车。支腿与吊臂收妥后才能行驶。当前无载荷吊装。</p></section>
+          <div class="actions"><button id="vehicle-doors" type="button" hidden></button><button id="vehicle-cargo" type="button" hidden></button><button id="vehicle-aux" type="button" hidden></button></div>
+          <p id="operation-status" class="panel-help" role="status">车型操作：J 乘客门、Y 行李舱或尾门、I 尾翼 / 警示灯 / 支架。车门、舱门和支架收妥才能行驶；当前为无载荷开合动画。</p>
           <p id="equipment-status" class="equipment-status" role="status">车载设备就绪</p>
           <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃与座舱设备。</p>
 </div></section>
@@ -260,7 +262,7 @@
       </dialog>
       <dialog id="seat-dialog" class="cabin-dialog" aria-labelledby="seat-title">
         <header><h2 id="seat-title">选择座位</h2><button type="button" data-close>返回旅程 · Esc</button></header>
-        <p id="seat-status" role="status"></p><div class="seat-scroll"><p class="seat-front">↑ 车头 · 点击座位就坐</p><div id="seat-map" role="group" aria-label="车辆座位地图"></div></div>
+        <p id="seat-status" role="status"></p><div id="seat-decks" class="actions" role="group" aria-label="选择客车楼层" hidden></div><div class="seat-scroll"><p class="seat-front">↑ 车头 · 点击座位就坐</p><div id="seat-map" role="group" aria-label="车辆座位地图"></div></div>
       </dialog>
       <dialog id="controls-menu" class="cabin-dialog" aria-labelledby="menu-title">
         <header><h2 id="menu-title">旅程操作</h2><button type="button" data-close>返回旅程 · Esc</button></header>
@@ -271,6 +273,7 @@
         <header><div><p class="eyebrow">VEHICLE / CONTROL PANEL</p><h2 id="vehicle-panel-title">载具面板</h2></div><button type="button" data-close>返回旅程 · Esc</button></header>
         <div class="vehicle-panel-scroll"><p id="vehicle-panel-state"></p><dl id="vehicle-panel-specs" class="vehicle-specs"></dl><p id="vehicle-panel-equipment" class="equipment-status"></p>
         <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表</button><button id="panel-equipment" type="button">车载设备</button><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div>
+        <div class="actions"><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button></div>
         <p id="vehicle-panel-help" class="panel-help"></p></div>
       </dialog>
       <div class="crosshair" aria-hidden="true">+</div>

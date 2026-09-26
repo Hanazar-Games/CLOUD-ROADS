@@ -15,10 +15,10 @@ export class Transmission {
 
   constructor(profile: VehicleProfile) {
     this.maxSpeed = profile.maxSpeed;
-    const heavy = profile.mass > 4000, bike = profile.shape === 'motorcycle';
-    this.ranges = heavy ? [0.1, 0.17, 0.25, 0.35, 0.47, 0.63, 0.8, 1.06] : [0.16, 0.26, 0.39, 0.56, 0.76, 1.06];
+    const heavy = profile.mass > 4000, bike = profile.shape === 'motorcycle', sport = profile.shape === 'supercar';
+    this.ranges = heavy || sport ? [0.1, 0.17, 0.25, 0.35, 0.47, 0.63, 0.8, 1.06] : [0.16, 0.26, 0.39, 0.56, 0.76, 1.06];
     this.gears = this.ranges.length; this.idle = heavy ? 650 : bike ? 1200 : 850;
-    this.redline = heavy ? 2800 : bike ? 11000 : 7000; this.rpm = this.idle;
+    this.redline = heavy ? 2800 : bike ? 11000 : sport ? 8500 : 7000; this.rpm = this.idle;
   }
 
   get driveScale(): number {

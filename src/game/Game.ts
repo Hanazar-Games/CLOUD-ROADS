@@ -525,7 +525,7 @@ export class Game {
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
     this.audio.setActive(!silent && !document.hidden && this.windowFocused && document.hasFocus());
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
-      throttle: this.input.down('KeyW') && moving && this.driving.cabin.driver && this.driving.crane.stowed,
+      throttle: this.input.down('KeyW') && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
@@ -533,7 +533,8 @@ export class Game {
       exposure: this.driving.systems.cabinExposure, wet: this.weather.wetness, night: this.sky.sun.night,
       nature: !['desert', 'dunes', 'badlands', 'volcanic'].includes(this.world.options.terrain) && this.world.season.kind !== 'winter',
       horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
-      washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor,
+      washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor || this.driving.operations.moving,
+      supercar: this.driving.car.kind === 'supercar', braking: this.driving.car.braking, operations: this.driving.operations.events,
       walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
@@ -620,6 +621,8 @@ export class Game {
         'Washer fluid': this.driving.systems.washerFluid.toFixed(2),
         'Cabin exposure': this.driving.systems.cabinExposure.toFixed(2),
         'Cabin seat': this.driving.cabin.selected.id,
+        'Cabin floor': this.driving.cabin.selected.floor,
+        'Vehicle operations': `${this.driving.operations.doors.toFixed(2)} / ${this.driving.operations.cargo.toFixed(2)} / ${this.driving.operations.aux.toFixed(2)}`,
         'Vehicle speed limit': `${(this.driving.car.maxSpeed * 3.6).toFixed(1)} km/h`,
         'Steering assist': this.driving.car.steeringAssist ? `${Math.round(this.driving.car.steeringAssistStrength * 100)}%` : 'off',
         'Cabin fan': String(this.driving.systems.fan),

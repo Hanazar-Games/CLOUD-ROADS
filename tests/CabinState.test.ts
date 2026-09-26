@@ -8,7 +8,7 @@ it('gives every modeled cabin seat a unique position and exactly one driver', ()
     const seats = cabinSeats(profile);
     expect(seats.filter(s => s.role === 'driver')).toHaveLength(1);
     expect(new Set(seats.map(s => s.id)).size).toBe(seats.length);
-    expect(new Set(seats.map(s => `${s.x},${s.along}`)).size).toBe(seats.length);
+    expect(new Set(seats.map(s => `${s.x},${s.y},${s.along}`)).size).toBe(seats.length);
     expect(seats.every(s => Math.abs(s.x) < profile.width / 2)).toBe(true);
   }
   expect(cabinSeats(vehicleProfiles.coach).length).toBeGreaterThan(30);

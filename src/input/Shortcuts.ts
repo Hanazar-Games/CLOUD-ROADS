@@ -7,6 +7,8 @@ export const shortcuts = [
   ['设备', '1–9 / 0', '车载电台频道 1–10'], ['设备', 'K', '氛围描边灯'], ['设备', 'U', '阅读灯'],
   ['设备', 'L', '自动 / 关 / 近光 / 远光'], ['设备', 'Q / E / H', '左转灯 / 右转灯 / 双闪'],
   ['设备', 'B', '雨刮模式'], ['设备', 'G', '玻璃水喷洗'], ['设备', 'T', '低速开合敞篷'], ['设备', 'V', '按住鸣笛'],
+  ['车型操作', 'J', '客车乘客门 · 停车操作'], ['车型操作', 'Y', '行李舱 / 货厢尾门 / 装载坡板 · 停车操作'],
+  ['车型操作', 'I', '超跑尾翼 / 吊车警示灯 / 摩托驻车支架'],
   ['座椅', 'PageUp / PageDown', '升高 / 降低视角'], ['座椅', '↑ / ↓ / ← / →', '座椅前 / 后 / 左 / 右微调'],
   ['座椅', 'Home / End', '靠背直立 / 后仰'], ['座椅', 'Backspace', '恢复当前座椅视角'],
   ['吊车操作席', 'O', '展开支腿并启动 / 自动收车'], ['吊车操作席', 'W / S', '升起 / 降低吊臂'],
@@ -15,6 +17,6 @@ export const shortcuts = [
   ['自由探索', 'WASD / Space / Shift / Ctrl', '平移 / 上升 / 下降 / 加速'], ['观察', '拖动鼠标 / 双击画面', '观察 / 锁定鼠标'],
 ] as const;
 export const actionKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'KeyE', 'KeyL', 'KeyB', 'KeyQ', 'KeyH', 'KeyF', 'KeyG', 'KeyT', 'KeyV',
-  'KeyN', 'KeyK', 'KeyU', 'KeyM', 'KeyP', 'KeyO', 'KeyZ', 'KeyX', 'Comma', 'Period', 'BracketLeft', 'BracketRight',
+  'KeyN', 'KeyK', 'KeyU', 'KeyM', 'KeyP', 'KeyO', 'KeyZ', 'KeyX', 'KeyJ', 'KeyY', 'KeyI', 'Comma', 'Period', 'BracketLeft', 'BracketRight',
   'PageUp', 'PageDown', 'Home', 'End', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace', 'Pause', 'F8', 'F3',
   'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', ...Array.from({ length: 10 }, (_, i) => `Digit${i}`)]);
