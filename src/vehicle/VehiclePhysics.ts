@@ -21,6 +21,9 @@ export class VehiclePhysics {
   suspension: Suspension = 3;
   damping = 1;
   powerScale = 1; brakeScale = 1; steeringScale = 1;
+  speedLimit?: number;
+  steeringAssist = true;
+  steeringAssistStrength = 1;
   readonly wheels: WheelState[];
   readonly trailer?: TrailerState;
   private vy = 0; private pitchVelocity = 0; private rollVelocity = 0; private accumulator = 0;
@@ -45,6 +48,12 @@ export class VehiclePhysics {
   }
 
   get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
+  get maxSpeed(): number { return this.speedLimit ?? this.profile.maxSpeed; }
+  setSpeedLimit(kmh?: number): void {
+    if (kmh !== undefined && !Number.isFinite(kmh)) return;
+    this.speedLimit = kmh === undefined ? undefined : clamp(kmh, 20, 400) / 3.6;
+    this.transmission.maxSpeed = this.maxSpeed;
+  }
   park(): void {
     this.speed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.transmission.reset();
@@ -161,19 +170,22 @@ export class VehiclePhysics {
       this.speed += (drive - slopeForce) * STEP;
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + (1 - grip) * 0.5) * STEP);
     }
-    this.speed = clamp(this.speed, -config.reverseSpeed, config.maxSpeed);
+    this.speed = clamp(this.speed, -config.reverseSpeed, this.maxSpeed);
     const stability = this.kind === 'motorcycle' ? 8 : Math.min(8, GRAVITY * config.width / (2 * config.cg) * 0.7);
-    const speed = Math.abs(this.speed), blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
+    const speed = Math.abs(this.speed) * Math.sqrt(clamp(this.steeringAssistStrength, 0.25, 2));
+    const blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
     const lowSpeedLock = Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4)) / (1 + speed / 28);
     const highSpeedLock = Math.min(lowSpeedLock, Math.atan(this.wheelbase * stability * 1.15 / Math.max(1, speed * speed)));
-    const steeringLock = lowSpeedLock + (highSpeedLock - lowSpeedLock) * smooth;
+    const steeringLock = this.steeringAssist ? lowSpeedLock + (highSpeedLock - lowSpeedLock) * smooth
+      : Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4));
     this.steering = approach(this.steering, clamp(input.steer, -1, 1) * steeringLock,
       config.steerRate * Math.max(0.08, steeringLock / config.steer) * STEP);
     const tireAcceleration = (this.speed - oldSpeed) / STEP + slopeForce;
     const availableGrip = this.braking || this.parked ? Math.min(grip, brakingGrip) : grip;
     const lateral = Math.sqrt(Math.max(0, (availableGrip * GRAVITY) ** 2 - tireAcceleration ** 2));
     const yawLimit = Math.min(lateral, availableGrip * (input.handbrake ? 3 : stability)) / Math.max(1, Math.abs(this.speed));
-    const yawRate = clamp(this.speed * Math.tan(this.steering) / this.wheelbase, -yawLimit, yawLimit);
+    const requestedYaw = this.speed * Math.tan(this.steering) / this.wheelbase;
+    const yawRate = this.steeringAssist ? clamp(requestedYaw, -yawLimit, yawLimit) : requestedYaw * Math.min(1, availableGrip);
     this.heading += yawRate * STEP;
     this.x += Math.sin(this.heading) * this.speed * STEP; this.z -= Math.cos(this.heading) * this.speed * STEP;
     this.trip += Math.abs(this.speed) * STEP;

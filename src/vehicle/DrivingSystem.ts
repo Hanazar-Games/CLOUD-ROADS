@@ -52,6 +52,15 @@ export class DrivingSystem {
     element('crane-power').addEventListener('click', () => this.crane.toggle(this.active && this.cabin.selected.role === 'operator', this.car.speed), options);
     element('seat-reset').addEventListener('click', () => { this.cabin.resetAdjustment(); this.cameraRig.reset(); }, options);
     element('cabin-fan').addEventListener('change', () => { this.systems.fan = Number(element<HTMLSelectElement>('cabin-fan').value); }, options);
+    element('vehicle-max-speed').addEventListener('input', () => {
+      this.car.setSpeedLimit(Number(element<HTMLInputElement>('vehicle-max-speed').value)); this.describeTuning();
+    }, options);
+    element('steering-assist').addEventListener('change', () => {
+      this.car.steeringAssist = element<HTMLInputElement>('steering-assist').checked; this.describeTuning();
+    }, options);
+    element('steering-assist-strength').addEventListener('input', () => {
+      this.car.steeringAssistStrength = Number(element<HTMLInputElement>('steering-assist-strength').value) / 100; this.describeTuning();
+    }, options);
     const tuning = [['vehicle-power', 'powerScale'], ['vehicle-brake', 'brakeScale'], ['vehicle-steering', 'steeringScale']] as const;
     for (const [id, field] of tuning) element(id).addEventListener('input', () => {
       this.car[field] = Number(element<HTMLInputElement>(id).value) / 100;
@@ -59,6 +68,7 @@ export class DrivingSystem {
       this.describeVehicle();
     }, options);
     element('vehicle-tuning-reset').addEventListener('click', () => {
+      this.car.setSpeedLimit(); this.car.steeringAssist = true; this.car.steeringAssistStrength = 1;
       for (const [id, field] of tuning) {
         this.car[field] = 1; element<HTMLInputElement>(id).value = '100'; element(`${id}-value`).textContent = '100%';
       }
@@ -244,7 +254,7 @@ export class DrivingSystem {
         : this.exitBlockedTime > 0 ? '车旁空间不足，请移到平缓路段再下车'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
-      element('speed-line').style.transform = `scaleX(${Math.min(1, Math.abs(this.car.speed) / this.car.profile.maxSpeed)})`;
+      element('speed-line').style.transform = `scaleX(${Math.min(1, Math.abs(this.car.speed) / this.car.maxSpeed)})`;
       element('drive-hud').classList.toggle('braking', this.car.braking);
       element('suspension-compression').textContent = `轮端压缩 ${this.car.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`
         + (this.car.trailer ? ` · 挂车 ${this.car.trailer.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm` : '');
@@ -283,6 +293,8 @@ export class DrivingSystem {
     const next = new VehiclePhysics(kind);
     next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
     next.powerScale = this.car.powerScale; next.brakeScale = this.car.brakeScale; next.steeringScale = this.car.steeringScale;
+    next.setSpeedLimit(this.car.speedLimit === undefined ? undefined : this.car.maxSpeed * 3.6);
+    next.steeringAssist = this.car.steeringAssist; next.steeringAssistStrength = this.car.steeringAssistStrength;
     next.transmission.mode = this.car.transmission.mode;
     if (this.active && this.surface) {
       const spawn = this.getWorld().roadReady ? this.surface.spawn(this.car.x, this.car.z, next.profile) : undefined;
@@ -302,6 +314,7 @@ export class DrivingSystem {
 
   private describeVehicle(): void {
     const p = this.car.profile;
+    this.describeTuning();
     this.systems.hasWindshield = p.shape !== 'motorcycle';
     this.describeEquipment();
     element<HTMLSelectElement>('vehicle-wipers').disabled = !this.systems.hasWindshield;
@@ -318,6 +331,16 @@ export class DrivingSystem {
   private applyPaint(): void {
     const value = element<HTMLSelectElement>('vehicle-paint').value;
     this.mesh.setPaint(value === 'default' ? this.car.profile.paint : parseInt(value, 16));
+  }
+
+  private describeTuning(): void {
+    const kmh = Math.round(this.car.maxSpeed * 3.6);
+    element<HTMLInputElement>('vehicle-max-speed').value = String(kmh);
+    element('vehicle-max-speed-value').textContent = `${kmh} km/h${this.car.speedLimit === undefined ? ' · 车型默认' : ''}`;
+    element<HTMLInputElement>('steering-assist').checked = this.car.steeringAssist;
+    const strength = element<HTMLInputElement>('steering-assist-strength');
+    strength.value = String(Math.round(this.car.steeringAssistStrength * 100)); strength.disabled = !this.car.steeringAssist;
+    element('steering-assist-strength-value').textContent = `${strength.value}%${this.car.steeringAssist ? '' : ' · 已关闭'}`;
   }
 
   describeEquipment(): void {

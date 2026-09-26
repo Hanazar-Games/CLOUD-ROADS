@@ -79,7 +79,7 @@ export class RoadGenerator {
     if (this.options.routeStyle >= 2 || this.options.maxGrade > 0.06) {
       const target = serviceTarget(this.seed, Math.max(1, Math.round(start.distance / 15000)));
       if (this.serviceApproach(start.distance)) {
-        const heading = this.options.routeStyle === 0 ? this.start.heading : start.heading + clamp(this.start.heading - start.heading, Math.PI / 10);
+        const heading = this.limitHeading(start, this.options.routeStyle === 0 ? this.start.heading : start.heading + clamp(this.start.heading - start.heading, Math.PI / 10));
         const blend = Math.max(0, Math.min(1, (Math.abs(start.distance - target) - 160) / 640));
         const grade = this.nextGrade(start, clamp(this.desiredGrade(start, heading), 0.02 + Math.max(0, this.options.maxGrade - 0.02) * blend));
         const segment = new RoadSegment(start, heading, grade);
@@ -144,6 +144,12 @@ export class RoadGenerator {
     return limit === 0 ? 0 : clamp(start.grade + clamp(target - start.grade, Math.max(0.002, limit / 3)), limit);
   }
 
+  private limitHeading(start: RoadControlPoint, heading: number, length = 96): number {
+    // Smooth heading reaches its peak curvature halfway through each segment.
+    return this.options.roadType === 'highway'
+      ? start.heading + clamp(heading - start.heading, length / (1.5 * this.options.highwayRadius)) : heading;
+  }
+
   private desiredGrade(start: RoadControlPoint, heading: number, length = 96): number {
     const curve = new RoadSegment(start, heading, start.grade, length);
     let numerator = 0, denominator = 0;
@@ -161,7 +167,7 @@ export class RoadGenerator {
     const guide = straight || this.start.heading !== 0 ? undefined : this.terrain.route?.(z - 700), behind = this.terrain.route?.(z + 700);
     const direction = guide && behind ? Math.atan2(guide.x - behind.x, 1400) : this.noise.fractal(start.distance / 12000, 17, 2) * 0.28;
     const desired = this.start.heading + clamp(guide ? direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
-    const heading = straight ? this.start.heading : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60);
+    const heading = this.limitHeading(start, straight ? this.start.heading : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60));
     const limit = this.options.maxGrade;
     const grade = limit === 0 ? 0 : clamp(start.grade + clamp(this.desiredGrade(start, heading) - start.grade, 0.002 * Math.max(1, limit / 0.03)), limit);
     return new RoadSegment(start, heading, grade);
@@ -173,8 +179,8 @@ export class RoadGenerator {
     const last = [0, 0, 3, 7, 15, Infinity][level], exiting = plan.stage > last;
     const target = this.start.heading + (exiting ? 0 : angle * (Math.ceil(plan.stage / 2) % 2 ? -1 : 1));
     const hairpin = !exiting && plan.stage % 2 === 1;
-    const heading = hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10);
     const length = hairpin ? [0, 0, 272, 224, 192, 160][level] : plan.stage === 0 || exiting ? 96 : [0, 0, 288, 192, 96, 96][level];
+    const heading = this.limitHeading(start, hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10), length);
     const desired = this.desiredGrade(start, heading, length);
     const grade = this.nextGrade(start, desired);
     const segment = new RoadSegment(start, heading, grade, length, hairpin ? 'hairpin' : 'traverse');

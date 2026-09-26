@@ -30,13 +30,19 @@
           <p class="panel-help">乘用车与摩托车 6 挡，重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
           <details class="world-options">
             <summary>动力与外观</summary>
+            <label class="speed-label" for="vehicle-max-speed">最高速度 <output id="vehicle-max-speed-value">车型默认</output></label>
+            <input id="vehicle-max-speed" type="range" min="20" max="400" step="1" value="173" aria-describedby="vehicle-max-speed-help" />
+            <p id="vehicle-max-speed-help" class="panel-help">20–400 km/h，前进限速与齿比同步调整。实际极速仍受动力、坡度和抓地力影响；倒车限速按车型保留。自选值换车后保留，恢复默认会使用各车型原限速。</p>
             <label class="speed-label" for="vehicle-power">发动机输出 <output id="vehicle-power-value">100%</output></label>
             <input id="vehicle-power" type="range" min="50" max="150" step="5" value="100" aria-describedby="vehicle-tuning-help" />
             <label class="speed-label" for="vehicle-brake">行车制动力 <output id="vehicle-brake-value">100%</output></label>
             <input id="vehicle-brake" type="range" min="50" max="150" step="5" value="100" aria-describedby="vehicle-tuning-help" />
             <label class="speed-label" for="vehicle-steering">低速转向幅度 <output id="vehicle-steering-value">100%</output></label>
             <input id="vehicle-steering" type="range" min="60" max="140" step="5" value="100" aria-describedby="vehicle-tuning-help" />
-            <p id="vehicle-tuning-help" class="panel-help">100% 为车型默认值。动力和制动受路面抓地力限制；手刹保持原强度，高速转向自动收小。</p>
+            <label for="steering-assist"><input id="steering-assist" type="checkbox" checked /> 随速度增大转弯半径</label>
+            <label class="speed-label" for="steering-assist-strength">高速转向辅助强度 <output id="steering-assist-strength-value">100%</output></label>
+            <input id="steering-assist-strength" type="range" min="25" max="200" step="5" value="100" aria-describedby="vehicle-tuning-help" />
+            <p id="vehicle-tuning-help" class="panel-help">辅助默认开启；强度越高，高速转向越缓。关闭后取消按车速收小转角和稳定性限幅，允许高速急转，偏街机操控。动力与制动仍受抓地力限制，手刹保持原强度。恢复默认同时重置限速与转向辅助。</p>
             <button id="vehicle-tuning-reset" type="button">恢复默认动力与转向</button>
             <label for="vehicle-paint">车身配色</label>
             <select id="vehicle-paint"><option value="default">车型原色</option><option value="d8dedb">冰川白</option><option value="29485e">深海蓝</option><option value="377d78">山谷青</option><option value="a73d32">赤焰红</option><option value="dca632">工程黄</option><option value="353d43">石墨灰</option></select>
@@ -99,6 +105,9 @@
             <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="autumn">阔叶丘陵</option><option value="karst">喀斯特峰林</option><option value="volcanic">火山高地</option><option value="tundra">冰蚀苔原</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
+            <label class="speed-label" for="highway-radius">高速主线最小转弯半径 <output id="highway-radius-value">200 m</output></label>
+            <input id="highway-radius" type="range" min="50" max="2000" step="10" value="200" disabled aria-describedby="highway-radius-help" />
+            <p id="highway-radius-help" class="panel-help">仅高速生效，50–2000 米；越大弯道越舒展，实际半径可以更大。五档蜿蜒均受约束，全直道保持不转弯。匝道独立设计；点击应用后重新生成。</p>
             <label for="route-style">蜿蜒程度</label>
             <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
             <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。超过 150 米的高桥在平缓桥段使用连续拱结构；急弯、陡坡保留实心墩。全直道方向固定，仍可上下起伏。</p>
@@ -133,7 +142,8 @@
           <p id="season-status" class="panel-help">夏季 · 路面正常</p>
           <p id="season-help" class="panel-help">四季即时切换，保留当前位置。树木、花草、路面与建筑积雪随季节变化；低温时雨转雪，雪路抓地力降低。炎热沙漠不会整片积雪。</p>
           <label for="weather-kind">天气</label>
-          <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="drizzle">小雨</option><option value="rain">雨天</option><option value="storm">风雨</option><option value="fog">浓雾</option></select>
+          <select id="weather-kind" aria-describedby="weather-kind-help"><option value="clear">晴天</option><option value="overcast">多云</option><option value="drizzle">小雨 / 小雪</option><option value="rain">雨天 / 雪天</option><option value="storm">风雨 / 风雪</option><option value="fog">浓雾</option></select>
+          <p id="weather-kind-help" class="panel-help">降水会随温度变为雨、雨夹雪或雪；当前实际天气见季节状态。选择后即时预览，关闭设置继续旅程。</p>
           <label class="speed-label" for="fog-density">雾气浓度 <output id="fog-density-value">100%</output></label>
           <input id="fog-density" type="range" min="50" max="200" step="10" value="100" />
           <p class="panel-help">天气逐渐过渡，雨后路面慢慢变干；暂停时选择天气可即时预览。雾气浓度越高，远景越朦胧。</p>

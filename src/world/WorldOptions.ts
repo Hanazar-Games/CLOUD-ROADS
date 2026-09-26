@@ -5,6 +5,7 @@ export interface WorldOptions {
   terrain: TerrainKind;
   roadType: 'mountain' | 'highway';
   roadWidth: number;
+  highwayRadius: number;
   routeStyle: RouteStyle;
   maxGrade: number;
   elevationMode: 'natural' | 'cycles';
@@ -14,7 +15,7 @@ export interface WorldOptions {
   interchanges: boolean;
 }
 
-export const DEFAULT_OPTIONS: Readonly<WorldOptions> = { terrain: 'alpine', roadType: 'mountain', roadWidth: 8, routeStyle: 1, maxGrade: 0.06,
+export const DEFAULT_OPTIONS: Readonly<WorldOptions> = { terrain: 'alpine', roadType: 'mountain', roadWidth: 8, highwayRadius: 200, routeStyle: 1, maxGrade: 0.06,
   elevationMode: 'natural', climbMin: 300, climbMax: 900, junctions: true, interchanges: true };
 export const routeNames: Record<RouteStyle, string> = { 0: '全直道 · 零弯道', 1: '1 档 · 舒缓山路', 2: '2 档 · 蜿蜒山路', 3: '3 档 · 盘山折返', 4: '4 档 · 密集发卡弯', 5: '5 档 · 连续发卡弯' };
 export const terrainNames: Record<TerrainKind, string> = { alpine: '高山雪岭', forest: '森林山谷', desert: '沙漠峡谷', dunes: '沙丘旷野',

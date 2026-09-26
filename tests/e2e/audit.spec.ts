@@ -111,8 +111,10 @@ test('shows the current release, archives the previous baseline and isolates dia
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.32');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('随席而行 · 车内交互与吊车操作');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.33');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('弯道调校 · 自选极速与天气菜单修复');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.32');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('随席而行 · 车内交互与吊车操作');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.31');
   await expect(dialog.locator('[data-release="history"]')).toContainText('座舱电台 · 分类设置与车载设备');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.30');

@@ -174,23 +174,28 @@ export class Game {
       const terrain = element<HTMLSelectElement>('terrain-kind').value as TerrainKind;
       const roadType = element<HTMLSelectElement>('road-type').value as WorldOptions['roadType'];
       const roadWidth = Number(element<HTMLSelectElement>('road-width').value);
+      const highwayRadius = Number(element<HTMLInputElement>('highway-radius').value);
       const routeStyle = Number(element<HTMLSelectElement>('route-style').value) as WorldOptions['routeStyle'];
       const maxGrade = Number(element<HTMLInputElement>('max-grade').value) / 100;
       const elevationMode = element<HTMLSelectElement>('elevation-mode').value as WorldOptions['elevationMode'];
       const climbMin = elevationMode === 'cycles' ? Number(element<HTMLInputElement>('climb-min').value) : this.world.options.climbMin;
       const climbMax = elevationMode === 'cycles' ? Number(element<HTMLInputElement>('climb-max').value) : this.world.options.climbMax;
       if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)
+        || !Number.isFinite(highwayRadius) || highwayRadius < 50 || highwayRadius > 2000
         || !Number.isFinite(maxGrade) || maxGrade < 0 || maxGrade > 0.4 || !['natural', 'cycles'].includes(elevationMode)
         || !Number.isFinite(climbMin + climbMax) || climbMin < 50 || climbMax > 2000 || climbMin > climbMax) return;
       const junctions = element<HTMLInputElement>('junctions').checked, interchanges = element<HTMLInputElement>('interchanges').checked;
-      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, routeStyle, maxGrade, elevationMode, climbMin, climbMax, junctions, interchanges });
+      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, highwayRadius, routeStyle, maxGrade, elevationMode, climbMin, climbMax, junctions, interchanges });
     }, { signal: this.events.signal });
     element('max-grade').addEventListener('input', () => {
       element('max-grade-value').textContent = `${element<HTMLInputElement>('max-grade').value}%`;
     }, { signal: this.events.signal });
+    element('road-type').addEventListener('change', () => this.syncRoadControls(), { signal: this.events.signal });
+    element('highway-radius').addEventListener('input', () => this.syncRoadControls(), { signal: this.events.signal });
     for (const id of ['elevation-mode', 'climb-min', 'climb-max']) element(id).addEventListener('input', () => this.syncClimbControls(), { signal: this.events.signal });
     element('eighteen-bends').addEventListener('click', () => {
       element<HTMLSelectElement>('road-type').value = 'mountain';
+      this.syncRoadControls();
       element<HTMLSelectElement>('route-style').value = '5';
       element<HTMLInputElement>('max-grade').value = '25'; element('max-grade-value').textContent = '25%';
       element<HTMLSelectElement>('elevation-mode').value = 'cycles';
@@ -357,6 +362,8 @@ export class Game {
       element<HTMLSelectElement>('terrain-kind').value = options.terrain;
       element<HTMLSelectElement>('road-type').value = options.roadType;
       element<HTMLSelectElement>('road-width').value = String(options.roadWidth);
+      element<HTMLInputElement>('highway-radius').value = String(options.highwayRadius);
+      this.syncRoadControls();
       element<HTMLSelectElement>('route-style').value = String(options.routeStyle);
       element<HTMLInputElement>('junctions').checked = options.junctions;
       element<HTMLInputElement>('interchanges').checked = options.interchanges;
@@ -365,7 +372,7 @@ export class Game {
       element<HTMLSelectElement>('elevation-mode').value = options.elevationMode;
       element<HTMLInputElement>('climb-min').value = String(options.climbMin); element<HTMLInputElement>('climb-max').value = String(options.climbMax);
       this.syncClimbControls();
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.elevationMode === 'cycles' ? ` · 目标爬升 ${options.climbMin}–${options.climbMax} 米` : ''} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`;
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.roadType === 'highway' ? ` · 最小半径 ${options.highwayRadius} 米` : ''}${options.elevationMode === 'cycles' ? ` · 目标爬升 ${options.climbMin}–${options.climbMax} 米` : ''} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`;
       this.setError(null);
       this.resetCamera();
     } catch (error) {
@@ -408,6 +415,12 @@ export class Game {
     this.clouds.enabled = enabled;
     element('cloud-toggle').setAttribute('aria-pressed', String(enabled));
     element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留远景雾与所选天气。';
+  }
+
+  private syncRoadControls(): void {
+    const radius = element<HTMLInputElement>('highway-radius');
+    radius.disabled = element<HTMLSelectElement>('road-type').value !== 'highway';
+    element('highway-radius-value').textContent = `${radius.value} m${radius.disabled ? ' · 仅高速生效' : ''}`;
   }
 
   private syncClimbControls(): void {
@@ -568,16 +581,12 @@ export class Game {
       element('boarding-help').hidden = !boardable;
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
-      const snow = season.snow(roadHeight), cold = season.temperature(y) < 2;
+      const snow = season.snow(roadHeight);
       const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
       const condition = this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
       element('season-status').textContent = `${seasonNames[season.kind]} · ${season.temperature(y).toFixed(1)} °C · ${precipitation} · ${condition}`;
       element('drive-condition').textContent = `${seasonNames[season.kind]} · ${season.temperature(roadHeight).toFixed(0)} °C · ${condition}`;
       element('drive-condition').dataset.snow = String(snow > 0.15 && this.world.shelter < 0.9);
-      for (const [kind, warm, frozenName] of [['drizzle', '小雨', '小雪'], ['rain', '雨天', '雪天'], ['storm', '风雨', '风雪']]) {
-        const option = element<HTMLSelectElement>('weather-kind').querySelector(`option[value="${kind}"]`)!;
-        option.textContent = cold ? frozenName : warm;
-      }
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
       element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 F8 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
@@ -636,6 +645,8 @@ export class Game {
         'Washer fluid': this.driving.systems.washerFluid.toFixed(2),
         'Cabin exposure': this.driving.systems.cabinExposure.toFixed(2),
         'Cabin seat': this.driving.cabin.selected.id,
+        'Vehicle speed limit': `${(this.driving.car.maxSpeed * 3.6).toFixed(1)} km/h`,
+        'Steering assist': this.driving.car.steeringAssist ? `${Math.round(this.driving.car.steeringAssistStrength * 100)}%` : 'off',
         'Cabin fan': String(this.driving.systems.fan),
         'Radio channel': String(this.audio.station),
         'Cabin lighting': `${this.driving.systems.ambientLight ? 'ambient' : 'off'} / ${this.driving.systems.cabinLight ? 'reading' : 'off'}`,
@@ -663,6 +674,7 @@ export class Game {
         'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',
         Landscape: terrainNames[this.world.options.terrain],
         'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
+        'Highway minimum radius': `${this.world.options.highwayRadius} m`,
         'Carriageway width': `${this.world.options.roadWidth} m`,
         'Route style': routeNames[this.world.options.routeStyle], 'Maximum grade': `${Math.round(this.world.options.maxGrade * 100)}%`, 'Route checkpoints': this.world.road.checkpointCount,
         'Roadside grass': chunks.vegetation.meadowCount, 'Wildflowers': chunks.vegetation.flowerCount,

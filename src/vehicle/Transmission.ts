@@ -8,11 +8,13 @@ export class Transmission {
   readonly idle: number;
   readonly gears: number;
   shifts = 0;
+  maxSpeed: number;
   private shiftTime = 0;
   private cooldown = 0;
   private readonly ranges: number[];
 
-  constructor(private readonly profile: VehicleProfile) {
+  constructor(profile: VehicleProfile) {
+    this.maxSpeed = profile.maxSpeed;
     const heavy = profile.mass > 4000, bike = profile.shape === 'motorcycle';
     this.ranges = heavy ? [0.1, 0.17, 0.25, 0.35, 0.47, 0.63, 0.8, 1.06] : [0.16, 0.26, 0.39, 0.56, 0.76, 1.06];
     this.gears = this.ranges.length; this.idle = heavy ? 650 : bike ? 1200 : 850;
@@ -45,5 +47,5 @@ export class Transmission {
     }
   }
 
-  private revs(speed: number, gear: number): number { return speed / (this.profile.maxSpeed * this.ranges[gear - 1]) * this.redline; }
+  private revs(speed: number, gear: number): number { return speed / (this.maxSpeed * this.ranges[gear - 1]) * this.redline; }
 }
