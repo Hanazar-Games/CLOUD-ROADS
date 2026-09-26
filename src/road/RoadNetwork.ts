@@ -2,7 +2,7 @@ import { BridgeDetector, type BridgeSpan } from '../bridge/BridgeDetector';
 import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
 import { ServicePlanner, type ServiceArea } from '../service/ServicePlanner';
 import { hashSeed } from '../world/WorldSeed';
-import type { WorldOptions } from '../world/WorldOptions';
+import { absoluteElevation, type WorldOptions } from '../world/WorldOptions';
 import type { RoadTerrain } from './RoadGenerator';
 import { RoadSegment, type RoadControlPoint, type RoadSample } from './RoadSegment';
 import { RoadSpine } from './RoadSpine';
@@ -121,7 +121,9 @@ export class RoadNetwork {
       const childId = `branch-${hashSeed(seed).toString(36)}-${hashSeed(`${seed}:id`).toString(36)}`;
       let kind: Junction['kind'] = this.options.interchanges && this.options.maxGrade >= 0.025 ? 'stack' : 'fork';
       let prefix = this.ramp(sample, childId, kind);
-      if (kind === 'stack' && !this.clearance(prefix, route.road)) { kind = 'fork'; prefix = this.ramp(sample, childId, kind); }
+      const altitudeFits = !absoluteElevation(this.options) || prefix.every(s => [s.start.position.y, s.end.position.y]
+        .every(y => y >= this.options.altitudeMin - 0.05 && y <= this.options.altitudeMax + 0.05));
+      if (kind === 'stack' && (!altitudeFits || !this.clearance(prefix, route.road))) { kind = 'fork'; prefix = this.ramp(sample, childId, kind); }
       const junction: Junction = { id, route: route.id, distance, sample, kind, exits: [childId] };
       route.road.openings.splice(0, route.road.openings.length, ...route.road.openings.filter(range => range.end >= current.distance - 8000));
       const start = prefix.at(-1)!.end;

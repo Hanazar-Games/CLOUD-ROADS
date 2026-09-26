@@ -10,7 +10,7 @@ import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
 import { randomSeed, startingSeed } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
-import { routeNames, terrainNames, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
+import { absoluteElevation, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
 import { WalkingSystem } from '../walking/WalkingSystem';
 import { graphicsPresets, renderPixelRatio } from './GraphicsSettings';
@@ -19,6 +19,8 @@ import { SettingsDialog } from '../ui/SettingsDialog';
 import { CabinDialogs } from '../ui/CabinDialogs';
 import { radioStations } from '../audio/RadioStations';
 import { seasonNames, type Season } from '../season/SeasonState';
+import { WorldSettings } from '../settings/WorldSettings';
+import { PresetPanel } from '../settings/PresetPanel';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -34,6 +36,8 @@ export class Game {
   private readonly camera = new PerspectiveCamera(65, 1, 0.5, 7000);
   private readonly input = new InputManager(this.canvas);
   private readonly settings = new SettingsDialog(() => this.input.clear());
+  private readonly worldSettings = new WorldSettings();
+  private readonly presets: PresetPanel;
   private readonly flight = new FreeCamera(this.camera, this.input);
   private readonly debug = new DebugUI();
   private readonly releaseNotes = element<HTMLDialogElement>('release-notes');
@@ -59,7 +63,10 @@ export class Game {
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world);
-    this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), () => this.settings.show());
+    this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), category => {
+      this.settings.show();
+      if (category) document.querySelector<HTMLButtonElement>(`[data-settings-target="${category}"]`)!.click();
+    });
     this.world.resetCamera(this.camera);
     element('phase-label').textContent = '/ DRIVE';
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -171,38 +178,18 @@ export class Game {
     element('random-world').addEventListener('click', () => this.loadSeed(randomSeed()), { signal: this.events.signal });
     element('world-options').addEventListener('submit', (event) => {
       event.preventDefault();
-      const terrain = element<HTMLSelectElement>('terrain-kind').value as TerrainKind;
-      const roadType = element<HTMLSelectElement>('road-type').value as WorldOptions['roadType'];
-      const roadWidth = Number(element<HTMLSelectElement>('road-width').value);
-      const highwayRadius = Number(element<HTMLInputElement>('highway-radius').value);
-      const routeStyle = Number(element<HTMLSelectElement>('route-style').value) as WorldOptions['routeStyle'];
-      const maxGrade = Number(element<HTMLInputElement>('max-grade').value) / 100;
-      const elevationMode = element<HTMLSelectElement>('elevation-mode').value as WorldOptions['elevationMode'];
-      const climbMin = elevationMode === 'cycles' ? Number(element<HTMLInputElement>('climb-min').value) : this.world.options.climbMin;
-      const climbMax = elevationMode === 'cycles' ? Number(element<HTMLInputElement>('climb-max').value) : this.world.options.climbMax;
-      if (!(terrain in terrainNames) || !(routeStyle in routeNames) || !['mountain', 'highway'].includes(roadType) || ![6, 8, 10].includes(roadWidth)
-        || !Number.isFinite(highwayRadius) || highwayRadius < 50 || highwayRadius > 2000
-        || !Number.isFinite(maxGrade) || maxGrade < 0 || maxGrade > 0.4 || !['natural', 'cycles'].includes(elevationMode)
-        || !Number.isFinite(climbMin + climbMax) || climbMin < 50 || climbMax > 2000 || climbMin > climbMax) return;
-      const junctions = element<HTMLInputElement>('junctions').checked, interchanges = element<HTMLInputElement>('interchanges').checked;
-      this.loadSeed(this.world.seed, { terrain, roadType, roadWidth, highwayRadius, routeStyle, maxGrade, elevationMode, climbMin, climbMax, junctions, interchanges });
+      try { this.loadSeed(this.world.seed, this.worldSettings.read()); }
+      catch (error) { element('settings-status').textContent = error instanceof Error ? error.message : String(error); }
     }, { signal: this.events.signal });
-    element('max-grade').addEventListener('input', () => {
-      element('max-grade-value').textContent = `${element<HTMLInputElement>('max-grade').value}%`;
-    }, { signal: this.events.signal });
-    element('road-type').addEventListener('change', () => this.syncRoadControls(), { signal: this.events.signal });
-    element('highway-radius').addEventListener('input', () => this.syncRoadControls(), { signal: this.events.signal });
-    for (const id of ['elevation-mode', 'climb-min', 'climb-max']) element(id).addEventListener('input', () => this.syncClimbControls(), { signal: this.events.signal });
     element('eighteen-bends').addEventListener('click', () => {
       element<HTMLSelectElement>('road-type').value = 'mountain';
-      this.syncRoadControls();
       element<HTMLSelectElement>('route-style').value = '5';
       element<HTMLInputElement>('max-grade').value = '25'; element('max-grade-value').textContent = '25%';
       element<HTMLSelectElement>('elevation-mode').value = 'cycles';
       const min = element<HTMLInputElement>('climb-min'), max = element<HTMLInputElement>('climb-max');
-      this.syncClimbControls();
+      this.worldSettings.sync();
       if (!min.validity.valid || !max.validity.valid) { min.value = '300'; max.value = '900'; }
-      this.syncClimbControls();
+      this.worldSettings.sync();
     }, { signal: this.events.signal });
     element('vegetation-toggle').addEventListener('click', () => {
       const vegetation = this.world.chunks.vegetation;
@@ -338,11 +325,19 @@ export class Game {
       this.resize();
       if (!document.hidden) this.loop.start();
     }, { signal: this.events.signal });
+    this.presets = new PresetPanel(() => ({ seed: this.world.seed, world: this.worldSettings.read(), factorySpeed: this.driving.car.speedLimit === undefined }), preset => {
+      if (!this.loadSeed(preset.seed, preset.world)) throw new Error('世界尚未就绪，请等待恢复后再应用预设。');
+      this.driving.car.park(); this.driving.describeEquipment();
+      this.settings.show();
+    }, preset => {
+      if (preset.factorySpeed) this.driving.car.setSpeedLimit();
+      this.driving.describeTuning(); this.applyGraphics(); this.customGraphics(); this.syncAudioUI();
+    });
     this.loop.start();
   }
 
-  private loadSeed(seed: string, options: Readonly<WorldOptions> = this.world.options): void {
-    if (this.contextLost) return;
+  private loadSeed(seed: string, options: Readonly<WorldOptions> = this.world.options): boolean {
+    if (this.contextLost) return false;
     this.settings.close();
     try {
       const world = new World(this.scene, seed, options);
@@ -359,24 +354,17 @@ export class Game {
       this.world.roadDebug.enabled = element('road-debug').getAttribute('aria-pressed') === 'true';
       this.world.furniture.enabled = element('lights-toggle').getAttribute('aria-pressed') === 'true';
       element<HTMLInputElement>('seed').value = seed;
-      element<HTMLSelectElement>('terrain-kind').value = options.terrain;
-      element<HTMLSelectElement>('road-type').value = options.roadType;
-      element<HTMLSelectElement>('road-width').value = String(options.roadWidth);
-      element<HTMLInputElement>('highway-radius').value = String(options.highwayRadius);
-      this.syncRoadControls();
-      element<HTMLSelectElement>('route-style').value = String(options.routeStyle);
-      element<HTMLInputElement>('junctions').checked = options.junctions;
-      element<HTMLInputElement>('interchanges').checked = options.interchanges;
-      element<HTMLInputElement>('max-grade').value = String(Math.round(options.maxGrade * 100));
-      element('max-grade-value').textContent = `${Math.round(options.maxGrade * 100)}%`;
-      element<HTMLSelectElement>('elevation-mode').value = options.elevationMode;
-      element<HTMLInputElement>('climb-min').value = String(options.climbMin); element<HTMLInputElement>('climb-max').value = String(options.climbMax);
-      this.syncClimbControls();
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.roadType === 'highway' ? ` · 最小半径 ${options.highwayRadius} 米` : ''}${options.elevationMode === 'cycles' ? ` · 目标爬升 ${options.climbMin}–${options.climbMax} 米` : ''} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`;
+      this.worldSettings.write(options);
+      const elevation = absoluteElevation(options) ? ` · ${options.elevationMode === 'fixed' ? '固定往返' : '随机升降'} ${options.altitudeMin}–${options.altitudeMax} 米`
+        : options.elevationMode === 'cycles' ? ` · 目标爬升 ${options.climbMin}–${options.climbMax} 米` : '';
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.roadType === 'highway' ? ` · 最小半径 ${options.highwayRadius} 米` : ''}${elevation} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`
+        + `${options.mountainHeight === 'range' ? ` · 山脉 ${options.mountainMin}–${options.mountainMax} 米` : ''} · 山脉密集度 ${Math.round(options.mountainDensity * 100)}% · 植被 ${Math.round(options.vegetationDensity * 100)}%`;
       this.setError(null);
       this.resetCamera();
+      return true;
     } catch (error) {
       this.setError(`无法加载世界，请重试。${error instanceof Error ? error.message : String(error)}`);
+      return false;
     }
   }
 
@@ -415,19 +403,6 @@ export class Game {
     this.clouds.enabled = enabled;
     element('cloud-toggle').setAttribute('aria-pressed', String(enabled));
     element('cloud-help').textContent = enabled ? '前往穿云起点，按住 Space 上升，Shift 下降。' : '云层已关闭 · 保留远景雾与所选天气。';
-  }
-
-  private syncRoadControls(): void {
-    const radius = element<HTMLInputElement>('highway-radius');
-    radius.disabled = element<HTMLSelectElement>('road-type').value !== 'highway';
-    element('highway-radius-value').textContent = `${radius.value} m${radius.disabled ? ' · 仅高速生效' : ''}`;
-  }
-
-  private syncClimbControls(): void {
-    const enabled = element<HTMLSelectElement>('elevation-mode').value === 'cycles';
-    const min = element<HTMLInputElement>('climb-min'), max = element<HTMLInputElement>('climb-max');
-    min.disabled = max.disabled = !enabled;
-    max.setCustomValidity(enabled && Number(min.value) > Number(max.value) ? '爬升上限不能低于下限。' : '');
   }
 
   private resetCamera(): void {
@@ -664,7 +639,11 @@ export class Game {
         'Service areas': this.world.services.length,
         'Arch bays': this.world.bridgeMesh.archBridges.bayCount, 'Arch ribs': this.world.bridgeMesh.archBridges.ribs.count,
         'Cable spans': this.world.bridgeMesh.cableBridges.spanCount, 'Bridgeheads': this.world.bridgeMesh.abutments.endCount,
-        'Climb range': this.world.options.elevationMode === 'cycles' ? `${this.world.options.climbMin}–${this.world.options.climbMax} m` : 'natural',
+        'Climb range': absoluteElevation(this.world.options) ? `${this.world.options.elevationMode} ${this.world.options.altitudeMin}–${this.world.options.altitudeMax} m`
+          : this.world.options.elevationMode === 'cycles' ? `${this.world.options.climbMin}–${this.world.options.climbMax} m` : 'natural',
+        'Mountain range': this.world.options.mountainHeight === 'range' ? `${this.world.options.mountainMin}–${this.world.options.mountainMax} m` : 'natural',
+        'Mountain density': `${Math.round(this.world.options.mountainDensity * 100)}%`,
+        'Vegetation density': `${Math.round(this.world.options.vegetationDensity * 100)}%`,
         'Elevated services': this.world.services.filter(site => site.ground.elevated).length,
         'Service mileage': this.world.services.map(site => `${(site.sample.distance / 1000).toFixed(2)} km`).join(', ') || '—',
         'Street lamps': this.world.furniture.lampPositions.length,
@@ -725,6 +704,7 @@ export class Game {
   }
 
   dispose(): void {
+    this.presets.dispose(); this.worldSettings.dispose();
     this.cabinDialogs.dispose();
     this.settings.dispose();
     this.audio.dispose();

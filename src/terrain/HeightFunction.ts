@@ -1,6 +1,6 @@
 import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
-import type { TerrainKind, WorldOptions } from '../world/WorldOptions';
+import { DEFAULT_OPTIONS, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { MountainRanges } from './MountainRanges';
 import { mountainIncision } from './MountainErosion';
 
@@ -8,16 +8,34 @@ export class HeightFunction {
   readonly noise: Noise;
   readonly ranges: MountainRanges;
 
-  constructor(seed: string, readonly terrain: TerrainKind = 'alpine', roadType: WorldOptions['roadType'] = 'mountain') {
-    this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed, roadType === 'highway' ? 64000 : 32000);
+  constructor(seed: string, readonly terrain: TerrainKind = 'alpine', roadType: WorldOptions['roadType'] = 'mountain', private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+    this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed, (roadType === 'highway' ? 64000 : 32000) / options.mountainDensity);
   }
 
-  route(z: number) { return this.terrain === 'alpine' ? this.ranges.sample(z) : undefined; }
+  route(z: number) {
+    if (this.terrain !== 'alpine') return;
+    const guide = this.ranges.sample(z);
+    if (this.options.mountainHeight === 'range') {
+      const derivative = (this.options.mountainMax - this.options.mountainMin) / (900 * Math.PI * (1 + ((guide.height - 1400) / 900) ** 2));
+      return { ...guide, height: this.remapHeight(guide.height), grade: guide.grade * derivative };
+    }
+    return guide;
+  }
 
   sample(x: number, z: number): number {
-    const warpX = this.noise.fractal(x / 4200, z / 4200, 2) * 650;
-    const warpZ = this.noise.fractal(x / 4200 + 73, z / 4200 - 29, 2) * 650;
-    const wx = x + warpX, wz = z + warpZ;
+    return this.remapHeight(this.naturalHeight(x, z));
+  }
+
+  private remapHeight(height: number): number {
+    return this.options.mountainHeight === 'natural' ? height : this.options.mountainMin
+      + (this.options.mountainMax - this.options.mountainMin) * (0.5 + Math.atan((height - 1400) / 900) / Math.PI);
+  }
+
+  private naturalHeight(x: number, z: number): number {
+    const density = this.options.mountainDensity, sx = 128 + (x - 128) * density, sz = 128 + (z - 128) * density;
+    const warpX = this.noise.fractal(sx / 4200, sz / 4200, 2) * 650;
+    const warpZ = this.noise.fractal(sx / 4200 + 73, sz / 4200 - 29, 2) * 650;
+    const wx = sx + warpX, wz = sz + warpZ;
     const macro = (this.noise.fractal(wx / 6200, wz / 6200, 3) + 1) * 820;
     const ranges = this.noise.ridged(wx / 3400, wz / 4600, 4) * 3100;
     const medium = this.noise.fractal(wx / 380, wz / 380, 3) * 145;
@@ -72,10 +90,10 @@ export class HeightFunction {
         + medium * 0.2 + dunes * (1 - t) + detail * 0.15 - gullies * basin * (1 - t) * 70;
     }
     const guide = this.ranges.sample(z), lateral = Math.abs(x - guide.x);
-    const valleyWidth = 350 + this.noise.sample(z / 5100, 149) * 180 - guide.level * 150;
-    const flank = Math.max(0, Math.min(1, (lateral - valleyWidth) / (1250 + region * 350)));
+    const valleyWidth = (350 + this.noise.sample(sz / 5100, 149) * 180 - guide.level * 150) / density;
+    const flank = Math.max(0, Math.min(1, (lateral - valleyWidth) * density / (1250 + region * 350)));
     const relief = flank * flank * (3 - 2 * flank);
-    const saddle = Math.min(1, Math.abs(z - this.ranges.passZ(guide.id)) / 1600);
+    const saddle = Math.min(1, Math.abs(z - this.ranges.passZ(guide.id)) * density / 1600);
     const ribs = this.noise.ridged(wx / 180, wz / 290, 2);
     const crests = this.noise.ridged(wx / 1250 + 31, wz / 1700 - 53, 2);
     const drainage = Math.abs(this.noise.sample(wx / 3200 + 61, wz / 900 - 117));

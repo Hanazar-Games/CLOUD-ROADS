@@ -21,7 +21,7 @@ export class TerrainGenerator {
   private readonly biomes: BiomeSystem;
 
   constructor(private readonly seed: string, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.height = new HeightFunction(seed, options.terrain, options.roadType);
+    this.height = new HeightFunction(seed, options.terrain, options.roadType, options);
     this.biomes = new BiomeSystem(seed, options.terrain);
   }
 
@@ -51,6 +51,6 @@ export class TerrainGenerator {
       this.biomes.sample(x, z, y, 4 / magnitude, biome);
       colors.set(biome.color, offset);
     }
-    return { positions, normals, colors, vegetation: generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes) };
+    return { positions, normals, colors, vegetation: generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity) };
   }
 }

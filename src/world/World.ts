@@ -76,7 +76,7 @@ export class World {
   private corridorVersion = -1;
 
   constructor(private readonly scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
-    this.height = new HeightFunction(seed, options.terrain, options.roadType);
+    this.height = new HeightFunction(seed, options.terrain, options.roadType, options);
     this.crossingPlanner = new CrossingPlanner(seed, this.height);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));

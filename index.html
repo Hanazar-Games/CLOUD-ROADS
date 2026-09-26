@@ -18,13 +18,17 @@
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
         <p id="settings-help">调整你的旅程。设置期间暂停行驶；音量可以即时试听。</p>
-        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
+        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
         <details class="world-options" open>
           <summary>驾驶与视角</summary>
           <label for="vehicle-kind">载具</label>
           <select id="vehicle-kind" aria-describedby="vehicle-summary"></select>
           <p id="vehicle-summary" class="panel-help" aria-live="polite"></p>
+          <button id="vehicle-panel-settings" type="button" aria-haspopup="dialog">查看当前载具面板</button>
+          <label for="hud-style">速度表样式</label>
+          <select id="hud-style"><option value="digital">科技数字 · 完整信息</option><option value="dial">经典指针 · 环形仪表</option><option value="minimal">极简 · 专注道路</option></select>
+          <p class="panel-help">所有车型均可使用；速度表下方可打开当前载具面板，查看参数、设备及座位。</p>
           <label for="transmission-mode">变速箱</label>
           <select id="transmission-mode"><option value="auto">自动换挡</option><option value="manual">手动换挡 · [ 降挡 / ] 升挡</option></select>
           <p class="panel-help">乘用车与摩托车 6 挡，重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
@@ -103,6 +107,17 @@
           <form id="world-options">
             <label for="terrain-kind">地貌</label>
             <select id="terrain-kind"><option value="alpine">高山雪岭</option><option value="forest">森林山谷</option><option value="meadow">草甸丘陵</option><option value="autumn">阔叶丘陵</option><option value="karst">喀斯特峰林</option><option value="volcanic">火山高地</option><option value="tundra">冰蚀苔原</option><option value="dunes">沙丘旷野</option><option value="desert">沙漠峡谷</option><option value="badlands">红岩荒原</option></select>
+            <label for="mountain-height">山脉海拔</label>
+            <select id="mountain-height"><option value="natural">地貌原生高度</option><option value="range">自定义随机高低区间</option></select>
+            <div class="climb-range">
+              <label for="mountain-min">天然地形下限 · 米<input id="mountain-min" type="number" min="0" max="6000" step="1" value="0" disabled required /></label>
+              <label for="mountain-max">天然地形上限 · 米<input id="mountain-max" type="number" min="0" max="6000" step="1" value="3500" disabled required /></label>
+            </div>
+            <label class="speed-label" for="mountain-density">山脉密集度 <output id="mountain-density-value">100%</output></label>
+            <input id="mountain-density" type="range" min="25" max="200" step="5" value="100" />
+            <label class="speed-label" for="vegetation-density">植被密度 <output id="vegetation-density-value">100%</output></label>
+            <input id="vegetation-density" type="range" min="0" max="200" step="5" value="100" />
+            <p class="panel-help">山脉越密集，峰谷间距越短；高度和峰谷位置由种子决定。植被密度影响树木、灌木、花草与地表点缀，0% 不生成，仍避让路面与陡坡。高密度增加渲染负担。上述设置应用后重新生成；道路开挖不计入天然地形区间。</p>
             <label for="road-type">道路类型</label>
             <select id="road-type"><option value="mountain">双向两车道山路</option><option value="highway">分隔式双向四车道高速</option></select>
             <label class="speed-label" for="highway-radius">高速主线最小转弯半径 <output id="highway-radius-value">200 m</output></label>
@@ -118,12 +133,19 @@
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
             <label for="elevation-mode">上下坡节奏</label>
-            <select id="elevation-mode" aria-describedby="climb-help"><option value="natural">自然起伏 · 跟随地形</option><option value="cycles">上下山偏好 · 目标爬升</option></select>
+            <select id="elevation-mode" aria-describedby="climb-help altitude-help"><option value="natural">自然起伏 · 跟随地形</option><option value="cycles">上下山偏好 · 目标爬升</option><option value="fixed">固定海拔往返 · 上下山</option><option value="random">区间内随机升降</option></select>
             <div class="climb-range">
               <label for="climb-min">目标爬升下限 · 米<input id="climb-min" type="number" min="50" max="2000" step="50" value="300" disabled required /></label>
               <label for="climb-max">目标爬升上限 · 米<input id="climb-max" type="number" min="50" max="2000" step="50" value="900" disabled required /></label>
             </div>
             <p id="climb-help" class="panel-help">目标影响上下山选线，实际爬升以山体走势为准；到垭口可提前下山，平地不会强行抬高。目标不是绝对海拔，也不保证每次达到。仍遵守最大坡度，0% 时保持水平；服务区附近缓坡过渡。</p>
+            <div class="climb-range">
+              <label for="altitude-min">道路海拔下限 · 米<input id="altitude-min" type="number" min="0" max="6000" step="1" value="300" disabled required /></label>
+              <label for="altitude-max">道路海拔上限 · 米<input id="altitude-max" type="number" min="0" max="6000" step="1" value="1500" disabled required /></label>
+            </div>
+            <label for="elevation-direction">起步升降方向</label>
+            <select id="elevation-direction" disabled><option value="up">从下限开始上山</option><option value="down">从上限开始下山</option><option value="random">由种子随机决定</option></select>
+            <p id="altitude-help" class="panel-help">固定模式在两个海拔附近反复往返；随机模式在区间内交替抽取高低目标，接近目标时平缓换向。最大坡度始终生效，0% 保持起始海拔。绝对海拔模式优先满足道路高度，可能产生高桥或深隧；跟随山体请选自然起伏。</p>
             <div class="actions"><button id="eighteen-bends" type="button">山路十八弯预设</button></div>
             <p class="panel-help">预设选择 5 档山路、25% 坡度及反复上下山，保留有效爬升范围；点击下方应用后生成。</p>
             <label for="road-width">车行道宽度</label>
@@ -194,8 +216,19 @@
           <div class="actions road-actions"><button id="preview-engine" type="button">试听发动机</button><button id="preview-shift" type="button">试听换挡</button><button id="preview-horn" type="button">试听喇叭</button></div>
           <p id="audio-preview-status" class="panel-help" role="status">先开启声音，再选择试听。</p>
           <p id="audio-status" class="panel-help" role="status">声音未开启</p>
-          <p class="panel-help">发动机随车型、转速与换挡变化；湿路胎噪、风雨、日间鸟声与夜间虫鸣分层混音。开窗、敞篷和隧道改变听感。音源由程序合成，设有输出压缩保护；暂停、公告和窗口失焦时静音，设置页允许试听，不保存运行时设置。</p>
+          <p class="panel-help">发动机随车型、转速与换挡变化；湿路胎噪、风雨、日间鸟声与夜间虫鸣分层混音。开窗、敞篷和隧道改变听感。音源由程序合成，设有输出压缩保护；暂停、公告和窗口失焦时静音，设置页允许试听，混音参数可存入预设。</p>
         </details>
+</section>
+<section class="settings-category" id="settings-presets" aria-labelledby="heading-presets"><h3 id="heading-presets">我的预设</h3>
+        <p class="panel-help">保存世界种子、道路与地形、车型与调校、仪表、设备、天气、画质和声音设置。仅在主动保存时写入当前浏览器；不保存位置、车速、行程或玻璃水余量。</p>
+        <label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="60" value="我的山路" autocomplete="off" />
+        <div class="actions"><button id="preset-save" type="button">保存 / 更新本机预设</button><button id="preset-export" type="button">导出当前设置 JSON</button></div>
+        <label for="preset-list">本机预设与导入预览</label><select id="preset-list" aria-describedby="preset-summary"><option value="">尚无预设</option></select>
+        <p id="preset-summary" class="panel-help"></p>
+        <div class="actions"><button id="preset-apply" type="button" disabled>应用预设并返回起点</button><button id="preset-delete" type="button" disabled>删除所选本机预设</button></div>
+        <label for="preset-import">导入 JSON 预设</label><button id="preset-import-open" type="button" aria-controls="preset-import">选择 JSON 文件…</button><input id="preset-import" type="file" accept=".json,application/json" hidden />
+        <p class="panel-help">导入后先预览，再点击应用；应用会重新生成世界并返回起点。若要保留导入的预设，请应用后点击保存。同名保存会更新原预设。最多 32 个本机预设，单个 JSON 不超过 64 KB；清除网站数据会移除本机预设，可先导出备份。</p>
+        <p id="preset-status" role="status" class="panel-help" aria-live="polite"></p>
 </section>
 <section class="settings-category" id="settings-explore" aria-labelledby="heading-explore"><h3 id="heading-explore">探索工具</h3>
         <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
@@ -234,9 +267,17 @@
         <p id="menu-status" role="status"></p><div class="actions"><button id="menu-settings" type="button">设置</button><button id="menu-seats" type="button">选择座位 · P</button><button id="menu-pause" type="button">暂停 / 继续 · F8</button></div>
         <div class="shortcut-scroll"><table class="shortcut-table"><caption>全部快捷键 · 弹窗内不响应驾驶按键</caption><thead><tr><th>模式</th><th>按键</th><th>操作</th></tr></thead><tbody id="shortcut-list"></tbody></table></div>
       </dialog>
+      <dialog id="vehicle-panel" class="cabin-dialog" aria-labelledby="vehicle-panel-title">
+        <header><div><p class="eyebrow">VEHICLE / CONTROL PANEL</p><h2 id="vehicle-panel-title">载具面板</h2></div><button type="button" data-close>返回旅程 · Esc</button></header>
+        <div class="vehicle-panel-scroll"><p id="vehicle-panel-state"></p><dl id="vehicle-panel-specs" class="vehicle-specs"></dl><p id="vehicle-panel-equipment" class="equipment-status"></p>
+        <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表</button><button id="panel-equipment" type="button">车载设备</button><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div>
+        <p id="vehicle-panel-help" class="panel-help"></p></div>
+      </dialog>
       <div class="crosshair" aria-hidden="true">+</div>
       <div id="notice" role="status">拖动视角，开始探索</div>
-      <section id="drive-hud" aria-label="驾驶仪表" hidden>
+      <section id="drive-hud" aria-label="驾驶仪表" data-style="digital" hidden>
+        <div class="hud-heading"><span id="hud-vehicle-name">敞篷跑车</span><span id="hud-mode">DRIVE</span></div>
+        <div class="speed-dial" aria-hidden="true"><svg viewBox="0 0 200 140"><path class="dial-track" d="M 34 121 A 76 76 0 1 1 166 121" /><path class="dial-progress" id="dial-progress" d="M 34 121 A 76 76 0 1 1 166 121" pathLength="100" /><path class="dial-ticks" d="M 34 121 A 76 76 0 1 1 166 121" pathLength="100" /><g id="dial-needle"><path d="M 100 83 L 42 117" /><circle cx="100" cy="83" r="5" /></g><text x="18" y="138">0</text><text id="dial-max" x="182" y="138" text-anchor="end">173</text></svg></div>
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
@@ -246,6 +287,7 @@
         <p id="drive-condition">夏季 · 路面正常</p>
         <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
         <div class="vehicle-indicators"><span id="turn-left" aria-label="左转灯灭">◀</span><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span><span id="turn-right" aria-label="右转灯灭">▶</span></div>
+        <button id="hud-vehicle-panel" type="button" aria-haspopup="dialog">载具面板 <span>参数 · 设备 · 座位</span></button>
       </section>
       <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small><small id="boarding-help" hidden>F 上车</small></section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>

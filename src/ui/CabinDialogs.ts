@@ -1,21 +1,27 @@
 import { element } from '../debug/DebugUI';
 import { shortcuts } from '../input/Shortcuts';
 import type { DrivingSystem } from '../vehicle/DrivingSystem';
+import { lightNames, wiperNames } from '../vehicle/VehicleSystems';
 
 export class CabinDialogs {
   private readonly seats = element<HTMLDialogElement>('seat-dialog');
   private readonly menu = element<HTMLDialogElement>('controls-menu');
+  private readonly vehicle = element<HTMLDialogElement>('vehicle-panel');
   private readonly events = new AbortController();
-  get open(): boolean { return this.seats.open || this.menu.open; }
-  constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: () => void) {
+  get open(): boolean { return this.seats.open || this.menu.open || this.vehicle.open; }
+  constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: (category?: string) => void) {
     const options = { signal: this.events.signal };
     element('seat-open').addEventListener('click', () => this.showSeats(), options);
     element('menu-open').addEventListener('click', () => this.showMenu(), options);
     element('menu-pause').addEventListener('click', () => { pause(); this.close(); }, options);
     element('menu-settings').addEventListener('click', () => { this.close(); settings(); }, options);
     element('menu-seats').addEventListener('click', () => this.showSeats(), options);
+    for (const id of ['hud-vehicle-panel', 'vehicle-panel-settings']) element(id).addEventListener('click', () => this.showVehicle(), options);
+    element('panel-seats').addEventListener('click', () => this.showSeats(), options);
+    element('panel-shortcuts').addEventListener('click', () => this.showMenu(), options);
+    for (const category of ['driving', 'equipment']) element(`panel-${category}`).addEventListener('click', () => { this.close(); settings(category); }, options);
     element('shortcut-list').innerHTML = shortcuts.map(([group, key, action]) => `<tr><td>${group}</td><th scope="row"><kbd>${key}</kbd></th><td>${action}</td></tr>`).join('');
-    for (const dialog of [this.seats, this.menu]) {
+    for (const dialog of [this.seats, this.menu, this.vehicle]) {
       dialog.querySelector('button[data-close]')!.addEventListener('click', () => this.close(), options);
       dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); }, options);
       dialog.addEventListener('beforetoggle', this.clear, options);
@@ -37,12 +43,28 @@ export class CabinDialogs {
     this.show(this.seats);
   }
   showMenu(): void { element('menu-status').textContent = '选择设置、座位或查看按键。关闭菜单后继续旅程。'; this.show(this.menu); }
+  showVehicle(): void {
+    const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';
+    element('vehicle-panel-title').textContent = p.name;
+    element('vehicle-panel-state').textContent = active ? `${cabin.selected.label} · ${cabin.driver ? '驾驶权限' : '乘坐 / 设备操作'} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h · ${car.transmission.gear} 挡 / ${Math.round(car.transmission.rpm)} RPM · 行程 ${(car.trip / 1000).toFixed(2)} km` : '车型预览 · 开始驾驶后可选择座位';
+    const specs = [['车身尺寸', `${p.length} × ${p.width} × ${p.height} m`], ['整备质量', `${(p.mass / 1000).toLocaleString('zh-CN')} t`],
+      ['当前输出', `${Math.round(p.power * car.powerScale / 1000)} kW`], ['速度上限', `${Math.round(car.maxSpeed * 3.6)} km/h`],
+      ['底盘轴距', `${car.wheelbase.toFixed(2)} m`], ['可选座位', `${cabin.seats.length} 席`],
+      ['悬挂调校', `${car.suspension} / 5 · 阻尼 ${Math.round(car.damping * 100)}%`], ['转向辅助', car.steeringAssist ? `${Math.round(car.steeringAssistStrength * 100)}%` : '关闭']];
+    element('vehicle-panel-specs').replaceChildren(...specs.flatMap(([label, value]) => {
+      const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = label; dd.textContent = value; return [dt, dd];
+    }));
+    element('vehicle-panel-equipment').textContent = `车灯 ${lightNames[s.lights]}${glass ? ` · 雨刮 ${wiperNames[s.wipers]} · 车窗 ${Math.round(s.windowTarget * 100)}% · 风机 ${s.fan} / 6 · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ' · 开放骑行，无车窗与雨刮'}`;
+    element('vehicle-panel-help').textContent = element('vehicle-summary').textContent;
+    element<HTMLButtonElement>('panel-seats').disabled = !active;
+    this.show(this.vehicle);
+  }
   private show(dialog: HTMLDialogElement): void {
     if (document.pointerLockElement) document.exitPointerLock();
     this.close(); element<HTMLDialogElement>('explorer').close(); this.clear(); dialog.showModal();
   }
   close(): void {
-    this.clear(); this.seats.close(); this.menu.close();
+    this.clear(); this.seats.close(); this.menu.close(); this.vehicle.close();
     if (!document.querySelector('dialog[open]') && !element('world').inert) element('world').focus();
   }
   dispose(): void { this.close(); this.events.abort(); }

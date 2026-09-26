@@ -8,7 +8,8 @@ import { distantPlant, MEADOW_GRID, PLANT_GRID, PLANT_SPACING } from './Vegetati
 
 // Local x/y/z, scale, rotation, species, tint; randomness precedes LOD filtering.
 export function generateVegetation(seed: string, cx: number, cz: number, cells: TerrainCells,
-  positions: Float32Array, corridor: RoadCorridor, biomes: BiomeSystem): Float32Array<ArrayBuffer> {
+  positions: Float32Array, corridor: RoadCorridor, biomes: BiomeSystem, densityScale = 1): Float32Array<ArrayBuffer> {
+  if (densityScale <= 0) return new Float32Array();
   const rng = createRng(hashSeed(`${seed}:plants:${cx}:${cz}`)), groves = new Noise(hashSeed(`${seed}:groves`));
   const plants: number[] = [], biome = createBiomeSample(), surface = new TerrainSurface(cells, positions);
   const clear = (x: number, z: number, radius: number) => corridor.distance(x, z, corridor.roadHalfWidth + radius + 2) >= corridor.roadHalfWidth + radius + 2
@@ -27,17 +28,17 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       const habitat = w.forest + w.valley;
       let kind: number, scale: number, radius: number;
       if (layer === 0) {
-        const density = desert ? 0.11 * grove : (w.forest * 0.95 + w.valley * 0.65) * grove * biomes.treeDensity;
+        const density = (desert ? 0.11 * grove : (w.forest * 0.95 + w.valley * 0.65) * grove * biomes.treeDensity) * densityScale;
         if (chance < density && normalY > 0.76 && w.snow < 0.2) {
           kind = desert ? 1 : height < 1700 && species > 0.5 ? 2 : 0;
           if (biomes.autumn && species > 0.12) kind = 10;
           scale = desert ? 0.65 + size * 0.8 : 0.55 + size ** 0.7 * 0.95;
           radius = (kind === 1 ? 2 : 4.7) * scale;
-        } else if (cells !== 8 && chance < 0.06 + w.rock * 0.4 + w.alpine * 0.18 && w.snow < 0.6) {
+        } else if (cells !== 8 && chance < (0.06 + w.rock * 0.4 + w.alpine * 0.18) * densityScale && w.snow < 0.6) {
           kind = 5; scale = 0.5 + size * 1.1; radius = 2.1 * scale;
         } else continue;
       } else {
-        const cover = desert ? 0.24 * grove : (habitat * 0.85 + w.alpine * 0.28 + w.rock * 0.12) * grove;
+        const cover = (desert ? 0.24 * grove : (habitat * 0.85 + w.alpine * 0.28 + w.rock * 0.12) * grove) * densityScale;
         if (chance > cover || w.snow > 0.3 || normalY < 0.64) continue;
         kind = desert ? 4 : species < 0.3 ? 3 : 6;
         scale = kind === 6 ? 0.65 + size * 0.85 : 0.45 + size * 0.8;
@@ -58,7 +59,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       if (normalY < 0.75) continue;
       biomes.sample(wx, wz, height, normalY, biome);
       const w = biome.weights, patch = 0.65 + groves.sample(wx / 38, wz / 38) * 0.35;
-      if (w.desert > 0.2 || w.snow > 0.15 || chance > (w.valley + w.forest + w.alpine * 0.25) * patch) continue;
+      if (w.desert > 0.2 || w.snow > 0.15 || chance > (w.valley + w.forest + w.alpine * 0.25) * patch * densityScale) continue;
       if (!clear(wx, wz, 1.1)) continue;
       const flowers = 0.16 + Math.max(0, groves.sample(wx / 24 + 71, wz / 24)) * 0.4;
       plants.push(x, height - 0.04, z, 0.7 + size * 0.65, rotation, species < flowers / 2 ? 8 : species < flowers ? 9 : 7, 0.85 + size * 0.25);

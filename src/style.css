@@ -134,6 +134,12 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 .settings-category .speed-label { margin-top: 16px; }
 .settings-category .actions { flex-wrap: wrap; }
 .settings-category .seed-entry input { font-size: 14px; }
+.settings-category input[type=text] { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; color: #e7f4f8; background: #0a1d2d; border: 1px solid #79e5ed35; border-radius: 5px; }
+#preset-status { padding: 10px 0; color: var(--accent); overflow-wrap: anywhere; }
+#preset-summary { overflow-wrap: anywhere; }
+#settings-presets > label { margin: 16px 0 6px; }
+#settings-presets > .actions { margin: 12px 0; }
+#preset-list { width: 100%; padding: 8px; background: #0a1d2d; border: 1px solid #79e5ed35; border-radius: 5px; color: #e7f4f8; }
 .audio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .cabin-dialog { width: min(720px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); padding: 20px; border: 1px solid #79e5ed66; border-radius: 12px; background: #091925; color: #e7f4f8; }
 .cabin-dialog[open] { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
@@ -161,7 +167,46 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 .in-cabin #drive-hud { left: 24px; bottom: 70px; transform: none; width: 260px; padding: 12px; }
 .in-cabin #vehicle-speed { font-size: 36px; min-width: 56px; letter-spacing: -1px; }
 .in-cabin #cabin-status { display: none; }
+.hud-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; font-size: 10px; color: #c0e2e9; }
+#hud-mode { color: var(--accent); font: 8px ui-monospace, monospace; letter-spacing: 1px; }
+#drive-hud { left: 28px; right: auto; transform: none; max-width: calc(100vw - 24px); box-sizing: border-box; border-radius: 12px; }
+#hud-vehicle-panel { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 10px; padding: 9px 10px; border: 1px solid #79e5ed55; border-radius: 5px; background: #174055; color: #dbfaff; pointer-events: auto; cursor: pointer; font-size: 11px; }
+#hud-vehicle-panel span { font-size: 9px; color: #a6c4cd; }
+#hud-vehicle-panel:hover { background: #225569; }
+#hud-vehicle-panel:focus-visible { outline: 2px solid #b6faff; outline-offset: 2px; }
+.speed-dial { display: none; height: 108px; text-align: center; }
+.speed-dial svg { height: 100%; width: 180px; overflow: visible; }
+.dial-track, .dial-progress { fill: none; stroke: #688a9444; stroke-width: 8; stroke-linecap: round; }
+.dial-progress { stroke: #efc582; stroke-dasharray: 0 100; }
+.dial-ticks { fill: none; stroke: #f7dfb688; stroke-width: 8; stroke-dasharray: .4 9.6; }
+#dial-needle { fill: #f7dfb6; stroke: #f7dfb6; stroke-width: 3; }
+.speed-dial text { fill: #d0c3b1; font: 10px ui-monospace, monospace; }
+#drive-hud[data-style=dial] { background: linear-gradient(135deg, #28241fec, #111919ef); border-color: #d4b27a77; }
+#drive-hud[data-style=dial] .speed-dial { display: block; }
+#drive-hud[data-style=dial] .speed-track { display: none; }
+#drive-hud[data-style=dial] #vehicle-speed { font-size: 36px; min-width: 54px; letter-spacing: -1px; }
+#drive-hud[data-style=dial] .drive-reading { justify-content: center; margin-top: 0; }
+#drive-hud[data-style=dial] #cabin-status, #drive-hud[data-style=dial] #radio-reading { display: none; }
+#drive-hud[data-style=minimal] { width: 270px; background: #07131bde; padding: 12px 16px; }
+#drive-hud[data-style=minimal] #vehicle-speed { font-size: 44px; min-width: 64px; letter-spacing: -1px; }
+#drive-hud[data-style=minimal] #seat-reading, #drive-hud[data-style=minimal] #radio-reading, #drive-hud[data-style=minimal] #cabin-status,
+#drive-hud[data-style=minimal] .rpm-reading, #drive-hud[data-style=minimal] .route-guidance { display: none; }
+.vehicle-panel-scroll { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.vehicle-specs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); gap: 10px 16px; margin: 20px 0; font-size: 13px; }
+.vehicle-specs dt { color: #a1becb; opacity: 1; }.vehicle-specs dd { margin: 0; color: #e2f7f5; overflow-wrap: anywhere; }
+.vehicle-panel-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+#vehicle-panel .eyebrow { color: var(--accent); font-size: 9px; margin-bottom: 6px; }
+#vehicle-panel header > div { min-width: 0; } #vehicle-panel header > button { flex-shrink: 0; }
+@media (max-height: 650px) {
+  #drive-hud { padding: 10px 14px; }
+  #drive-hud #seat-reading, #drive-hud #radio-reading, #drive-hud #cabin-status, #drive-hud .route-guidance,
+  #drive-hud .rpm-reading, #drive-hud #drive-condition { display: none; }
+  #drive-hud #vehicle-speed { font-size: 34px; min-width: 50px; letter-spacing: -1px; }
+  #drive-hud .speed-dial { height: 52px; }
+  #drive-hud .hud-heading { margin-bottom: 5px; }
+}
 @media (max-width: 620px) {
+  #drive-hud { left: 50%; right: auto; transform: translateX(-50%); }
   .in-cabin #drive-hud { left: 12px; bottom: 12px; width: 230px; }
   .in-cabin #drive-condition, .in-cabin .route-guidance { display: none; }
 }

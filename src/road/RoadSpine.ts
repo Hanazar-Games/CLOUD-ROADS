@@ -23,7 +23,7 @@ export class RoadSpine {
 
   constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS,
     private readonly origin?: RoadControlPoint, private readonly prefix: readonly RoadSegment[] = []) {
-    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType);
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType, options);
     this.generator = new RoadGenerator(seed, this.terrain, options, origin);
     this.resume = this.generator.start;
     this.segments.push(...prefix);

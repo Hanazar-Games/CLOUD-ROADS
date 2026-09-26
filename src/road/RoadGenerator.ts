@@ -2,7 +2,7 @@ import { HeightFunction } from '../terrain/HeightFunction';
 import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
 import { RoadSegment, type MountainPlan, type RoadControlPoint } from './RoadSegment';
-import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
+import { absoluteElevation, DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { MountainGuide } from '../terrain/MountainRanges';
 import { serviceTarget } from '../service/ServiceSchedule';
 import { StructurePlanner } from './StructurePlanner';
@@ -18,13 +18,15 @@ export class RoadGenerator {
   private readonly structures: StructurePlanner;
 
   constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS, origin?: RoadControlPoint) {
-    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType);
+    this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType, options);
     this.noise = new Noise(hashSeed(`${seed}:road`));
     this.structures = new StructurePlanner(this.terrain, options);
     this.start = origin ?? { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
+    if (!origin && absoluteElevation(options)) this.start.position.y = this.initialAscent() ? options.altitudeMin : options.altitudeMax;
   }
 
   next(start: RoadControlPoint): RoadSegment {
+    if (absoluteElevation(this.options)) start = this.elevationTarget(start);
     const junction = junctionsEnabled(this.options) && junctionApproach(start.distance);
     start = { ...start, junction: junction || undefined };
     if (junction) {
@@ -38,6 +40,12 @@ export class RoadGenerator {
     if (structure && start.distance >= structure.finish) structure = undefined;
     if (!structure && start.distance >= (start.nextStructure ?? 0) && !this.serviceApproach(start.distance)) {
       structure = this.structures.plan(start);
+      if (structure && absoluteElevation(this.options)) {
+        const travel = structure.finish - start.distance + 192;
+        const a = start.position.y + Math.min(start.grade, structure.grade) * travel;
+        const b = start.position.y + Math.max(start.grade, structure.grade) * travel;
+        if (a < this.options.altitudeMin + 2 || b > this.options.altitudeMax - 2) structure = undefined;
+      }
       if (structure) {
         const service = serviceTarget(this.seed, Math.max(1, Math.round((start.distance + structure.finish) / 30000)));
         if (structure.finish > service - 1000 && start.distance < service + 800) structure = undefined;
@@ -68,6 +76,19 @@ export class RoadGenerator {
 
   private climbGain(cycle: number): number {
     return this.options.climbMin + hashSeed(`${this.seed}:climb:${cycle}`) / 4294967296 * (this.options.climbMax - this.options.climbMin);
+  }
+
+  private initialAscent(): boolean {
+    return this.options.elevationDirection === 'random' ? hashSeed(`${this.seed}:altitude-start`) % 2 === 0 : this.options.elevationDirection === 'up';
+  }
+
+  private elevationTarget(start: RoadControlPoint): RoadControlPoint {
+    let cycle = start.climb?.cycle ?? 0, ascending = start.climb?.ascending ?? this.initialAscent();
+    if (start.climb && (ascending ? 1 : -1) * (start.climb.target - start.position.y) > 1) return start;
+    if (start.climb) { cycle++; ascending = !ascending; }
+    const { altitudeMin: low, altitudeMax: high } = this.options;
+    const variation = this.options.elevationMode === 'random' ? hashSeed(`${this.seed}:altitude:${cycle}`) / 4294967296 * (high - low) * 0.35 : 0;
+    return { ...start, climb: { cycle, ascending, base: start.position.y, target: ascending ? high - variation : low + variation } };
   }
 
   private serviceApproach(distance: number): boolean {
@@ -114,7 +135,7 @@ export class RoadGenerator {
       const heading = start.heading + turn * Math.PI / 180;
       if (Math.abs(heading - this.start.heading) > 1) continue;
       const grades = new Set([this.nextGrade(start, this.desiredGrade(start, heading)),
-        ...[-1, -0.5, 0, 0.5, 1].map(grade => this.nextGrade(start, grade * gradeLimit))]);
+        ...(absoluteElevation(this.options) ? [] : [-1, -0.5, 0, 0.5, 1].map(grade => this.nextGrade(start, grade * gradeLimit)))]);
       for (const grade of grades) {
         const segment = new RoadSegment(start, heading, grade);
         let terrainCost = 0, cliffCost = 0;
@@ -151,6 +172,7 @@ export class RoadGenerator {
   }
 
   private desiredGrade(start: RoadControlPoint, heading: number, length = 96): number {
+    if (absoluteElevation(this.options)) return clamp((start.climb!.target - start.position.y) / 1200, this.options.maxGrade);
     const curve = new RoadSegment(start, heading, start.grade, length);
     let numerator = 0, denominator = 0;
     // Fit terrain to the segment's integrated grade, then damp the correction.
@@ -169,7 +191,8 @@ export class RoadGenerator {
     const desired = this.start.heading + clamp(guide ? direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
     const heading = this.limitHeading(start, straight ? this.start.heading : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60));
     const limit = this.options.maxGrade;
-    const grade = limit === 0 ? 0 : clamp(start.grade + clamp(this.desiredGrade(start, heading) - start.grade, 0.002 * Math.max(1, limit / 0.03)), limit);
+    const grade = absoluteElevation(this.options) ? this.nextGrade(start, this.desiredGrade(start, heading))
+      : limit === 0 ? 0 : clamp(start.grade + clamp(this.desiredGrade(start, heading) - start.grade, 0.002 * Math.max(1, limit / 0.03)), limit);
     return new RoadSegment(start, heading, grade);
   }
 

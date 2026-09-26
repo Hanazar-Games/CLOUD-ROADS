@@ -39,6 +39,10 @@ export class DrivingSystem {
       if (Object.hasOwn(vehicleProfiles, selector.value)) this.selectVehicle(selector.value as VehicleKind);
     }, options);
     this.describeVehicle();
+    element('hud-style').addEventListener('change', () => {
+      const style = element<HTMLSelectElement>('hud-style').value;
+      if (['digital', 'dial', 'minimal'].includes(style)) element('drive-hud').dataset.style = style;
+    }, options);
     this.systems.configure(this.car.profile.shape);
     element('transmission-mode').addEventListener('change', () => {
       this.car.transmission.mode = element<HTMLSelectElement>('transmission-mode').value === 'manual' ? 'manual' : 'auto';
@@ -254,7 +258,11 @@ export class DrivingSystem {
         : this.exitBlockedTime > 0 ? '车旁空间不足，请移到平缓路段再下车'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
-      element('speed-line').style.transform = `scaleX(${Math.min(1, Math.abs(this.car.speed) / this.car.maxSpeed)})`;
+      const speedRatio = Math.min(1, Math.abs(this.car.speed) / this.car.maxSpeed);
+      element('speed-line').style.transform = `scaleX(${speedRatio})`;
+      element('dial-progress').style.strokeDasharray = `${speedRatio * 100} 100`;
+      element('dial-needle').setAttribute('transform', `rotate(${speedRatio * 240} 100 83)`);
+      element('hud-mode').textContent = operator ? 'CRANE' : this.cabin.driver ? 'DRIVE' : 'PASSENGER';
       element('drive-hud').classList.toggle('braking', this.car.braking);
       element('suspension-compression').textContent = `轮端压缩 ${this.car.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`
         + (this.car.trailer ? ` · 挂车 ${this.car.trailer.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm` : '');
@@ -314,6 +322,7 @@ export class DrivingSystem {
 
   private describeVehicle(): void {
     const p = this.car.profile;
+    element('hud-vehicle-name').textContent = p.name;
     this.describeTuning();
     this.systems.hasWindshield = p.shape !== 'motorcycle';
     this.describeEquipment();
@@ -333,8 +342,9 @@ export class DrivingSystem {
     this.mesh.setPaint(value === 'default' ? this.car.profile.paint : parseInt(value, 16));
   }
 
-  private describeTuning(): void {
+  describeTuning(): void {
     const kmh = Math.round(this.car.maxSpeed * 3.6);
+    element('dial-max').textContent = String(kmh);
     element<HTMLInputElement>('vehicle-max-speed').value = String(kmh);
     element('vehicle-max-speed-value').textContent = `${kmh} km/h${this.car.speedLimit === undefined ? ' · 车型默认' : ''}`;
     element<HTMLInputElement>('steering-assist').checked = this.car.steeringAssist;

@@ -9,7 +9,7 @@ test('opens categorized modal settings, freezes driving and restores fresh keybo
   await page.locator('#controls-toggle').click();
   const dialog = page.getByRole('dialog', { name: '旅程设置' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveCount(7);
+  await expect(dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveCount(8);
   const position = page.locator('[data-metric="Vehicle position"]');
   await page.waitForTimeout(250); const parked = await position.textContent();
   await page.keyboard.press('KeyF'); await page.waitForTimeout(300);
@@ -75,7 +75,7 @@ test('shifts automatically, allows manual shifts and blocks roof motion at speed
 test('keeps every settings category usable in a short narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 450 }); await page.goto('/?seed=FLEET-FLAT');
   await openSettings(page);
-  for (const [category, id] of [['driving', 'transmission-mode'], ['equipment', 'cabin-fan'], ['world', 'road-width'], ['weather', 'daylight'], ['graphics', 'view-distance'], ['audio', 'preview-horn'], ['explore', 'cloud-toggle']]) {
+  for (const [category, id] of [['driving', 'transmission-mode'], ['equipment', 'cabin-fan'], ['world', 'road-width'], ['weather', 'daylight'], ['graphics', 'view-distance'], ['audio', 'preview-horn'], ['presets', 'preset-export'], ['explore', 'cloud-toggle']]) {
     await page.locator(`[data-settings-target="${category}"]`).click();
     const heading = await page.locator(`#settings-${category} h3`).boundingBox();
     const content = await page.locator('#settings-content').boundingBox();
