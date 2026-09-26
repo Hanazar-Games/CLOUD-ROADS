@@ -42,14 +42,14 @@ test('renders WebGL, resizes, flies, pauses and exposes debug telemetry', async 
   await page.keyboard.down('KeyW');
   await expect(page.locator('#position')).not.toHaveText(before!);
   await page.keyboard.up('KeyW');
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#notice')).toContainText('已暂停');
   const stopped = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(250);
   await page.keyboard.up('KeyW');
   await expect(page.locator('#position')).toHaveText(stopped!);
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await page.setViewportSize({ width: 1100, height: 720 });
   await expect.poll(() => page.locator('#world').evaluate((canvas: HTMLCanvasElement) => canvas.width / canvas.height)).toBeCloseTo(1100 / 720, 2);
   expect(errors).toEqual([]);

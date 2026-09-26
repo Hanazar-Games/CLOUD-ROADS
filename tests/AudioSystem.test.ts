@@ -24,6 +24,12 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it('selects ten radio presets without allocating an audio context and rejects invalid stations', () => {
+  const audio = new AudioSystem();
+  for (let i = 1; i <= 10; i++) { audio.tune(i); expect(audio.station).toBe(i); expect(audio.musicPace).toBeGreaterThanOrEqual(0.6); }
+  audio.tune(11); audio.tune(NaN); expect(audio.station).toBe(10); expect(audio.state).toBe('locked');
+});
+
 it('uses one output limiter and refuses preview while muted or inactive', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem();

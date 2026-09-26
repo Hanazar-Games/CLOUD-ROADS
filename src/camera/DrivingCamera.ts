@@ -2,6 +2,7 @@ import { Euler, Quaternion, Vector3, type PerspectiveCamera } from 'three';
 import type { VehiclePhysics } from '../vehicle/VehiclePhysics';
 import type { DrivingSurface } from '../vehicle/DrivingSurface';
 import { vehicleOffset } from '../vehicle/VehicleConfig';
+import type { CabinSeat, SeatAdjustment } from '../vehicle/CabinState';
 
 export type DrivingView = 'chase' | 'cockpit' | 'hood';
 export const drivingViews: DrivingView[] = ['chase', 'cockpit', 'hood'];
@@ -12,6 +13,9 @@ export class DrivingCamera {
   distance = 7;
   height = 0;
   enclosed = false;
+  seat?: CabinSeat;
+  adjustment?: SeatAdjustment;
+  seatYaw = 0;
   private yaw = 0; private pitch = 0;
   private bodyPitch = 0; private bodyRoll = 0;
   private lastView: DrivingView = 'chase';
@@ -36,7 +40,7 @@ export class DrivingCamera {
     this.bodyPitch += (car.pitch - this.bodyPitch) * blend;
     this.bodyRoll += (car.roll * 0.3 - this.bodyRoll) * blend;
     const tunnel = surface.inTunnel(car.x, car.z, 14);
-    const yawLimit = this.view === 'chase' ? Math.PI : 1.45;
+    const yawLimit = this.view === 'chase' || this.seat?.role !== 'driver' && this.seat ? Math.PI : 1.45;
     this.yaw = Math.max(-yawLimit, Math.min(yawLimit, this.yaw + look[0] * 0.0025));
     this.pitch = Math.max(-0.3, Math.min(0.5, this.pitch + look[1] * 0.002));
     const cabInTunnel = tunnel && car.profile.length > 5;
@@ -62,12 +66,21 @@ export class DrivingCamera {
     } else {
       this.euler.set(car.pitch, -car.heading, car.roll);
       this.rotation.setFromEuler(this.euler);
-      const eye = car.profile.eye, cockpit = this.view === 'cockpit' || cabInTunnel;
+      const eye = this.seat ?? car.profile.eye, cockpit = this.view === 'cockpit' || cabInTunnel;
       const raised = cockpit && (this.enclosed || car.profile.shape !== 'roadster' && car.profile.shape !== 'motorcycle') ? Math.min(0.05, this.height) : this.height;
       this.offset.set(cockpit ? eye.x : 0, (cockpit ? eye.y : eye.y - 0.12) + raised,
-        cockpit ? -eye.along : car.kind === 'roadster' ? -1.2 : -car.profile.chassisLength / 2 - 0.12).applyQuaternion(this.rotation);
+        cockpit ? -eye.along : car.kind === 'roadster' ? -1.2 : -car.profile.chassisLength / 2 - 0.12);
+      if (cockpit && this.adjustment) {
+        this.offset.x += this.adjustment.x; this.offset.y += this.adjustment.height;
+        this.offset.z += -this.adjustment.along + this.adjustment.recline * 0.2;
+      }
+      if (cockpit && this.seat?.role === 'operator') {
+        const x = this.offset.x, z = this.offset.z - 2.25, yaw = this.seatYaw;
+        this.offset.x = x * Math.cos(yaw) + z * Math.sin(yaw); this.offset.z = 2.25 - x * Math.sin(yaw) + z * Math.cos(yaw);
+      }
+      this.offset.applyQuaternion(this.rotation);
       this.camera.position.set(car.x - origin.x, car.y, car.z - origin.z).add(this.offset);
-      this.camera.rotation.set(this.bodyPitch - this.pitch, -car.heading - this.yaw, this.bodyRoll, 'YXZ');
+      this.camera.rotation.set(this.bodyPitch - this.pitch + (cockpit ? this.adjustment?.recline ?? 0 : 0), -car.heading - this.yaw + (cockpit ? this.seatYaw : 0), this.bodyRoll, 'YXZ');
     }
     if (this.camera.fov !== this.fov || this.camera.near !== 0.08) {
       this.camera.fov = this.fov; this.camera.near = 0.08; this.camera.updateProjectionMatrix();

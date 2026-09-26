@@ -1,3 +1,5 @@
+import { radioStations } from './RadioStations';
+
 export interface SoundState {
   driving: boolean; speed: number; throttle: boolean; mass: number; motorcycle: boolean;
   rain: number; shelter: number; cockpit: boolean; signal: boolean; wiper: number; walkingSpeed: number;
@@ -25,6 +27,7 @@ export class AudioSystem {
   effectsVolume = 0.7;
   musicStyle: MusicStyle = 'ambient';
   musicPace = 1;
+  station = 1;
   error = '';
   private context?: AudioContext;
   private master?: GainNode;
@@ -57,6 +60,7 @@ export class AudioSystem {
   private transitioning = false;
   private disposed = false;
   private time = 0;
+  private musicTime = 0;
   private chord = -1;
   private step = 0;
   private lastSignal = false;
@@ -65,6 +69,12 @@ export class AudioSystem {
   private readonly targets = new WeakMap<AudioParam, number>();
 
   get state(): string { return this.error ? 'unavailable' : this.context?.state ?? 'locked'; }
+
+  tune(channel: number): void {
+    if (!Number.isInteger(channel) || channel < 1 || channel > radioStations.length) return;
+    const station = radioStations[channel - 1];
+    this.station = channel; this.musicStyle = station.style; this.musicPace = station.pace; this.musicTime = 0;
+  }
 
   toggle(): void {
     if (this.disposed) return;
@@ -163,7 +173,7 @@ export class AudioSystem {
     set(this.rainGain!.gain, state.rain * 0.17 * (0.35 + cabin * 0.65) * (1 - state.shelter) * this.weatherVolume);
     set(this.tireGain!.gain, Math.min(0.15, speed * 0.004) * (1 + state.wet * 0.65) * (0.55 + cabin * 0.45) * this.tireVolume);
     set(this.wiperGain!.gain, state.driving && dt > 0 ? Math.min(0.07, Math.abs(state.wiper - this.lastWiper) / dt * 0.045) * this.cabinVolume : 0, 0.025);
-    set(this.cabinGain!.gain, state.driving ? (state.fan * 0.012 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);
+    set(this.cabinGain!.gain, state.driving ? (state.fan * 0.009 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);
     set(this.horn!.frequency, state.mass > 4000 ? 155 : state.motorcycle ? 490 : 350);
     set(this.hornGain!.gain, (state.horn || preview && this.previewKind === 'horn' ? 0.14 : 0) * this.effectsVolume, 0.015);
     const chirp = this.time % (state.night > 0.5 ? 1.4 : 8.7);
@@ -180,11 +190,13 @@ export class AudioSystem {
       this.pulse(this.stepGain!, 0.22 * this.effectsVolume, 0.025);
     }
     this.lastSignal = state.signal; this.lastWiper = state.wiper;
-    this.time += dt * this.musicPace;
-    const chord = Math.floor(this.time / 12) % chords.length;
-    const transpose = this.musicStyle === 'night' ? 0.75 : this.musicStyle === 'motion' ? 1.12246 : 1;
+    this.time += dt; this.musicTime += dt * this.musicPace;
+    const station = radioStations[this.station - 1];
+    const chord = Math.floor(this.musicTime / 12) % chords.length;
+    const transpose = station.pitch * (this.musicStyle === 'night' ? 0.75 : this.musicStyle === 'motion' ? 1.12246 : 1);
+    this.melody!.type = station.wave;
     this.chord = chord; this.voices.forEach((voice, i) => set(voice.frequency, chords[chord][i] * transpose, 0.6));
-    const beat = this.time % (this.musicStyle === 'motion' ? 0.6 : 1.2), note = [0, 2, 1, 3, 2, 1, 0, 3][Math.floor(this.time / (this.musicStyle === 'motion' ? 0.6 : 1.2)) % 8];
+    const beat = this.musicTime % (this.musicStyle === 'motion' ? 0.6 : 1.2), note = [0, 2, 1, 3, 2, 1, 0, 3][Math.floor(this.musicTime / (this.musicStyle === 'motion' ? 0.6 : 1.2)) % 8];
     set(this.melody!.frequency, chords[this.chord][note] * 2 * transpose, 0.025);
     set(this.melodyGain!.gain, (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
   }

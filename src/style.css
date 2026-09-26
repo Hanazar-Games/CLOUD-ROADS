@@ -135,8 +135,36 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 .settings-category .actions { flex-wrap: wrap; }
 .settings-category .seed-entry input { font-size: 14px; }
 .audio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.cabin-dialog { width: min(720px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); padding: 20px; border: 1px solid #79e5ed66; border-radius: 12px; background: #091925; color: #e7f4f8; }
+.cabin-dialog[open] { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.cabin-dialog::backdrop { background: #03101bc9; }
+.cabin-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.cabin-dialog h2, .cabin-dialog p { margin: 0; }
+.cabin-dialog h2 { font-size: 22px; font-weight: 500; }
+.cabin-dialog p { font-size: 12px; line-height: 1.6; }
+.cabin-dialog button { min-height: 38px; border: 1px solid #79e5ed55; border-radius: 5px; background: #163247; color: #e7f4f8; padding: 8px 10px; cursor: pointer; }
+.cabin-dialog .actions { flex-shrink: 0; flex-wrap: wrap; }
+.seat-scroll, .shortcut-scroll { overflow: auto; overscroll-behavior: contain; min-height: 0; }
+#seat-map { display: grid; grid-template-columns: 1fr 1fr 20px 1fr 1fr; gap: 10px; padding: 18px 8px; border: 1px solid #79e5ed33; border-radius: 28px; }
+.seat-front { text-align: center; padding: 12px; color: var(--accent); }
+#seat-map .seat { min-height: 52px; font-size: 12px; padding: 7px 3px; }
+#seat-map .driver { border-color: #a9d68b; }
+#seat-map .operator { border-color: #ecc471; }
+#seat-map [aria-pressed=true] { background: #79e5ed; color: #08222c; }
+#seat-map button:disabled { opacity: .45; cursor: not-allowed; }
+.shortcut-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.shortcut-table caption { text-align: left; padding: 8px 0 16px; color: #a6bfcb; }
+.shortcut-table th, .shortcut-table td { padding: 10px 6px; border-bottom: 1px solid #79e5ed22; text-align: left; }
+.shortcut-table th { font-weight: 500; color: var(--accent); }
 .equipment-status { padding: 12px; border-left: 2px solid var(--accent); background: #102534; font-size: 12px; line-height: 1.6; }
 .rpm-reading { margin-top: 4px; font: 10px ui-monospace, monospace; color: #97bbc8; text-align: center; }
+.in-cabin #drive-hud { left: 24px; bottom: 70px; transform: none; width: 260px; padding: 12px; }
+.in-cabin #vehicle-speed { font-size: 36px; min-width: 56px; letter-spacing: -1px; }
+.in-cabin #cabin-status { display: none; }
+@media (max-width: 620px) {
+  .in-cabin #drive-hud { left: 12px; bottom: 12px; width: 230px; }
+  .in-cabin #drive-condition, .in-cabin .route-guidance { display: none; }
+}
 @media (max-width: 640px) {
   .settings-header { padding: 16px 16px 10px; } .settings-header h2 { font-size: 21px; }
   #settings-help { padding: 0 16px 12px; font-size: 11px; }

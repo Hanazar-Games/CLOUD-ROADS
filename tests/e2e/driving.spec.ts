@@ -74,8 +74,8 @@ test('switches views and tuning, isolates settings and announcements, and resume
   await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.press('KeyR');
   await expect(page.locator('#vehicle-gear')).toHaveText('P');
-  await page.keyboard.press('KeyP');
-  await page.keyboard.down('KeyW'); await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
+  await page.keyboard.down('KeyW'); await page.keyboard.press('F8');
   await page.keyboard.down('KeyW'); await page.waitForTimeout(400);
   await expect(page.locator('#vehicle-speed')).toHaveText('0');
   await page.keyboard.up('KeyW'); await page.keyboard.down('KeyW');

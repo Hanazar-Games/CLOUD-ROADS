@@ -40,7 +40,7 @@ test('customizes all winding levels and grades, renders roadside flowers and dri
   await (await control(page, page.locator('#drive-toggle'))).click();
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(45);
-  await page.keyboard.up('KeyW'); await page.keyboard.press('KeyP');
+  await page.keyboard.up('KeyW'); await page.keyboard.press('F8');
   expect(parseFloat((await metric('Road curvature').textContent())!)).toBe(0);
   expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBe(0);
   await toggleSettings(page);

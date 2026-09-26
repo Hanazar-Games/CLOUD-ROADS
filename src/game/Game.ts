@@ -16,6 +16,8 @@ import { WalkingSystem } from '../walking/WalkingSystem';
 import { graphicsPresets, renderPixelRatio } from './GraphicsSettings';
 import { AudioSystem, audioChannels, type MusicStyle } from '../audio/AudioSystem';
 import { SettingsDialog } from '../ui/SettingsDialog';
+import { CabinDialogs } from '../ui/CabinDialogs';
+import { radioStations } from '../audio/RadioStations';
 import { seasonNames, type Season } from '../season/SeasonState';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
@@ -40,6 +42,7 @@ export class Game {
   private world: World;
   private readonly driving: DrivingSystem;
   private readonly walking: WalkingSystem;
+  private readonly cabinDialogs: CabinDialogs;
   private paused = false;
   private wireframe = false;
   private hudTime = 0;
@@ -56,6 +59,7 @@ export class Game {
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world);
+    this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), () => this.settings.show());
     this.world.resetCamera(this.camera);
     element('phase-label').textContent = '/ DRIVE';
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -78,6 +82,9 @@ export class Game {
       }, { signal: this.events.signal });
     }
     element('music-style').addEventListener('change', () => { this.audio.musicStyle = element<HTMLSelectElement>('music-style').value as MusicStyle; }, { signal: this.events.signal });
+    const radio = element<HTMLSelectElement>('radio-station');
+    radio.replaceChildren(...radioStations.map((station, i) => new Option(`${i + 1} · ${station.name}`, String(i + 1))));
+    radio.addEventListener('change', () => this.tuneRadio(Number(radio.value)), { signal: this.events.signal });
     element('music-pace').addEventListener('input', () => {
       const value = Number(element<HTMLInputElement>('music-pace').value); this.audio.musicPace = value / 100;
       element('music-pace-value').textContent = `${value}%`;
@@ -89,8 +96,11 @@ export class Game {
     window.addEventListener('focus', () => { this.windowFocused = true; }, { signal: this.events.signal });
     this.input.onAction = (code) => {
       if (code === 'F3') this.debug.toggle();
-      if (code === 'KeyP') this.setPaused(!this.paused);
-      if (!this.paused && !this.releaseNotes.open && !this.settings.open) {
+      if (code === 'Pause' || code === 'F8') this.setPaused(!this.paused);
+      if (code === 'KeyM') this.cabinDialogs.showMenu();
+      if (code === 'KeyP') this.cabinDialogs.showSeats();
+      if (!this.paused && !this.releaseNotes.open && !this.settings.open && !this.cabinDialogs.open) {
+        if (/^Digit\d$/.test(code) && this.driving.active) this.tuneRadio(Number(code.slice(5)) || 10);
         if (code === 'KeyF') this.interactVehicle();
         else { this.driving.action(code); this.walking.action(code); }
       }
@@ -372,6 +382,17 @@ export class Game {
     element('pause').textContent = paused ? '继续探索' : '暂停探索';
   }
 
+  private tuneRadio(channel: number): void {
+    this.audio.tune(channel);
+    if (!this.audio.enabled) this.audio.toggle();
+    this.driving.systems.radioChannel = this.audio.station;
+    element<HTMLSelectElement>('radio-station').value = String(this.audio.station);
+    element<HTMLSelectElement>('music-style').value = this.audio.musicStyle;
+    element<HTMLInputElement>('music-pace').value = String(Math.round(this.audio.musicPace * 100));
+    element('music-pace-value').textContent = `${Math.round(this.audio.musicPace * 100)}%`;
+    this.syncAudioUI();
+  }
+
   private setTime(value: number): void {
     this.sky.sun.setTime(value / 100);
     element<HTMLInputElement>('daylight').value = String(value);
@@ -419,7 +440,7 @@ export class Game {
     this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
   }
 
-  private stopTravel(): void { this.stopDriving(); this.stopWalking(); }
+  private stopTravel(): void { this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
 
   private interactVehicle(): void {
     if (this.driving.active) {
@@ -438,7 +459,7 @@ export class Game {
     this.input.enabled = message === null;
     this.input.clear();
     this.canvas.inert = element('explorer').inert = message !== null;
-    if (message) this.settings.close();
+    if (message) { this.settings.close(); this.cabinDialogs.close(); }
     element<HTMLButtonElement>('controls-toggle').disabled = message !== null;
     element<HTMLButtonElement>('drive-toggle').disabled = message !== null || (!this.driving.active && !this.world.roadReady);
     element<HTMLButtonElement>('walk-toggle').disabled = message !== null || (!this.walking.active && !this.world.roadReady);
@@ -494,7 +515,7 @@ export class Game {
 
   private update(dt: number): void {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
-    const silent = this.paused || this.releaseNotes.open || !this.input.enabled;
+    const silent = this.paused || this.releaseNotes.open || this.cabinDialogs.open || !this.input.enabled;
     const frozen = silent || this.settings.open;
     if (this.driving.active) this.driving.update(dt, frozen, this.weather.wetness);
     else if (this.walking.active) this.walking.update(dt, frozen);
@@ -509,13 +530,15 @@ export class Game {
       this.flight.update(0, false);
     }
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
+    this.driving.systems.radioPlaying = this.audio.enabled && this.audio.masterVolume > 0 && this.audio.musicVolume > 0 && !this.audio.error;
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
       Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain, frozen ? 0 : dt);
     this.walking.sync();
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
     this.audio.setActive(!silent && !document.hidden && this.windowFocused && document.hasFocus());
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
-      throttle: this.input.down('KeyW') && moving, mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
+      throttle: this.input.down('KeyW') && moving && this.driving.cabin.driver && this.driving.crane.stowed,
+      mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
       rpm: this.driving.car.transmission.rpm, shifts: this.driving.car.transmission.shifts,
@@ -557,7 +580,7 @@ export class Game {
       }
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
-      element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 P 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
+      element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 F8 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
         : stats.queued > 0 ? `山地生成中 · ${stats.active} / ${stats.target} 分块`
         : this.input.pointerLockFailed ? '鼠标锁定不可用 · 请拖动观察' : '拖动视角 · 双击锁定鼠标 · Esc 释放';
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
@@ -612,6 +635,13 @@ export class Game {
         'Roof opening': this.driving.systems.roofOpen.toFixed(2),
         'Washer fluid': this.driving.systems.washerFluid.toFixed(2),
         'Cabin exposure': this.driving.systems.cabinExposure.toFixed(2),
+        'Cabin seat': this.driving.cabin.selected.id,
+        'Cabin fan': String(this.driving.systems.fan),
+        'Radio channel': String(this.audio.station),
+        'Cabin lighting': `${this.driving.systems.ambientLight ? 'ambient' : 'off'} / ${this.driving.systems.cabinLight ? 'reading' : 'off'}`,
+        'Seat adjustment': JSON.stringify(this.driving.cabin.adjustment),
+        'Crane state': this.driving.crane.stowed ? 'stowed' : this.driving.crane.enabled ? 'active' : 'stowing',
+        'Crane boom': `${this.driving.crane.yaw.toFixed(2)} / ${this.driving.crane.angle.toFixed(2)} / ${this.driving.crane.extension.toFixed(2)}`,
         'Light phase': this.sky.sun.label, 'Sun elevation': `${this.sky.sun.elevation.toFixed(1)}°`,
         Weather: weatherNames[this.weather.kind], 'World time': this.sky.sun.clock,
         Season: seasonNames[this.world.season.kind], 'Air temperature': `${this.world.season.temperature(y).toFixed(1)} °C`,
@@ -683,6 +713,7 @@ export class Game {
   }
 
   dispose(): void {
+    this.cabinDialogs.dispose();
     this.settings.dispose();
     this.audio.dispose();
     this.loop.stop();

@@ -68,7 +68,7 @@ test('previews weather and fog while paused and keeps the vehicle stationary', a
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('motorcycle');
   await (await control(page, page.locator('#drive-toggle'))).click();
-  await page.keyboard.press('KeyP'); await toggleSettings(page);
+  await page.keyboard.press('F8'); await toggleSettings(page);
   const position = await metric('Vehicle position').textContent();
   await (await control(page, page.locator('#cloud-toggle'))).click();
   await (await control(page, page.locator('#weather-kind'))).selectOption('fog');

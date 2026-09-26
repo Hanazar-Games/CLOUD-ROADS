@@ -19,6 +19,9 @@ export class VehicleSystems {
   roofTarget = 1;
   fan = 0;
   cabinLight = false;
+  ambientLight = false;
+  radioChannel = 1;
+  radioPlaying = false;
   equipmentMotor = false;
   washerFluid = 3;
   washerSpray = 0;
@@ -48,6 +51,7 @@ export class VehicleSystems {
 
   configure(shape: VehicleProfile['shape']): void {
     this.hasWindshield = this.hasWindows = shape !== 'motorcycle'; this.convertible = shape === 'roadster';
+    if (!this.hasWindows) { this.fan = 0; this.cabinLight = this.ambientLight = false; }
     this.windowOpen = this.hasWindows ? this.windowTarget : 0;
     this.roofTarget = this.roofOpen = this.convertible ? 1 : 0;
     this.equipmentMotor = false;
@@ -58,6 +62,12 @@ export class VehicleSystems {
     if (!this.hasWindshield || this.washerFluid <= 0) return false;
     this.washerTime = 1.2; this.washWipe = 3.2; return true;
   }
+
+  moveWindow(direction: number, dt: number): void {
+    if (!this.hasWindows || !Number.isFinite(dt) || dt <= 0 || !direction) return;
+    this.windowTarget = Math.max(0, Math.min(1, this.windowOpen + Math.sign(direction) * Math.min(dt, 0.1) * 0.5));
+  }
+  cycleFan(): void { if (this.hasWindows) this.fan = (this.fan + 1) % 7; }
 
   refill(speed: number): boolean { if (!this.hasWindshield || Math.abs(speed) > 0.1) return false; this.washerFluid = 3; return true; }
 

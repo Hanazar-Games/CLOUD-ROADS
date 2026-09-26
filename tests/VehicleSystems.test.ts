@@ -5,6 +5,15 @@ const tick = (systems: VehicleSystems, seconds: number, rain = 1, shelter = 0, d
   for (let i = 0; i < Math.round(seconds / dt); i++) systems.update(dt, 1, rain, shelter);
 };
 
+it('stops window travel on release and cycles six fan levels with motorcycle equipment disabled', () => {
+  const s = new VehicleSystems();
+  for (let i = 0; i < 30; i++) { s.moveWindow(1, 1 / 60); s.update(1 / 60, 0, 0, 0); }
+  expect(s.windowOpen).toBeCloseTo(0.25);
+  const position = s.windowOpen; tick(s, 1, 0); expect(s.windowOpen).toBe(position);
+  for (let i = 1; i <= 7; i++) { s.cycleFan(); expect(s.fan).toBe(i % 7); }
+  s.configure('motorcycle'); s.moveWindow(1, 1); s.cycleFan(); expect(s.fan).toBe(0); expect(s.windowOpen).toBe(0);
+});
+
 it('sprays washer fluid and runs a cleanup cycle even with wipers switched off', () => {
   const systems = new VehicleSystems(); systems.wipers = 'off';
   expect(systems.wash()).toBe(true);

@@ -5,8 +5,25 @@ import { VehicleMesh } from '../src/vehicle/VehicleMesh';
 import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import type { DrivingSurface } from '../src/vehicle/DrivingSurface';
+import { CabinState } from '../src/vehicle/CabinState';
 
 describe('Driving rendering', () => {
+  it('positions passenger cameras at their seats and follows the crane operator turntable', () => {
+    const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics('coach');
+    const cabin = new CabinState(car.profile);
+    const surface = { sample: () => ({ height: 0, grip: 1 }), inTunnel: () => false } as unknown as DrivingSurface;
+    car.reset(30000, -30000, 0, surface.sample); rig.view = 'cockpit';
+    cabin.select('row-3-3', 0); rig.seat = cabin.selected; rig.adjustment = cabin.adjustment;
+    rig.update(0, car, surface, { x: 30000, z: -30000 }, [0, 0]);
+    expect(camera.position.x).toBeCloseTo(cabin.selected.x); expect(camera.position.z).toBeCloseTo(-cabin.selected.along);
+    cabin.adjust(0.1, 0.1, 0.05, 0.2); rig.update(0, car, surface, { x: 30000, z: -30000 }, [0, 0]);
+    expect(camera.position.x).toBeCloseTo(cabin.selected.x + 0.1); expect(camera.rotation.x).toBeCloseTo(0.2);
+    const crane = new VehiclePhysics('crane'), operator = new CabinState(crane.profile); operator.select('operator', 0);
+    crane.reset(0, 0, 0, surface.sample); rig.seat = operator.selected; rig.adjustment = operator.adjustment; rig.seatYaw = Math.PI / 2;
+    rig.update(0, crane, surface, { x: 0, z: 0 }, [0, 0]);
+    expect(camera.position.x).toBeCloseTo(-0.7); expect(camera.position.z).toBeCloseTo(3.13);
+    expect(camera.rotation.y).toBeCloseTo(Math.PI / 2);
+  });
   it('frames the whole long rig and uses its cab inside a tunnel', () => {
     const camera = new PerspectiveCamera(), rig = new DrivingCamera(camera), car = new VehiclePhysics('semi20');
     let inside = false;

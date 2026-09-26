@@ -13,11 +13,11 @@ test('wipes accumulated windshield water and freezes it while paused', async ({ 
   await (await control(page, page.locator('#vehicle-wipers'))).selectOption('off');
   await expect(page.locator('#drive-toggle')).toBeEnabled(); await (await control(page, page.locator('#drive-toggle'))).click();
   await expect.poll(async () => parseFloat((await metric('Wiped water').textContent())!), { timeout: 15000 }).toBeGreaterThan(90);
-  await page.keyboard.press('KeyP'); await page.waitForTimeout(250);
+  await page.keyboard.press('F8'); await page.waitForTimeout(250);
   const water = await metric('Glass water').textContent(); await page.waitForTimeout(500);
   await expect(metric('Glass water')).toHaveText(water!);
   await page.keyboard.press('KeyF'); await expect(metric('Travel mode')).toHaveText('driving');
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await toggleSettings(page); await (await control(page, page.locator('#vehicle-wipers'))).selectOption('high');
   await toggleSettings(page); await (await control(page, page.locator('#world'))).focus();
   await expect.poll(async () => parseFloat((await metric('Wiped water').textContent())!), { timeout: 5000 }).toBeLessThan(20);

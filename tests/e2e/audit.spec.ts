@@ -111,8 +111,10 @@ test('shows the current release, archives the previous baseline and isolates dia
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.31');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('座舱电台 · 分类设置与车载设备');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.32');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('随席而行 · 车内交互与吊车操作');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.31');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('座舱电台 · 分类设置与车载设备');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.30');
   await expect(dialog.locator('[data-release="history"]')).toContainText('旅途检修 · 上下车与声画修复');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.29');
@@ -216,7 +218,7 @@ test('closes modal settings and keeps pause button and keyboard state in sync', 
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#notice')).toContainText('已暂停');
   await toggleSettings(page);
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#pause')).toHaveText('暂停探索');
 });

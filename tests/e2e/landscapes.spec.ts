@@ -111,7 +111,7 @@ test('applies world choices in a narrow window without leaking movement from sel
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 30_000 });
   await (await control(page, page.locator('#terrain-kind'))).focus();
   const coordinates = await page.locator('[data-metric="Coordinates"]').textContent();
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'false');
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(250);

@@ -1,3 +1,5 @@
+import { actionKeys } from './Shortcuts';
+
 export class InputManager {
   private readonly keys = new Set<string>();
   private readonly events = new AbortController();
@@ -12,10 +14,10 @@ export class InputManager {
     const options = { signal: this.events.signal };
     window.addEventListener('keydown', (event) => {
       if (!this.enabled || event.isComposing || event.metaKey || event.altKey || event.defaultPrevented) return;
-      const action = event.code === 'KeyP' || event.code === 'F3';
+      const action = ['KeyP', 'KeyM', 'Pause', 'F8', 'F3'].includes(event.code);
       if (event.target !== canvas && event.target !== document.body
         && (!action || !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable], dialog'))) return;
-      if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyR', 'KeyE', 'KeyL', 'KeyB', 'KeyQ', 'KeyH', 'KeyF', 'KeyG', 'KeyT', 'KeyJ', 'KeyV', 'BracketLeft', 'BracketRight', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'KeyP', 'F3'].includes(event.code)) return;
+      if (!actionKeys.has(event.code)) return;
       event.preventDefault();
       if (event.repeat && !this.keys.has(event.code)) return;
       this.keys.add(event.code);

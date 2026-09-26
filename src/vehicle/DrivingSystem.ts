@@ -8,10 +8,15 @@ import { VehicleMesh } from './VehicleMesh';
 import { VehiclePhysics } from './VehiclePhysics';
 import { vehicleProfiles, suspensionLevels, suspensionNames, suspensionTuning, type Suspension, type VehicleKind } from './VehicleConfig';
 import { VehicleSystems, lightNames, wiperNames, signalNames, type LightMode, type WiperMode, type SignalMode } from './VehicleSystems';
+import { CabinState } from './CabinState';
+import { CraneSystems } from './CraneSystems';
+import { radioStations } from '../audio/RadioStations';
 
 export class DrivingSystem {
   car = new VehiclePhysics();
   readonly systems = new VehicleSystems();
+  cabin = new CabinState(this.car.profile);
+  crane = new CraneSystems();
   readonly cameraRig;
   active = false;
   parked = false;
@@ -43,6 +48,9 @@ export class DrivingSystem {
     element('washer').addEventListener('click', () => { this.systems.wash(); this.describeEquipment(); }, options);
     element('washer-refill').addEventListener('click', () => { this.systems.refill(this.car.speed); this.describeEquipment(); }, options);
     element('cabin-light').addEventListener('click', () => { this.systems.cabinLight = !this.systems.cabinLight; this.describeEquipment(); }, options);
+    element('ambient-light').addEventListener('click', () => { this.systems.ambientLight = !this.systems.ambientLight; this.describeEquipment(); }, options);
+    element('crane-power').addEventListener('click', () => this.crane.toggle(this.active && this.cabin.selected.role === 'operator', this.car.speed), options);
+    element('seat-reset').addEventListener('click', () => { this.cabin.resetAdjustment(); this.cameraRig.reset(); }, options);
     element('cabin-fan').addEventListener('change', () => { this.systems.fan = Number(element<HTMLSelectElement>('cabin-fan').value); }, options);
     const tuning = [['vehicle-power', 'powerScale'], ['vehicle-brake', 'brakeScale'], ['vehicle-steering', 'steeringScale']] as const;
     for (const [id, field] of tuning) element(id).addEventListener('input', () => {
@@ -107,9 +115,11 @@ export class DrivingSystem {
       const spawn = this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z, this.car.profile);
       if (!spawn) { this.explainSpace(); return false; }
       this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
+      this.cabin = new CabinState(this.car.profile); this.crane = new CraneSystems();
     }
     this.parked = false; this.exitBlockedTime = 0; this.hudTime = 0.1;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
+    this.updateSeatCamera();
     this.setUI();
     element<HTMLDialogElement>('explorer').close();
     element('world').focus();
@@ -145,7 +155,7 @@ export class DrivingSystem {
   get sweptWater(): number { return this.mesh.sweptWater; }
 
   reset(): void {
-    if (!this.active || !this.surface || !this.getWorld().roadReady) return;
+    if (!this.active || !this.surface || !this.getWorld().roadReady || !this.cabin.driver || !this.crane.stowed) return;
     const spawn = this.surface.spawn(this.car.x, this.car.z, this.car.profile);
     if (!spawn) { this.explainSpace(); return; }
     this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
@@ -154,18 +164,19 @@ export class DrivingSystem {
 
   action(code: string): void {
     if (!this.active) return;
-    if (code === 'BracketLeft' || code === 'BracketRight') {
+    if (code === 'KeyN') this.systems.cycleFan();
+    if (code === 'KeyK' && this.systems.hasWindows) this.systems.ambientLight = !this.systems.ambientLight;
+    if (code === 'KeyU' && this.systems.hasWindows) this.systems.cabinLight = !this.systems.cabinLight;
+    if (code === 'KeyO' && this.car.kind === 'crane') this.crane.toggle(this.cabin.selected.role === 'operator', this.car.speed);
+    if (code === 'Backspace') { this.cabin.resetAdjustment(); this.cameraRig.reset(); }
+    if (this.cabin.driver && (code === 'BracketLeft' || code === 'BracketRight')) {
       this.car.transmission.mode = 'manual'; element<HTMLSelectElement>('transmission-mode').value = 'manual';
       this.car.transmission.shift(code === 'BracketRight' ? 1 : -1, this.car.speed);
     }
     if (code === 'KeyG') this.systems.wash();
     if (code === 'KeyT') this.systems.toggleRoof(this.car.speed);
-    if (code === 'KeyJ' && this.systems.hasWindows) {
-      this.systems.windowTarget = this.systems.windowTarget > 0.5 ? 0 : 1;
-      element<HTMLInputElement>('vehicle-windows').value = String(this.systems.windowTarget * 100);
-    }
     if (code === 'KeyR') this.reset();
-    const signal: SignalMode | undefined = code === 'KeyQ' ? 'left' : code === 'KeyE' ? 'right' : code === 'KeyH' ? 'hazard' : undefined;
+    const signal: SignalMode | undefined = !this.cabin.driver ? undefined : code === 'KeyQ' ? 'left' : code === 'KeyE' ? 'right' : code === 'KeyH' ? 'hazard' : undefined;
     if (signal) this.systems.signal = this.systems.signal === signal ? 'off' : signal;
     if (code === 'KeyL') {
       const modes = Object.keys(lightNames) as LightMode[];
@@ -190,12 +201,23 @@ export class DrivingSystem {
     const waiting = !world.roadReady;
     const held = frozen || waiting || !focused;
     this.systemsDt = held ? 0 : dt;
+    const axis = (positive: string, negative: string) => Number(this.input.down(positive)) - Number(this.input.down(negative));
+    const operator = this.cabin.selected.role === 'operator';
+    if (!held) {
+      this.systems.moveWindow(axis('Period', 'Comma'), dt);
+      this.cabin.adjust(axis('ArrowRight', 'ArrowLeft') * dt * 0.1, axis('ArrowUp', 'ArrowDown') * dt * 0.12,
+        axis('PageUp', 'PageDown') * dt * 0.08, axis('End', 'Home') * dt * 0.2);
+      if (this.car.kind === 'crane') this.crane.update(dt, { slew: axis('KeyD', 'KeyA'), lift: axis('KeyW', 'KeyS'),
+        extend: axis('KeyE', 'KeyQ'), hoist: axis('KeyX', 'KeyZ') }, operator, this.car.speed);
+      if (!this.cabin.driver || !this.crane.stowed) this.car.park();
+    }
     this.surface.wet = wet;
     this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
     if (!held) {
       const x = this.car.x, z = this.car.z, trip = this.car.trip;
-      this.car.update(dt, { throttle: Number(this.input.down('KeyW')) - Number(this.input.down('KeyS')),
-        steer: Number(this.input.down('KeyD')) - Number(this.input.down('KeyA')), handbrake: this.input.down('Space') }, this.surface.sample);
+      const canDrive = this.cabin.driver && this.crane.stowed;
+      this.car.update(dt, { throttle: canDrive ? axis('KeyW', 'KeyS') : 0,
+        steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') }, this.surface.sample);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
       this.exitBlockedTime = Math.max(0, this.exitBlockedTime - dt);
       if (this.surface.constrain(this.car, x, z, dt)) {
@@ -204,7 +226,9 @@ export class DrivingSystem {
       }
     }
     this.cameraRig.enclosed = this.car.kind === 'roadster' && this.systems.roofOpen < 0.95;
+    this.updateSeatCamera();
     this.cameraRig.update(held ? 0 : dt, this.car, this.surface, world.origin, held ? [0, 0] : look);
+    document.body.classList.toggle('in-cabin', this.cameraRig.view === 'cockpit');
     this.hudTime += dt;
     if (this.hudTime >= 0.1) {
       this.hudTime = 0;
@@ -214,7 +238,9 @@ export class DrivingSystem {
       element('transmission-status').textContent = `${this.car.transmission.mode === 'auto' ? 'AT' : 'MT'} · ${this.car.transmission.gear} 挡`;
       element('engine-rpm').textContent = String(Math.round(this.car.transmission.rpm / 10) * 10);
       this.describeEquipment();
-      element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续驾驶'
+      element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
+        : !this.cabin.driver ? `${this.cabin.selected.label} · P 换座${operator ? ' · O 操作吊车' : ' · 不能驾驶'}`
+        : !this.crane.stowed ? '吊车未收妥 · 请回操作席按 O 收车'
         : this.exitBlockedTime > 0 ? '车旁空间不足，请移到平缓路段再下车'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
@@ -233,7 +259,8 @@ export class DrivingSystem {
       if (this.mesh.root.visible) {
         const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
         this.systems.update(dt, Math.max(night, sheltered), rain, sheltered, this.car.steering, this.car.speed);
-        this.mesh.sync(this.car, world.origin, this.systems, dt);
+        if (this.car.kind === 'crane') this.crane.update(dt, { slew: 0, lift: 0, extend: 0, hoist: 0 }, false, 0);
+        this.mesh.sync(this.car, world.origin, this.systems, dt, this.crane);
       }
     }
     if (this.active) {
@@ -244,7 +271,7 @@ export class DrivingSystem {
       element('turn-right').classList.toggle('lit', this.systems.rightSignal);
       element('turn-left').setAttribute('aria-label', this.systems.leftSignal ? '左转灯亮' : '左转灯灭');
       element('turn-right').setAttribute('aria-label', this.systems.rightSignal ? '右转灯亮' : '右转灯灭');
-      this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt);
+      this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt, this.crane);
       element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯`;
       element('vehicle-lights-status').classList.toggle('high-beam', this.systems.beam === 'high');
       element('vehicle-wipers-status').textContent = this.systems.hasWindshield ? `雨刮 · ${wiperNames[this.systems.wipers]}` : '无雨刮';
@@ -267,6 +294,7 @@ export class DrivingSystem {
     }
     this.parked = false;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
+    this.cabin = new CabinState(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
     this.systems.configure(next.profile.shape);
     this.applyPaint();
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();
@@ -281,7 +309,7 @@ export class DrivingSystem {
     this.describeSuspension();
     const power = p.power * this.car.powerScale;
     element('vehicle-summary').textContent = `${p.length} m · ${(p.mass / 1000).toLocaleString('zh-CN')} 吨 · ${p.wheels.length + (p.trailer?.wheels.length ?? 0)} 轮 · ${Math.round(power / 1000)} kW / ${Math.round(power / 735.5)} 马力。`
-      + (p.shape === 'crane' ? '五轴底盘、双前轴转向，吊臂与支腿收拢行驶；当前不支持吊装操作。'
+      + (p.shape === 'crane' ? '五轴底盘、双前轴转向；停车按 P 进入后部操作席，O 展开或收车，收妥才能驾驶。'
         : p.shape === 'flatbed' ? '四轴底盘、双前轴转向，开放货台与折叠坡板，窄弯留足车尾空间。'
           : p.trailer ? '半挂有内轮差和倒车折叠，窄弯请放慢并留足外侧空间。' : p.shape === 'motorcycle' ? '两轮独立悬挂，转弯自动侧倾，低速自动平衡。' : p.mass > 4000 ? '重车加速较慢，陡坡与湿路请提前减速。' : '五档弹簧与阻尼按车型匹配。');
     element('camera-distance-value').textContent = `${Number(this.cameraRig.distanceFor(this.car).toFixed(1))} m`;
@@ -294,21 +322,46 @@ export class DrivingSystem {
 
   describeEquipment(): void {
     const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
+    element<HTMLButtonElement>('vehicle-reset').disabled = !this.active || !this.cabin.driver || !this.crane.stowed;
     element<HTMLInputElement>('vehicle-windows').disabled = !glass;
     element<HTMLButtonElement>('vehicle-roof').disabled = !roof || Math.abs(this.car.speed) > 1.4;
     element<HTMLButtonElement>('washer').disabled = !glass || s.washerFluid <= 0;
     element<HTMLButtonElement>('washer-refill').disabled = !glass || Math.abs(this.car.speed) > 0.1;
     element<HTMLButtonElement>('cabin-light').disabled = !glass;
+    element<HTMLButtonElement>('ambient-light').disabled = !glass;
     element<HTMLSelectElement>('cabin-fan').disabled = !glass;
+    element<HTMLSelectElement>('cabin-fan').value = String(s.fan);
+    element<HTMLInputElement>('vehicle-windows').value = String(Math.round(s.windowTarget * 100));
+    element('ambient-light').setAttribute('aria-pressed', String(s.ambientLight));
+    element('ambient-light').textContent = `氛围描边灯 · ${s.ambientLight ? '开启' : '关闭'} · K`;
     element('vehicle-windows-value').textContent = !glass ? '无车窗' : s.windowTarget === 0 ? '关闭' : `开启 ${Math.round(s.windowTarget * 100)}%`;
     element('vehicle-roof').textContent = roof ? s.roofTarget > 0.5 ? '关闭敞篷 · T' : '打开敞篷 · T' : '当前车型无敞篷';
     element('vehicle-roof').setAttribute('aria-pressed', String(roof && s.roofTarget === 0));
-    element('cabin-light').textContent = `阅读灯 · ${s.cabinLight ? '开启' : '关闭'}`;
+    element('cabin-light').textContent = `阅读灯 · ${s.cabinLight ? '开启' : '关闭'} · U`;
     element('cabin-light').setAttribute('aria-pressed', String(s.cabinLight));
     element('washer-status').textContent = glass ? `玻璃水 ${s.washerFluid.toFixed(2)} L / 3 L${s.washerFluid < 0.2 ? ' · 请停车补液' : ''}` : '无挡风玻璃，无需玻璃水';
     const status = !glass ? '摩托车 · 开放座舱' : `${roof ? s.roofOpen > 0.99 ? '敞篷开启' : s.roofOpen < 0.01 ? '车顶关闭' : '车顶收合中' : '封闭车身'} · 车窗开启 ${Math.round(s.windowOpen * 100)}%`;
     element('equipment-status').textContent = `${status}${s.equipmentMoving ? ' · 关闭设置后继续动画' : ''}`;
     element('cabin-status').textContent = `${status}${glass ? ` · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ''}`;
+    element('seat-reading').textContent = `${this.cabin.selected.label} · ${this.cabin.driver ? '驾驶权限' : '乘坐模式'} · 风速 ${glass ? s.fan : 0} / 6`;
+    element('radio-reading').textContent = `CH ${s.radioChannel} · ${radioStations[s.radioChannel - 1].name}${s.radioPlaying ? '' : ' · 静音'}`;
+    const a = this.cabin.adjustment;
+    element('seat-adjustment').textContent = `横移 ${Math.round(a.x * 100)} cm · 前后 ${Math.round(a.along * 100)} cm · 高度 ${Math.round(a.height * 100)} cm · 靠背 ${Math.round(a.recline * 180 / Math.PI)}°`;
+    element('crane-controls').hidden = this.car.kind !== 'crane';
+    element<HTMLButtonElement>('crane-power').disabled = !this.active || this.cabin.selected.role !== 'operator' || Math.abs(this.car.speed) > 0.1;
+    element('crane-power').textContent = this.crane.enabled ? '收回吊臂与支腿 · O' : '展开支腿并启动 · O';
+    element('crane-status').textContent = this.crane.stowed ? '收妥 · 可以驾驶' : `${this.crane.enabled ? '操作中' : '自动收车中'} · 支腿 ${Math.round(this.crane.deployment * 100)}% · 仰角 ${Math.round(this.crane.angle * 180 / Math.PI)}° · 伸出 ${this.crane.extension.toFixed(1)} m`;
+  }
+
+  selectSeat(id: string): boolean {
+    if (!this.active || !this.cabin.select(id, this.car.speed)) return false;
+    this.car.park(); this.cameraRig.view = 'cockpit'; this.cameraRig.reset(); this.input.clear();
+    element<HTMLSelectElement>('driving-view').value = 'cockpit'; this.updateSeatCamera(); return true;
+  }
+
+  private updateSeatCamera(): void {
+    this.cameraRig.seat = this.cabin.selected; this.cameraRig.adjustment = this.cabin.adjustment;
+    this.cameraRig.seatYaw = this.cabin.selected.role === 'operator' ? this.crane.yaw : 0;
   }
 
   private describeSuspension(): void {
@@ -326,14 +379,15 @@ export class DrivingSystem {
 
   private setUI(): void {
     document.body.classList.toggle('driving', this.active);
+    document.body.classList.toggle('in-cabin', this.active && this.cameraRig.view === 'cockpit');
     element('drive-toggle').textContent = this.active ? '退出驾驶' : '开始驾驶';
     element('drive-toggle').setAttribute('aria-pressed', String(this.active));
     element('drive-hud').hidden = !this.active;
     element('flight-controls').hidden = this.active;
     element('driving-controls').hidden = !this.active;
-    element<HTMLButtonElement>('vehicle-reset').disabled = !this.active;
+    element<HTMLButtonElement>('vehicle-reset').disabled = !this.active || !this.cabin.driver || !this.crane.stowed;
     element('world').setAttribute('aria-label', this.active ? '山路驾驶；W 加速，S 刹车倒车，A D 转向，Space 手刹，C 切换视角，F 下车，L 车灯，B 雨刮，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
   }
 
-  dispose(): void { this.events.abort(); this.mesh.dispose(); document.body.classList.remove('driving'); }
+  dispose(): void { this.events.abort(); this.mesh.dispose(); document.body.classList.remove('driving', 'in-cabin'); }
 }

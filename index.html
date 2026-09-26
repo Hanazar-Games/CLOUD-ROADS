@@ -13,7 +13,7 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="menu-open" type="button" aria-haspopup="dialog">菜单 · M</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
@@ -56,7 +56,7 @@
           <p id="suspension-summary" class="panel-help"></p>
           <p id="suspension-compression" class="panel-help">开始驾驶后显示轮端压缩量</p>
           <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
-          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。打开设置时车辆暂停，关闭设置继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
+          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，F8 暂停。打开设置时车辆暂停，关闭设置继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
         </details>
 </section>
 <section class="settings-category" id="settings-equipment" aria-labelledby="heading-equipment"><h3 id="heading-equipment">车载设备</h3>
@@ -75,12 +75,15 @@
           <div class="actions road-actions"><button id="washer" type="button">喷玻璃水 · G</button><button id="washer-refill" type="button">停车补液</button></div>
           <p id="washer-status" class="panel-help" role="status">玻璃水 3.00 L / 3 L</p>
           <label class="speed-label" for="vehicle-windows">驾驶室车窗 <output id="vehicle-windows-value">关闭</output></label>
-          <input id="vehicle-windows" type="range" min="0" max="100" step="10" value="0" aria-describedby="equipment-help" />
+          <input id="vehicle-windows" type="range" min="0" max="100" step="1" value="0" aria-describedby="equipment-help" />
           <div class="actions road-actions"><button id="vehicle-roof" type="button" aria-pressed="false">关闭敞篷 · T</button><button id="cabin-light" type="button" aria-pressed="false">阅读灯 · 关闭</button></div>
-          <label for="cabin-fan">通风风机</label>
-          <select id="cabin-fan"><option value="0">关闭</option><option value="1">1 档 · 轻风</option><option value="2">2 档 · 标准</option><option value="3">3 档 · 强风</option></select>
+          <div class="actions"><button id="ambient-light" type="button" aria-pressed="false">氛围描边灯 · K</button><button id="seat-open" type="button">座位图 · P</button><button id="seat-reset" type="button">重置当前座椅视角</button></div>
+          <p id="seat-adjustment" class="panel-help"></p>
+          <label for="cabin-fan">空调风机 · N · 0–6 档</label>
+          <select id="cabin-fan"><option value="0">关闭</option><option value="1">1 档 · 轻风</option><option value="2">2 档 · 标准</option><option value="3">3 档</option><option value="4">4 档</option><option value="5">5 档</option><option value="6">6 档 · 强风</option></select>
+          <section id="crane-controls" hidden><button id="crane-power" type="button">启动吊车 · O</button><p id="crane-status" role="status"></p><p class="panel-help">停车按 P 进入后部操作席。O 展开支腿，W/S 升降吊臂、A/D 回转、Q/E 伸缩、Z/X 收放吊钩；再次 O 自动收车。支腿与吊臂收妥后才能行驶。当前无载荷吊装。</p></section>
           <p id="equipment-status" class="equipment-status" role="status">车载设备就绪</p>
-          <p id="equipment-help" class="panel-help">G 喷洗并自动补刮；V 按住鸣笛；J 开关车窗；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃与座舱设备。</p>
+          <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃与座舱设备。</p>
 </div></section>
 <section class="settings-category" id="settings-world" aria-labelledby="heading-world"><h3 id="heading-world">世界与道路</h3>
         <form id="seed-form">
@@ -173,6 +176,7 @@
           <summary>声音与音乐</summary>
           <button id="audio-toggle" type="button" aria-pressed="false">开启声音</button>
           <div class="audio-grid" id="audio-channels"></div>
+          <label for="radio-station">车载电台 · 数字 1–9 / 0 对应频道 1–10</label><select id="radio-station"></select><p class="panel-help">选择频道开启声音；十个频道采用不同调性、节奏与音色的程序音乐。</p>
           <label for="music-style">音乐氛围</label>
           <select id="music-style"><option value="ambient">山间漫游 · 舒缓</option><option value="night">夜行电台 · 低音</option><option value="motion">逐光公路 · 轻快</option></select>
           <label class="speed-label" for="music-pace">音乐节奏 <output id="music-pace-value">100%</output></label>
@@ -188,7 +192,7 @@
         <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
         <details class="world-options">
           <summary>步行与跑跳</summary>
-          <p class="panel-help">右上角「开始步行」进入第一人称，WASD 行走，按住 Shift 跑步，按住 E 疾跑，Space 跳跃，R 回到道路。拖动鼠标观察，双击画面锁定鼠标，P 暂停。可在驾驶、步行和自由飞行间切换。</p>
+          <p class="panel-help">右上角「开始步行」进入第一人称，WASD 行走，按住 Shift 跑步，按住 E 疾跑，Space 跳跃，R 回到道路。拖动鼠标观察，双击画面锁定鼠标，F8 暂停。可在驾驶、步行和自由飞行间切换。</p>
           <p class="panel-help">平缓地面道路留有无护栏段，可走进山野；所有桥梁两侧均有护栏。桥下步行保持在谷底，跳跃必须落地后才能再次起跳。</p>
         </details>
         <div class="actions"><button id="home" type="button">返回起点</button><button id="wireframe" type="button" aria-pressed="false">地形线框</button></div>
@@ -211,6 +215,15 @@
 </section>
         </div></div>
       </dialog>
+      <dialog id="seat-dialog" class="cabin-dialog" aria-labelledby="seat-title">
+        <header><h2 id="seat-title">选择座位</h2><button type="button" data-close>返回旅程 · Esc</button></header>
+        <p id="seat-status" role="status"></p><div class="seat-scroll"><p class="seat-front">↑ 车头 · 点击座位就坐</p><div id="seat-map" role="group" aria-label="车辆座位地图"></div></div>
+      </dialog>
+      <dialog id="controls-menu" class="cabin-dialog" aria-labelledby="menu-title">
+        <header><h2 id="menu-title">旅程操作</h2><button type="button" data-close>返回旅程 · Esc</button></header>
+        <p id="menu-status" role="status"></p><div class="actions"><button id="menu-settings" type="button">设置</button><button id="menu-seats" type="button">选择座位 · P</button><button id="menu-pause" type="button">暂停 / 继续 · F8</button></div>
+        <div class="shortcut-scroll"><table class="shortcut-table"><caption>全部快捷键 · 弹窗内不响应驾驶按键</caption><thead><tr><th>模式</th><th>按键</th><th>操作</th></tr></thead><tbody id="shortcut-list"></tbody></table></div>
+      </dialog>
       <div class="crosshair" aria-hidden="true">+</div>
       <div id="notice" role="status">拖动视角，开始探索</div>
       <section id="drive-hud" aria-label="驾驶仪表" hidden>
@@ -218,6 +231,7 @@
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
         <p class="rpm-reading"><span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">850</span> RPM</p>
+        <p id="seat-reading" class="rpm-reading"></p><p id="radio-reading" class="rpm-reading"></p>
         <p id="cabin-status" class="rpm-reading">敞篷开启 · 玻璃水 3.0 L</p>
         <p id="drive-condition">夏季 · 路面正常</p>
         <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
@@ -227,9 +241,9 @@
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · F3</button></h2><dl id="debug-values"></dl></section>
       <footer>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
-        <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>P</kbd> 暂停</span></div>
-        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>F</kbd> 下车</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
-        <div class="controls" id="walking-controls" hidden><span><kbd>F</kbd> 靠近车辆上车</span><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 暂停</span></div>
+        <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>F3</kbd> 调试</span><span><kbd>F8</kbd> 暂停</span><span><kbd>M</kbd> 菜单</span></div>
+        <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>F</kbd> 下车</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 座位</span><span><kbd>M</kbd> 菜单</span></div>
+        <div class="controls" id="walking-controls" hidden><span><kbd>F</kbd> 靠近车辆上车</span><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>F8</kbd> 暂停</span><span><kbd>M</kbd> 菜单</span></div>
       </footer>
       <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
       <dialog id="release-notes" aria-labelledby="release-title">

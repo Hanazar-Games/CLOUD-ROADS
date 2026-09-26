@@ -1,10 +1,14 @@
-import { BoxGeometry, CatmullRomCurve3, CylinderGeometry, DoubleSide, ExtrudeGeometry, Group, Mesh, MeshStandardMaterial, PointLight, Shape, SpotLight, TorusGeometry, TubeGeometry, Vector3, type BufferGeometry, type Scene } from 'three';
+import { BoxGeometry, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PointLight, Shape, SpotLight, TorusGeometry, TubeGeometry, Vector3, type BufferGeometry, type Scene } from 'three';
 import type { VehiclePhysics, WheelState } from './VehiclePhysics';
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Windshield } from './Windshield';
 import type { VehicleSystems } from './VehicleSystems';
 import { mergeVehicleParts, tireGeometry } from './VehicleGeometry';
 import { flatbedDetails, vehicleDetails, type VehicleBlock as Block } from './VehicleDetails';
+import { cabinSeats } from './CabinState';
+import { CraneMesh } from './CraneMesh';
+import type { CraneSystems } from './CraneSystems';
+import { VehicleDisplay } from './VehicleDisplay';
 
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
 
@@ -27,6 +31,12 @@ export class VehicleMesh {
   private readonly windows: Group[] = [];
   private readonly cabinLight = new PointLight(0xffd69b, 0, 2.5, 2);
   private readonly readingLamp: MeshStandardMaterial;
+  private readonly ambient: MeshStandardMaterial;
+  private readonly display = new VehicleDisplay();
+  private readonly operatorDisplay?: VehicleDisplay;
+  private readonly deviceLights: InstancedMesh<BoxGeometry, MeshBasicMaterial>;
+  private readonly indicatorColor = new Color();
+  private readonly crane?: CraneMesh;
   private readonly headlight = new SpotLight(0xffeed0, 0, 100, 0.6, 0.65, 1.6);
 
   constructor(scene: Scene, private readonly profile: VehicleProfile = vehicleProfiles.roadster) {
@@ -36,6 +46,7 @@ export class VehicleMesh {
     glass.transparent = true; glass.opacity = profile.shape === 'roadster' ? 0.16 : 0.58; glass.depthWrite = false;
     glass.side = DoubleSide;
     this.readingLamp = this.material(0xe2d6b5, 0.4); this.readingLamp.emissive.setHex(0xffd69b);
+    this.ambient = this.material(0x265262, 0.4); this.ambient.emissive.setHex(0x57dbe7); this.ambient.emissiveIntensity = 0;
     this.tail = this.material(0xca3932); this.tail.emissive.setHex(0xff3020);
     const lamp = this.lamp = this.material(0xffefcf); lamp.emissive.setHex(0xffeed0); lamp.emissiveIntensity = 0;
     this.root.add(this.chassis); this.root.visible = false; scene.add(this.root);
@@ -70,9 +81,6 @@ export class VehicleMesh {
       block(0.2, 0.035, 0.045, side * 0.93, 0.44, -0.66, trim);
       block(0.22, 0.12, 0.13, side * 1.03, 0.44, -0.64, paint);
       block(0.19, 0.09, 0.012, side * 1.03, 0.44, -0.569, metal);
-      block(0.56, 0.16, 0.65, side * 0.43, 0.03, 0.4, leather);
-      const seat = block(0.57, 0.58, 0.17, side * 0.43, 0.33, 0.83, leather); seat.rotation.x = -0.14;
-      block(0.29, 0.2, 0.14, side * 0.43, 0.69, 0.88, leather);
       const pillar = block(0.035, 0.87, 0.035, side * 0.8, 0.65, -0.74, metal); pillar.rotation.x = 0.27;
     }
     const windshield = block(1.55, 0.81, 0.014, 0, 0.65, -0.74, glass); windshield.rotation.x = 0.27;
@@ -95,9 +103,36 @@ export class VehicleMesh {
     block(0.035, 0.14, 0.03, 0, -0.065, 0, metal, this.steering);
     } else this.buildBody(block, paint, trim, metal, glass, leather, lamp);
     vehicleDetails(profile, this.chassis, kit);
+    if (profile.shape === 'crane') { this.crane = new CraneMesh(this.chassis, kit, this.rideHeight); this.geometries.push(...this.crane.mergeParts()); }
+    for (const seat of cabinSeats(profile)) {
+      if (seat.role === 'operator' || profile.shape === 'motorcycle') continue;
+      const width = profile.shape === 'bus' || seat.id.startsWith('rear') ? 0.4 : 0.52;
+      block(width, 0.15, 0.5, seat.x, seat.y - 0.69, -seat.along + 0.05, leather);
+      block(width, 0.58, 0.13, seat.x, seat.y - 0.37, -seat.along + 0.32, leather);
+      block(width * 0.65, 0.18, 0.13, seat.x, seat.y - 0.02, -seat.along + 0.32, leather);
+    }
+    const eye = profile.eye;
+    this.display.root.position.set(eye.x + 0.28, eye.y - 0.22, -eye.along - 0.6);
+    this.display.root.rotation.x = -0.2;
+    if (profile.shape === 'motorcycle') { this.display.root.position.x = 0; this.display.root.scale.setScalar(0.7); this.display.root.rotation.x = -0.45; }
+    this.chassis.add(this.display.root);
+    if (this.crane) {
+      this.operatorDisplay = new VehicleDisplay();
+      this.operatorDisplay.root.name = 'crane-display';
+      this.operatorDisplay.root.position.set(-0.7, 1.56, -1.28);
+      this.operatorDisplay.root.rotation.x = -0.2;
+      this.crane.turret.add(this.operatorDisplay.root);
+    }
+    this.deviceLights = new InstancedMesh(box, new MeshBasicMaterial({ toneMapped: false }), 9);
+    this.deviceLights.name = 'device-indicators'; this.chassis.add(this.deviceLights);
+    for (let i = 0; i < 9; i++) this.deviceLights.setMatrixAt(i,
+      new Matrix4().makeScale(0.016, 0.012, 0.012).setPosition(this.display.root.position.x - 0.11 + i * 0.027, eye.y - 0.31, -eye.along - 0.57));
+    this.deviceLights.instanceMatrix.needsUpdate = true;
     if (profile.shape !== 'motorcycle') {
       const eye = profile.eye;
-      block(0.16, 0.04, 0.08, 0, eye.y - 0.22, -eye.along - 0.55, this.readingLamp);
+      for (const side of [-1, 1]) block(0.025, 0.018, profile.shape === 'bus' ? profile.length - 1 : 1.2,
+        side * (profile.width / 2 - 0.12), eye.y - 0.42, profile.shape === 'bus' ? 0 : -eye.along, this.ambient);
+      block(0.07, 0.02, 0.045, profile.width * 0.36, eye.y - 0.35, -eye.along - 0.65, this.readingLamp);
       this.cabinLight.position.set(0, eye.y - 0.04, -eye.along - 0.3); this.chassis.add(this.cabinLight);
       for (const side of [-1, 1]) {
         block(0.04, 0.018, 0.045, side * profile.width * 0.34, eye.y - 0.48, -profile.chassisLength / 2 + 0.18, trim);
@@ -183,7 +218,7 @@ export class VehicleMesh {
   get glassWater(): number { return this.windshield?.rain.coverage ?? 0; }
   get sweptWater(): number { return this.windshield?.rain.sweptCoverage ?? 0; }
 
-  sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0): void {
+  sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0, crane?: CraneSystems): void {
     this.root.position.set(car.x - origin.x, car.y, car.z - origin.z);
     this.root.rotation.y = -car.heading;
     this.chassis.rotation.set(car.pitch, 0, car.roll, 'YXZ');
@@ -211,6 +246,14 @@ export class VehicleMesh {
     this.roof.rotation.x = -systems.roofOpen * 1.35; this.roof.scale.z = 1 - systems.roofOpen * 0.78;
     this.cabinLight.intensity = systems.cabinLight && systems.hasWindows ? 1.5 : 0;
     this.readingLamp.emissiveIntensity = this.cabinLight.intensity;
+    this.ambient.emissiveIntensity = systems.ambientLight && systems.hasWindows ? 2 : 0;
+    const devices = [systems.leftSignal, systems.rightSignal, systems.fan > 0, systems.radioPlaying, systems.wiperRate > 0,
+      systems.washerSpray > 0, systems.beam !== 'off', systems.windowOpen > 0, systems.convertible && systems.roofOpen > 0];
+    devices.forEach((on, i) => this.deviceLights.setColorAt(i, this.indicatorColor.setHex(on ? i < 2 ? 0x36ed89 : 0x67deee : 0x07111a)));
+    this.deviceLights.instanceColor!.needsUpdate = true;
+    this.display.update(car, systems, dt);
+    this.operatorDisplay?.update(car, systems, dt, crane);
+    if (crane) this.crane?.sync(crane);
     this.windshield?.update(dt, systems, car.speed);
   }
 
@@ -310,10 +353,7 @@ export class VehicleMesh {
       block(w * 0.19, 0.11, 0.04, side * w * 0.31, 0.02, length / 2 + 0.02, this.tail);
       if (bus) {
         block(0.035, 0.17, length - 0.15, side * w / 2, 0.36, 0, metal);
-        for (let z = cabFront + 1.7; z < cabBack - 0.3; z += 1.1) {
-          block(0.72, 0.16, 0.6, side * w * 0.28, 0.42, z, leather);
-          block(0.72, 0.68, 0.14, side * w * 0.28, 0.74, z + 0.27, leather);
-        }
+
       }
     }
     if (bus) {
@@ -331,14 +371,6 @@ export class VehicleMesh {
     }
     block(w * 0.62, 0.14, 0.025, 0, -0.12, nose - 0.022, trim);
     block(w - 0.08, 0.15, 0.35, 0, p.eye.y - 0.43, cabFront + 0.18, trim);
-    for (const x of bus ? [p.eye.x] : [p.eye.x, -p.eye.x]) {
-      block(0.56, 0.16, 0.55, x, p.eye.y - 0.72, -p.eye.along + 0.05, leather);
-      block(0.56, 0.6, 0.13, x, p.eye.y - 0.42, -p.eye.along + 0.36, leather);
-      if (p.shape === 'suv') {
-        block(0.62, 0.16, 0.55, x, p.eye.y - 0.6, 1.15, leather);
-        block(0.62, 0.6, 0.13, x, p.eye.y - 0.3, 1.45, leather);
-      }
-    }
     this.steering.position.set(p.eye.x, p.eye.y - 0.3, -p.eye.along - 0.4);
     this.steering.rotation.x = -0.45; this.chassis.add(this.steering);
     this.steering.add(new Mesh(this.geometry(new TorusGeometry(0.18, 0.018, 6, 24)), trim));
@@ -377,6 +409,9 @@ export class VehicleMesh {
   }
   private geometry<T extends BufferGeometry>(geometry: T): T { this.geometries.push(geometry); return geometry; }
   dispose(): void {
+    this.display.dispose();
+    this.operatorDisplay?.dispose();
+    this.deviceLights.dispose(); this.deviceLights.material.dispose();
     this.windshield?.dispose();
     this.root.removeFromParent(); this.headlight.dispose(); this.cabinLight.dispose();
     this.geometries.forEach(geometry => geometry.dispose()); this.materials.forEach(material => material.dispose());

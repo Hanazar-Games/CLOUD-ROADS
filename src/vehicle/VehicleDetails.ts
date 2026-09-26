@@ -33,7 +33,7 @@ export function flatbedDetails(width: number, start: number, end: number, parent
 }
 
 export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDetailKit): void {
-  const { block, cylinder, paint, trim, metal, glass, lamp, amber } = kit;
+  const { block, cylinder, paint, trim, metal, lamp, amber } = kit;
   if (p.mass < 4000) return;
   const nose = -p.chassisLength / 2, end = p.chassisLength / 2;
   for (const side of [-1, 1]) {
@@ -68,40 +68,4 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
     }
     for (let x = -0.85; x <= 0.85; x += 0.425) block(0.16, 0.075, 0.14, x, 2.2, -2.35, lamp, parent);
   }
-  if (p.shape !== 'crane') return;
-  block(p.width - 0.1, 0.28, p.chassisLength - 2.6, 0, 0.28, 1.25, paint, parent);
-  cylinder(1.03, 0.22, 0, 0.54, 2.25, metal, parent);
-  cylinder(0.89, 0.2, 0, 0.73, 2.25, trim, parent);
-  block(1.55, 0.64, 3.4, 0.15, 1.04, 3.1, paint, parent);
-  for (let i = 0; i < 4; i++) block(2.35, 0.24, 1.25, 0, 0.94 + i * 0.25, 4.85, trim, parent);
-  for (let i = -4; i <= 4; i++) {
-    const stripe = block(0.13, 0.32, 0.025, i * 0.25, 1.04, 5.49, paint, parent); stripe.rotation.z = -0.35;
-    const bumper = block(0.12, 0.2, 0.025, i * 0.25, -0.27, nose - 0.02, trim, parent); bumper.rotation.z = 0.35;
-  }
-  block(0.88, 1.1, 1.7, -0.88, 1.52, 1.55, paint, parent);
-  block(0.72, 0.64, 0.02, -0.88, 1.75, 0.69, glass, parent);
-  block(0.02, 0.64, 1.3, -1.33, 1.75, 1.5, glass, parent);
-  block(0.9, 0.08, 1.75, -0.88, 2.12, 1.55, metal, parent);
-  for (const [width, height, length, z] of [[0.92, 0.65, 4.8, 0.6], [0.76, 0.51, 4, -0.5], [0.61, 0.39, 3.3, -2.2], [0.46, 0.28, 2.6, -4.4]]) {
-    block(width, height, length, 0.17, 2.45, z, paint, parent);
-    for (const side of [-1, 1]) block(0.035, 0.035, length - 0.12, 0.17 + side * width / 2, 2.45 - height * 0.25, z, metal, parent);
-  }
-  for (const side of [-1, 1]) {
-    block(0.15, 1.3, 0.65, side * 0.51 + 0.17, 1.64, 2.45, metal, parent);
-    const ram = cylinder(0.09, 2.4, side * 0.55 + 0.17, 1.5, 0.9, metal, parent); ram.rotation.x = -0.95;
-    for (const z of [-2.25, 4.9]) {
-      block(p.width - 0.15, 0.25, 0.42, 0, 0.02, z, trim, parent);
-      cylinder(0.14, 0.7, side * 1.17, -0.02, z, metal, parent);
-      block(0.34, 0.08, 0.48, side * 1.17, -0.41, z, trim, parent);
-      block(0.06, 0.24, 0.48, side * 1.34, 0.1, z, paint, parent);
-    }
-    cylinder(0.095, 0.045, side * 1.02, 1.98, nose + 0.35, trim, parent);
-    cylinder(0.08, 0.12, side * 1.02, 2.06, nose + 0.35, amber, parent);
-  }
-  const pulley = cylinder(0.2, 0.25, 0.17, 2.43, -5.73, trim, parent); pulley.rotation.z = Math.PI / 2;
-  for (const x of [0.1, 0.24]) cylinder(0.014, 0.2, x, 2.33, -5.79, metal, parent);
-  block(0.3, 0.18, 0.24, 0.17, 2.18, -5.79, paint, parent);
-  block(0.045, 0.12, 0.06, 0.17, 2.045, -5.79, metal, parent);
-  block(0.15, 0.045, 0.06, 0.22, 1.985, -5.79, metal, parent);
-  block(0.04, 0.07, 0.06, 0.285, 2.015, -5.79, metal, parent);
 }

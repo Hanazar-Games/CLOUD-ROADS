@@ -17,11 +17,11 @@ test('requires a fresh movement key after focus loss or keyboard pause', async (
   await page.keyboard.up('KeyW');
   await page.keyboard.down('KeyW');
   await expect(coordinates).not.toHaveText(stopped!);
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await page.waitForTimeout(300);
   const paused = await coordinates.textContent();
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(400);
   await expect(coordinates).toHaveText(paused!);
@@ -34,21 +34,21 @@ test('requires a fresh movement key after focus loss or keyboard pause', async (
 test('keeps pause and debug shortcuts available on buttons without hijacking editing or dialogs', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
   await page.locator('#controls-toggle').focus();
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('F3');
   await expect(page.locator('#debug')).toBeVisible();
   await toggleSettings(page);
   await (await control(page, page.locator('#seed'))).focus();
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await (await control(page, page.locator('#release-open'))).click();
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await page.keyboard.press('F3');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#debug')).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('F8');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'false');
 });
 

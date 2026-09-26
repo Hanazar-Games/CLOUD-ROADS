@@ -22,7 +22,7 @@ test('opens categorized modal settings, freezes driving and restores fresh keybo
 test('animates windows, roof and washer water, and preserves pause through settings', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT'); await page.locator('#drive-toggle').click();
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
-  await page.keyboard.press('KeyT'); await page.keyboard.press('KeyJ'); await page.keyboard.press('KeyG');
+  await page.keyboard.press('KeyT'); await page.keyboard.down('Period'); await expect(metric('Window opening')).toHaveText('1.00'); await page.keyboard.up('Period'); await page.keyboard.press('KeyG');
   await expect(metric('Roof opening')).toHaveText('0.00', { timeout: 15000 });
   await expect(metric('Window opening')).toHaveText('1.00');
   await expect.poll(async () => Number(await metric('Washer fluid').textContent())).toBeLessThan(3);
@@ -31,9 +31,9 @@ test('animates windows, roof and washer water, and preserves pause through setti
   await (await control(page, page.locator('#cabin-fan'))).selectOption('3');
   await closeSettings(page);
   await expect(metric('Cabin exposure')).toHaveText('0.00');
-  await page.keyboard.press('KeyP'); await openSettings(page); await page.keyboard.press('Escape');
+  await page.keyboard.press('F8'); await openSettings(page); await page.keyboard.press('Escape');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('KeyP'); await page.keyboard.press('KeyG');
+  await page.keyboard.press('F8'); await page.keyboard.press('KeyG');
   await expect.poll(async () => parseFloat((await metric('Glass water').textContent())!)).toBeGreaterThan(0);
   await page.keyboard.press('KeyF');
   await (await control(page, page.locator('#washer-refill'))).click();
