@@ -5,6 +5,52 @@ const tick = (systems: VehicleSystems, seconds: number, rain = 1, shelter = 0, d
   for (let i = 0; i < Math.round(seconds / dt); i++) systems.update(dt, 1, rain, shelter);
 };
 
+it('sprays washer fluid and runs a cleanup cycle even with wipers switched off', () => {
+  const systems = new VehicleSystems(); systems.wipers = 'off';
+  expect(systems.wash()).toBe(true);
+  tick(systems, 0.2, 0);
+  expect(systems.washerSpray).toBeGreaterThan(0);
+  expect(systems.washerFluid).toBeLessThan(3);
+  expect(systems.sweep).toBeGreaterThan(0);
+  const fluid = systems.washerFluid;
+  systems.update(0, 0, 0, 0); expect(systems.washerFluid).toBe(fluid);
+  tick(systems, 6, 0); expect(systems.washerSpray).toBe(0); expect(systems.sweep).toBe(0);
+  systems.washerFluid = 0; expect(systems.wash()).toBe(false);
+  expect(systems.refill(10)).toBe(false); expect(systems.refill(0)).toBe(true);
+  expect(systems.washerFluid).toBe(3);
+});
+
+it('animates windows and the convertible roof, with speed and equipment limits', () => {
+  const systems = new VehicleSystems(); systems.configure('roadster');
+  systems.windowTarget = 1;
+  expect(systems.toggleRoof(20)).toBe(false);
+  expect(systems.toggleRoof(0)).toBe(true);
+  const roof = systems.roofOpen;
+  systems.update(0, 0, 0, 0); expect(systems.roofOpen).toBe(roof);
+  tick(systems, 5, 0);
+  expect(systems.windowOpen).toBe(1); expect(systems.roofOpen).toBe(0);
+  systems.configure('motorcycle');
+  expect(systems.hasWindows).toBe(false); expect(systems.hasWindshield).toBe(false);
+  expect(systems.toggleRoof(0)).toBe(false); expect(systems.wash()).toBe(false);
+  expect(systems.cabinExposure).toBe(1);
+  systems.configure('sedan'); systems.windowTarget = 0; tick(systems, 5, 0);
+  expect(systems.cabinExposure).toBe(0);
+});
+
+it('only runs the equipment motor while windows or the roof actually move', () => {
+  const systems = new VehicleSystems(); systems.configure('roadster'); systems.toggleRoof(0);
+  systems.update(0.1, 0, 0, 0, 0, 0);
+  expect(systems.equipmentMotor).toBe(true);
+  const roof = systems.roofOpen;
+  systems.update(0.1, 0, 0, 0, 0, 10);
+  expect(systems.roofOpen).toBe(roof); expect(systems.equipmentMotor).toBe(false);
+  systems.windowTarget = 1; systems.update(0.1, 0, 0, 0, 0, 10);
+  expect(systems.equipmentMotor).toBe(true);
+  systems.update(0, 0, 0, 0);
+  expect(systems.equipmentMotor).toBe(false);
+  tick(systems, 5, 0); expect(systems.equipmentMotor).toBe(false);
+});
+
 it('reports the complete blade sweep when a frame crosses the reversal point', () => {
   const systems = new VehicleSystems(); systems.wipers = 'high';
   tick(systems, 0.3, 1, 0, 0.1);

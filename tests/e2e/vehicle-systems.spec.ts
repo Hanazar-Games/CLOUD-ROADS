@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control, toggleSettings } from './settings';
 
 test('operates headlights and wipers, freezes controls in dialogs and adapts to motorcycles', async ({ page }) => {
   const errors: string[] = [];
@@ -6,13 +7,13 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#vehicle-kind').selectOption('sedan');
-  await page.locator('#driving-view').selectOption('cockpit');
-  await page.locator('#weather-kind').selectOption('storm');
-  await page.locator('#vehicle-lights').selectOption('off');
-  await page.locator('#suspension-damping').fill('130');
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('sedan');
+  await (await control(page, page.locator('#driving-view'))).selectOption('cockpit');
+  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#vehicle-lights'))).selectOption('off');
+  await (await control(page, page.locator('#suspension-damping'))).fill('130');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
-  await page.locator('#drive-toggle').click();
+  await (await control(page, page.locator('#drive-toggle'))).click();
   await expect(metric('Vehicle lights')).toHaveText('off');
   await expect(metric('Wiper rate')).toHaveText('1.6');
   await expect.poll(async () => Number(await metric('Wiper sweep').textContent())).toBeGreaterThan(0.2);
@@ -21,23 +22,26 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   await page.keyboard.press('KeyB'); await expect(metric('Wiper sweep')).toHaveText('0.000');
   await page.keyboard.press('KeyB'); await expect(page.locator('#vehicle-wipers-status')).toHaveText('雨刮 · 间歇');
   await page.keyboard.press('KeyP');
-  const sweep = await metric('Wiper sweep').textContent();
+  const sweep = await metric('Wiper sweep').evaluate(field => new Promise<string>(resolve => {
+    const observer = new MutationObserver(() => { observer.disconnect(); resolve(field.textContent!); });
+    observer.observe(field, { childList: true });
+  }));
   await page.keyboard.press('KeyL'); await expect(metric('Vehicle lights')).toHaveText('high');
-  await page.locator('#release-open').click(); await page.keyboard.press('KeyB');
+  await (await control(page, page.locator('#release-open'))).click(); await page.keyboard.press('KeyB');
   await expect(metric('Wiper sweep')).toHaveText(sweep!);
-  await page.getByRole('button', { name: '关闭公告', exact: true }).click();
-  await page.locator('#controls-toggle').click();
-  await page.locator('#vehicle-kind').selectOption('motorcycle');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '关闭公告', exact: true }))).click();
+  await toggleSettings(page);
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('motorcycle');
   await expect(page.locator('#vehicle-wipers')).toBeDisabled();
   await expect(metric('Wiper rate')).toHaveText('0.0');
   await expect(metric('Suspension damping')).toHaveText('130%');
-  await page.locator('#vehicle-kind').selectOption('coach');
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('coach');
   await expect(page.locator('#vehicle-wipers')).toBeEnabled();
   await expect(page.locator('#vehicle-lights')).toHaveValue('high');
   await expect(page.locator('#vehicle-wipers')).toHaveValue('intermittent');
   await expect(page.locator('#suspension-damping-value')).toHaveText('130%');
-  await page.locator('#vehicle-wipers').selectOption('high');
-  await page.locator('#controls-toggle').click(); await page.locator('#world').focus(); await page.keyboard.press('KeyP');
+  await (await control(page, page.locator('#vehicle-wipers'))).selectOption('high');
+  await toggleSettings(page); await (await control(page, page.locator('#world'))).focus(); await page.keyboard.press('KeyP');
   await expect.poll(async () => Number(await metric('Wiper sweep').textContent())).toBeGreaterThan(0.2);
   expect(errors).toEqual([]);
 });

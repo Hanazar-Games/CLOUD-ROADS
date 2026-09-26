@@ -13,22 +13,21 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="controls-toggle" type="button" aria-expanded="true" aria-controls="explorer">收起面板</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
-      <section id="explorer" class="explorer" aria-label="探索控制">
-        <p class="eyebrow">无尽山野，自由探索</p>
-        <h1>向群山深处。</h1>
-        <p class="intro">一颗种子，一片没有边界的世界。<br />驾驶穿越群山，或下车步行看看风景。</p>
-        <details class="world-options">
-          <summary>步行与跑跳</summary>
-          <p class="panel-help">右上角「开始步行」进入第一人称，WASD 行走，按住 Shift 跑步，按住 E 疾跑，Space 跳跃，R 回到道路。拖动鼠标观察，双击画面锁定鼠标，P 暂停。可在驾驶、步行和自由飞行间切换。</p>
-          <p class="panel-help">平缓地面道路留有无护栏段，可走进山野；所有桥梁两侧均有护栏。桥下步行保持在谷底，跳跃必须落地后才能再次起跳。</p>
-        </details>
+      <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
+        <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
+        <p id="settings-help">调整你的旅程。设置期间暂停行驶；音量可以即时试听。</p>
+        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
+<section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
         <details class="world-options" open>
           <summary>驾驶与视角</summary>
           <label for="vehicle-kind">载具</label>
           <select id="vehicle-kind" aria-describedby="vehicle-summary"></select>
           <p id="vehicle-summary" class="panel-help" aria-live="polite"></p>
+          <label for="transmission-mode">变速箱</label>
+          <select id="transmission-mode"><option value="auto">自动换挡</option><option value="manual">手动换挡 · [ 降挡 / ] 升挡</option></select>
+          <p class="panel-help">乘用车与摩托车 6 挡，重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
           <details class="world-options">
             <summary>动力与外观</summary>
             <label class="speed-label" for="vehicle-power">发动机输出 <output id="vehicle-power-value">100%</output></label>
@@ -56,7 +55,12 @@
           <input id="suspension-damping" type="range" min="70" max="130" step="5" value="100" aria-describedby="suspension-summary" />
           <p id="suspension-summary" class="panel-help"></p>
           <p id="suspension-compression" class="panel-help">开始驾驶后显示轮端压缩量</p>
-          <label for="vehicle-lights">车灯 · L 切换</label>
+          <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
+          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。打开设置时车辆暂停，关闭设置继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
+        </details>
+</section>
+<section class="settings-category" id="settings-equipment" aria-labelledby="heading-equipment"><h3 id="heading-equipment">车载设备</h3>
+<div class="world-options">          <label for="vehicle-lights">车灯 · L 切换</label>
           <select id="vehicle-lights" aria-describedby="vehicle-lights-help"></select>
           <label class="speed-label" for="light-power">车灯亮度 <output id="light-power-value">100%</output></label>
           <input id="light-power" type="range" min="25" max="200" step="5" value="100" />
@@ -68,9 +72,17 @@
           <label for="vehicle-wipers">雨刮 · B 切换</label>
           <select id="vehicle-wipers" aria-describedby="vehicle-wipers-help"></select>
           <p id="vehicle-wipers-help" class="panel-help"></p>
-          <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
-          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，P 暂停。调整设置时车辆暂停，点击画面继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
-        </details>
+          <div class="actions road-actions"><button id="washer" type="button">喷玻璃水 · G</button><button id="washer-refill" type="button">停车补液</button></div>
+          <p id="washer-status" class="panel-help" role="status">玻璃水 3.00 L / 3 L</p>
+          <label class="speed-label" for="vehicle-windows">驾驶室车窗 <output id="vehicle-windows-value">关闭</output></label>
+          <input id="vehicle-windows" type="range" min="0" max="100" step="10" value="0" aria-describedby="equipment-help" />
+          <div class="actions road-actions"><button id="vehicle-roof" type="button" aria-pressed="false">关闭敞篷 · T</button><button id="cabin-light" type="button" aria-pressed="false">阅读灯 · 关闭</button></div>
+          <label for="cabin-fan">通风风机</label>
+          <select id="cabin-fan"><option value="0">关闭</option><option value="1">1 档 · 轻风</option><option value="2">2 档 · 标准</option><option value="3">3 档 · 强风</option></select>
+          <p id="equipment-status" class="equipment-status" role="status">车载设备就绪</p>
+          <p id="equipment-help" class="panel-help">G 喷洗并自动补刮；V 按住鸣笛；J 开关车窗；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃与座舱设备。</p>
+</div></section>
+<section class="settings-category" id="settings-world" aria-labelledby="heading-world"><h3 id="heading-world">世界与道路</h3>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
           <div class="seed-entry"><input id="seed" maxlength="80" autocomplete="off" spellcheck="false" /><button type="submit" aria-label="加载种子">↗</button></div>
@@ -109,8 +121,28 @@
             <p id="settings-status" role="status">当前：高山雪岭 · 1 档 · 舒缓山路 · 最大坡度 6% · 山路 · 8 米</p>
           </form>
         </details>
-        <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
-        <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
+</section>
+<section class="settings-category" id="settings-weather" aria-labelledby="heading-weather"><h3 id="heading-weather">天气与时间</h3>
+        <details class="world-options" open>
+          <summary>季节、天气与时间</summary>
+          <label for="season-kind">季节</label>
+          <select id="season-kind" aria-describedby="season-help"><option value="spring">春 · 新绿花开</option><option value="summer" selected>夏 · 林海繁茂</option><option value="autumn">秋 · 金叶山野</option><option value="winter">冬 · 霜雪归途</option></select>
+          <p id="season-status" class="panel-help">夏季 · 路面正常</p>
+          <p id="season-help" class="panel-help">四季即时切换，保留当前位置。树木、花草、路面与建筑积雪随季节变化；低温时雨转雪，雪路抓地力降低。炎热沙漠不会整片积雪。</p>
+          <label for="weather-kind">天气</label>
+          <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="drizzle">小雨</option><option value="rain">雨天</option><option value="storm">风雨</option><option value="fog">浓雾</option></select>
+          <label class="speed-label" for="fog-density">雾气浓度 <output id="fog-density-value">100%</output></label>
+          <input id="fog-density" type="range" min="50" max="200" step="10" value="100" />
+          <p class="panel-help">天气逐渐过渡，雨后路面慢慢变干；暂停时选择天气可即时预览。雾气浓度越高，远景越朦胧。</p>
+          <label for="time-preset">时段</label>
+          <select id="time-preset"><option value="-100">清晨 · 07:00</option><option value="0">午后 · 13:00</option><option value="70" selected>金色时刻 · 17:12</option><option value="90">橙色晚霞 · 18:24</option><option value="150">夜晚 · 22:00</option><option value="custom" disabled>自定义时刻</option></select>
+          <label class="speed-label" for="daylight">光照时刻 <output id="daylight-value">金色时刻 · 17:12</output></label>
+          <input id="daylight" type="range" min="-100" max="150" step="1" value="70" aria-valuetext="金色时刻，17:12" />
+          <div class="actions atmosphere-actions"><button id="sun-view" type="button">望向太阳</button><button id="shadows" type="button" aria-pressed="true">山体投影</button></div>
+          <p class="panel-help">即时切换，保留当前位置。云层开关不影响天气雾。</p>
+        </details>
+</section>
+<section class="settings-category" id="settings-graphics" aria-labelledby="heading-graphics"><h3 id="heading-graphics">性能与画质</h3>
         <details class="world-options" open>
           <summary>性能与画质</summary>
           <label for="graphics-preset">画质预设</label>
@@ -135,33 +167,29 @@
           <p id="graphics-status" class="panel-help" role="status"></p>
           <p class="panel-help">预设同时调整渲染比例、投影、抗锯齿、云层、视距和近景细节；帧率上限独立保留。不限帧率取消游戏内限帧，实际帧率取决于设备和屏幕刷新率。切到后台后停止渲染，返回时继续。</p>
         </details>
+</section>
+<section class="settings-category" id="settings-audio" aria-labelledby="heading-audio"><h3 id="heading-audio">声音与音乐</h3>
         <details class="world-options">
           <summary>声音与音乐</summary>
           <button id="audio-toggle" type="button" aria-pressed="false">开启声音</button>
-          <label class="speed-label" for="sfx-volume">驾驶与环境音 <output id="sfx-volume-value">60%</output></label>
-          <input id="sfx-volume" type="range" min="0" max="100" value="60" />
-          <label class="speed-label" for="music-volume">背景音乐 <output id="music-volume-value">25%</output></label>
-          <input id="music-volume" type="range" min="0" max="100" value="25" />
+          <div class="audio-grid" id="audio-channels"></div>
+          <label for="music-style">音乐氛围</label>
+          <select id="music-style"><option value="ambient">山间漫游 · 舒缓</option><option value="night">夜行电台 · 低音</option><option value="motion">逐光公路 · 轻快</option></select>
+          <label class="speed-label" for="music-pace">音乐节奏 <output id="music-pace-value">100%</output></label>
+          <input id="music-pace" type="range" min="60" max="140" step="10" value="100" />
+          <div class="actions road-actions"><button id="preview-engine" type="button">试听发动机</button><button id="preview-shift" type="button">试听换挡</button><button id="preview-horn" type="button">试听喇叭</button></div>
+          <p id="audio-preview-status" class="panel-help" role="status">先开启声音，再选择试听。</p>
           <p id="audio-status" class="panel-help" role="status">声音未开启</p>
-          <p class="panel-help">轻环境音乐、引擎、风雨、脚步、雨刮与转向灯音效。暂停、打开公告或离开窗口时静音；设置只在本次页面内保留。</p>
+          <p class="panel-help">发动机随车型、转速与换挡变化；湿路胎噪、风雨、日间鸟声与夜间虫鸣分层混音。开窗、敞篷和隧道改变听感。音源由程序合成，设有输出压缩保护；暂停、公告和窗口失焦时静音，设置页允许试听，不保存运行时设置。</p>
         </details>
-        <details class="world-options" open>
-          <summary>季节、天气与时间</summary>
-          <label for="season-kind">季节</label>
-          <select id="season-kind" aria-describedby="season-help"><option value="spring">春 · 新绿花开</option><option value="summer" selected>夏 · 林海繁茂</option><option value="autumn">秋 · 金叶山野</option><option value="winter">冬 · 霜雪归途</option></select>
-          <p id="season-status" class="panel-help">夏季 · 路面正常</p>
-          <p id="season-help" class="panel-help">四季即时切换，保留当前位置。树木、花草、路面与建筑积雪随季节变化；低温时雨转雪，雪路抓地力降低。炎热沙漠不会整片积雪。</p>
-          <label for="weather-kind">天气</label>
-          <select id="weather-kind"><option value="clear">晴天</option><option value="overcast">多云</option><option value="drizzle">小雨</option><option value="rain">雨天</option><option value="storm">风雨</option><option value="fog">浓雾</option></select>
-          <label class="speed-label" for="fog-density">雾气浓度 <output id="fog-density-value">100%</output></label>
-          <input id="fog-density" type="range" min="50" max="200" step="10" value="100" />
-          <p class="panel-help">天气逐渐过渡，雨后路面慢慢变干；暂停时选择天气可即时预览。雾气浓度越高，远景越朦胧。</p>
-          <label for="time-preset">时段</label>
-          <select id="time-preset"><option value="-100">清晨 · 07:00</option><option value="0">午后 · 13:00</option><option value="70" selected>金色时刻 · 17:12</option><option value="90">橙色晚霞 · 18:24</option><option value="150">夜晚 · 22:00</option><option value="custom" disabled>自定义时刻</option></select>
-          <label class="speed-label" for="daylight">光照时刻 <output id="daylight-value">金色时刻 · 17:12</output></label>
-          <input id="daylight" type="range" min="-100" max="150" step="1" value="70" aria-valuetext="金色时刻，17:12" />
-          <div class="actions atmosphere-actions"><button id="sun-view" type="button">望向太阳</button><button id="shadows" type="button" aria-pressed="true">山体投影</button></div>
-          <p class="panel-help">即时切换，保留当前位置。云层开关不影响天气雾。</p>
+</section>
+<section class="settings-category" id="settings-explore" aria-labelledby="heading-explore"><h3 id="heading-explore">探索工具</h3>
+        <label class="speed-label" for="speed">飞行速度 <output id="speed-value">120 m/s</output></label>
+        <input id="speed" type="range" min="20" max="1200" step="20" value="120" aria-valuetext="每秒 120 米" />
+        <details class="world-options">
+          <summary>步行与跑跳</summary>
+          <p class="panel-help">右上角「开始步行」进入第一人称，WASD 行走，按住 Shift 跑步，按住 E 疾跑，Space 跳跃，R 回到道路。拖动鼠标观察，双击画面锁定鼠标，P 暂停。可在驾驶、步行和自由飞行间切换。</p>
+          <p class="panel-help">平缓地面道路留有无护栏段，可走进山野；所有桥梁两侧均有护栏。桥下步行保持在谷底，跳跃必须落地后才能再次起跳。</p>
         </details>
         <div class="actions"><button id="home" type="button">返回起点</button><button id="wireframe" type="button" aria-pressed="false">地形线框</button></div>
         <div class="actions road-actions"><button id="road-view" type="button" disabled>道路视角</button><button id="road-debug" type="button" aria-pressed="false">路线骨架</button></div>
@@ -180,13 +208,17 @@
         <div class="actions road-actions"><button id="cloud-view" type="button" disabled>穿云起点</button><button id="cloud-toggle" type="button" aria-pressed="true">云层</button><span id="cloud-region">云上</span></div>
         <p id="cloud-help" role="status">前往穿云起点，按住 Space 上升，Shift 下降。</p>
         <div class="actions road-actions"><button id="pause" type="button" aria-pressed="false">暂停探索</button></div>
-      </section>
+</section>
+        </div></div>
+      </dialog>
       <div class="crosshair" aria-hidden="true">+</div>
       <div id="notice" role="status">拖动视角，开始探索</div>
       <section id="drive-hud" aria-label="驾驶仪表" hidden>
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">W 起步 · S 倒车</p>
+        <p class="rpm-reading"><span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">850</span> RPM</p>
+        <p id="cabin-status" class="rpm-reading">敞篷开启 · 玻璃水 3.0 L</p>
         <p id="drive-condition">夏季 · 路面正常</p>
         <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
         <div class="vehicle-indicators"><span id="turn-left" aria-label="左转灯灭">◀</span><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span><span id="turn-right" aria-label="右转灯灭">▶</span></div>

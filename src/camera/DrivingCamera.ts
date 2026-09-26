@@ -11,6 +11,7 @@ export class DrivingCamera {
   fov = 65;
   distance = 7;
   height = 0;
+  enclosed = false;
   private yaw = 0; private pitch = 0;
   private bodyPitch = 0; private bodyRoll = 0;
   private lastView: DrivingView = 'chase';
@@ -62,7 +63,7 @@ export class DrivingCamera {
       this.euler.set(car.pitch, -car.heading, car.roll);
       this.rotation.setFromEuler(this.euler);
       const eye = car.profile.eye, cockpit = this.view === 'cockpit' || cabInTunnel;
-      const raised = cockpit && car.profile.shape !== 'roadster' && car.profile.shape !== 'motorcycle' ? Math.min(0.05, this.height) : this.height;
+      const raised = cockpit && (this.enclosed || car.profile.shape !== 'roadster' && car.profile.shape !== 'motorcycle') ? Math.min(0.05, this.height) : this.height;
       this.offset.set(cockpit ? eye.x : 0, (cockpit ? eye.y : eye.y - 0.12) + raised,
         cockpit ? -eye.along : car.kind === 'roadster' ? -1.2 : -car.profile.chassisLength / 2 - 0.12).applyQuaternion(this.rotation);
       this.camera.position.set(car.x - origin.x, car.y, car.z - origin.z).add(this.offset);

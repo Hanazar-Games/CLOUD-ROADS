@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control, toggleSettings } from './settings';
 import { BiomeSystem } from '../../src/biome/BiomeSystem';
 import { HeightFunction } from '../../src/terrain/HeightFunction';
 
@@ -6,9 +7,9 @@ test('stops held movement when focus leaves the canvas and consumes flight short
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20000 });
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('KeyW');
-  await page.locator('#seed').click();
+  await (await control(page, page.locator('#seed'))).click();
   await expect(page.locator('#seed')).toBeFocused();
   await page.waitForTimeout(350);
   const position = await page.locator('#position').textContent();
@@ -27,8 +28,8 @@ test('keeps ground readings aligned with the displayed coordinates during fast f
   const terrain = new HeightFunction('CLOUD-ROAD-001'), biomes = new BiomeSystem('CLOUD-ROAD-001');
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
-  await page.locator('#speed').fill('1200');
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#speed'))).fill('1200');
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('ControlLeft');
   await page.keyboard.down('KeyD');
   await expect.poll(async () => Number((await page.locator('[data-metric="Coordinates"]').textContent())!.split(',')[0])).toBeGreaterThan(8000);
@@ -48,15 +49,15 @@ test('keeps ground readings aligned with the displayed coordinates during fast f
 test('keeps all controls reachable in a short desktop window', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#terrain-kind').selectOption('forest');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   for (const id of ['sun-view', 'shadows', 'bridge-view', 'cloud-view', 'cloud-toggle', 'pause']) {
     const button = page.locator(`#${id}`);
     await expect(button).toBeEnabled({ timeout: 20_000 });
-    await button.scrollIntoViewIfNeeded();
+    await (await control(page, button)).scrollIntoViewIfNeeded();
     const bounds = await button.boundingBox();
     expect(bounds!.y + bounds!.height).toBeLessThan(450);
-    await button.click({ timeout: 3000 });
+    await (await control(page, button)).click({ timeout: 3000 });
   }
 });
 
@@ -74,7 +75,7 @@ test('recovers from a failed terrain worker without reloading the page', async (
   });
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#error')).toContainText('Injected worker failure');
-  await page.getByRole('button', { name: '重试当前世界' }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '重试当前世界' }))).click();
   await expect(page.locator('#error')).toBeHidden();
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
@@ -84,7 +85,7 @@ test('restores rendering after context loss and clears held flight keys', async 
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('KeyW');
   await page.locator('#world').evaluate((canvas) => {
     const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
@@ -107,11 +108,13 @@ test('restores rendering after context loss and clears held flight keys', async 
 test('shows the current release, archives the previous baseline and isolates dialog controls', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
-  await page.getByRole('button', { name: '版本公告' }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.30');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('旅途检修 · 上下车与声画修复');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.31');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('座舱电台 · 分类设置与车载设备');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.30');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('旅途检修 · 上下车与声画修复');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.29');
   await expect(dialog.locator('[data-release="history"]')).toContainText('雨雾漫行 · 雨刮清水与下车探索');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.28');
@@ -160,7 +163,7 @@ test('shows the current release, archives the previous baseline and isolates dia
   await expect(page.locator('#position')).toHaveText(position!);
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
-  await expect(page.getByRole('button', { name: '版本公告' })).toBeFocused();
+  await expect(page.getByRole('button', { includeHidden: true, name: '版本公告' })).toBeFocused();
 });
 
 test('retains release access and a reload action when WebGL cannot start', async ({ page }) => {
@@ -169,8 +172,8 @@ test('retains release access and a reload action when WebGL cannot start', async
   await expect(page.locator('#error')).toContainText('无法启动 3D 世界');
   await expect(page.locator('#explorer')).toHaveAttribute('inert', '');
   await expect(page.locator('#controls-toggle')).toBeDisabled();
-  await expect(page.getByRole('button', { name: '重新加载页面' })).toBeVisible();
-  await page.getByRole('button', { name: '版本公告' }).click();
+  await expect(page.getByRole('button', { includeHidden: true, name: '重新加载页面' })).toBeVisible();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   await expect(page.getByRole('dialog', { name: '版本公告' })).toBeVisible();
 });
 
@@ -188,11 +191,11 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   const workerCount = await page.evaluate(() => Reflect.get(window, 'activeTerrainWorkers'));
-  await page.locator('#wireframe').click();
-  await page.locator('#road-debug').click();
+  await (await control(page, page.locator('#wireframe'))).click();
+  await (await control(page, page.locator('#road-debug'))).click();
   for (let i = 0; i < 10; i++) {
-    await page.locator('#seed').fill(`AUDIT-${i}`);
-    await page.getByRole('button', { name: '加载种子' }).click();
+    await (await control(page, page.locator('#seed'))).fill(`AUDIT-${i}`);
+    await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
     await expect(page.locator('[data-metric="Seed"]')).toHaveText(`AUDIT-${i}`);
     expect(await page.evaluate(() => Reflect.get(window, 'activeTerrainWorkers'))).toBe(workerCount);
   }
@@ -205,14 +208,14 @@ test('releases workers through repeated seed changes and keeps display preferenc
   expect(errors).toEqual([]);
 });
 
-test('collapses the panel and keeps pause button and keyboard state in sync', async ({ page }) => {
+test('closes modal settings and keeps pause button and keyboard state in sync', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.getByRole('button', { name: '收起面板' }).click();
   await expect(page.locator('#explorer')).toBeHidden();
-  await page.getByRole('button', { name: '展开面板' }).click();
-  await page.getByRole('button', { name: '暂停探索' }).click();
+  await toggleSettings(page);
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '暂停探索' }))).click();
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#notice')).toContainText('已暂停');
+  await toggleSettings(page);
   await page.keyboard.press('KeyP');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#pause')).toHaveText('暂停探索');

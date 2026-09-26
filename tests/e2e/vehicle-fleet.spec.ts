@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control, toggleSettings } from './settings';
 
 test('switches every vehicle in place, drives long rigs, and preserves choices through world and graphics resets', async ({ page }) => {
   test.setTimeout(150_000);
@@ -7,24 +8,24 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=FLEET-FLAT');
-  await page.locator('#terrain-kind').selectOption('meadow');
-  await page.locator('#road-type').selectOption('highway');
-  await page.locator('#route-style').selectOption('0');
-  await page.locator('#max-grade').fill('0');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('meadow');
+  await (await control(page, page.locator('#road-type'))).selectOption('highway');
+  await (await control(page, page.locator('#route-style'))).selectOption('0');
+  await (await control(page, page.locator('#max-grade'))).fill('0');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#vehicle-kind option')).toHaveCount(13);
   await expect(page.locator('#suspension option')).toHaveCount(5);
-  await page.locator('#drive-toggle').click();
+  await (await control(page, page.locator('#drive-toggle'))).click();
   for (const kind of ['sedan', 'suv', 'truck5', 'truck8', 'flatbed12', 'crane', 'semi15', 'semi20', 'heavySemi', 'minibus', 'coach', 'motorcycle', 'roadster']) {
-    await page.locator('#controls-toggle').click();
-    await page.locator('#vehicle-kind').selectOption(kind);
+    await toggleSettings(page);
+    await (await control(page, page.locator('#vehicle-kind'))).selectOption(kind);
     await expect(page.locator('#vehicle-kind')).toHaveValue(kind);
     await expect(metric('Vehicle model')).toHaveText(await page.locator('#vehicle-kind option:checked').textContent() ?? '');
     await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
-    await page.locator('#suspension').selectOption('5');
-    await page.locator('#controls-toggle').click();
-    await page.locator('#world').focus();
+    await (await control(page, page.locator('#suspension'))).selectOption('5');
+    await toggleSettings(page);
+    await (await control(page, page.locator('#world'))).focus();
     await page.keyboard.down('KeyW');
     await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(12);
     await page.keyboard.up('KeyW'); await page.keyboard.down('Space');
@@ -38,10 +39,10 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
     await page.keyboard.press('KeyF'); await expect(metric('Travel mode')).toHaveText('driving');
     await expect(page.locator('#vehicle-trip')).toHaveText(trip!);
   }
-  await page.locator('#controls-toggle').click();
-  await page.locator('#vehicle-kind').selectOption('semi20');
-  await page.locator('#weather-kind').selectOption('storm');
-  await page.locator('#fog-density').fill('150');
+  await toggleSettings(page);
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('semi20');
+  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#fog-density'))).fill('150');
   await expect(metric('Tunnel shelter')).toHaveText('0%');
   await expect(metric('Rain visible')).toHaveText('yes');
   await page.locator('#world').evaluate(canvas => {
@@ -51,8 +52,8 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   await expect(page.locator('#error')).toBeVisible();
   await expect(page.locator('#error')).toBeHidden({ timeout: 15_000 });
   await expect(metric('Vehicle model')).toHaveText('20 米超长半挂');
-  await page.locator('#seed').fill('FLEET-REPLAY');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('FLEET-REPLAY');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
   await expect(page.locator('#vehicle-kind')).toHaveValue('semi20');
   await expect(page.locator('#suspension')).toHaveValue('5');
@@ -65,17 +66,17 @@ test('previews weather and fog while paused and keeps the vehicle stationary', a
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
-  await page.locator('#vehicle-kind').selectOption('motorcycle');
-  await page.locator('#drive-toggle').click();
-  await page.keyboard.press('KeyP'); await page.locator('#controls-toggle').click();
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('motorcycle');
+  await (await control(page, page.locator('#drive-toggle'))).click();
+  await page.keyboard.press('KeyP'); await toggleSettings(page);
   const position = await metric('Vehicle position').textContent();
-  await page.locator('#cloud-toggle').click();
-  await page.locator('#weather-kind').selectOption('fog');
-  await page.locator('#fog-density').fill('200');
+  await (await control(page, page.locator('#cloud-toggle'))).click();
+  await (await control(page, page.locator('#weather-kind'))).selectOption('fog');
+  await (await control(page, page.locator('#fog-density'))).fill('200');
   await expect(metric('Fog near / far')).toHaveText('18 / 210 m');
-  await page.locator('#weather-kind').selectOption('drizzle');
+  await (await control(page, page.locator('#weather-kind'))).selectOption('drizzle');
   await expect(metric('Rain visible')).toHaveText('yes');
-  await page.locator('#weather-kind').selectOption('clear');
+  await (await control(page, page.locator('#weather-kind'))).selectOption('clear');
   await expect(metric('Rain visible')).toHaveText('no');
   await expect(metric('Vehicle position')).toHaveText(position!);
 });

@@ -1,4 +1,5 @@
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type Suspension, type VehicleKind, type VehicleProfile, type WheelPoint } from './VehicleConfig';
+import { Transmission } from './Transmission';
 export interface VehicleInput { throttle: number; steer: number; handbrake: boolean }
 export interface SurfaceContact { height: number; grip: number }
 export type SurfaceSampler = (x: number, z: number) => SurfaceContact;
@@ -13,6 +14,7 @@ const wheel = (): WheelState => ({ height: 0, compression: 0, grounded: true });
 
 export class VehiclePhysics {
   readonly profile: Readonly<VehicleProfile>;
+  readonly transmission: Transmission;
   x = 0; y = 0; z = 0; heading = 0;
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   braking = false; parked = true; jackknifed = false;
@@ -33,6 +35,7 @@ export class VehiclePhysics {
 
   constructor(readonly kind: VehicleKind = 'roadster') {
     this.profile = vehicleProfiles[kind]; this.wheels = this.profile.wheels.map(wheel);
+    this.transmission = new Transmission(this.profile);
     this.pitchInertia = this.profile.wheels.reduce((sum, p) => sum + p.along ** 2, 0) / this.wheels.length;
     this.rollInertia = Math.max(0.3, this.profile.wheels.reduce((sum, p) => sum + p.x ** 2, 0) / this.wheels.length);
     const front = this.profile.wheels.filter(p => p.steer), rear = this.profile.wheels.filter(p => !p.steer);
@@ -44,6 +47,7 @@ export class VehiclePhysics {
   get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
   park(): void {
     this.speed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
+    this.transmission.reset();
     this.parked = true; this.braking = false; this.saveMotion();
   }
   wheelSteering(point: WheelPoint): number {
@@ -62,6 +66,7 @@ export class VehiclePhysics {
     this.speed = this.steering = this.pitch = this.roll = this.wheelAngle = 0;
     this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.parked = true; this.braking = this.jackknifed = false;
+    this.transmission.reset();
     if (!preserveTrip) this.trip = 0;
     const contacts = this.contacts(surface), grade = this.slope(contacts, 'along'), bank = this.slope(contacts, 'x');
     this.pitch = Math.atan(grade); this.roll = this.kind === 'motorcycle' ? 0 : Math.atan(bank * Math.cos(this.pitch));
@@ -146,12 +151,13 @@ export class VehiclePhysics {
     const grade = this.slope(contacts, 'along'), oldSpeed = this.speed;
     const slopeForce = GRAVITY * grade / Math.hypot(1, grade);
     this.braking = input.handbrake || throttle * this.speed < 0;
+    this.transmission.update(STEP, this.speed, this.parked ? 0 : throttle);
     if (input.handbrake || this.parked || this.braking) {
       const deceleration = Math.min(config.brake * (input.handbrake || this.parked ? 1.2 : clamp(this.brakeScale, 0.5, 1.5)), GRAVITY * 0.94) * brakingGrip;
       this.speed = approach(this.speed - slopeForce * STEP, 0, deceleration * STEP);
     } else {
       const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) * clamp(this.powerScale, 0.5, 1.5) / config.mass;
-      const drive = throttle * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : 1);
+      const drive = throttle * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : this.transmission.driveScale);
       this.speed += (drive - slopeForce) * STEP;
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + (1 - grip) * 0.5) * STEP);
     }

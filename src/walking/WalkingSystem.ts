@@ -29,9 +29,7 @@ export class WalkingSystem {
     this.hudTime = 1;
     this.pitch = this.stride = 0; this.jumpRequested = false; this.input.clear(); this.active = true;
     this.setUI();
-    element('explorer').hidden = true;
-    element('controls-toggle').setAttribute('aria-expanded', 'false');
-    element('controls-toggle').textContent = '展开面板';
+    element<HTMLDialogElement>('explorer').close();
     element('world').focus(); this.update(0, false);
     return true;
   }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control, closeSettings } from './settings';
 
 test('shows a streamed road spine, inspects it and preserves display settings across seeds', async ({ page }) => {
   const errors: string[] = [];
@@ -13,13 +14,13 @@ test('shows a streamed road spine, inspects it and preserves display settings ac
   expect(count).toBeGreaterThan(20);
   expect(count).toBeLessThanOrEqual(256);
   const before = await page.locator('#altitude').textContent();
-  await page.getByRole('button', { name: '道路视角' }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '道路视角' }))).click();
   await expect(page.locator('#altitude')).not.toHaveText(before!);
   await expect(page.locator('[data-metric="Road grade"]')).toContainText('%');
-  await page.getByRole('button', { name: '路线骨架' }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '路线骨架' }))).click();
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#seed').fill('ROAD-TEST-002');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('ROAD-TEST-002');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(page.locator('[data-metric="Seed"]')).toHaveText('ROAD-TEST-002');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
@@ -36,7 +37,8 @@ test('extends the road during 30 km of northbound flight and replays it on retur
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   const initialBridges = await metric('Bridges').textContent();
-  await page.locator('#speed').fill('1200');
+  await (await control(page, page.locator('#speed'))).fill('1200');
+  await closeSettings(page);
   await page.mouse.move(900, 450);
   await page.mouse.down();
   await page.mouse.move(900, 325);
@@ -50,9 +52,9 @@ test('extends the road during 30 km of northbound flight and replays it on retur
   expect(parseFloat((await metric('Road distance').textContent())!)).toBeGreaterThan(30);
   expect(Number(await metric('Road segments').textContent())).toBeLessThanOrEqual(256);
   expect(Number(await metric('Origin rebases').textContent())).toBeGreaterThanOrEqual(5);
-  await page.getByRole('button', { name: '道路视角' }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '道路视角' }))).click();
   await expect(page.locator('#notice')).not.toContainText('已暂停');
-  await page.getByRole('button', { name: '返回起点', exact: true }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '返回起点', exact: true }))).click();
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Road distance')).toHaveText('0.00 km');
   await expect(metric('Bridges')).toHaveText(initialBridges!);
@@ -64,13 +66,13 @@ test('inspects generated hairpins and continues streaming the coupled terrain', 
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto('/?seed=CLOUD-ROAD-001');
-  const button = page.getByRole('button', { name: '发卡弯视角' });
-  await page.locator('#route-style').selectOption('3');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  const button = page.getByRole('button', { includeHidden: true, name: '发卡弯视角' });
+  await (await control(page, page.locator('#route-style'))).selectOption('3');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(button).toBeEnabled({ timeout: 20_000 });
   expect(Number(await page.locator('[data-metric="Hairpins"]').textContent())).toBeGreaterThanOrEqual(2);
   const before = await page.locator('#position').textContent();
-  await button.click();
+  await (await control(page, button)).click();
   await expect(page.locator('#position')).not.toHaveText(before!);
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('289');
@@ -85,21 +87,21 @@ test('renders viaducts, inspects a bridge and rebuilds the same bridges after ch
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#terrain-kind').selectOption('forest');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
-  const button = page.getByRole('button', { name: '桥梁视角' });
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
+  const button = page.getByRole('button', { includeHidden: true, name: '桥梁视角' });
   await expect(button).toBeEnabled({ timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   const bridges = await metric('Bridges').textContent(), piers = await metric('Bridge piers').textContent();
   expect(Number(bridges)).toBeGreaterThan(0);
   expect(Number(piers)).toBeGreaterThan(Number(bridges) * 2);
   const position = await page.locator('#position').textContent();
-  await button.click();
+  await (await control(page, button)).click();
   await expect(page.locator('#position')).not.toHaveText(position!);
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   for (const seed of ['ROAD-TEST-002', 'CLOUD-ROAD-001']) {
-    await page.locator('#seed').fill(seed);
-    await page.getByRole('button', { name: '加载种子' }).click();
+    await (await control(page, page.locator('#seed'))).fill(seed);
+    await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
     await expect(metric('Seed')).toHaveText(seed);
     await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   }

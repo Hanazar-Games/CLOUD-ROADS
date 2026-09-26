@@ -1,9 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
+import { control, toggleSettings } from './settings';
 
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 async function start(page: Page) {
   await expect(page.locator('#walk-toggle')).toBeEnabled({ timeout: 30000 });
-  await page.locator('#walk-toggle').click();
+  await (await control(page, page.locator('#walk-toggle'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('walking');
   await expect(page.locator('#walk-hud')).toBeVisible();
   await expect(page.locator('#world')).toBeFocused();
@@ -50,14 +51,14 @@ test('switches walking, driving and flight on a tall bridge and survives setting
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=VALLEY-22');
-  await page.locator('#terrain-kind').selectOption('forest');
-  await page.locator('#route-style').selectOption('5');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
+  await (await control(page, page.locator('#route-style'))).selectOption('5');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric(page, 'Landscape')).toHaveText('森林山谷');
   await expect(metric(page, 'Route style')).toHaveText('5 档 · 连续发卡弯');
   await expect(metric(page, 'Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   await expect(page.locator('#bridge-view')).toBeEnabled({ timeout: 30000 });
-  await page.locator('#bridge-view').click();
+  await (await control(page, page.locator('#bridge-view'))).click();
   await start(page);
   expect(parseFloat((await metric(page, 'Tallest bridge').textContent())!)).toBeGreaterThan(100);
   await page.keyboard.down('KeyD'); await page.keyboard.down('KeyE');
@@ -67,16 +68,16 @@ test('switches walking, driving and flight on a tall bridge and survives setting
   const bridgeHeight = Number(bridgePosition!.split(',')[1]);
   await page.keyboard.press('KeyR');
   await expect(metric(page, 'Walking position')).not.toHaveText(bridgePosition!);
-  await page.locator('#controls-toggle').click();
-  await page.locator('#weather-kind').selectOption('rain');
+  await toggleSettings(page);
+  await (await control(page, page.locator('#weather-kind'))).selectOption('rain');
   const held = await metric(page, 'Walking position').textContent();
-  await page.locator('#release-open').click(); await page.keyboard.press('Space'); await page.keyboard.press('KeyR');
+  await (await control(page, page.locator('#release-open'))).click(); await page.keyboard.press('Space'); await page.keyboard.press('KeyR');
   await expect(metric(page, 'Walking position')).toHaveText(held!);
   await page.keyboard.press('Escape');
-  await page.locator('#drive-toggle').click();
+  await (await control(page, page.locator('#drive-toggle'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('driving');
   await expect(page.locator('#walk-hud')).toBeHidden();
-  await page.locator('#walk-toggle').click();
+  await (await control(page, page.locator('#walk-toggle'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('walking');
   await expect(page.locator('#drive-hud')).toBeHidden();
   expect(Math.abs(Number((await metric(page, 'Walking position').textContent())!.split(',')[1]) - bridgeHeight)).toBeLessThan(3);
@@ -88,11 +89,11 @@ test('switches walking, driving and flight on a tall bridge and survives setting
   await expect(page.locator('#walk-toggle')).toBeDisabled();
   await expect(page.locator('#error')).toBeHidden({ timeout: 20000 });
   await expect(metric(page, 'Travel mode')).toHaveText('walking');
-  await page.locator('#walk-toggle').click();
+  await (await control(page, page.locator('#walk-toggle'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
   await start(page);
-  await page.locator('#controls-toggle').click();
-  await page.locator('#home').click();
+  await toggleSettings(page);
+  await (await control(page, page.locator('#home'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
   await expect(page.locator('#walk-hud')).toBeHidden();
   expect(errors).toEqual([]);
@@ -101,10 +102,10 @@ test('switches walking, driving and flight on a tall bridge and survives setting
 test('keeps walking controls reachable in a short narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 520 });
   await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
-  await page.locator('#controls-toggle').click();
-  await page.getByText('步行与跑跳', { exact: true }).click();
+  await toggleSettings(page);
+  await (await control(page, page.locator('[data-settings-target="explore"]'))).click();
   await expect(page.getByText('右上角「开始步行」进入第一人称', { exact: false })).toBeVisible();
-  await page.locator('#walk-toggle').click();
+  await (await control(page, page.locator('#walk-toggle'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
 });
 
@@ -112,10 +113,10 @@ test('walks at a distant highway service area after rebasing and resets cleanly 
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#road-type').selectOption('highway');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await (await control(page, page.locator('#road-type'))).selectOption('highway');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric(page, 'Road ready')).toHaveText('yes', { timeout: 30000 });
-  await page.locator('#service-view').click();
+  await (await control(page, page.locator('#service-view'))).click();
   await expect(page.locator('#service-view')).toHaveText('下一服务区', { timeout: 30000 });
   await expect.poll(async () => Number(await metric(page, 'Origin rebases').textContent())).toBeGreaterThan(0);
   await start(page);
@@ -135,9 +136,9 @@ test('walks at a distant highway service area after rebasing and resets cleanly 
   });
   await expect(metric(page, 'Walking grounded')).toHaveText('no');
   await expect(metric(page, 'Walking grounded')).toHaveText('yes');
-  await page.locator('#controls-toggle').click();
-  await page.locator('#seed').fill('WALKING-RELOAD');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await toggleSettings(page);
+  await (await control(page, page.locator('#seed'))).fill('WALKING-RELOAD');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(page.locator('#walk-hud')).toBeHidden();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
   await start(page);

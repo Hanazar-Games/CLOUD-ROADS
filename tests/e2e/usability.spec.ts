@@ -1,13 +1,14 @@
 import { expect, test } from '@playwright/test';
+import { control, toggleSettings } from './settings';
 
 test('requires a fresh movement key after focus loss or keyboard pause', async ({ page }) => {
   const coordinates = page.locator('[data-metric="Coordinates"]');
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('KeyW');
-  await page.locator('#seed').focus();
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#seed'))).focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.waitForTimeout(300);
   const stopped = await coordinates.textContent();
   await page.keyboard.down('KeyW');
@@ -32,16 +33,16 @@ test('requires a fresh movement key after focus loss or keyboard pause', async (
 
 test('keeps pause and debug shortcuts available on buttons without hijacking editing or dialogs', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#controls-toggle').click();
+  await page.locator('#controls-toggle').focus();
   await page.keyboard.press('KeyP');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('F3');
   await expect(page.locator('#debug')).toBeVisible();
-  await page.locator('#controls-toggle').click();
-  await page.locator('#seed').focus();
+  await toggleSettings(page);
+  await (await control(page, page.locator('#seed'))).focus();
   await page.keyboard.press('KeyP');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#release-open').click();
+  await (await control(page, page.locator('#release-open'))).click();
   await page.keyboard.press('KeyP');
   await page.keyboard.press('F3');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
@@ -68,13 +69,13 @@ test('blocks exploration during a terrain failure and restores controls and pref
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20_000 });
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
-  await page.locator('#daylight').fill('90');
-  await page.locator('#shadows').click();
+  await (await control(page, page.locator('#daylight'))).fill('90');
+  await (await control(page, page.locator('#shadows'))).click();
   await page.evaluate(() => Reflect.set(window, 'failTerrain', true));
-  await page.locator('#seed').fill('AUDIT-RECOVERY');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('AUDIT-RECOVERY');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(page.locator('#error')).toContainText('Injected audit failure');
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.waitForTimeout(300);
   const position = await page.locator('[data-metric="Coordinates"]').textContent();
   await page.keyboard.down('KeyW');
@@ -84,7 +85,7 @@ test('blocks exploration during a terrain failure and restores controls and pref
   await expect(page.locator('#explorer')).toHaveAttribute('inert', '');
   await expect(page.locator('#controls-toggle')).toBeDisabled();
   await expect(page.locator('#notice')).toContainText('探索已中止');
-  await page.locator('#release-open').click();
+  await (await control(page, page.locator('#release-open'))).click();
   await expect(page.locator('#release-notes')).toBeVisible();
   await page.locator('#world').evaluate((canvas) => {
     const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
@@ -94,9 +95,9 @@ test('blocks exploration during a terrain failure and restores controls and pref
   await expect(page.locator('#error')).toContainText('图形上下文暂时丢失');
   await expect(page.locator('#error')).toContainText('Injected audit failure');
   await expect(page.locator('#explorer')).toHaveAttribute('inert', '');
-  await expect(page.getByRole('button', { name: '关闭公告' })).toBeFocused();
+  await expect(page.getByRole('button', { includeHidden: true, name: '关闭公告' })).toBeFocused();
   await page.keyboard.press('Escape');
-  await page.locator('#retry-world').click();
+  await (await control(page, page.locator('#retry-world'))).click();
   await expect(page.locator('#error')).toBeHidden();
   await expect(page.locator('#explorer')).not.toHaveAttribute('inert', '');
   await expect(page.locator('#controls-toggle')).toBeEnabled();
@@ -111,11 +112,11 @@ test('blocks exploration during a terrain failure and restores controls and pref
 test('keeps the release close button reachable while reading the oldest announcement', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 450 });
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#release-open').click();
-  await page.getByText('历史公告', { exact: true }).click();
-  await page.locator('#release-history article').last().locator('li').last().scrollIntoViewIfNeeded();
-  await expect(page.getByRole('button', { name: '关闭公告' })).toBeInViewport();
-  await page.getByRole('button', { name: '关闭公告' }).click();
+  await (await control(page, page.locator('#release-open'))).click();
+  await (await control(page, page.getByText('历史公告', { exact: true }))).click();
+  await (await control(page, page.locator('#release-history article').last().locator('li').last())).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { includeHidden: true, name: '关闭公告' })).toBeInViewport();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '关闭公告' }))).click();
   await expect(page.locator('#release-notes')).toBeHidden();
   await expect(page.locator('#release-open')).toBeFocused();
 });
@@ -123,15 +124,15 @@ test('keeps the release close button reachable while reading the oldest announce
 test('closes overlapping debug telemetry with a visible control in a narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?seed=CLOUD-ROAD-001');
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.press('F3');
   await expect(page.locator('#debug')).toBeVisible();
-  const close = page.getByRole('button', { name: '关闭调试面板' });
-  await page.locator('#debug dd').last().scrollIntoViewIfNeeded();
+  const close = page.getByRole('button', { includeHidden: true, name: '关闭调试面板' });
+  await (await control(page, page.locator('#debug dd').last())).scrollIntoViewIfNeeded();
   await expect(close).toBeInViewport();
   await close.click();
   await expect(page.locator('#debug')).toBeHidden();
   await expect(page.locator('#world')).toBeFocused();
-  await page.locator('#seed').click();
+  await (await control(page, page.locator('#seed'))).click();
   await expect(page.locator('#seed')).toBeFocused();
 });

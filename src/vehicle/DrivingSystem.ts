@@ -34,6 +34,16 @@ export class DrivingSystem {
       if (Object.hasOwn(vehicleProfiles, selector.value)) this.selectVehicle(selector.value as VehicleKind);
     }, options);
     this.describeVehicle();
+    this.systems.configure(this.car.profile.shape);
+    element('transmission-mode').addEventListener('change', () => {
+      this.car.transmission.mode = element<HTMLSelectElement>('transmission-mode').value === 'manual' ? 'manual' : 'auto';
+    }, options);
+    element('vehicle-windows').addEventListener('input', () => { this.systems.windowTarget = Number(element<HTMLInputElement>('vehicle-windows').value) / 100; this.describeEquipment(); }, options);
+    element('vehicle-roof').addEventListener('click', () => { this.systems.toggleRoof(this.car.speed); this.describeEquipment(); }, options);
+    element('washer').addEventListener('click', () => { this.systems.wash(); this.describeEquipment(); }, options);
+    element('washer-refill').addEventListener('click', () => { this.systems.refill(this.car.speed); this.describeEquipment(); }, options);
+    element('cabin-light').addEventListener('click', () => { this.systems.cabinLight = !this.systems.cabinLight; this.describeEquipment(); }, options);
+    element('cabin-fan').addEventListener('change', () => { this.systems.fan = Number(element<HTMLSelectElement>('cabin-fan').value); }, options);
     const tuning = [['vehicle-power', 'powerScale'], ['vehicle-brake', 'brakeScale'], ['vehicle-steering', 'steeringScale']] as const;
     for (const [id, field] of tuning) element(id).addEventListener('input', () => {
       this.car[field] = Number(element<HTMLInputElement>(id).value) / 100;
@@ -101,9 +111,7 @@ export class DrivingSystem {
     this.parked = false; this.exitBlockedTime = 0; this.hudTime = 0.1;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
     this.setUI();
-    element('explorer').hidden = true;
-    element('controls-toggle').setAttribute('aria-expanded', 'false');
-    element('controls-toggle').textContent = '展开面板';
+    element<HTMLDialogElement>('explorer').close();
     element('world').focus();
     this.cameraRig.update(0, this.car, this.surface, world.origin, [0, 0]);
     return true;
@@ -146,6 +154,16 @@ export class DrivingSystem {
 
   action(code: string): void {
     if (!this.active) return;
+    if (code === 'BracketLeft' || code === 'BracketRight') {
+      this.car.transmission.mode = 'manual'; element<HTMLSelectElement>('transmission-mode').value = 'manual';
+      this.car.transmission.shift(code === 'BracketRight' ? 1 : -1, this.car.speed);
+    }
+    if (code === 'KeyG') this.systems.wash();
+    if (code === 'KeyT') this.systems.toggleRoof(this.car.speed);
+    if (code === 'KeyJ' && this.systems.hasWindows) {
+      this.systems.windowTarget = this.systems.windowTarget > 0.5 ? 0 : 1;
+      element<HTMLInputElement>('vehicle-windows').value = String(this.systems.windowTarget * 100);
+    }
     if (code === 'KeyR') this.reset();
     const signal: SignalMode | undefined = code === 'KeyQ' ? 'left' : code === 'KeyE' ? 'right' : code === 'KeyH' ? 'hazard' : undefined;
     if (signal) this.systems.signal = this.systems.signal === signal ? 'off' : signal;
@@ -185,6 +203,7 @@ export class DrivingSystem {
         this.car.trip = trip + Math.min(this.car.trip - trip, Math.hypot(this.car.x - x, this.car.z - z));
       }
     }
+    this.cameraRig.enclosed = this.car.kind === 'roadster' && this.systems.roofOpen < 0.95;
     this.cameraRig.update(held ? 0 : dt, this.car, this.surface, world.origin, held ? [0, 0] : look);
     this.hudTime += dt;
     if (this.hudTime >= 0.1) {
@@ -192,6 +211,9 @@ export class DrivingSystem {
       element('vehicle-speed').textContent = String(Math.round(Math.abs(this.car.speed) * 3.6));
       element('vehicle-gear').textContent = this.car.parked ? 'P' : this.car.speed < -0.1 ? 'R' : this.car.speed > 0.1 ? 'D' : 'N';
       element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
+      element('transmission-status').textContent = `${this.car.transmission.mode === 'auto' ? 'AT' : 'MT'} · ${this.car.transmission.gear} 挡`;
+      element('engine-rpm').textContent = String(Math.round(this.car.transmission.rpm / 10) * 10);
+      this.describeEquipment();
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续驾驶'
         : this.exitBlockedTime > 0 ? '车旁空间不足，请移到平缓路段再下车'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
@@ -210,13 +232,13 @@ export class DrivingSystem {
       this.mesh.root.visible = Math.hypot(this.car.x - world.origin.x - this.camera.position.x, this.car.z - world.origin.z - this.camera.position.z) < 250;
       if (this.mesh.root.visible) {
         const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
-        this.systems.update(dt, Math.max(night, sheltered), rain, sheltered, this.car.steering);
+        this.systems.update(dt, Math.max(night, sheltered), rain, sheltered, this.car.steering, this.car.speed);
         this.mesh.sync(this.car, world.origin, this.systems, dt);
       }
     }
     if (this.active) {
       const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
-      this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered, this.car.steering);
+      this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered, this.car.steering, this.car.speed);
       element<HTMLSelectElement>('vehicle-signals').value = this.systems.signal;
       element('turn-left').classList.toggle('lit', this.systems.leftSignal);
       element('turn-right').classList.toggle('lit', this.systems.rightSignal);
@@ -234,6 +256,7 @@ export class DrivingSystem {
     const next = new VehiclePhysics(kind);
     next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
     next.powerScale = this.car.powerScale; next.brakeScale = this.car.brakeScale; next.steeringScale = this.car.steeringScale;
+    next.transmission.mode = this.car.transmission.mode;
     if (this.active && this.surface) {
       const spawn = this.getWorld().roadReady ? this.surface.spawn(this.car.x, this.car.z, next.profile) : undefined;
       if (!spawn) {
@@ -244,6 +267,7 @@ export class DrivingSystem {
     }
     this.parked = false;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
+    this.systems.configure(next.profile.shape);
     this.applyPaint();
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();
   }
@@ -251,6 +275,7 @@ export class DrivingSystem {
   private describeVehicle(): void {
     const p = this.car.profile;
     this.systems.hasWindshield = p.shape !== 'motorcycle';
+    this.describeEquipment();
     element<HTMLSelectElement>('vehicle-wipers').disabled = !this.systems.hasWindshield;
     element('vehicle-wipers-help').textContent = this.systems.hasWindshield ? '自动按雨量调速；间歇每次刮动后停顿。关闭后完成当前刮动并归位。' : '此摩托车没有挡风玻璃，不提供雨刮。';
     this.describeSuspension();
@@ -267,6 +292,25 @@ export class DrivingSystem {
     this.mesh.setPaint(value === 'default' ? this.car.profile.paint : parseInt(value, 16));
   }
 
+  describeEquipment(): void {
+    const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
+    element<HTMLInputElement>('vehicle-windows').disabled = !glass;
+    element<HTMLButtonElement>('vehicle-roof').disabled = !roof || Math.abs(this.car.speed) > 1.4;
+    element<HTMLButtonElement>('washer').disabled = !glass || s.washerFluid <= 0;
+    element<HTMLButtonElement>('washer-refill').disabled = !glass || Math.abs(this.car.speed) > 0.1;
+    element<HTMLButtonElement>('cabin-light').disabled = !glass;
+    element<HTMLSelectElement>('cabin-fan').disabled = !glass;
+    element('vehicle-windows-value').textContent = !glass ? '无车窗' : s.windowTarget === 0 ? '关闭' : `开启 ${Math.round(s.windowTarget * 100)}%`;
+    element('vehicle-roof').textContent = roof ? s.roofTarget > 0.5 ? '关闭敞篷 · T' : '打开敞篷 · T' : '当前车型无敞篷';
+    element('vehicle-roof').setAttribute('aria-pressed', String(roof && s.roofTarget === 0));
+    element('cabin-light').textContent = `阅读灯 · ${s.cabinLight ? '开启' : '关闭'}`;
+    element('cabin-light').setAttribute('aria-pressed', String(s.cabinLight));
+    element('washer-status').textContent = glass ? `玻璃水 ${s.washerFluid.toFixed(2)} L / 3 L${s.washerFluid < 0.2 ? ' · 请停车补液' : ''}` : '无挡风玻璃，无需玻璃水';
+    const status = !glass ? '摩托车 · 开放座舱' : `${roof ? s.roofOpen > 0.99 ? '敞篷开启' : s.roofOpen < 0.01 ? '车顶关闭' : '车顶收合中' : '封闭车身'} · 车窗开启 ${Math.round(s.windowOpen * 100)}%`;
+    element('equipment-status').textContent = `${status}${s.equipmentMoving ? ' · 关闭设置后继续动画' : ''}`;
+    element('cabin-status').textContent = `${status}${glass ? ` · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ''}`;
+  }
+
   private describeSuspension(): void {
     const p = this.car.profile, tuning = suspensionTuning(this.car.suspension, p, this.car.damping);
     element('suspension-damping-value').textContent = `${Math.round(this.car.damping * 100)}%`;
@@ -274,9 +318,7 @@ export class DrivingSystem {
   }
 
   private explainSpace(): void {
-    element('explorer').hidden = false;
-    element('controls-toggle').setAttribute('aria-expanded', 'true');
-    element('controls-toggle').textContent = '收起面板';
+    element<HTMLDialogElement>('explorer').showModal();
     element('vehicle-summary').textContent = '附近道路容不下这辆车，请选择较小载具或更宽的道路。';
     element('vehicle-kind').closest<HTMLDetailsElement>('details')!.open = true;
     this.input.clear(); element('vehicle-kind').focus();

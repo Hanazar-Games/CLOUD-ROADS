@@ -59,7 +59,7 @@ export class Windshield {
 
   update(dt: number, systems: VehicleSystems, speed: number): void {
     for (const blade of this.blades) blade.rotation.z = 0.08 + systems.sweep * 1.56;
-    if (!this.rain.update(dt, systems.rain, systems.sweepFrom, systems.sweepTo, speed)) return;
+    if (!this.rain.update(dt, systems.rain, systems.sweepFrom, systems.sweepTo, speed, systems.washerSpray)) return;
     this.texture.needsUpdate = true;
     this.film.material.uniforms.time.value = this.rain.time;
     this.film.visible = this.rain.coverage > 0.002;

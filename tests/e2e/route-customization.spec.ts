@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control, toggleSettings } from './settings';
 
 test('customizes all winding levels and grades, renders roadside flowers and drives a level straight highway', async ({ page }) => {
   test.setTimeout(120000);
@@ -16,12 +17,12 @@ test('customizes all winding levels and grades, renders roadside flowers and dri
   await expect(route.locator('option')).toHaveCount(6);
   await expect(grade).toHaveAttribute('min', '0');
   await expect(grade).toHaveAttribute('max', '40');
-  await page.locator('#terrain-kind').selectOption('forest');
-  await grade.fill('40');
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
+  await (await control(page, grade)).fill('40');
   await expect(page.locator('#max-grade-value')).toHaveText('40%');
   for (const level of [1, 2, 3, 4, 5]) {
-    await route.selectOption(String(level));
-    await page.getByRole('button', { name: '应用并返回起点' }).click();
+    await (await control(page, route)).selectOption(String(level));
+    await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
     await expect(metric('Route style')).toContainText(`${level} 档`);
     await expect(metric('Maximum grade')).toHaveText('40%');
     await ready();
@@ -30,21 +31,21 @@ test('customizes all winding levels and grades, renders roadside flowers and dri
   }
   expect(Number(await metric('Roadside grass').textContent())).toBeGreaterThan(0);
   expect(Number(await metric('Wildflowers').textContent())).toBeGreaterThan(0);
-  await page.locator('#road-type').selectOption('highway');
-  await grade.fill('0'); await route.selectOption('0');
-  await page.getByRole('button', { name: '应用并返回起点' }).click(); await ready();
+  await (await control(page, page.locator('#road-type'))).selectOption('highway');
+  await (await control(page, grade)).fill('0'); await (await control(page, route)).selectOption('0');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click(); await ready();
   await expect(metric('Route style')).toHaveText('全直道 · 零弯道');
   await expect(metric('Maximum grade')).toHaveText('0%');
   await expect(metric('Hairpins')).toHaveText('0');
-  await page.locator('#drive-toggle').click();
-  await page.locator('#world').focus(); await page.keyboard.down('KeyW');
+  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(45);
   await page.keyboard.up('KeyW'); await page.keyboard.press('KeyP');
   expect(parseFloat((await metric('Road curvature').textContent())!)).toBe(0);
   expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBe(0);
-  await page.locator('#controls-toggle').click();
-  await page.locator('#seed').fill('STRAIGHT-MEADOW');
-  await page.getByRole('button', { name: '加载种子' }).click(); await ready();
+  await toggleSettings(page);
+  await (await control(page, page.locator('#seed'))).fill('STRAIGHT-MEADOW');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click(); await ready();
   await expect(route).toHaveValue('0'); await expect(grade).toHaveValue('0');
   await expect(page.locator('#settings-status')).toContainText('最大坡度 0%');
   await page.locator('#world').evaluate(canvas => {

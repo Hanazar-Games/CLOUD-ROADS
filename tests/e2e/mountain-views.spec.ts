@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control } from './settings';
 
 test('changes viewing distance in place, streams repeated passes and preserves settings on world changes', async ({ page }) => {
   test.setTimeout(120_000);
@@ -14,7 +15,7 @@ test('changes viewing distance in place, streams repeated passes and preserves s
   const home = await metric('Coordinates').textContent();
   await expect(metric('Mountain stage')).toHaveText('山谷');
   for (const radius of [6, 16, 8]) {
-    await page.locator('#view-distance').selectOption(String(radius));
+    await (await control(page, page.locator('#view-distance'))).selectOption(String(radius));
     await expect(metric('Target chunks')).toHaveText(String((radius * 2 + 1) ** 2));
     await ready();
     await expect(metric('Active chunks')).toHaveText(String((radius * 2 + 1) ** 2));
@@ -23,7 +24,7 @@ test('changes viewing distance in place, streams repeated passes and preserves s
   }
   const visit = async () => {
     const before = await metric('Coordinates').textContent();
-    await page.locator('#pass-view').click();
+    await (await control(page, page.locator('#pass-view'))).click();
     await expect(metric('Coordinates')).not.toHaveText(before!, { timeout: 30000 });
     await ready();
     await expect(metric('Mountain stage')).toHaveText('垭口');
@@ -32,12 +33,12 @@ test('changes viewing distance in place, streams repeated passes and preserves s
   };
   const first = await visit(), second = await visit();
   expect(first - second).toBeGreaterThan(25000);
-  await page.locator('#pass-view').click();
-  await page.locator('#home').click(); await ready();
+  await (await control(page, page.locator('#pass-view'))).click();
+  await (await control(page, page.locator('#home'))).click(); await ready();
   await expect(metric('Coordinates')).toHaveText(home!);
-  await page.locator('#view-distance').selectOption('6');
-  await page.locator('#terrain-kind').selectOption('forest');
-  await page.getByRole('button', { name: '应用并返回起点' }).click();
+  await (await control(page, page.locator('#view-distance'))).selectOption('6');
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await ready();
   await expect(page.locator('#pass-view')).toBeDisabled();
   await expect(page.locator('#view-distance')).toHaveValue('6');

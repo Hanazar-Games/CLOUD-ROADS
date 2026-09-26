@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { control } from './settings';
 
 test('reports ground biomes independently of flight altitude and reproduces them after seed reload', async ({ page }) => {
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
@@ -10,18 +11,18 @@ test('reports ground biomes independently of flight altitude and reproduces them
   await expect(metric('Ground biome')).toHaveText(/^(山谷|森林|岩石|高山|雪区)$/);
   const original = await values();
   const altitude = Number((await metric('Coordinates').textContent())!.split(',')[1]);
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('Space');
   await expect.poll(async () => Number((await metric('Coordinates').textContent())!.split(',')[1])).toBeGreaterThan(altitude + 80);
   await page.keyboard.up('Space');
   expect(await values()).toEqual(original);
-  await page.locator('#seed').fill('A-SECOND-MOUNTAIN');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('A-SECOND-MOUNTAIN');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(metric('Seed')).toHaveText('A-SECOND-MOUNTAIN');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Snow line')).not.toHaveText(original[4]!);
-  await page.locator('#seed').fill('CLOUD-ROAD-001');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('CLOUD-ROAD-001');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(metric('Seed')).toHaveText('CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
@@ -34,7 +35,7 @@ test('renders WebGL, resizes, flies, pauses and exposes debug telemetry', async 
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await expect(page.locator('#error')).toBeHidden();
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.press('F3');
   await expect(page.locator('#debug')).toBeVisible();
   const before = await page.locator('#position').textContent();
@@ -63,10 +64,10 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 20_000 });
   await expect(metric('Active chunks')).toHaveText('289');
   const originalAltitude = await page.locator('#altitude').textContent();
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.press('F3');
-  await page.locator('#speed').fill('1200');
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#speed'))).fill('1200');
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('ControlLeft');
   await page.keyboard.down('KeyD');
   await expect.poll(async () => Number((await metric('Coordinates').textContent())?.split(',')[0]), { timeout: 40_000 }).toBeGreaterThan(30_128);
@@ -78,17 +79,17 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   expect(Number(await metric('Allocated meshes').textContent())).toBeLessThanOrEqual(578);
   const local = (await metric('Local X / Z').textContent())!.split('/').map(Number);
   expect(Math.hypot(...local)).toBeLessThan(5000);
-  await page.getByRole('button', { name: '返回起点', exact: true }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '返回起点', exact: true }))).click();
   await expect(page.locator('#position')).toHaveText('128 / 128');
   await expect(page.locator('#altitude')).toHaveText(originalAltitude!);
-  await page.getByRole('button', { name: '地形线框' }).click();
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '地形线框' }))).click();
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#seed').fill('A-SECOND-MOUNTAIN');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('A-SECOND-MOUNTAIN');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(metric('Seed')).toHaveText('A-SECOND-MOUNTAIN');
   await expect(page.locator('#altitude')).not.toHaveText(originalAltitude!);
-  await page.locator('#seed').fill('CLOUD-ROAD-001');
-  await page.getByRole('button', { name: '加载种子' }).click();
+  await (await control(page, page.locator('#seed'))).fill('CLOUD-ROAD-001');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(metric('Seed')).toHaveText('CLOUD-ROAD-001');
   await expect(page.locator('#altitude')).toHaveText(originalAltitude!);
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
@@ -100,7 +101,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
 test('clears held keys on blur and ignores flight keys while editing the seed', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
-  await page.locator('#world').focus();
+  await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('KeyW');
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await page.waitForTimeout(300);
@@ -108,7 +109,7 @@ test('clears held keys on blur and ignores flight keys while editing the seed', 
   await page.waitForTimeout(300);
   await expect(page.locator('#position')).toHaveText(stopped!);
   await page.keyboard.up('KeyW');
-  await page.locator('#seed').focus();
+  await (await control(page, page.locator('#seed'))).focus();
   await page.keyboard.type('wasd');
   await page.waitForTimeout(300);
   await expect(page.locator('#position')).toHaveText(stopped!);

@@ -2,7 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 
 const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
-  rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0 };
+  rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
+  rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
   setValueAtTime(value: number) { this.value = value; }, cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
@@ -13,6 +14,8 @@ class AudioContextStub {
   createGain() { const node = gain(); this.gains.push(node); return node; }
   createOscillator() { return { frequency: param(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; }
   createBiquadFilter() { return { frequency: param(), Q: param(), connect: vi.fn() }; }
+  compressors = 0;
+  createDynamicsCompressor() { this.compressors++; return { threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), connect: vi.fn() }; }
   createBuffer(_channels: number, size: number) { return { getChannelData: () => new Float32Array(size) }; }
   createBufferSource() { return { connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; }
   async resume() { this.resumed.push(this.gains.map(node => node.gain.value)); this.state = 'running'; }
@@ -20,6 +23,19 @@ class AudioContextStub {
   async close() { this.state = 'closed'; }
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('uses one output limiter and refuses preview while muted or inactive', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem();
+  expect(audio.preview('shift')).toBe(false);
+  audio.toggle(); await Promise.resolve();
+  expect(context.compressors).toBe(1);
+  expect(audio.preview('shift')).toBe(true);
+  audio.setActive(false); await Promise.resolve(); expect(audio.preview('horn')).toBe(false);
+  audio.setActive(true); await Promise.resolve(); audio.sfxVolume = 0;
+  expect(audio.preview('shift')).toBe(false);
+  audio.dispose();
+});
 
 it('applies SFX and music volume changes before resuming suspended audio', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
