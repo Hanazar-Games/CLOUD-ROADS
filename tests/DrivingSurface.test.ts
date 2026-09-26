@@ -18,6 +18,19 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it.each([-0.2, 0.2])('exits a long coach beside its cab on a %s grade', grade => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics('coach');
+    const sample = scene.road.samples[100];
+    vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample,
+      position: { x: 0, y: 100 - z * grade, z }, heading: 0, grade, bank: 0,
+    }));
+    car.reset(2, 0, 0, surface.sample);
+    const exit = surface.exit(car);
+    expect(exit).toBeDefined();
+    expect(exit!.y).toBeCloseTo(100 - exit!.z * grade);
+    expect(-exit!.z).toBeGreaterThan(4.5);
+    vi.restoreAllMocks();
+  });
   it.each([false, true])('exits beside the cab on the same bridge deck without crossing a barrier (highway %s)', highway => {
     const scene = world(highway), surface = new DrivingSurface(scene), car = new VehiclePhysics('truck5');
     scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
@@ -30,6 +43,21 @@ describe('DrivingSurface', () => {
     const side = (exit.x - car.x) * Math.cos(car.heading) + (exit.z - car.z) * Math.sin(car.heading);
     expect(Math.abs(side)).toBeGreaterThan(car.profile.width / 2 + 0.35);
     expect(surface.constrainWalker({ ...exit }, car.x, car.z)).toBe(false);
+    expect(surface.canBoard(car, exit)).toBe(true);
+    expect(surface.canBoard(car, { ...exit, y: exit.y - 2 })).toBe(false);
+    expect(surface.canBoard(car, { ...exit, x: exit.x + 20 })).toBe(false);
+    car.y += 30;
+    expect(surface.exit(car)).toBeUndefined();
+  });
+  it('does not board through a bridge guardrail next to the vehicle', () => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics('coach'), sample = scene.road.samples[100];
+    vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank: 0 }));
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
+    car.reset(2.8, 0, 0, surface.sample);
+    expect(surface.canBoard(car, { x: 6, y: 100, z: -car.profile.eye.along })).toBe(false);
+    expect(surface.canBoard(car, { x: 2.8, y: 100, z: 4.8 })).toBe(false);
+    expect(surface.canBoard(car, surface.exit(car)!)).toBe(true);
+    vi.restoreAllMocks();
   });
   it('uses seasonal grip at each contact and exempts only the matching road tunnel', () => {
     const scene = { ...world(), season: new SeasonState('forest') }, sample = scene.road.samples[100], outside = scene.road.samples[300];

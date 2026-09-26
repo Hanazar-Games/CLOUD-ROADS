@@ -100,7 +100,7 @@ export class WalkingSystem {
     element('walk-hud').hidden = !this.active;
     element('walking-controls').hidden = !this.active;
     element('flight-controls').hidden = this.active;
-    element('world').setAttribute('aria-label', this.active ? '步行探索；WASD 移动，Shift 跑步，E 疾跑，Space 跳跃，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
+    element('world').setAttribute('aria-label', this.active ? '步行探索；WASD 移动，Shift 跑步，E 疾跑，Space 跳跃，F 靠近驾驶室上车，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
   }
 
   dispose(): void { this.stop(); }

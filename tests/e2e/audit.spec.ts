@@ -5,9 +5,11 @@ import { HeightFunction } from '../../src/terrain/HeightFunction';
 test('stops held movement when focus leaves the canvas and consumes flight shortcuts', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
+  await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20000 });
   await page.locator('#world').focus();
   await page.keyboard.down('KeyW');
   await page.locator('#seed').click();
+  await expect(page.locator('#seed')).toBeFocused();
   await page.waitForTimeout(350);
   const position = await page.locator('#position').textContent();
   await page.waitForTimeout(450);
@@ -108,8 +110,10 @@ test('shows the current release, archives the previous baseline and isolates dia
   await page.getByRole('button', { name: '版本公告' }).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.29');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('雨雾漫行 · 雨刮清水与下车探索');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.30');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('旅途检修 · 上下车与声画修复');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.29');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('雨雾漫行 · 雨刮清水与下车探索');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.28');
   await expect(dialog.locator('[data-release="history"]')).toContainText('跨谷云行 · 混凝土桥头与斜拉长跨');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.27');

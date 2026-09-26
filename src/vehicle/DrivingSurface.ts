@@ -115,17 +115,31 @@ export class DrivingSurface {
   }
 
   exit(car: VehiclePhysics): { x: number; y: number; z: number; heading: number } | undefined {
-    const floor = this.sample(car.x, car.z, car.y + 0.3).height;
-    const cos = Math.cos(car.heading), sin = Math.sin(car.heading), along = car.profile.eye.along;
+    return this.exits(car)[0];
+  }
+
+  canBoard(car: VehiclePhysics, person: { x: number; y: number; z: number }): boolean {
+    return this.exits(car).some(point => Math.hypot(point.x - person.x, point.z - person.z) < 2.2
+      && Math.abs(point.y - person.y) < 0.6 && !this.constrainWalker({ ...point }, person.x, person.z));
+  }
+
+  private exits(car: VehiclePhysics): { x: number; y: number; z: number; heading: number }[] {
+    const offset = vehicleOffset(0, car.profile.eye.along, car.pitch, car.roll);
+    const cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+    const cabX = car.x - sin * offset.z, cabZ = car.z + cos * offset.z;
+    const floor = this.sample(cabX, cabZ, car.y + offset.y + 0.3).height;
+    const points: { x: number; y: number; z: number; heading: number }[] = [];
+    const clearance = car.y + offset.y - floor;
+    if (clearance < -0.3 || clearance > car.profile.radius + car.profile.rest + car.profile.travel + 0.5) return points;
     for (const side of [-1, 1]) {
       const lateral = side * (car.profile.width / 2 + 0.65);
-      const x = car.x + cos * lateral + sin * along, z = car.z + sin * lateral - cos * along;
+      const x = cabX + cos * lateral, z = cabZ + sin * lateral;
       const y = this.sample(x, z, floor + 0.45).height, point = { x, y, z, heading: car.heading };
       if (Math.abs(y - floor) > 0.5 || this.ceiling(x, z, y) < y + 1.8) continue;
-      if (this.constrainWalker(point, car.x + sin * along, car.z - cos * along)) continue;
-      return point;
+      if (this.constrainWalker(point, cabX, cabZ)) continue;
+      points.push(point);
     }
-    return undefined;
+    return points;
   }
 
   constrain(car: VehiclePhysics, previousX: number, previousZ: number, dt = 1 / 60): boolean {

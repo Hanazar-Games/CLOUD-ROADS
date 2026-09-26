@@ -50,8 +50,22 @@ export class AudioSystem {
   private sync(): void {
     const context = this.context;
     if (!context || this.disposed || this.error) return;
+    const now = context.currentTime;
+    for (const [parameter, value] of [[this.sfx!.gain, this.sfxVolume], [this.music!.gain, this.musicVolume]] as const) {
+      if (this.targets.get(parameter) === value) continue;
+      this.targets.set(parameter, value);
+      if (context.state !== 'running' || value === 0) { parameter.cancelScheduledValues(now); parameter.setValueAtTime(value, now); }
+      else parameter.setTargetAtTime(value, now, 0.08);
+    }
     const audible = this.enabled && this.active && (this.sfxVolume > 0 || this.musicVolume > 0);
-    if (this.audible !== audible) { this.audible = audible; this.master!.gain.setTargetAtTime(audible ? 0.7 : 0, context.currentTime, 0.02); }
+    if (this.audible !== audible) {
+      this.audible = audible;
+      this.master!.gain.cancelScheduledValues(now); this.master!.gain.setValueAtTime(0, now);
+      if (audible) this.master!.gain.setTargetAtTime(0.7, now, 0.02);
+      else for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain]) {
+        channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.delete(channel!.gain);
+      }
+    }
     if (this.transitioning || context.state === (audible ? 'running' : 'suspended')) return;
     this.transitioning = true;
     void (audible ? context.resume() : context.suspend()).then(() => {
@@ -95,7 +109,6 @@ export class AudioSystem {
       if (this.targets.get(parameter) === value) return;
       this.targets.set(parameter, value); parameter.setTargetAtTime(value, now, smooth);
     };
-    set(this.sfx!.gain, this.sfxVolume, this.sfxVolume ? 0.08 : 0.02); set(this.music!.gain, this.musicVolume, this.musicVolume ? 0.3 : 0.02);
     const speed = Math.min(75, Math.abs(state.speed)), cabin = state.cockpit ? 0.55 : 1;
     set(this.engine!.frequency, (state.motorcycle ? 70 : state.mass > 4000 ? 28 : 42) + speed * 2.4 + (state.throttle ? 24 : 0));
     set(this.engineGain!.gain, state.driving ? 0.045 + speed * 0.001 + (state.throttle ? 0.025 : 0) : 0);

@@ -32,6 +32,11 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
     await page.keyboard.up('Space');
     await page.keyboard.press('KeyR');
     await expect(page.locator('#vehicle-gear')).toHaveText('P');
+    const trip = await page.locator('#vehicle-trip').textContent();
+    await page.keyboard.press('KeyF'); await expect(metric('Travel mode')).toHaveText('walking');
+    await expect(page.locator('#boarding-help')).toBeVisible();
+    await page.keyboard.press('KeyF'); await expect(metric('Travel mode')).toHaveText('driving');
+    await expect(page.locator('#vehicle-trip')).toHaveText(trip!);
   }
   await page.locator('#controls-toggle').click();
   await page.locator('#vehicle-kind').selectOption('semi20');

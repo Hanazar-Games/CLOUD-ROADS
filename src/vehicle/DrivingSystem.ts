@@ -98,7 +98,7 @@ export class DrivingSystem {
       if (!spawn) { this.explainSpace(); return false; }
       this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
     }
-    this.parked = false; this.exitBlockedTime = 0;
+    this.parked = false; this.exitBlockedTime = 0; this.hudTime = 0.1;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
     this.setUI();
     element('explorer').hidden = true;
@@ -113,7 +113,9 @@ export class DrivingSystem {
     if (!this.active && !this.parked) return;
     this.parked = park;
     if (park) this.car.park();
-    this.active = false; this.input.clear(); this.surface = undefined;
+    element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
+    this.active = false; this.input.clear();
+    if (!park) this.surface = undefined;
     this.camera.fov = 65; this.camera.near = 0.5; this.camera.updateProjectionMatrix();
     this.mesh.root.visible = park; this.setUI();
   }
@@ -127,8 +129,8 @@ export class DrivingSystem {
 
   canBoard(person: { x: number; y: number; z: number }): boolean {
     return this.parked && this.getWorld().roadReady && !this.getWorld().searching
-      && Math.hypot(person.x - this.car.x, person.z - this.car.z) < Math.max(4, this.car.profile.chassisLength / 2 + 1)
-      && Math.abs(person.y - this.car.y) < 3;
+      && Math.hypot(person.x - this.car.x, person.z - this.car.z) < this.car.profile.chassisLength / 2 + 4
+      && !!this.surface?.canBoard(this.car, person);
   }
 
   get glassWater(): number { return this.mesh.glassWater; }
@@ -201,12 +203,16 @@ export class DrivingSystem {
     }
   }
 
-  sync(night: number, rain: number): void {
+  sync(night: number, rain: number, dt = 0): void {
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
     if (this.parked) {
       const world = this.getWorld();
       this.mesh.root.visible = Math.hypot(this.car.x - world.origin.x - this.camera.position.x, this.car.z - world.origin.z - this.camera.position.z) < 250;
-      if (this.mesh.root.visible) this.mesh.sync(this.car, world.origin, this.systems, 0);
+      if (this.mesh.root.visible) {
+        const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
+        this.systems.update(dt, Math.max(night, sheltered), rain, sheltered, this.car.steering);
+        this.mesh.sync(this.car, world.origin, this.systems, dt);
+      }
     }
     if (this.active) {
       const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
@@ -284,7 +290,7 @@ export class DrivingSystem {
     element('flight-controls').hidden = this.active;
     element('driving-controls').hidden = !this.active;
     element<HTMLButtonElement>('vehicle-reset').disabled = !this.active;
-    element('world').setAttribute('aria-label', this.active ? '山路驾驶；W 加速，S 刹车倒车，A D 转向，Space 手刹，C 切换视角，L 车灯，B 雨刮，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
+    element('world').setAttribute('aria-label', this.active ? '山路驾驶；W 加速，S 刹车倒车，A D 转向，Space 手刹，C 切换视角，F 下车，L 车灯，B 雨刮，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
   }
 
   dispose(): void { this.events.abort(); this.mesh.dispose(); document.body.classList.remove('driving'); }

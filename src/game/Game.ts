@@ -82,6 +82,7 @@ export class Game {
     };
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
+      else if (this.walking.active && this.driving.canBoard(this.walking.person)) this.interactVehicle();
       else { this.stopWalking(); this.driving.start(); }
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
@@ -213,6 +214,7 @@ export class Game {
       panel.hidden = !panel.hidden;
       button.setAttribute('aria-expanded', String(!panel.hidden));
       button.textContent = panel.hidden ? '展开面板' : '收起面板';
+      if (panel.hidden) this.canvas.focus();
     }, { signal: this.events.signal });
     element('home').addEventListener('click', () => this.resetCamera(), { signal: this.events.signal });
     element('crossing-view').addEventListener('click', () => {
@@ -496,7 +498,7 @@ export class Game {
     }
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
-      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain);
+      Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain, frozen ? 0 : dt);
     this.walking.sync();
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
     this.audio.setActive(!frozen && !document.hidden && this.windowFocused && document.hasFocus());
@@ -521,7 +523,9 @@ export class Game {
       const stats = chunks.stats;
       this.hudTime = 0;
       this.syncAudioUI();
-      element('boarding-help').hidden = !this.walking.active || !this.driving.canBoard(this.walking.person);
+      const boardable = this.walking.active && this.driving.canBoard(this.walking.person);
+      element('boarding-help').hidden = !boardable;
+      if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight), cold = season.temperature(y) < 2;
       const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
