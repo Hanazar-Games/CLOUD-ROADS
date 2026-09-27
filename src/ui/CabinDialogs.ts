@@ -1,5 +1,5 @@
 import { element } from '../debug/DebugUI';
-import { shortcuts } from '../input/Shortcuts';
+import { bindingActions, type KeyBindings } from '../input/KeyBindings';
 import type { DrivingSystem } from '../vehicle/DrivingSystem';
 import { lightNames, wiperNames } from '../vehicle/VehicleSystems';
 
@@ -9,7 +9,7 @@ export class CabinDialogs {
   private readonly vehicle = element<HTMLDialogElement>('vehicle-panel');
   private readonly events = new AbortController();
   get open(): boolean { return this.seats.open || this.menu.open || this.vehicle.open; }
-  constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: (category?: string) => void) {
+  constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: (category?: string) => void, private readonly bindings: KeyBindings) {
     const options = { signal: this.events.signal };
     element('seat-open').addEventListener('click', () => this.showSeats(), options);
     element('menu-open').addEventListener('click', () => this.showMenu(), options);
@@ -20,7 +20,6 @@ export class CabinDialogs {
     element('panel-seats').addEventListener('click', () => this.showSeats(), options);
     element('panel-shortcuts').addEventListener('click', () => this.showMenu(), options);
     for (const category of ['driving', 'equipment']) element(`panel-${category}`).addEventListener('click', () => { this.close(); settings(category); }, options);
-    element('shortcut-list').innerHTML = shortcuts.map(([group, key, action]) => `<tr><td>${group}</td><th scope="row"><kbd>${key}</kbd></th><td>${action}</td></tr>`).join('');
     for (const dialog of [this.seats, this.menu, this.vehicle]) {
       dialog.querySelector('button[data-close]')!.addEventListener('click', () => this.close(), options);
       dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); }, options);
@@ -28,7 +27,7 @@ export class CabinDialogs {
     }
   }
   showSeats(floor = this.driving.cabin.selected.floor): void {
-    if (!this.driving.active) { this.showMenu(); element('menu-status').textContent = '先进入车辆，再按 P 选择座位。'; return; }
+    if (!this.driving.active) { this.showMenu(); element('menu-status').textContent = this.bindings.format('先进入车辆，再按 P 选择座位。'); return; }
     const cabin = this.driving.cabin, moving = this.driving.car.motionSpeed > 0.1;
     const decks = [...new Set(cabin.seats.map(s => s.floor))], nav = element('seat-decks'); nav.replaceChildren(); nav.hidden = decks.length < 2;
     for (const deck of decks) {
@@ -49,7 +48,14 @@ export class CabinDialogs {
     element('seat-status').textContent = moving ? '请先停车再换座；打开座位图会冻结行驶，但不会改变车速。' : `${this.driving.car.profile.name} · 当前：${cabin.selected.label} · ${cabin.seats.length} 席 · 只有驾驶员可以开车`;
     this.show(this.seats);
   }
-  showMenu(): void { element('menu-status').textContent = '选择设置、座位或查看按键。关闭菜单后继续旅程。'; this.show(this.menu); }
+  showMenu(): void {
+    element('shortcut-list').replaceChildren(...bindingActions.map(([id, , group, action]) => {
+      const row = document.createElement('tr');
+      for (const text of [group, this.bindings.label(id), action]) { const cell = document.createElement('td'); cell.textContent = text; row.append(cell); }
+      return row;
+    }));
+    element('menu-status').textContent = '当前快捷键 · 设置 → 快捷键中修改。Esc 关闭弹窗；拖动鼠标观察，双击锁定鼠标。'; this.show(this.menu);
+  }
   showVehicle(): void {
     this.driving.describeEquipment();
     const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';

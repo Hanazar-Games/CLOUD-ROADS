@@ -36,7 +36,7 @@ export class VehicleDisplay {
       `L ${systems.beam === 'off' ? '-' : systems.beam === 'high' ? 'HI' : 'ON'} W ${systems.wiperRate ? 'ON' : '-'} G ${systems.washerSpray ? 'ON' : '-'}`,
       `AIR ${systems.fan} ${systems.ambientLight ? 'LED' : '---'} ${systems.cabinLight ? 'READ' : '----'}`,
     ];
-    if (car.ignition !== 'running') lines[5] = car.ignition === 'starting' ? 'ENGINE STARTING' : 'ENGINE OFF - F2';
+    if (car.ignition !== 'running') lines[5] = car.ignition === 'starting' ? 'ENGINE STARTING' : 'ENGINE OFF';
     if (operations && !operations.driveReady) lines[5] = operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
     if (crane) lines.splice(3, 3,
       `CRANE ${crane.stowed ? 'PARK' : crane.enabled ? 'ON' : 'STOW'}`,

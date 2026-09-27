@@ -10,6 +10,13 @@ function run(car: VehiclePhysics, seconds: number, input = idle, surface = flat,
 function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); car.ignition = 'running'; return car; }
 
 describe('VehiclePhysics', () => {
+  it('supports proportional service braking while preserving full keyboard and handbrake force', () => {
+    const gentle = create(), hard = create();
+    for (const car of [gentle, hard]) { car.speed = 20; car.parked = false; }
+    run(gentle, 0.5, { ...idle, throttle: -0.25 }); run(hard, 0.5, { ...idle, throttle: -1 });
+    expect(gentle.speed).toBeGreaterThan(hard.speed + 2);
+    expect(gentle.speed).toBeLessThan(20);
+  });
   it('preserves tangential contact velocity, dissipates sliding through grip and clears it on parking', () => {
     const dry = create(), wet = create();
     for (const car of [dry, wet]) {

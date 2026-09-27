@@ -6,7 +6,7 @@ import { roadProfile } from './RoadProfile';
 import type { WorldOptions } from '../world/WorldOptions';
 
 export class JunctionMesh {
-  readonly parts = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0.15 }), 2048);
+  readonly parts = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0.15 }), 8192);
   readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xeeeedd, roughness: 0.9 }), 4096);
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
@@ -37,6 +37,9 @@ export class JunctionMesh {
           for (const side of [-1, 1]) {
             this.box(this.parts, approach, side * (width + 1.8), 3.5, 0.38, 7, 0.38, 0x78868b);
             this.box(this.parts, approach, side * (width + 1.8), 0.25, 0.8, 0.5, 0.8, 0xb4b2a7);
+            this.box(this.parts, approach, side * (width + 1.8), 0.53, 0.65, 0.06, 0.65, 0x515f63);
+            for (const dx of [-0.22, 0.22]) for (const dz of [-0.22, 0.22])
+              this.box(this.parts, approach, side * (width + 1.8) + dx, 0.58, 0.07, 0.09, 0.07, 0xadb4b3, 0, dz);
           }
           for (const height of [6.4, 7]) this.box(this.parts, approach, 0, height, width * 2 + 4, 0.18, 0.26, 0x78868b);
           for (let offset = -width; offset <= width; offset += 2) this.box(this.parts, approach, offset, 6.7, 0.12, 0.7, 0.16, 0x78868b);
@@ -57,8 +60,13 @@ export class JunctionMesh {
         }
         const terminal = at(ramp.sample.distance + 285);
         if (terminal) {
-          this.box(this.parts, terminal, width + 0.35, 0.47, 0.65, 0.78, 3.6, 0xddaf40);
-          for (let i = -1; i <= 1; i++) this.box(this.parts, terminal, width + 0.35, 0.88, 0.68, 0.04, 0.4, 0x303a3c, 0, i);
+          for (let i = 0; i < 5; i++) {
+            this.box(this.parts, terminal, width + 0.6, 0.46, 0.55 + i * 0.07, 0.72, 0.62, i % 2 ? 0x3b4445 : 0xe5b845, 0, i * 0.68 - 1.5);
+            this.box(this.parts, terminal, width + 0.6, 0.84, 0.5 + i * 0.07, 0.04, 0.5, 0xbfc4c0, 0, i * 0.68 - 1.5);
+          }
+          this.box(this.parts, terminal, width + 0.6, 1.55, 0.85, 0.6, 0.12, 0x235954, 0, 2.4);
+          this.box(this.parts, terminal, width + 0.6, 1, 0.1, 1, 0.1, 0x7a8789, 0, 2.4);
+          for (const side of [-1, 1]) this.box(this.parts, terminal, width + 0.6 + side * 0.18, 1.55, 0.12, 0.42, 0.13, 0xf6f1cf, side * 0.45, 2.32);
         }
         for (let distance = 60; distance <= 240; distance += 12) {
           const sample = branch.segments.find(s => s.start.distance <= distance && s.end.distance >= distance)?.atDistance(distance);
@@ -68,6 +76,26 @@ export class JunctionMesh {
           const parent = road.nearest(sample.position.x, sample.position.z)!;
           if (Math.hypot(parent.position.x - sample.position.x, parent.position.z - sample.position.z) > width * 2 - 2)
             this.box(this.markings, sample, -width + 0.65, 0.04, 0.15, 0.025, 1.4, 0xeeeedd, 0.65);
+        }
+        const end = Math.min(1500, branch.segments.at(-1)?.end.distance ?? 0);
+        for (let distance = 320; distance < end; distance += 24) {
+          const sample = branch.segments.find(s => s.start.distance <= distance && s.end.distance >= distance)?.atDistance(distance);
+          if (!sample) continue;
+          for (const side of [-1, 1]) {
+            const offset = side * (width + 0.22);
+            this.box(this.parts, sample, offset, 0.72, 0.12, 1.25, 0.14, 0x84918f);
+            this.box(this.parts, sample, offset, 1.25, 0.2, 0.16, 0.09, side > 0 ? 0xece8ce : 0xe5b34c);
+            if (Math.abs(sample.curvature) > 0.002 && side === -Math.sign(sample.curvature)) {
+              this.box(this.parts, sample, offset, 1.72, 0.7, 0.45, 0.09, 0x344b4b);
+              this.box(this.parts, sample, offset, 1.72, 0.17, 0.34, 0.11, 0xf1d577, side * 0.6);
+            }
+          }
+          if (junction.kind === 'stack' && sample.elevated && distance % 96 === 32) {
+            for (const center of this.profile.centers) {
+              this.box(this.markings, sample, center, 0.035, this.profile.width, 0.015, 0.1, 0x7a7c77);
+              this.box(this.markings, sample, center, 0.035, this.profile.width, 0.015, 0.06, 0xb2b4ad, 0, 0.16);
+            }
+          }
         }
       }
       for (const mesh of [this.parts, this.markings]) {

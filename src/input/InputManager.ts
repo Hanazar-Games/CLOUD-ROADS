@@ -1,7 +1,8 @@
-import { actionKeys } from './Shortcuts';
+import { KeyBindings } from './KeyBindings';
 
 export class InputManager {
-  private readonly keys = new Set<string>();
+  readonly bindings = new KeyBindings();
+  private readonly keys = new Map<string, string>();
   private readonly events = new AbortController();
   private dragging = false;
   private dx = 0;
@@ -14,14 +15,14 @@ export class InputManager {
     const options = { signal: this.events.signal };
     window.addEventListener('keydown', (event) => {
       if (!this.enabled || event.isComposing || event.metaKey || event.altKey || event.defaultPrevented) return;
-      const action = ['KeyP', 'KeyM', 'Pause', 'F8', 'F3'].includes(event.code);
+      const code = this.bindings.resolve(event.code, event.shiftKey);
+      if (!code) return;
+      const action = ['KeyP', 'KeyM', 'Pause', 'F8', 'F3', 'Panel', 'Settings'].includes(code);
       if (event.target !== canvas && event.target !== document.body
         && (!action || !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable], dialog'))) return;
-      if (!actionKeys.has(event.code)) return;
       event.preventDefault();
       if (event.repeat && !this.keys.has(event.code)) return;
-      this.keys.add(event.code);
-      if (!event.repeat) this.onAction(event.code);
+      if (!event.repeat) { this.keys.set(event.code, code); this.onAction(code); }
     }, options);
     window.addEventListener('keyup', (event) => this.keys.delete(event.code), options);
     window.addEventListener('blur', () => this.clear(), options);
@@ -54,7 +55,7 @@ export class InputManager {
     }, options);
   }
 
-  down(code: string): boolean { return this.keys.has(code); }
+  down(code: string): boolean { for (const action of this.keys.values()) if (action === code) return true; return false; }
 
   consumeLook(): [number, number] {
     const look: [number, number] = [this.dx, this.dy];

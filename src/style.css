@@ -220,3 +220,13 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
   .settings-nav button { flex-shrink: 0; } .settings-content { padding: 20px 16px; }
   .audio-grid { grid-template-columns: minmax(0, 1fr); }
 }
+.binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, auto); gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #ffffff12; font-size: 12px; }
+.binding-row button { min-height: 34px; overflow-wrap: anywhere; }
+.binding-row button[aria-pressed="true"], #hud-autopilot[aria-pressed="true"] { border-color: #78ddce; color: #a5ffea; background: #173d3b; }
+#hud-autopilot { width: 100%; margin: 6px 0; font-size: 11px; white-space: normal; pointer-events: auto; cursor: pointer; }
+@media (max-width: 620px) and (max-height: 650px) {
+  #drive-hud, .in-cabin #drive-hud { bottom: 12px; padding: 8px 12px; }
+  #drive-hud .speed-dial { height: 28px; }
+  #drive-hud #vehicle-status { display: none; }
+  #hud-autopilot { font-size: 10px; margin: 3px 0; padding: 4px 6px; }
+}

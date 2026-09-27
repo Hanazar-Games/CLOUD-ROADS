@@ -13,10 +13,13 @@ import { CraneSystems } from './CraneSystems';
 import { radioStations } from '../audio/RadioStations';
 import { VehicleOperations, operationKeys, type VehicleOperation } from './VehicleOperations';
 import type { ParkedEntry } from '../service/ServiceParking';
+import { Autopilot, pilotModes, type AutopilotSettings } from './Autopilot';
 
 export class DrivingSystem {
   car = new VehiclePhysics();
   readonly systems = new VehicleSystems();
+  readonly autopilot = new Autopilot();
+  appliedThrottle = 0;
   cabin = new CabinState(this.car.profile);
   crane = new CraneSystems();
   operations = new VehicleOperations(this.car.profile);
@@ -37,6 +40,22 @@ export class DrivingSystem {
     this.mesh = new VehicleMesh(scene);
     this.cameraRig = new DrivingCamera(camera);
     const options = { signal: this.events.signal };
+    try { const data = localStorage.getItem('cloud-roads.autopilot.v1'); if (data) this.autopilot.configure(JSON.parse(data)); }
+    catch { element('autopilot-settings-status').textContent = '无法读取本机辅助设置，使用默认参数。'; }
+    this.syncPilotOptions();
+    for (const id of ['autopilot-toggle', 'hud-autopilot']) element(id).addEventListener('click', () => {
+      this.toggleAutopilot(); if (id === 'hud-autopilot') element('world').focus();
+    }, options);
+    element('autopilot-options').addEventListener('submit', event => {
+      event.preventDefault();
+      try {
+        this.autopilot.configure({ mode: element<HTMLSelectElement>('autopilot-mode').value as AutopilotSettings['mode'],
+          comfort: Number(element<HTMLSelectElement>('autopilot-comfort').value), minKmh: Number(element<HTMLInputElement>('autopilot-min').value), maxKmh: Number(element<HTMLInputElement>('autopilot-max').value) });
+        element('autopilot-settings-status').textContent = '参数已应用并保存；关闭设置后继续。';
+        try { localStorage.setItem('cloud-roads.autopilot.v1', JSON.stringify(this.autopilot.settings)); }
+        catch { element('autopilot-settings-status').textContent = '参数已应用，但浏览器不允许本机保存。'; }
+      } catch (error) { element('autopilot-settings-status').textContent = (error as Error).message; }
+    }, options);
     for (const id of ['vehicle-ignition', 'panel-ignition']) element(id).addEventListener('click', () => this.ignite(), options);
     const selector = element<HTMLSelectElement>('vehicle-kind');
     selector.replaceChildren(...Object.entries(vehicleProfiles).map(([kind, profile]) => new Option(profile.name, kind)));
@@ -52,6 +71,7 @@ export class DrivingSystem {
     }, options);
     this.systems.configure(this.car.profile.shape);
     element('transmission-mode').addEventListener('change', () => {
+      this.autopilot.cancel('变速箱模式改变，请重新开启');
       this.car.transmission.mode = element<HTMLSelectElement>('transmission-mode').value === 'manual' ? 'manual' : 'auto';
     }, options);
     element('vehicle-windows').addEventListener('input', () => { this.systems.windowTarget = Number(element<HTMLInputElement>('vehicle-windows').value) / 100; this.describeEquipment(); }, options);
@@ -153,6 +173,7 @@ export class DrivingSystem {
   }
 
   stop(park = false): void {
+    this.autopilot.cancel(); this.appliedThrottle = 0;
     this.boardingSurface = undefined;
     if (!this.active && !this.parked) return;
     this.parked = park;
@@ -223,6 +244,7 @@ export class DrivingSystem {
   get sweptWater(): number { return this.mesh.sweptWater; }
 
   reset(): void {
+    this.autopilot.cancel();
     if (!this.active || !this.surface || !this.getWorld().roadReady || !this.cabin.driver || !this.crane.stowed) return;
     const spawn = this.surface.spawn(this.car.x, this.car.z, this.car.profile);
     if (!spawn) { this.explainSpace(); return; }
@@ -241,11 +263,58 @@ export class DrivingSystem {
 
   ignite(): void {
     if (!this.active || !this.cabin.driver) return;
-    this.car.toggleIgnition(); this.describeEquipment();
+    this.autopilot.cancel(); this.car.toggleIgnition(); this.describeEquipment();
+  }
+
+  private syncPilotOptions(): void {
+    const settings = this.autopilot.settings;
+    for (const [id, value] of [['mode', settings.mode], ['comfort', settings.comfort], ['min', settings.minKmh], ['max', settings.maxKmh]] as const)
+      element<HTMLInputElement>(`autopilot-${id}`).value = String(value);
+  }
+
+  private toggleAutopilot(): void {
+    if (this.autopilot.active) this.autopilot.cancel();
+    else if (!this.active || !this.cabin.driver || !this.crane.stowed || !this.operations.driveReady || !this.getWorld().roadReady)
+      this.autopilot.cancel('请在驾驶位收妥设备，并等待道路就绪');
+    else if (this.autopilot.engage(this.car, this.getWorld().network.routes, this.getWorld().options) && this.autopilot.settings.mode !== 'steering') {
+      this.car.transmission.mode = 'auto'; element<HTMLSelectElement>('transmission-mode').value = 'auto';
+    }
+    element('autopilot-settings-status').textContent = this.autopilot.status;
+    this.describePilot();
+  }
+
+  private describePilot(): void {
+    const pilot = this.autopilot, label = this.input.bindings.label('Autopilot');
+    for (const id of ['autopilot-toggle', 'hud-autopilot']) {
+      const button = element(id); button.setAttribute('aria-pressed', String(pilot.active));
+      button.textContent = `${pilot.active ? '退出' : '开启'}自动驾驶 · ${label}${id === 'hud-autopilot' ? ` · ${pilotModes[pilot.settings.mode]} · ${pilot.active ? `${Math.round(pilot.targetKmh)} km/h · ` : ''}${pilot.status}` : ''}`;
+    }
   }
 
   action(code: string): void {
     if (!this.active) return;
+    if (this.autopilot.active && (['KeyS', 'Space', 'BracketLeft', 'BracketRight', 'Transmission'].includes(code)
+      || code === 'KeyW' && this.autopilot.settings.mode !== 'steering'
+      || ['KeyA', 'KeyD'].includes(code) && this.autopilot.settings.mode !== 'speed')) this.autopilot.cancel('驾驶员已接管');
+    if (code === 'Autopilot') this.toggleAutopilot();
+    if (code === 'AutoMode') {
+      const modes = Object.keys(pilotModes) as AutopilotSettings['mode'][];
+      this.autopilot.configure({ ...this.autopilot.settings, mode: modes[(modes.indexOf(this.autopilot.settings.mode) + 1) % modes.length] }); this.syncPilotOptions();
+    }
+    if (code === 'AutoSlower' || code === 'AutoFaster') {
+      const s = this.autopilot.settings, maxKmh = Math.max(10, Math.min(160, s.maxKmh + (code === 'AutoFaster' ? 5 : -5)));
+      this.autopilot.configure({ ...s, maxKmh, minKmh: Math.min(s.minKmh, maxKmh) }); this.syncPilotOptions();
+    }
+    if (code === 'Refill') this.systems.refill(this.car.motionSpeed);
+    if (code === 'ViewReset') this.cameraRig.reset();
+    if (code === 'Transmission' && this.cabin.driver) {
+      this.car.transmission.mode = this.car.transmission.mode === 'auto' ? 'manual' : 'auto';
+      element<HTMLSelectElement>('transmission-mode').value = this.car.transmission.mode;
+    }
+    for (const [action, id, step] of [['LightPower', 'light-power', 25], ['LightRange', 'light-range', 80]] as const) if (code === action) {
+      const input = element<HTMLInputElement>(id), next = Number(input.value) + step;
+      input.value = String(next > Number(input.max) ? Number(input.min) : next); input.dispatchEvent(new Event('input'));
+    }
     if (code === 'F2') this.ignite();
     for (const action of ['doors', 'cargo', 'aux'] as const) if (code === operationKeys[action]) this.operate(action);
     if (code === 'KeyN') this.systems.cycleFan();
@@ -300,11 +369,16 @@ export class DrivingSystem {
     this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
     if (!held) {
       const canDrive = this.cabin.driver && this.crane.stowed && this.operations.driveReady;
-      const hit = this.car.update(dt, { throttle: canDrive ? axis('KeyW', 'KeyS') : 0,
-        steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') }, this.surface.sample, this.surface.constrain);
+      if (!canDrive) this.autopilot.cancel('设备或座位状态改变');
+      const manual = { throttle: canDrive ? axis('KeyW', 'KeyS') : 0, steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') };
+      const obstacles = this.autopilot.active ? [...world.traffic.entries.map(e => e.car), ...world.parkedVehicles.fleet.entries
+        .filter(e => Math.hypot(e.x - this.car.x, e.z - this.car.z) < 300).map(e => world.parkedVehicles.fleet.vehicle(e))] : [];
+      const controls = this.autopilot.update(dt, this.car, world.network.routes, obstacles, manual, this.surface.sample(this.car.x, this.car.z).grip);
+      this.appliedThrottle = controls.throttle;
+      const hit = this.car.update(dt, controls, this.surface.sample, this.surface.constrain);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
       this.exitBlockedTime = Math.max(0, this.exitBlockedTime - dt);
-      if (hit) this.collisionTime = 1.2;
+      if (hit) { this.collisionTime = 1.2; if (this.autopilot.active) { this.autopilot.cancel('发生接触，请接管'); this.car.park(); } }
     }
     this.cameraRig.enclosed = this.car.kind === 'roadster' && this.systems.roofOpen < 0.95;
     this.updateSeatCamera();
@@ -328,6 +402,8 @@ export class DrivingSystem {
         : this.car.ignition === 'starting' ? '点火中 · 请稍候'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
+      element('vehicle-status').textContent = this.input.bindings.format(element('vehicle-status').textContent!);
+      this.describePilot();
       const speedRatio = Math.min(1, this.car.motionSpeed / this.car.maxSpeed);
       element('speed-line').style.transform = `scaleX(${speedRatio})`;
       element('dial-progress').style.strokeDasharray = `${speedRatio * 100} 100`;
@@ -384,7 +460,7 @@ export class DrivingSystem {
       }
       next.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
     }
-    this.parked = false;
+    this.autopilot.cancel(); this.parked = false;
     this.fleetId = undefined;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
     this.cabin = new CabinState(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
@@ -441,7 +517,7 @@ export class DrivingSystem {
       const node = element<HTMLButtonElement>(`${prefix}-${action}`), label = this.operations.label(action);
       node.hidden = !label; node.disabled = !this.active || !this.cabin.driver
         || (action !== 'aux' || this.car.kind === 'motorcycle') && this.car.motionSpeed > 0.1;
-      node.textContent = `${label} · ${this.operations.target[action] ? '收起 / 关闭' : '展开 / 开启'} · ${operationKeys[action].slice(3)}`;
+      node.textContent = `${label} · ${this.operations.target[action] ? '收起 / 关闭' : '展开 / 开启'} · ${this.input.bindings.label(operationKeys[action])}`;
       node.setAttribute('aria-pressed', String(!!this.operations.target[action]));
     }
     element<HTMLButtonElement>('vehicle-reset').disabled = !this.active || !this.cabin.driver || !this.crane.stowed;
@@ -473,11 +549,13 @@ export class DrivingSystem {
     element<HTMLButtonElement>('crane-power').disabled = !this.active || this.cabin.selected.role !== 'operator' || this.car.motionSpeed > 0.1;
     element('crane-power').textContent = this.crane.enabled ? '收回吊臂与支腿 · O' : '展开支腿并启动 · O';
     element('crane-status').textContent = this.crane.stowed ? '收妥 · 可以驾驶' : `${this.crane.enabled ? '操作中' : '自动收车中'} · 支腿 ${Math.round(this.crane.deployment * 100)}% · 仰角 ${Math.round(this.crane.angle * 180 / Math.PI)}° · 伸出 ${this.crane.extension.toFixed(1)} m`;
+    for (const id of ['vehicle-ignition', 'panel-ignition', 'ambient-light', 'vehicle-roof', 'cabin-light', 'crane-power'])
+      element(id).textContent = this.input.bindings.format(element(id).textContent!);
   }
 
   selectSeat(id: string): boolean {
     if (!this.active || !this.cabin.select(id, this.car.motionSpeed)) return false;
-    this.car.park(); this.cameraRig.view = 'cockpit'; this.cameraRig.reset(); this.input.clear();
+    this.autopilot.cancel(); this.car.park(); this.cameraRig.view = 'cockpit'; this.cameraRig.reset(); this.input.clear();
     element<HTMLSelectElement>('driving-view').value = 'cockpit'; this.updateSeatCamera(); return true;
   }
 

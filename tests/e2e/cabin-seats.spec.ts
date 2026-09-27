@@ -14,7 +14,7 @@ test('holds windows at arbitrary heights and uses six fan speeds, ten radio chan
   await page.keyboard.press('KeyK'); await page.keyboard.press('KeyU'); await expect(metric('Cabin lighting')).toHaveText('ambient / reading');
   await page.keyboard.press('KeyQ'); await expect(page.locator('#turn-left')).toHaveClass(/lit/);
   await page.keyboard.press('KeyM'); await expect(page.getByRole('dialog', { name: '旅程操作' })).toBeVisible();
-  await expect(page.locator('#shortcut-list')).toContainText('Home / End'); await page.keyboard.press('Escape');
+  await expect(page.locator('#shortcut-list')).toContainText('Home'); await expect(page.locator('#shortcut-list')).toContainText('End'); await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });
 

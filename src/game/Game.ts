@@ -23,6 +23,7 @@ import { radioStations } from '../audio/RadioStations';
 import { seasonNames, type Season } from '../season/SeasonState';
 import { WorldSettings } from '../settings/WorldSettings';
 import { PresetPanel } from '../settings/PresetPanel';
+import { KeyBindingPanel } from '../settings/KeyBindingPanel';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -49,6 +50,7 @@ export class Game {
   private readonly driving: DrivingSystem;
   private readonly walking: WalkingSystem;
   private readonly cabinDialogs: CabinDialogs;
+  private readonly keyBindingPanel: KeyBindingPanel;
   private paused = false;
   private wireframe = false;
   private hudTime = 0;
@@ -68,7 +70,8 @@ export class Game {
     this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), category => {
       this.settings.show();
       if (category) document.querySelector<HTMLButtonElement>(`[data-settings-target="${category}"]`)!.click();
-    });
+    }, this.input.bindings);
+    this.keyBindingPanel = new KeyBindingPanel(this.input);
     this.world.resetCamera(this.camera);
     element('phase-label').textContent = '/ DRIVE';
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -108,8 +111,11 @@ export class Game {
       if (code === 'Pause' || code === 'F8') this.setPaused(!this.paused);
       if (code === 'KeyM') this.cabinDialogs.showMenu();
       if (code === 'KeyP') this.cabinDialogs.showSeats();
+      if (code === 'Panel') this.cabinDialogs.showVehicle();
+      if (code === 'Settings') this.settings.show();
       if (!this.paused && !this.releaseNotes.open && !this.settings.open && !this.cabinDialogs.open) {
         if (/^Digit\d$/.test(code) && this.driving.active) this.tuneRadio(Number(code.slice(5)) || 10);
+        if (code === 'Audio') element<HTMLButtonElement>('audio-toggle').click();
         if (code === 'KeyF') this.interactVehicle();
         else { this.driving.action(code); this.walking.action(code); }
       }
@@ -558,7 +564,7 @@ export class Game {
     this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter));
     this.audio.setActive(!silent && !document.hidden && this.windowFocused && document.hasFocus());
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
-      throttle: this.input.down('KeyW') && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
+      throttle: this.driving.appliedThrottle > 0 && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
@@ -606,6 +612,7 @@ export class Game {
       element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 F8 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
         : stats.queued > 0 ? `山地生成中 · ${stats.active} / ${stats.target} 分块`
         : this.input.pointerLockFailed ? '鼠标锁定不可用 · 请拖动观察' : '拖动视角 · 双击锁定鼠标 · Esc 释放';
+      element('notice').textContent = this.input.bindings.format(element('notice').textContent!);
       element<HTMLButtonElement>('road-view').disabled = !this.world.roadReady || !this.world.roadSample;
       element<HTMLButtonElement>('hairpin-view').disabled = !this.world.roadReady || !this.world.road.segments.some((segment) => segment.kind === 'hairpin');
       element<HTMLButtonElement>('bridge-view').disabled = !this.world.roadReady || !this.world.bridges.length;
@@ -751,6 +758,7 @@ export class Game {
   }
 
   dispose(): void {
+    this.keyBindingPanel.dispose();
     this.presets.dispose(); this.worldSettings.dispose();
     this.cabinDialogs.dispose();
     this.settings.dispose();
