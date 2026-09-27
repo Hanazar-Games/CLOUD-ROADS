@@ -10,7 +10,8 @@ import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
 import { randomSeed, startingSeed } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
-import { absoluteElevation, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
+import { absoluteElevation, roadNames, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
+import { roadLayout } from '../road/RoadProfile';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
 import { vehicleProfiles } from '../vehicle/VehicleConfig';
 import { WalkingSystem } from '../walking/WalkingSystem';
@@ -363,7 +364,7 @@ export class Game {
       this.worldSettings.write(options);
       const elevation = absoluteElevation(options) ? ` · ${options.elevationMode === 'fixed' ? '固定往返' : '随机升降'} ${options.altitudeMin}–${options.altitudeMax} 米`
         : options.elevationMode === 'cycles' ? ` · 目标爬升 ${options.climbMin}–${options.climbMax} 米` : '';
-      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${options.roadType === 'highway' ? '高速 · 每向' : '山路 ·'} ${options.roadWidth} 米${options.roadType === 'highway' ? ` · 最小半径 ${options.highwayRadius} 米` : ''}${elevation} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`
+      element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${roadNames[options.roadType]} · ${roadLayout(options)} · 单幅 ${options.roadWidth} 米${options.roadType === 'highway' ? ` · 最小半径 ${options.highwayRadius} 米` : ''}${elevation} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`
         + `${options.mountainHeight === 'range' ? ` · 山脉 ${options.mountainMin}–${options.mountainMax} 米` : ''} · 山脉密集度 ${Math.round(options.mountainDensity * 100)}% · 植被 ${Math.round(options.vegetationDensity * 100)}%`;
       this.setError(null);
       this.resetCamera();
@@ -696,7 +697,7 @@ export class Game {
         'Local lights': this.world.furniture.localLights.filter(light => light.intensity > 0).length,
         'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',
         Landscape: terrainNames[this.world.options.terrain],
-        'Road layout': this.world.options.roadType === 'highway' ? '双向四车道' : '双向两车道',
+        'Road layout': roadLayout(this.world.options),
         'Highway minimum radius': `${this.world.options.highwayRadius} m`,
         'Carriageway width': `${this.world.options.roadWidth} m`,
         'Route style': routeNames[this.world.options.routeStyle], 'Maximum grade': `${Math.round(this.world.options.maxGrade * 100)}%`, 'Route checkpoints': this.world.road.checkpointCount,

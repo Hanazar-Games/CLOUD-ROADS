@@ -2,11 +2,12 @@ import { expect, it } from 'vitest';
 import { TrafficSystem, MAX_TRAFFIC } from '../src/traffic/TrafficSystem';
 import { RoadNetwork } from '../src/road/RoadNetwork';
 import { RoadSpine } from '../src/road/RoadSpine';
-import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
+import { DEFAULT_OPTIONS, type WorldOptions } from '../src/world/WorldOptions';
+import { roadProfile } from '../src/road/RoadProfile';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 
-function setup() {
-  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade: 0 };
+function setup(patch: Partial<WorldOptions> = {}) {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade: 0, ...patch };
   const terrain = { sample: () => 0 }, road = new RoadSpine('traffic', terrain, options);
   const network = new RoadNetwork('traffic', terrain, options, road);
   while (!network.update(128, 128, undefined, 4000)) { /* finish initial road */ }
@@ -47,7 +48,7 @@ it('stops for a pedestrian and allows boarding after yielding without driving th
 });
 
 it('stops before a solid parked car and resumes once the lane is clear', () => {
-  const { traffic, network, anchor } = setup(); traffic.density = 5;
+  const { traffic, network, anchor } = setup({ roadLanes: 1 }); traffic.density = 5;
   for (let i = 0; i < 50; i++) traffic.update(0.1, network.routes, anchor);
   const entry = traffic.entries[0], car = entry.car, parked = new VehiclePhysics('truck8');
   parked.reset(car.x + Math.sin(car.heading) * 25, car.z - Math.cos(car.heading) * 25, car.heading,
@@ -60,9 +61,10 @@ it('stops before a solid parked car and resumes once the lane is clear', () => {
 });
 
 it('continues through the origin onto the reverse route without teleporting or accumulating at the seam', () => {
-  const { traffic, network, anchor } = setup(); traffic.density = 5;
+  const { traffic, network, anchor, options } = setup(); traffic.density = 5;
   const car = new VehiclePhysics('sedan');
-  traffic.entries.push({ id: 'seam', car, routeId: 'root', distance: 12, direction: -1, cruise: 10 });
+  traffic.entries.push({ id: 'seam', car, routeId: 'root', distance: 12, direction: -1, cruise: 10,
+    lane: 0, offset: roadProfile(options).lanes[0].offset, signal: 0, cooldown: 0 });
   traffic.update(0.01, network.routes, anchor);
   for (let i = 0; i < 170; i++) {
     const x = car.x, z = car.z;
@@ -73,4 +75,48 @@ it('continues through the origin onto the reverse route without teleporting or a
   expect(entry.distance).toBeLessThan(-40);
   const back = network.routes.find(r => r.id === 'back')!;
   expect(back.road.nearest(car.x, car.z)!.distance).toBeCloseTo(-entry.distance, 0);
+});
+
+it('keeps one-way NPCs aligned through both sides of the origin', () => {
+  const { traffic, network, anchor } = setup({ oneWay: true, roadLanes: 1, roadWidth: 5 }); traffic.density = 100;
+  for (let i = 0; i < 200; i++) traffic.update(0.1, network.routes, anchor);
+  expect(traffic.entries.length).toBeGreaterThan(5);
+  expect(new Set(traffic.entries.map(e => e.routeId)).size).toBe(2);
+  for (const entry of traffic.entries) {
+    expect(Math.cos(entry.car.heading)).toBeGreaterThan(0.99);
+    expect(entry.car.x).toBeCloseTo(128, 3);
+    expect(entry.signal).toBe(0);
+  }
+});
+
+it.each(['clear', 'beside', 'fast-rear'])('signals and passes a stopped vehicle only with a safe adjacent lane (%s)', obstacle => {
+  const blocked = obstacle !== 'clear';
+  const { traffic, network, anchor, options } = setup(); traffic.density = 1;
+  const lanes = roadProfile(options).lanes, car = new VehiclePhysics('sedan'), lane = lanes.at(-1)!;
+  car.reset(128 + lane.offset, -22, 0, () => ({ height: 1, grip: 1 })); car.speed = 12;
+  const entry = { id: 'pass', car, routeId: 'root', distance: 150, direction: 1, cruise: 15,
+    lane: lane.index, offset: lane.offset, signal: 0, cooldown: 0 };
+  traffic.entries.push(entry);
+  const truck = new VehiclePhysics('truck8');
+  truck.reset(car.x, car.z - 60, 0, () => ({ height: 1, grip: 1 }));
+  const neighbor = new VehiclePhysics('semi20');
+  neighbor.reset(128 + lanes.at(-2)!.offset, car.z - 12, 0, () => ({ height: 1, grip: 1 }));
+  const signals: number[] = [];
+  for (let i = 0; i < 160; i++) {
+    const oldX = car.x;
+    if (blocked) {
+      neighbor.reset(128 + lanes.at(-2)!.offset, car.z + (obstacle === 'fast-rear' ? 30 : 0), 0, () => ({ height: 1, grip: 1 }));
+      neighbor.speed = obstacle === 'fast-rear' ? 30 : car.speed;
+    }
+    traffic.update(0.1, network.routes, anchor, blocked ? [truck, neighbor] : [truck]);
+    signals.push(entry.signal);
+    expect(Math.abs(car.x - oldX)).toBeLessThan(0.3);
+    expect(car.x).toBeGreaterThan(128 + 2);
+  }
+  if (blocked) { expect(entry.lane).toBe(lane.index); expect(car.speed).toBeLessThan(0.1); }
+  else {
+    expect(signals).toContain(-1);
+    expect(entry.distance).toBeGreaterThan(225);
+    expect(entry.lane).toBe(lane.index - 1);
+  }
 });

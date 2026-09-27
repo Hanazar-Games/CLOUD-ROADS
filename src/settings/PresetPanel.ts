@@ -1,6 +1,6 @@
 import { element } from '../debug/DebugUI';
 import { audioChannels } from '../audio/AudioSystem';
-import { terrainNames, type WorldOptions } from '../world/WorldOptions';
+import { roadNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
 import { parsePreset, PresetStore, PRESET_MAX_BYTES, type SettingRules, type SettingsPreset } from './SettingsPreset';
 
 const controls = ['vehicle-kind', 'hud-style', 'transmission-mode', 'vehicle-max-speed', 'vehicle-power', 'vehicle-brake', 'vehicle-steering',
@@ -72,7 +72,7 @@ export class PresetPanel {
       settings[id] = node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
-    const preset = { format: 'cloud-roads-preset', version: 1, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
+    const preset = { format: 'cloud-roads-preset', version: 2, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
     return parsePreset(JSON.stringify(preset), this.rules);
   }
   private async importFile(): Promise<void> {
@@ -105,7 +105,7 @@ export class PresetPanel {
     element<HTMLButtonElement>('preset-apply').disabled = !preset;
     element<HTMLButtonElement>('preset-delete').disabled = !preset || preset === this.imported;
     if (preset) element<HTMLInputElement>('preset-name').value = preset.name;
-    element('preset-summary').textContent = preset ? `${terrainNames[preset.world.terrain]} · ${preset.world.roadType === 'highway' ? '高速' : '山路'} · 种子 ${preset.seed} · 应用将返回起点` : '保存当前设置，或选择一个 JSON 文件导入。';
+    element('preset-summary').textContent = preset ? `${terrainNames[preset.world.terrain]} · ${roadNames[preset.world.roadType]} · 种子 ${preset.seed} · 应用将返回起点` : '保存当前设置，或选择一个 JSON 文件导入。';
   }
   private status(message: string): void { element('preset-status').textContent = message; }
   private error(error: unknown): void { this.status(`操作未完成：${error instanceof Error ? error.message : String(error)} 可使用 JSON 导入导出。`); }

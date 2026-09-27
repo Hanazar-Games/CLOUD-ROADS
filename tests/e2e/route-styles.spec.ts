@@ -44,7 +44,7 @@ test('applies winding levels, drives them and preserves choices during far strea
   await expect(page.locator('#route-style')).toHaveValue('5');
   await toggleSettings(page);
   await (await control(page, page.locator('#road-type'))).selectOption('highway');
-  await (await control(page, page.locator('#road-width'))).selectOption('10');
+  await (await control(page, page.locator('#road-width'))).fill('10');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click(); await ready();
   await expect(metric('Road layout')).toHaveText('双向四车道');
   await expect(metric('Route style')).toHaveText('5 档 · 连续发卡弯');

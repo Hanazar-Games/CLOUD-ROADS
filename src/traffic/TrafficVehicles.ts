@@ -7,7 +7,7 @@ export class TrafficVehicles {
   private readonly batches = new Map<VehicleKind, InstancedMesh[]>();
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65, alphaHash: true });
   private readonly box = new BoxGeometry();
-  private readonly lamps = new InstancedMesh(this.box, new MeshBasicMaterial({ toneMapped: false }), MAX_TRAFFIC * 4);
+  private readonly lamps = new InstancedMesh(this.box, new MeshBasicMaterial({ toneMapped: false }), MAX_TRAFFIC * 8);
   private readonly drivers = new InstancedMesh(this.box, new MeshStandardMaterial({ roughness: 0.9 }), MAX_TRAFFIC * 2);
   private readonly matrix = new Matrix4();
   private readonly local = new Matrix4();
@@ -35,7 +35,7 @@ export class TrafficVehicles {
     }));
     for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
     this.lamps.count = this.drivers.count = 0;
-    for (const { car } of this.traffic.entries) {
+    for (const { car, signal } of this.traffic.entries) {
       const meshes = this.batches.get(car.kind); if (!meshes) continue;
       for (const [i, mesh] of meshes.entries()) {
         const body = i ? car.trailer! : car;
@@ -55,6 +55,11 @@ export class TrafficVehicles {
         this.local.makeScale(0.23, 0.09, 0.04).setPosition(side * p.width * 0.32, 0.02, end * (p.chassisLength / 2 + 0.045));
         this.lamps.setMatrixAt(this.lamps.count, this.local.premultiply(this.matrix));
         this.lamps.setColorAt(this.lamps.count++, this.color.setHex(end < 0 ? darkness > 0.2 ? 0xffedbb : 0x637075 : car.braking ? 0xff351c : darkness > 0.2 ? 0x992211 : 0x43110c));
+        if (signal === side && this.traffic.time % 0.8 < 0.4) {
+          this.local.makeScale(0.14, 0.13, 0.055).setPosition(side * p.width * 0.43, 0.02, end * (p.chassisLength / 2 + 0.07));
+          this.lamps.setMatrixAt(this.lamps.count, this.local.premultiply(this.matrix));
+          this.lamps.setColorAt(this.lamps.count++, this.color.setHex(0xff990b));
+        }
       }
     }
     for (const mesh of [...this.batches.values()].flat().concat([this.lamps, this.drivers] as InstancedMesh[])) {

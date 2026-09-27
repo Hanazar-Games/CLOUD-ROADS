@@ -3,23 +3,29 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from './RoadProfile';
 
 export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPTIONS,
-  access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1))): MeshStandardMaterial {
+  access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1)), direction = { value: 1 }): MeshStandardMaterial {
   const profile = roadProfile(options);
   const material = new MeshStandardMaterial({ roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.roadHalfWidth = { value: profile.width / 2 };
     shader.uniforms.roadCenter = { value: profile.centers.at(-1)! };
+    shader.uniforms.roadLanes = { value: options.roadLanes };
+    shader.uniforms.oneWay = { value: options.oneWay ? 1 : 0 };
+    shader.uniforms.roadDirection = direction;
     shader.uniforms.serviceAccess = { value: access };
     shader.vertexShader = `varying vec2 vRoadUv;\n${shader.vertexShader}`.replace('#include <uv_vertex>', '#include <uv_vertex>\nvRoadUv = uv;');
-    shader.fragmentShader = `varying vec2 vRoadUv;\nuniform float roadHalfWidth;\nuniform float roadCenter;\nuniform vec4 serviceAccess[4];\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
+    shader.fragmentShader = `varying vec2 vRoadUv;\nuniform float roadHalfWidth;\nuniform float roadCenter;\nuniform float roadLanes;\nuniform float oneWay;\nuniform float roadDirection;\nuniform vec4 serviceAccess[4];\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
       #include <color_fragment>
       float lateral = abs(abs(vRoadUv.x) - roadCenter);
+      float localX = vRoadUv.x - sign(vRoadUv.x) * roadCenter;
+      float laneWidth = roadHalfWidth * 2.0 / roadLanes;
+      float laneCenter = (floor((localX + roadHalfWidth) / laneWidth) + 0.5) * laneWidth - roadHalfWidth;
       float aa = max(fwidth(vRoadUv.x), 0.015);
       float shoulder = smoothstep(roadHalfWidth - aa, roadHalfWidth + aa, lateral);
       vec3 surface = mix(vec3(0.075, 0.08, 0.084), vec3(0.24, 0.25, 0.25), shoulder);
       float grain = fract(sin(dot(floor(vRoadUv * 28.0), vec2(127.1, 311.7))) * 43758.5453);
       surface *= 1.0 + (grain - 0.5) * 0.18 * (1.0 - smoothstep(0.015, 0.15, length(fwidth(vRoadUv))));
-      float wheelTrack = exp(-pow((abs(lateral - roadHalfWidth * 0.5) - 0.72) / 0.22, 2.0));
+      float wheelTrack = exp(-pow((abs(localX - laneCenter) - 0.72) / 0.22, 2.0));
       surface *= 1.0 - wheelTrack * 0.065 * (1.0 - shoulder);
       float seam = 1.0 - smoothstep(0.018, 0.018 + aa, abs(lateral - roadHalfWidth * 0.96));
       surface *= 1.0 - seam * 0.18 * (1.0 - smoothstep(0.04, 0.4, length(fwidth(vRoadUv))));
@@ -33,17 +39,23 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
         opening = max(opening, max(step(access.x, vRoadUv.y) * step(vRoadUv.y, access.y), step(access.z, vRoadUv.y) * step(vRoadUv.y, access.w)));
       }
       edge *= 1.0 - opening * (roadCenter > 0.01 ? step(roadCenter, abs(vRoadUv.x)) : step(0.0, vRoadUv.x));
-      float center = 1.0 - smoothstep(0.075 - aa, 0.075 + aa, lateral);
+      float divider = 0.0;
+      for (int i = 1; i < 4; i++) {
+        if (float(i) < roadLanes && !(oneWay < 0.5 && roadCenter < 0.01 && float(i) == roadLanes * 0.5))
+          divider = max(divider, 1.0 - smoothstep(0.065 - aa, 0.065 + aa, abs(localX + roadHalfWidth - float(i) * laneWidth)));
+      }
+      float center = (1.0 - oneWay) * (1.0 - step(0.01, roadCenter)) * (1.0 - smoothstep(0.055 - aa, 0.055 + aa, abs(abs(localX) - 0.12)));
       float along = abs(mod(vRoadUv.y, 12.0) - 6.0);
       float dash = 1.0 - smoothstep(2.0 - fwidth(vRoadUv.y), 2.0 + fwidth(vRoadUv.y), along);
-      float yellow = roadCenter > 0.01 ? step(abs(vRoadUv.x), roadCenter) * edge : center * dash;
+      float yellow = roadCenter > 0.01 ? step(abs(vRoadUv.x), roadCenter) * edge : center;
       vec3 marking = mix(vec3(0.83, 0.82, 0.72), vec3(0.95, 0.61, 0.12), yellow);
-      diffuseColor.rgb = mix(surface, marking, max(edge, center * dash));
+      diffuseColor.rgb = mix(surface, marking, max(edge, max(center, divider * dash)));
       float stud = (1.0 - smoothstep(0.045, 0.045 + aa, abs(lateral - roadHalfWidth + 0.65)))
         * (1.0 - smoothstep(0.07, 0.07 + fwidth(vRoadUv.y), abs(mod(vRoadUv.y + 6.0, 12.0) - 6.0))) * (1.0 - opening);
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.7, 0.44), stud);
-      float lane = abs(lateral - roadHalfWidth * 0.5);
-      float arrowY = (mod(vRoadUv.y + 1000.0, 2000.0) - 1000.0) * sign(vRoadUv.x);
+      float lane = abs(localX - laneCenter);
+      float arrowDirection = oneWay > 0.5 ? roadDirection : sign(vRoadUv.x);
+      float arrowY = (mod(vRoadUv.y + 1000.0, 2000.0) - 1000.0) * arrowDirection;
       float shaft = (1.0 - smoothstep(0.16, 0.16 + aa, lane)) * step(-4.5, arrowY) * step(arrowY, 1.4);
       float headWidth = max(0.0, (3.8 - arrowY) * 0.34);
       float head = (1.0 - smoothstep(headWidth, headWidth + aa, lane)) * step(0.2, arrowY) * step(arrowY, 3.8);

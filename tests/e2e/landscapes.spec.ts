@@ -55,7 +55,7 @@ test('switches landscape, width and divided highway, preserving lighting and veg
   await (await control(page, page.locator('#daylight'))).fill('90');
   await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
   await (await control(page, page.locator('#road-type'))).selectOption('highway');
-  await (await control(page, page.locator('#road-width'))).selectOption('10');
+  await (await control(page, page.locator('#road-width'))).fill('10');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Landscape')).toHaveText('森林山谷');
   await ready();
@@ -76,7 +76,7 @@ test('switches landscape, width and divided highway, preserving lighting and veg
   await expect(metric('Vegetation instances')).toHaveText('0');
   expect((await sceneShot(page, { clip })).equals(forest)).toBe(false);
   await (await control(page, page.locator('#terrain-kind'))).selectOption('desert');
-  await (await control(page, page.locator('#road-width'))).selectOption('6');
+  await (await control(page, page.locator('#road-width'))).fill('6');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Landscape')).toHaveText('沙漠峡谷');
   await ready();
@@ -102,7 +102,7 @@ test('applies world choices in a narrow window without leaking movement from sel
   await page.goto('/?seed=CLOUD-ROAD-001');
   await (await control(page, page.locator('#terrain-kind'))).selectOption('desert');
   await (await control(page, page.locator('#road-type'))).selectOption('highway');
-  await (await control(page, page.locator('#road-width'))).selectOption('8');
+  await (await control(page, page.locator('#road-width'))).fill('8');
   const apply = page.getByRole('button', { includeHidden: true, name: '应用并返回起点' });
   await (await control(page, apply)).scrollIntoViewIfNeeded();
   await expect(apply).toBeInViewport();

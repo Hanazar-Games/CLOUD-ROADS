@@ -1,8 +1,9 @@
 import { element } from '../debug/DebugUI';
-import { DEFAULT_OPTIONS, validWorldOptions, type WorldOptions } from '../world/WorldOptions';
+import { DEFAULT_OPTIONS, minimumRoadWidth, validWorldOptions, type WorldOptions } from '../world/WorldOptions';
 
 const fields: Record<keyof WorldOptions, [string, number?]> = {
   terrain: ['terrain-kind'], roadType: ['road-type'], roadWidth: ['road-width'], highwayRadius: ['highway-radius'], routeStyle: ['route-style'],
+  roadLanes: ['road-lanes'], oneWay: ['road-one-way'],
   maxGrade: ['max-grade', 100], elevationMode: ['elevation-mode'], climbMin: ['climb-min'], climbMax: ['climb-max'],
   altitudeMin: ['altitude-min'], altitudeMax: ['altitude-max'], elevationDirection: ['elevation-direction'],
   mountainHeight: ['mountain-height'], mountainMin: ['mountain-min'], mountainMax: ['mountain-max'],
@@ -13,7 +14,7 @@ export class WorldSettings {
   private readonly events = new AbortController();
   private applied: Readonly<WorldOptions> = DEFAULT_OPTIONS;
   constructor() {
-    for (const [id] of Object.values(fields)) element(id).addEventListener('input', () => this.sync(), { signal: this.events.signal });
+    for (const [id] of Object.values(fields)) element(id).addEventListener('input', () => this.sync(id), { signal: this.events.signal });
     this.sync();
   }
   read(): WorldOptions {
@@ -23,7 +24,7 @@ export class WorldSettings {
       if (type === 'number' && (!node.value.trim() || !Number.isFinite(number) || number < Number(node.min) || node.max && number > Number(node.max)
         || Math.abs(steps - Math.round(steps)) > 1e-7)) {
         if (node.disabled) return [key, this.applied[key as keyof WorldOptions]];
-        throw new Error('高度与密度数值必须在允许范围内。');
+        throw new Error('道路宽度、高度与密度数值必须在允许范围内。');
       }
       return [key, type === 'boolean' ? node.checked : type === 'number' ? Number(node.value) / scale : node.value];
     }));
@@ -33,7 +34,7 @@ export class WorldSettings {
         value[min] = this.applied[min]; value[max] = this.applied[max];
       }
     }
-    if (!validWorldOptions(value)) throw new Error('请检查海拔、爬升和山脉范围：上限不能低于下限，所有数值必须在允许范围内。');
+    if (!validWorldOptions(value)) throw new Error('请检查道路宽度、车道与高度范围；车道不能过窄，上限不能低于下限。');
     return value;
   }
   write(value: Readonly<WorldOptions>): void {
@@ -45,7 +46,16 @@ export class WorldSettings {
     }
     this.sync();
   }
-  sync(): void {
+  sync(changed?: string): void {
+    const type = element<HTMLSelectElement>('road-type').value as WorldOptions['roadType'];
+    const oneWay = element<HTMLInputElement>('road-one-way').checked, lanes = element<HTMLSelectElement>('road-lanes');
+    for (const option of lanes.options) option.disabled = type === 'highway' ? Number(option.value) > 3 : !oneWay && Number(option.value) % 2 !== 0;
+    if (lanes.selectedOptions[0]?.disabled) lanes.value = '2';
+    const width = element<HTMLInputElement>('road-width'), min = minimumRoadWidth(type, Number(lanes.value));
+    if (['road-type', 'road-one-way', 'road-lanes'].includes(changed ?? '') && Number(width.value) < min) width.value = String(min);
+    width.setCustomValidity(Number(width.value) < min ? `此布局至少需要 ${min} 米宽路面。` : '');
+    element('road-lanes-label').textContent = type === 'highway' && !oneWay ? '每个方向的车道数' : '总车道数';
+    element('road-width-help').textContent = `5–12 米，步进 0.5 米，不含路肩；${type === 'highway' && !oneWay ? '每个方向单独计算，中央分隔带 4 米。' : '单幅路面总宽。'}当前布局至少 ${min} 米。`;
     const radius = element<HTMLInputElement>('highway-radius');
     radius.disabled = element<HTMLSelectElement>('road-type').value !== 'highway';
     element('highway-radius-value').textContent = `${radius.value} m${radius.disabled ? ' · 仅高速生效' : ''}`;

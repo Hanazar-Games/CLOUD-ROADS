@@ -3,6 +3,7 @@ import { expect, it } from 'vitest';
 import { RoadFurniture } from '../src/road/RoadFurniture';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
+import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 it('places reproducible lamp sections with dark gaps and keeps lights out of tunnels', () => {
   const start = new RoadGenerator('lamps', { sample: () => 200 }).start;
@@ -40,4 +41,21 @@ it('places reproducible lamp sections with dark gaps and keeps lights out of tun
   expect(furniture.localLights.some(light => light.intensity > 0)).toBe(true);
   furniture.dispose();
   expect(scene.children).toHaveLength(0);
+});
+
+it('lights both sides of an avenue continuously with bounded fixtures outside the pavement', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'avenue' as const, roadWidth: 12, roadLanes: 4 };
+  const start = new RoadGenerator('avenue', { sample: () => 0 }, options).start;
+  const segment = new RoadSegment(start, 0, 0, 1200);
+  const samples = Array.from({ length: 601 }, (_, i) => segment.sample(i / 600));
+  const scene = new Scene(), furniture = new RoadFurniture(scene, 'avenue', options);
+  furniture.update(samples, [], [], 1, 0, 0, true);
+  expect(furniture.lampPositions).toHaveLength(60);
+  const matrix = new Matrix4();
+  furniture.poles.getMatrixAt(0, matrix);
+  expect(Math.abs(matrix.elements[12])).toBeGreaterThan(6);
+  expect(furniture.lampPositions.some(p => p.x < start.position.x)).toBe(true);
+  expect(furniture.lampPositions.some(p => p.x > start.position.x)).toBe(true);
+  expect(furniture.poles.count).toBeLessThanOrEqual(furniture.poles.instanceMatrix.count);
+  furniture.dispose(); expect(scene.children).toHaveLength(0);
 });

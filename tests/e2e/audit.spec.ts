@@ -111,8 +111,12 @@ test('shows the current release, archives the previous baseline and isolates dia
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.40');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('多向立交 · 多彩驿站与十款新车');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.41');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('车流变道 · 自定义车道与灯光大道');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.40');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('NPC 车流 · 实体载具与点火交互');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.39');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('多向立交 · 多彩驿站与十款新车');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.38');
   await expect(dialog.locator('[data-release="history"]')).toContainText('护栏接触 · 碰撞与侧滑修正');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.37');

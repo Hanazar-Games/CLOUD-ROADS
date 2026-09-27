@@ -44,7 +44,7 @@ export class JunctionMesh {
         for (const ahead of [160, 80]) {
           const sample = at(ramp.sample.distance - ahead);
           if (!sample) continue;
-          const lane = this.profile.centers.at(-1)! + (this.profile.halfWidth - 1.2) / 2;
+          const lane = this.profile.lanes.filter(lane => lane.direction === 1).at(-1)!.offset;
           this.box(this.markings, sample, lane, 0.03, 0.16, 0.025, 6);
           for (const side of [-1, 1]) this.box(this.markings, sample, lane + side * 0.5, 0.035, 0.16, 0.025, 1.5, 0xeeeedd, -side * 0.75, 2.1);
           this.box(this.markings, sample, lane + 0.85, 0.035, 0.16, 0.025, 2.8, 0xeeeedd, 0.75, 0.7);

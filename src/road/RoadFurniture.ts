@@ -17,7 +17,7 @@ import { LampGlow } from './LampGlow';
 export class RoadFurniture {
   readonly rails = new InstancedMesh(guardrailGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
   readonly posts = new InstancedMesh(new BoxGeometry(), this.rails.material, MAX_ROAD_SEGMENTS * ROAD_SAMPLES);
-  readonly poles = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x52636b, metalness: 0.6, roughness: 0.4 }), 4096);
+  readonly poles = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x52636b, metalness: 0.6, roughness: 0.4 }), 8192);
   readonly markers = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.15 }), 16384);
   private readonly markerColor = new Color();
   readonly heads = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffe4b8, emissive: 0xffc781 }), 2048);
@@ -33,6 +33,12 @@ export class RoadFurniture {
 
   constructor(scene: Scene, private readonly seed: string, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
+    if (options.roadType === 'avenue') {
+      this.poles.material.color.setHex(0x33444d);
+      this.heads.material.color.setHex(0xe5f5ff); this.heads.material.emissive.setHex(0xc7e4ff);
+      this.glow.halos.material.color.setHex(0xd0e9ff); this.glow.pools.material.color.setHex(0xd0e9ff);
+      for (const light of this.localLights) light.color.setHex(0xd7ebff);
+    }
     for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
       mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true;
       scene.add(mesh);
@@ -75,16 +81,23 @@ export class RoadFurniture {
             this.markers.setColorAt(this.markers.count - 1, this.markerColor.setHex(color));
           }
         }
-        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || !sample.junction && hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
-        for (const side of this.profile.centers.length === 2 ? [-1, 1] : [1]) {
+        const avenue = this.options.roadType === 'avenue';
+        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || !avenue && !sample.junction && hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
+        for (const side of this.profile.centers.length === 2 || avenue ? [-1, 1] : [1]) {
           const offset = side * (this.profile.outerHalfWidth + (onBridge ? 0.15 : 0.9));
           this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);
           this.box(this.poles, sample, offset - side * 1.3, 8.95, 2.7, 0.15, 0.15);
-          this.box(this.heads, sample, offset - side * 2.4, 8.85, 0.85, 0.13, 1.4);
+          if (avenue) {
+            this.box(this.poles, sample, offset, 0.13, 0.55, 0.26, 0.55);
+            this.box(this.poles, sample, offset, 0.7, 0.28, 1.2, 0.28);
+            this.box(this.poles, sample, offset - side * 2.4, 8.91, 0.72, 0.16, 1.65);
+          }
+          this.box(this.heads, sample, offset - side * 2.4, 8.81, avenue ? 0.58 : 0.85, 0.08, 1.4);
           const { right, normal } = roadFrame(sample), p = sample.position, lateral = offset - side * 2.4;
           this.lampPositions.push({ x: p.x + right.x * lateral + normal.x * 8.65,
             y: p.y + right.y * lateral + normal.y * 8.65, z: p.z + right.z * lateral + normal.z * 8.65, sample });
-          this.box(this.glow.pools, sample, side * (this.profile.outerHalfWidth - this.profile.halfWidth), 0.035, this.profile.halfWidth * 2, 1, 32);
+          this.box(this.glow.pools, sample, side * (avenue ? this.profile.width / 4 : this.profile.outerHalfWidth - this.profile.halfWidth), 0.035,
+            avenue ? this.profile.halfWidth : this.profile.halfWidth * 2, 1, 32);
         }
       }
       const positions = this.glow.halos.geometry.getAttribute('position');

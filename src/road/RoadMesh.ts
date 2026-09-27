@@ -20,12 +20,13 @@ export class RoadMesh {
   private anchorX = 0;
   private anchorZ = 0;
   private readonly access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1));
+  private readonly direction = { value: 1 };
 
   constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS, capacity = MAX_ROAD_SEGMENTS) {
     this.profile = roadProfile(options);
     this.barriers = new InstancedMesh(barrierGeometry(), new MeshStandardMaterial({ color: 0xbfc2c1, roughness: 0.94 }),
       options.roadType === 'highway' ? capacity * ROAD_SAMPLES * 2 : 1);
-    this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access));
+    this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access, this.direction));
     const strips = this.profile.centers.length, stride = strips * 2;
     const rows = capacity * ROAD_SAMPLES + 1;
     for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['seasonExposure', 1]] as const) {
@@ -56,6 +57,7 @@ export class RoadMesh {
     if (this.version !== spine.version && spine.segments.length) {
       this.version = spine.version;
       const first = spine.segments[0].start;
+      this.direction.value = first.routeId === 'back' ? -1 : 1;
       this.anchorX = first.position.x;
       this.anchorZ = first.position.z;
       const positions = this.mesh.geometry.getAttribute('position') as BufferAttribute;

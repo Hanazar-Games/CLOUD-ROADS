@@ -92,18 +92,19 @@ export class DrivingSurface {
     const start = road.segments[0].start.distance + margin, end = road.segments.at(-1)!.end.distance - margin;
     if (end < start) return undefined;
     const distance = Math.max(start, Math.min(end, nearest.distance));
-    const offset = this.profile.centers.at(-1)! + this.world.options.roadWidth / 4;
+    const direction = this.world.options.oneWay && this.world.network?.active.id === 'back' ? -1 : 1;
+    const offset = this.profile.lanes.filter(lane => lane.direction === 1).at(-1)!.offset * direction;
     const point = (d: number) => {
       const sample = road.segments.find(segment => segment.start.distance <= d && segment.end.distance >= d)!.atDistance(d);
       const { right } = roadFrame(sample);
-      return { x: sample.position.x + right.x * offset, z: sample.position.z + right.z * offset, heading: sample.heading };
+      return { x: sample.position.x + right.x * offset, z: sample.position.z + right.z * offset, heading: sample.heading + (direction < 0 ? Math.PI : 0) };
     };
     for (let attempt = 0; attempt < 81; attempt++) {
       const d = distance + Math.ceil(attempt / 2) * 6 * (attempt % 2 ? 1 : -1);
       if (d < start || d > end) continue;
       const spawn = point(d), trailer = vehicle.trailer;
       const hitch = { x: spawn.x + Math.sin(spawn.heading) * (trailer?.hitchAlong ?? 0), z: spawn.z - Math.cos(spawn.heading) * (trailer?.hitchAlong ?? 0) };
-      const rear = point(d + (trailer?.hitchAlong ?? 0) - (trailer?.wheelbase ?? 0));
+      const rear = point(d + direction * ((trailer?.hitchAlong ?? 0) - (trailer?.wheelbase ?? 0)));
       const trailerHeading = trailer ? Math.atan2(hitch.x - rear.x, rear.z - hitch.z) : spawn.heading;
       const bodies = [{ ...spawn, front: vehicle.chassisLength / 2, rear: -vehicle.chassisLength / 2 }];
       if (trailer) bodies.push({ ...hitch, heading: trailerHeading, front: trailer.front, rear: trailer.front - trailer.length });
