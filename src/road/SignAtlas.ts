@@ -2,6 +2,7 @@ import { DataTexture, LinearFilter, LinearMipmapLinearFilter, SRGBColorSpace } f
 import { drawSignLetter } from './SignFont';
 
 export const signLabels = ['SERVICE\n500 M', 'SERVICE\nEXIT', 'P', 'FUEL', 'WC', 'TUNNEL', '40', '80', 'KM', '<', '>', 'EXIT >', ...'0123456789', 'PASS', 'REST', 'STEEP', 'SLOW', '20', '< ROUTE', 'ROUTE >', 'LOOP >', 'MAIN', 'EXIT >\n500 M', 'EXIT >\n200 M', 'CARS', 'BUS', 'TRUCK', 'SEMI', 'BIKE', 'MALL', 'CAFE', 'MARKET', 'WC\nMEN', 'WC\nWOMEN', 'WC\nACCESS', 'LEFT\nLOOP >', 'RIGHT >', 'RETURN >', 'JUNCTION\n500 M', 'EV', 'INFO', 'LEFT LOOP >\n200 M', 'RIGHT >\n200 M', 'RETURN >\n200 M'];
+signLabels.push('KEEP\nDISTANCE', 'KEEP\nRIGHT', 'CROSSWIND', 'RETURN\nOVERPASS', 'RETURN\nUNDERPASS', 'TWO WAY\n20');
 export const SIGN_ROWS = Math.ceil(signLabels.length / 4);
 export const SIGN_TILE_WIDTH = 512, SIGN_TILE_HEIGHT = 256, SIGN_GUTTER = 16;
 let pixels: Uint8Array | undefined;

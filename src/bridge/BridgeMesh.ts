@@ -14,7 +14,7 @@ import { createConcreteMaterial } from './ConcreteMaterial';
 import { isServiceAccess } from '../road/RoadProtection';
 import { archAlignment, ArchBridgeMesh } from './ArchBridgeMesh';
 import type { ServiceArea } from '../service/ServicePlanner';
-import { CableBridgeMesh, cableSpans } from './CableBridgeMesh';
+import { CableBridgeMesh, cableSpans, cablePylonWidth } from './CableBridgeMesh';
 import { BridgeAbutments } from './BridgeAbutments';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
@@ -160,7 +160,8 @@ export class BridgeMesh {
         }
         if (!span.openEnd) this.support(span.end, true, corridor, terrain);
       }
-      for (const cable of cables) for (const tower of cable.towers) this.support(tower, false, corridor, terrain, 1.6);
+      for (const cable of cables) for (const [i, tower] of cable.towers.entries())
+        this.support(tower, false, corridor, terrain, 1.6, cablePylonWidth(cable.depths[i], (cable.end - cable.start) / 4));
       for (const distance of this.heights.keys()) if (!active.has(distance)) this.heights.delete(distance);
       if (this.railings.instanceColor) { this.railings.instanceColor.setUsage(DynamicDrawUsage); this.railings.instanceColor.needsUpdate = true; }
       for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) {
@@ -191,15 +192,15 @@ export class BridgeMesh {
     };
   }
 
-  private support(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain, strength = 1): void {
+  private support(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain, strength = 1, pylonWidth = 0): void {
     if (corridor.crossesBelow(sample, this.profile.outerHalfWidth + 12)) return;
     const { right } = roadFrame(sample);
     for (const offset of this.profile.centers) this.supportCarriageway({ ...sample, position: {
       x: sample.position.x + right.x * offset, y: sample.position.y + right.y * offset, z: sample.position.z + right.z * offset,
-    } }, abutment, corridor, terrain, strength);
+    } }, abutment, corridor, terrain, strength, pylonWidth);
   }
 
-  private supportCarriageway(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain, strength: number): void {
+  private supportCarriageway(sample: RoadSample, abutment: boolean, corridor: RoadCorridor, terrain: RoadTerrain, strength: number, pylonWidth: number): void {
     const { x, y, z } = sample.position;
     const ground = (px: number, pz: number) => {
       const natural = terrain.sample(px, pz);
@@ -231,8 +232,8 @@ export class BridgeMesh {
           z + dz + verticalFrame.right.z * side * (width * taper / 2 + 0.008), 0.02, 0.035, width * taper * 0.7, upright);
       }
     }
-    this.box(this.piers, x - normal.x * (depth + 1.11), y - normal.y * (depth + 1.11), z - normal.z * (depth + 1.11),
-      Math.max(deckWidth + (strength > 1 ? 8 : 0), separation * 2 + width * 0.7 + 1), 1.2, tier === 2 ? 6 : 4, sample);
+    this.box(pylonWidth ? this.parapets : this.piers, x - normal.x * (depth + 1.11), y - normal.y * (depth + 1.11), z - normal.z * (depth + 1.11),
+      Math.max(deckWidth + (pylonWidth ? pylonWidth * 2 + 0.6 : 0), separation * 2 + width * 0.7 + 1), 1.2, Math.max(tier === 2 ? 6 : 4, pylonWidth * 1.15 + 0.2), sample);
     for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
       x + right.x * offset - normal.x * (depth + 0.26), y + right.y * offset - normal.y * (depth + 0.26), z + right.z * offset - normal.z * (depth + 0.26),
       1.2, 0.5, 1.4, sample);

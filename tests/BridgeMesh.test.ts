@@ -47,7 +47,7 @@ describe('BridgeMesh', () => {
     mesh.dispose();
   });
 
-  it('keeps the same pier spacing at every height and gives high bridges red steel railings', () => {
+  it('keeps ordinary pier stations, reserves eligible cable spans and gives high bridges red steel railings', () => {
     const counts: number[] = [];
     for (const height of [50, 50.01, 100, 100.01, 350]) {
       const terrain = { sample: () => 200 - height };
@@ -58,13 +58,15 @@ describe('BridgeMesh', () => {
       const spans = new BridgeDetector(terrain).detect(samples), mesh = new BridgeMesh(new Scene());
       mesh.update(spans, RoadCorridor.fromSamples(samples, spans), terrain, 1, 0, 0, true);
       counts.push(mesh.pierCount);
+      expect(mesh.cableBridges.spanCount > 0).toBe(height > 200);
       expect(mesh.railings.count).toBeGreaterThan(1000);
       const color = new Color(); mesh.railings.getColorAt(0, color);
       if (height > 100) expect(color.r).toBeGreaterThan(color.g * 2);
       else expect(Math.abs(color.r - color.g)).toBeLessThan(0.15);
       mesh.dispose();
     }
-    expect(counts).toEqual([48, 48, 48, 48, 48]);
+    expect(counts.slice(0, 4)).toEqual([48, 48, 48, 48]);
+    expect(counts[4]).toBeLessThan(48);
   });
 
   it('anchors tall piers to absolute mileage when either bridge end is outside the loaded window', () => {

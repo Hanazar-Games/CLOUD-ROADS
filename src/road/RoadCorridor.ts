@@ -69,6 +69,7 @@ export class RoadCorridor {
 
   crossesBelow(sample: RoadSample, radius: number): boolean {
     const { x, y, z } = sample.position;
+    if (this.services.crossesBelow(sample.position, radius)) return true;
     for (const index of this.index.within(x - radius, z - radius, x + radius, z + radius)) {
       const { a, b } = this.edges[index], dx = b.x - a.x, dz = b.z - a.z;
       if (a.routeId === sample.routeId && Math.abs((a.distance ?? sample.distance) - sample.distance) < 80) continue;

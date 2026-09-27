@@ -3,9 +3,9 @@ import { RoadIndex } from '../road/RoadIndex';
 import { roadProfile } from '../road/RoadProfile';
 import type { World } from '../world/World';
 import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
-import { hasRoadBarrier } from '../road/RoadProtection';
+import { hasBridgeScreen, hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
-import { padPoint } from '../service/ServiceTerrain';
+import { padPoint, crossoverShelter } from '../service/ServiceTerrain';
 import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision';
 import { serviceObstacles } from '../service/ServiceAmenities';
 import { vehicleSupport } from './VehicleSolids';
@@ -28,9 +28,9 @@ export class DrivingSurface {
   constructor(private readonly world: DrivingWorld) {
     this.profile = roadProfile(world.options);
     this.sites = world.services;
-    this.access = this.sites.flatMap(site => site.ground.access);
+    this.access = this.sites.flatMap(site => [...site.ground.access, ...site.ground.crossover?.access ?? []]);
     this.accessIndex = new RoadIndex(this.access);
-    this.barriers = this.sites.flatMap(site => site.ground.barriers);
+    this.barriers = this.sites.flatMap(site => [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]);
     this.barrierIndex = new RoadIndex(this.barriers);
   }
 
@@ -45,6 +45,11 @@ export class DrivingSurface {
 
   private ground(x: number, z: number, ceiling = Infinity): SurfaceContact {
     const reference = Number.isFinite(ceiling) ? ceiling : this.level;
+    const surfaces: SurfaceContact[] = [];
+    const add = (height: number, sheltered = false) => {
+      if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9))
+        surfaces.push({ height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height, sheltered) ?? 1) });
+    };
     const samples = (this.world.network?.routes ?? [this.world]).flatMap(route => {
       const sample = route.road.nearest(x, z); return sample ? [{ sample, route }] : [];
     });
@@ -59,10 +64,7 @@ export class DrivingSurface {
       if (Math.abs(along) < 1 && this.profile.centers.some(center => Math.abs(lateral - center) <= this.profile.halfWidth)) {
         const { normal } = roadFrame(sample);
         const height = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
-        if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9)) {
-          const sheltered = route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
-          return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height, sheltered) ?? 1) };
-        }
+        add(height, route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance));
       }
     }
     this.refreshServices();
@@ -71,16 +73,21 @@ export class DrivingSurface {
       const lateral = dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading);
       const along = dx * Math.sin(pad.heading) - dz * Math.cos(pad.heading);
       const height = pad.y + pad.grade * along;
-      if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength && height <= ceiling) return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
+      if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength) add(height);
     }
-    const access = this.accessIndex.nearest(x, z, 3.5);
-    if (access) {
-      const { a, b } = this.access[access.index], t = access.t;
+    for (const i of this.accessIndex.within(x - 3.5, z - 3.5, x + 3.5, z + 3.5)) {
+      const { a, b } = this.access[i], dx = b.x - a.x, dz = b.z - a.z;
+      const along = ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz);
+      const joint = 0.4 / Math.hypot(dx, dz);
+      if (along < -joint || along > 1 + joint) continue;
+      const t = along;
+      if (Math.hypot(x - a.x - dx * t, z - a.z - dz * t) > 3.5) continue;
       const height = a.y + (b.y - a.y) * t + 0.015
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      if (height <= ceiling) return { height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
+      add(height);
     }
+    if (surfaces.length) return reference === undefined ? surfaces[0] : surfaces.reduce((best, s) => Math.abs(s.height - reference) < Math.abs(best.height - reference) ? s : best);
     const height = this.world.groundHeight(x, z);
     return { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
   }
@@ -128,6 +135,7 @@ export class DrivingSurface {
   }
 
   inTunnel(x: number, z: number, margin = 0): boolean {
+    if (this.level !== undefined && this.world.services.some(site => crossoverShelter(site.ground.crossover, x, this.level!, z) > 0.5)) return true;
     const route = this.route(x, z), sample = route.road.nearest(x, z);
     return !!sample && Math.hypot(x - sample.position.x, z - sample.position.z) < this.profile.outerHalfWidth + 1
       && route.tunnels.some(span => sample.distance >= span.start.distance - margin && sample.distance <= span.end.distance + margin);
@@ -230,7 +238,9 @@ export class DrivingSurface {
       if (!inner && !hasRoadBarrier({ ...route, options: this.world.options }, sample, side)) continue;
       const offset = center + side * (this.profile.halfWidth + (inner ? 0.2 : tunnel ? 0.65 : bridge ? 0.25 : 0.3));
       const railHeight = y + right.y * offset;
-      if (feet > railHeight + (inner ? 0.85 : tunnel ? 7 : bridge ? 1.55 : 1.02) || feet + height < railHeight - 0.2) continue;
+      const screen = bridge && hasBridgeScreen(this.world.seed, sample, this.world.options)
+        && !this.sites.some(site => sample.distance >= site.start - 20 && sample.distance <= site.end + 20);
+      if (feet > railHeight + (inner ? 0.85 : tunnel ? 7 : bridge ? screen ? 4 : 1.55 : 1.02) || feet + height < railHeight - 0.2) continue;
       const rail = offset * Math.cos(sample.bank), clearance = radius + (inner || bridge ? 0.175 : 0.08);
       const before = previous - rail, after = lateral - rail;
       if (before * after > 0 && (Math.abs(after) >= clearance - 1e-7 || Math.abs(after) > Math.abs(before) + 1e-7)) continue;
@@ -251,12 +261,19 @@ export class DrivingSurface {
         && Math.abs(dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading)) <= pad.halfWidth) ceiling = Math.min(ceiling, height - 1.45);
     }
     const access = this.accessIndex.nearest(x, z, 3.8);
-    if (access && this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[access.index]))) {
+    if (access && this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[access.index])
+      || site.ground.crossover?.access.includes(this.access[access.index]))) {
       const { a, b } = this.access[access.index], t = access.t;
       const height = a.y + (b.y - a.y) * t
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
       if (feet < height - 0.15) ceiling = Math.min(ceiling, height - 1.45);
+    }
+    for (const site of this.sites) {
+      const cross = site.ground.crossover;
+      if (cross?.roof === undefined || feet >= cross.roof) continue;
+      if (cross.access.some(({ a, b }) => Math.abs(a.y - cross.deck) < 0.01 && Math.abs(b.y - cross.deck) < 0.01
+        && Math.hypot(x - (a.x + b.x) / 2, z - (a.z + b.z) / 2) < 4.5)) ceiling = Math.min(ceiling, cross.roof);
     }
     for (const route of this.world.network?.routes ?? [this.world]) {
     const sample = route.road.nearest(x, z);
@@ -289,9 +306,9 @@ export class DrivingSurface {
   private refreshServices(): void {
     if (this.sites === this.world.services) return;
     this.sites = this.world.services;
-    this.access = this.sites.flatMap(site => site.ground.access);
+    this.access = this.sites.flatMap(site => [...site.ground.access, ...site.ground.crossover?.access ?? []]);
     this.accessIndex = new RoadIndex(this.access);
-    this.barriers = this.sites.flatMap(site => site.ground.barriers);
+    this.barriers = this.sites.flatMap(site => [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]);
     this.barrierIndex = new RoadIndex(this.barriers);
   }
 
@@ -314,8 +331,8 @@ export class DrivingSurface {
       const { a, b } = this.barriers[index], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
       if (length < 1e-8) continue;
       const t = ((body.x - a.x) * dx + (body.z - a.z) * dz) / (length * length);
-      const height = a.y + (b.y - a.y) * Math.max(0, Math.min(1, t));
-      if (feet + 1.75 < height || feet > height + 1.5) continue;
+      const floor = a.y + (b.y - a.y) * Math.max(0, Math.min(1, t));
+      if (feet + height < floor || feet > floor + (this.barriers[index].height ?? 1.5)) continue;
       hit = constrainObstacle(body, previousX, previousZ, radius, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2,
         heading: Math.atan2(dx, -dz), width: 0.16, front: length / 2, rear: -length / 2 }) || hit;
     }

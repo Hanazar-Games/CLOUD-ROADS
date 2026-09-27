@@ -7,6 +7,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from './ServiceSchedule';
 import { padPoint, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
 import { PARK_HALF_WIDTH, PARK_HALF_LENGTH } from './ServiceParking';
+import { serviceCrossover } from './ServiceCrossover';
 
 export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround }
 
@@ -60,7 +61,7 @@ export class ServicePlanner {
         }
         let chosen: RoadSample | undefined, score = Infinity, bucket = -1;
         for (const sample of samples) {
-          if (Math.abs(sample.distance - target) > 600 || Math.floor(sample.distance / 24) === bucket) continue;
+          if (Math.abs(sample.distance - target) > (this.profile.centers.length === 2 ? 360 : 600) || Math.floor(sample.distance / 24) === bucket) continue;
           if (sample.structure?.kind === 'tunnel' && sample.distance > sample.structure.start - 245 && sample.distance < sample.structure.end + 245) continue;
           bucket = Math.floor(sample.distance / 24);
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;
@@ -121,6 +122,17 @@ export class ServicePlanner {
           }
         }
         site = { id, sample, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };
+        if (this.profile.centers.length === 2) site.ground.crossover = serviceCrossover(this.seed, id, pads,
+          samples.filter(p => Math.abs(p.distance - target) <= SERVICE_SEARCH_RADIUS), this.profile.outerHalfWidth);
+        if (site.ground.crossover) {
+          const cross = site.ground.crossover, index = new RoadIndex(cross.access);
+          site.ground.barriers = barriers.filter(({ a, b }) => {
+            const nearest = index.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 4.5);
+            if (!nearest) return true;
+            const edge = cross.access[nearest.index], y = edge.a.y + (edge.b.y - edge.a.y) * nearest.t;
+            return Math.abs(y - (a.y + b.y) / 2) > 2;
+          });
+        }
         this.cache.set(id, site);
       }
       sites.push(site);

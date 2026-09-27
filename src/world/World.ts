@@ -18,10 +18,11 @@ import { roadFrame } from '../road/RoadFrame';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
 import { TunnelMesh } from '../tunnel/TunnelMesh';
 import { RoadFurniture } from '../road/RoadFurniture';
+import { RoadsideScenery } from '../road/RoadsideScenery';
 import type { ServiceArea } from '../service/ServicePlanner';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule';
 import { ServiceMesh } from '../service/ServiceMesh';
-import { padPoint } from '../service/ServiceTerrain';
+import { padPoint, crossoverShelter } from '../service/ServiceTerrain';
 import { ParkedVehicles } from '../service/ParkedVehicles';
 import { RoadSigns } from '../road/RoadSigns';
 import type { Crossing } from '../road/Crossings';
@@ -52,6 +53,7 @@ export class World {
   readonly bridgeMesh: BridgeMesh;
   readonly tunnelMesh: TunnelMesh;
   readonly furniture: RoadFurniture;
+  readonly roadside: RoadsideScenery;
   readonly serviceMesh: ServiceMesh;
   readonly parkedVehicles: ParkedVehicles;
   readonly traffic: TrafficSystem;
@@ -92,6 +94,7 @@ export class World {
     this.bridgeMesh = new BridgeMesh(scene, options);
     this.tunnelMesh = new TunnelMesh(scene, seed, options);
     this.furniture = new RoadFurniture(scene, seed, options);
+    this.roadside = new RoadsideScenery(scene, seed, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.parkedVehicles = new ParkedVehicles(scene, seed);
     this.traffic = new TrafficSystem(seed, options);
@@ -106,9 +109,10 @@ export class World {
     for (const mesh of [this.tunnelMesh.portals, this.crossingMesh.tunnels.portals, this.crossingMesh.parts,
       this.bridgeMesh.piers, this.bridgeMesh.details, this.bridgeMesh.railings, this.furniture.rails, this.furniture.poles,
       this.serviceMesh.structures, this.serviceMesh.railings, this.serviceMesh.buildings,
-      this.serviceMesh.roofs, this.junctionMesh.parts]) seasonMaterial(mesh.material, this.season, 'structure');
+      this.serviceMesh.roofs, this.junctionMesh.parts, this.roadside.hardware, this.roadside.screens]) seasonMaterial(mesh.material, this.season, 'structure');
     for (const mesh of [this.serviceMesh.pavement, this.serviceMesh.markings, this.junctionMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
     seasonMaterial(this.serviceMesh.landscaping.material, this.season, 'foliage');
+    seasonMaterial(this.roadside.foliage.material, this.season, 'foliage');
   }
 
   setSeason(kind: Season): void { this.season.set(kind); this.chunks.vegetation.setSeason(this.season); }
@@ -164,6 +168,8 @@ export class World {
     this.crossingMesh.update(this.crossings, this.corridor, this.height, this.origin.x, this.origin.z, nearRoute);
     this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
+    this.roadside.update(this.renderSamples, this.renderBridges, this.renderTunnels, this.renderServices, this.corridor, this.height,
+      this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z);
     this.parkedVehicles.update(this.renderServices, this.origin, camera.position);
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
@@ -312,6 +318,8 @@ export class World {
   }
 
   private tunnelShelter(x: number, y: number, z: number): number {
+    const service = this.renderServices.reduce((best, site) => Math.max(best, crossoverShelter(site.ground.crossover, x, y, z)), 0);
+    if (service) return service;
     const sample = this.roadSample;
     if (!sample) return 0;
     const span = this.tunnels.find(tunnel => sample.distance >= tunnel.start.distance && sample.distance <= tunnel.end.distance);
@@ -427,6 +435,7 @@ export class World {
     for (const mesh of this.extraRoads.values()) mesh.dispose(); this.extraRoads.clear();
     this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
     this.tunnelMesh.dispose(); this.furniture.dispose();
+    this.roadside.dispose();
     this.serviceMesh.dispose(); this.parkedVehicles.dispose(); this.scout = undefined;
     this.trafficVehicles.dispose(); this.traffic.clear();
     this.signs.dispose();

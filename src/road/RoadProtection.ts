@@ -10,6 +10,11 @@ interface ProtectionContext {
   services: readonly { start: number; end: number }[];
 }
 
+export function hasBridgeScreen(seed: string, sample: RoadSample, options: Readonly<WorldOptions>): boolean {
+  return options.roadType !== 'mountain' && sample.opening === undefined
+    && hashSeed(`${seed}:screen:${sample.routeId ?? ''}:${Math.floor(sample.distance / 384)}`) % 3 === 0;
+}
+
 export function hasRoadBarrier(context: ProtectionContext, sample: RoadSample, side: number): boolean {
   if (sample.opening === 0 || sample.opening === side) return false;
   const distance = sample.distance;

@@ -1,0 +1,28 @@
+import { expect, it } from 'vitest';
+import { Scene } from 'three';
+import { RoadsideScenery } from '../src/road/RoadsideScenery';
+import { RoadGenerator } from '../src/road/RoadGenerator';
+import { RoadSegment } from '../src/road/RoadSegment';
+import { RoadCorridor } from '../src/road/RoadCorridor';
+import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
+import { BridgeDetector } from '../src/bridge/BridgeDetector';
+
+it('grounds roadside rows and utilities, restricts screens to bridges, and releases all resources', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'avenue' as const }, terrain = { sample: () => 100 };
+  const start = new RoadGenerator('scenery', terrain).start; start.heading = 0; start.position = { x: 0, y: 100, z: 0 };
+  const segment = new RoadSegment(start, 0, 0, 6000), samples = Array.from({ length: 3001 }, (_, i) => segment.sample(i / 3000));
+  const scene = new Scene(), mesh = new RoadsideScenery(scene, 'scenery', options), corridor = RoadCorridor.fromSamples(samples, [], options);
+  mesh.update(samples, [], [], [], corridor, terrain, 1, 0, 0, true);
+  expect(mesh.hardware.count).toBeGreaterThan(500); expect(mesh.foliage.count).toBeGreaterThan(200);
+  expect(mesh.wires.geometry.getAttribute('position').count).toBeGreaterThan(100); expect(mesh.screens.count).toBe(0);
+  const buffers = mesh.hardware.instanceMatrix.array.slice();
+  mesh.update(samples, [], [], [], corridor, terrain, 1, 5120, -5120, true);
+  expect(mesh.hardware.instanceMatrix.array).toEqual(buffers);
+  const bridges = new BridgeDetector({ sample: () => 0 }, options).detect(samples);
+  mesh.update(samples, bridges, [], [], corridor, terrain, 2, 0, 0, true);
+  expect(mesh.screens.count).toBeGreaterThan(0); expect(mesh.foliage.count).toBe(0);
+  expect(mesh.wires.geometry.getAttribute('position').count).toBe(0);
+  mesh.update([], [], [], [], corridor, terrain, 3, 0, 0, true);
+  expect(mesh.screens.count).toBe(0); expect(mesh.hardware.count).toBe(0);
+  mesh.dispose(); expect(scene.children).toHaveLength(0);
+});

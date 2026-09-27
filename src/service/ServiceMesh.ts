@@ -1,6 +1,6 @@
 import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector2, type Scene } from 'three';
 import type { ServiceArea } from './ServicePlanner';
-import { padPoint, type ServicePad, type ServicePoint } from './ServiceTerrain';
+import { padPoint, type ServicePad, type ServicePoint, type ServiceCrossover } from './ServiceTerrain';
 import type { WorldOptions } from '../world/WorldOptions';
 import type { RoadTerrain } from '../road/RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
@@ -32,7 +32,7 @@ export class ServiceMesh {
   readonly roofs = new InstancedMesh(roofGeometry(), new MeshStandardMaterial({ roughness: 0.7, metalness: 0.2 }), 64);
   readonly landscaping = new InstancedMesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ roughness: 1, flatShading: true }), 512);
   private readonly batches = [this.buildings, this.windows, this.markings, this.lights, this.roofs, this.landscaping, this.structures, this.railings];
-  readonly lampPositions: ServicePoint[] = [];
+  readonly lampPositions: (ServicePoint & { covered?: boolean })[] = [];
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
   private version = -1;
@@ -76,8 +76,12 @@ export class ServiceMesh {
             this.edge(this.structures, a, b, 7.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx / 3.5 + (a.slopeZ + b.slopeZ) / 2 * nz / 3.5);
             if (Math.floor(a.z / 32) !== Math.floor(b.z / 32)) this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
           }
+          if (!insidePad) for (const side of [-1, 1]) this.edge(this.markings,
+            { x: a.x + nx * side * 0.91, y: a.y + ay * side * 0.91, z: a.z + nz * side * 0.91 },
+            { x: b.x + nx * side * 0.91, y: b.y + by * side * 0.91, z: b.z + nz * side * 0.91 }, 0.14, 0.018, 0.04);
         }
-        for (const { a, b } of site.ground.barriers) {
+        if (site.ground.crossover) this.crossover(site.ground.crossover, site.ground.pads[0], data, vertex);
+        for (const { a, b } of [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]) {
           for (const height of [0.45, 0.95, 1.4]) this.edge(this.railings, a, b, 0.14, 0.14, height);
           const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 4));
           for (let i = 0; i <= count; i++) {
@@ -105,6 +109,44 @@ export class ServiceMesh {
     }
   }
 
+  private crossover(cross: ServiceCrossover, pad: ServicePad, data: number[], vertex: (p: ServicePoint, lift?: number) => Point): void {
+    const points = [cross.access[0].a, ...cross.access.map(e => e.b)];
+    const rims = points.map((p, i) => {
+      const a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)], length = Math.hypot(b.x - a.x, b.z - a.z);
+      return [-1, 1].map(side => ({ x: p.x + (a.z - b.z) / length * 3.5 * side, y: p.y, z: p.z + (b.x - a.x) / length * 3.5 * side }));
+    });
+    for (const [i, { a, b }] of cross.access.entries()) {
+      quad(data, vertex(rims[i][0], 0.015), vertex(rims[i][1], 0.015), vertex(rims[i + 1][0], 0.015), vertex(rims[i + 1][1], 0.015));
+      const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz), nx = -dz / length, nz = dx / length;
+      const shift = (p: ServicePoint, x: number) => ({ x: p.x + nx * x, y: p.y, z: p.z + nz * x });
+      this.edge(this.structures, a, b, 8.2, 1.2, -0.65);
+      for (const side of [-1, 1]) {
+        this.edge(this.markings, shift(a, side * 3.2), shift(b, side * 3.2), 0.15, 0.02, 0.04);
+        this.edge(this.markings, shift(a, side * 0.12), shift(b, side * 0.12), 0.1, 0.02, 0.04, 0, 0xf0ca71);
+        if (i % 12 === 6) {
+          const p = shift(a, side * 1.65), end = { x: p.x + dx * side * 0.75, y: p.y + (b.y - a.y) * side * 0.75, z: p.z + dz * side * 0.75 };
+          this.edge(this.markings, p, end, 0.17, 0.02, 0.045);
+          for (const wing of [-1, 1]) this.edge(this.markings,
+            { x: end.x - dx * side * 0.3 + nx * wing * 0.55, y: end.y - (b.y - a.y) * side * 0.3, z: end.z - dz * side * 0.3 + nz * wing * 0.55 }, end, 0.17, 0.02, 0.045);
+        }
+        if (cross.kind === 'under') {
+          const covered = Math.abs(a.y - cross.deck) < 0.01 && Math.abs(b.y - cross.deck) < 0.01;
+          const top = covered ? cross.roof! : Math.min(cross.roof!, Math.max(this.terrain.sample(a.x, a.z), this.terrain.sample(b.x, b.z)) + 0.3);
+          const height = Math.max(0, top - Math.min(a.y, b.y));
+          if (height > 0.4) this.edge(this.structures, shift(a, side * 4.3), shift(b, side * 4.3), 0.65, height, height / 2);
+        }
+      }
+      if (cross.roof !== undefined && Math.abs(a.y - cross.deck) < 0.01 && Math.abs(b.y - cross.deck) < 0.01) {
+        this.edge(this.structures, { ...a, y: cross.roof }, { ...b, y: cross.roof }, 9.3, 1.4, 0.7);
+        if (i % 6 === 0) {
+          this.edge(this.lights, { ...a, y: cross.roof }, { ...b, y: cross.roof }, 0.22, 0.06, -0.05);
+          this.lampPositions.push({ x: (a.x + b.x) / 2, y: cross.roof - 0.25, z: (a.z + b.z) / 2, covered: true });
+        }
+      }
+    }
+    for (const p of cross.supports) if (p.y - this.terrain.sample(p.x, p.z) > 5) this.column({ ...pad, ...p, heading: 0, grade: 0 }, 0, 0, -1.25);
+  }
+
   private column(pad: ServicePad, x: number, along: number, top: number): void {
     const p = padPoint(pad, x, along, top), gap = p.y - this.terrain.sample(p.x, p.z), width = gap > 100 ? 5 : 3;
     let bottom = Math.min(this.terrain.sample(p.x, p.z), p.y - 1);
@@ -115,13 +157,13 @@ export class ServiceMesh {
     this.box(this.structures, pad, x, along, top - height / 2 + 1, width, height - 2, width, 0xffffff);
   }
 
-  private edge(mesh: InstancedMesh, a: ServicePoint, b: ServicePoint, width: number, height: number, lift: number, crossSlope = 0): void {
+  private edge(mesh: InstancedMesh, a: ServicePoint, b: ServicePoint, width: number, height: number, lift: number, crossSlope = 0, color = 0xffffff): void {
     if (mesh.count >= mesh.instanceMatrix.count) throw new Error('Service structure capacity exceeded');
     const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, length = Math.hypot(dx, dz), overlap = 1 + 0.03 / length;
     this.matrix.set(-dz / length * width, 0, -dx * overlap, (a.x + b.x) / 2 - this.anchorX,
       crossSlope * width, height, -dy * overlap, (a.y + b.y) / 2 + lift,
       dx / length * width, 0, -dz * overlap, (a.z + b.z) / 2 - this.anchorZ, 0, 0, 0, 1);
-    mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(0xffffff));
+    mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(color));
   }
 
   private build(pad: ServicePad, architecture: ServiceArchitecture): void {
@@ -278,13 +320,20 @@ export class ServiceMesh {
       for (const a of [-1, 1]) stripe(slot.x, slot.along + a * l / 2, w, 0.11, colors[slot.zone]);
       if (slot.zone === 0) box(slot.x + (slot.x < -48 ? -2.3 : 2.3), slot.along, 0.08, 0.18, 0.16, 1.7, 0xb6aa77);
     }
-    for (const x of [-74, -48, -26, 30, 55, 76]) for (const a of [-70, -35, 0, 65, 98]) {
+    for (const x of [-48, -26, 30, 55, 76]) for (const a of [-70, -35, 0, 65, 98]) {
       if (x > 20 && a > 0 && a < 90) continue;
       stripe(x, a, 0.17, 4);
       const tip = padPoint(pad, x * pad.side, a + 2);
       for (const side of [-1, 1]) this.edge(this.markings, padPoint(pad, (x + side) * pad.side, a + 0.5), tip, 0.17, 0.015, 0.035);
     }
     for (let a = -102; a <= 102; a += 8) stripe(-74, a, 0.12, 3, 0xf0ca71);
+    for (const side of [-1, 1]) for (const a of [-65, 0, 65]) {
+      const x = -74 + side * 1.7, direction = side * pad.side;
+      stripe(x, a, 0.18, 3.5);
+      for (const wing of [-1, 1]) this.edge(this.markings, padPoint(pad, (x + wing * 0.65) * pad.side, a + direction * 0.4),
+        padPoint(pad, x * pad.side, a + direction * 1.75), 0.18, 0.015, 0.04);
+    }
+    for (const a of [-85, 85]) for (let x = -77; x < -70; x += 1) stripe(x, a, 0.5, 3.2);
     for (const x of [-69, -66, -63, -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0]) stripe(x, 94, 1.25, 6);
     for (let a = 4; a < 88; a += 4) stripe(-4, a, 0.18, 2);
     for (const x of [-70, -27, 32, 76]) for (const a of [-104, 102]) {

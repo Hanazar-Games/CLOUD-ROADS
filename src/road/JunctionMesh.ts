@@ -43,6 +43,10 @@ export class JunctionMesh {
           }
           for (const height of [6.4, 7]) this.box(this.parts, approach, 0, height, width * 2 + 4, 0.18, 0.26, 0x78868b);
           for (let offset = -width; offset <= width; offset += 2) this.box(this.parts, approach, offset, 6.7, 0.12, 0.7, 0.16, 0x78868b);
+          for (let offset = -width; offset < width; offset += 2) {
+            this.box(this.parts, approach, offset + 1, 6.7, Math.hypot(2, 0.6), 0.09, 0.12, 0x8b999d, 0, 0, Math.atan2(0.6, 2) * (Math.floor(offset / 2) % 2 ? -1 : 1));
+            this.box(this.parts, approach, offset + 1, 6.36, 1.9, 0.08, 0.72, 0x586b72, 0, 0.55);
+          }
         }
         for (const ahead of [160, 80]) {
           const sample = at(ramp.sample.distance - ahead);
@@ -95,6 +99,11 @@ export class JunctionMesh {
               this.box(this.markings, sample, center, 0.035, this.profile.width, 0.015, 0.1, 0x7a7c77);
               this.box(this.markings, sample, center, 0.035, this.profile.width, 0.015, 0.06, 0xb2b4ad, 0, 0.16);
             }
+            for (const side of [-1, 1]) {
+              this.box(this.parts, sample, side * (width + 0.2), -0.45, 0.34, 0.7, 0.4, 0x536466);
+              this.box(this.parts, sample, side * (width + 0.45), -0.7, 0.62, 0.18, 0.42, 0x536466);
+              this.box(this.parts, sample, side * (width + 0.23), 0.9, 0.22, 0.34, 0.1, 0xe3d7b2);
+            }
           }
         }
       }
@@ -107,12 +116,19 @@ export class JunctionMesh {
     for (const mesh of [this.parts, this.markings]) { mesh.position.set(this.x - originX, 0, this.z - originZ); mesh.visible = mesh.count > 0; }
   }
 
-  private box(mesh: InstancedMesh, sample: RoadSample, offset: number, height: number, width: number, tall: number, length: number, color = 0xeeeedd, turn = 0, along = 0): void {
+  private box(mesh: InstancedMesh, sample: RoadSample, offset: number, height: number, width: number, tall: number, length: number, color = 0xeeeedd, turn = 0, along = 0, roll = 0): void {
     if (mesh.count >= mesh.instanceMatrix.count) throw new Error('Junction detail capacity exceeded');
     const { right: r, normal: n } = roadFrame(sample), t = sample.tangent, p = sample.position, cos = Math.cos(turn), sin = Math.sin(turn);
     this.matrix.set((r.x * cos - t.x * sin) * width, n.x * tall, -(t.x * cos + r.x * sin) * length, p.x - this.x + r.x * offset + n.x * height + t.x * along,
       (r.y * cos - t.y * sin) * width, n.y * tall, -(t.y * cos + r.y * sin) * length, p.y + r.y * offset + n.y * height + t.y * along,
       (r.z * cos - t.z * sin) * width, n.z * tall, -(t.z * cos + r.z * sin) * length, p.z - this.z + r.z * offset + n.z * height + t.z * along, 0, 0, 0, 1);
+    if (roll) {
+      const c = Math.cos(roll), s = Math.sin(roll), e = this.matrix.elements;
+      for (let row = 0; row < 3; row++) {
+        const x = e[row] / width, y = e[row + 4] / tall;
+        e[row] = (x * c + y * s) * width; e[row + 4] = (y * c - x * s) * tall;
+      }
+    }
     mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(color));
   }
 

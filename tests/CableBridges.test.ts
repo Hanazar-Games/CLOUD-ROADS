@@ -77,6 +77,26 @@ it('finds the central crossing when an earlier loaded fragment belongs to the sa
   mesh.dispose();
 });
 
+it('recognizes qualifying straight bridges without a structure plan and scales pylons with valley depth', () => {
+  const widths: number[] = [];
+  for (const height of [220, 600]) {
+    const { mesh, samples, update } = fixture(height);
+    for (const sample of samples) sample.structure = undefined;
+    update();
+    expect(mesh.cableBridges.spanCount).toBeGreaterThan(0);
+    const matrix = new Matrix4(); mesh.cableBridges.towers.getMatrixAt(0, matrix);
+    widths.push(new Vector3().setFromMatrixColumn(matrix, 0).length());
+    matrix.premultiply(mesh.cableBridges.towers.matrixWorld);
+    for (const x of [-0.49, 0.49]) for (const z of [-0.49, 0.49]) {
+      const p = new Vector3(x, -0.5, z).applyMatrix4(matrix); p.y += 0.04;
+      const ray = new Raycaster(p, new Vector3(0, -1, 0), 0, 0.1);
+      expect(ray.intersectObjects([mesh.piers, mesh.parapets]).length).toBeGreaterThan(0);
+    }
+    mesh.dispose();
+  }
+  expect(widths[1]).toBeGreaterThan(widths[0] * 1.2);
+});
+
 it('builds land-facing bridgehead wing walls only at physical bridge ends', () => {
   const terrain = { sample: (_x: number, z: number) => 200 - 120 * Math.sin(Math.PI * Math.max(0, Math.min(1, (-z - 100) / 600))) ** 2 };
   const start = new RoadGenerator('head', { sample: () => 200 }).start; start.position = { x: 0, y: 200, z: 0 };

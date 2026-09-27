@@ -7,11 +7,16 @@ import { roadProfile } from '../road/RoadProfile';
 import type { WorldOptions } from '../world/WorldOptions';
 import { bridgeDeckDepth, BRIDGE_SPACING } from './BridgeProfile';
 
-interface CableSpan { routeId?: string; start: number; end: number; towers: RoadSample[]; at: (distance: number) => RoadSample }
+interface CableSpan { routeId?: string; start: number; end: number; towers: RoadSample[]; depths: number[]; at: (distance: number) => RoadSample }
+export const cablePylonWidth = (depth: number, reach: number): number => 2.2 + reach / 120 + Math.sqrt(depth) * 0.28;
 
 export function cableSpans(spans: readonly BridgeSpan[], terrain: RoadTerrain, corridor: RoadCorridor, options: Readonly<WorldOptions>): CableSpan[] {
   const result: CableSpan[] = [], visited = new Set<string>(), profile = roadProfile(options);
-  for (const span of spans) for (const anchor of span.samples) {
+  for (const span of spans) for (const source of span.samples) {
+    const block = Math.floor(source.distance / 768) * 768;
+    const inferred = !source.structure && block + 192 >= span.start.distance + 24 && block + 576 <= span.end.distance - 24;
+    const anchor = inferred ? { ...source, structure: { kind: 'bridge' as const, start: block, end: block + 768,
+      finish: block + 768, grade: source.grade, heading: source.heading } } : source;
     const plan = anchor.structure;
     if (plan?.kind !== 'bridge' || Math.abs(plan.grade) > 0.01 || plan.end - plan.start < 480
       || anchor.distance < plan.start || anchor.distance > plan.end || Math.abs(anchor.curvature) > 1e-8
@@ -33,10 +38,12 @@ export function cableSpans(spans: readonly BridgeSpan[], terrain: RoadTerrain, c
     if (towers.some(s => corridor.crossesBelow(s, profile.outerHalfWidth + 20)
       || profile.centers.some(offset => s.position.y - terrain.sample(s.position.x + cos * offset, s.position.z + sin * offset) <= 200))) continue;
     if (span.samples.some(s => s.distance >= start && s.distance <= end && (Math.abs(s.curvature) > 1e-8 || Math.abs(s.bank) > 1e-8
-      || Math.abs(s.grade - plan.grade) > 1e-8 || Math.abs(s.heading - plan.heading) > 1e-8))) continue;
+      || Math.abs(s.grade - plan.grade) > 1e-8 || Math.abs(s.heading - plan.heading) > 1e-8
+      || Math.hypot(s.position.x - at(s.distance).position.x, s.position.y - at(s.distance).position.y, s.position.z - at(s.distance).position.z) > 0.02))) continue;
     if (Array.from({ length: 37 }, (_, i) => at(start + length * i / 36)).some(s => profile.centers.some(offset =>
       s.position.y - terrain.sample(s.position.x + cos * offset, s.position.z + sin * offset) < 8))) continue;
-    result.push({ routeId: anchor.routeId, start, end, towers, at });
+    const depths = towers.map(s => Math.max(...profile.centers.map(offset => s.position.y - terrain.sample(s.position.x + cos * offset, s.position.z + sin * offset))));
+    result.push({ routeId: anchor.routeId, start, end, towers, depths, at });
   }
   return result;
 }
@@ -60,11 +67,11 @@ export class CableBridgeMesh {
 
   rebuild(spans: readonly CableSpan[], anchorX: number, anchorZ: number): void {
     this.anchorX = anchorX; this.anchorZ = anchorZ; this.towers.count = this.stays.count = 0; this.spanCount = spans.length;
-    for (const span of spans) for (const tower of span.towers) {
+    for (const span of spans) for (const [index, tower] of span.towers.entries()) {
       const width = this.profile.outerHalfWidth * 2 + 0.8, reach = (span.end - span.start) / 4, height = reach * 0.42;
       const cos = Math.cos(tower.heading), sin = Math.sin(tower.heading);
       const point = (sample: RoadSample, offset: number, y: number) => new Vector3(sample.position.x + cos * offset, sample.position.y + y, sample.position.z + sin * offset);
-      const column = 2.2 + reach / 120, lateral = width / 2 + column / 2 + 0.3;
+      const column = cablePylonWidth(span.depths[index], reach), lateral = width / 2 + column / 2 + 0.3;
       for (const side of [-1, 1]) {
         this.beam(this.towers, point(tower, side * lateral, -bridgeDeckDepth(this.options) - 0.51), point(tower, side * lateral, height), column, column * 1.15, tower.heading);
         for (const direction of [-1, 1]) for (let i = 1; i <= 12; i++) {

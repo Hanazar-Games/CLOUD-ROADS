@@ -23,7 +23,9 @@ function fixture(height: number, grade = 0, heading = 0) {
 
 it.each([150, 150.01, 350])('adds arch bays only above 150 m and keeps solid piers on the same stations (%s)', height => {
   const { mesh, scene, update } = fixture(height); update();
-  expect(mesh.pierCount).toBe(48); expect(mesh.columns.count).toBe(48);
+  if (height <= 200) expect(mesh.pierCount).toBe(48);
+  else { expect(mesh.cableBridges.spanCount).toBeGreaterThan(0); expect(mesh.pierCount).toBeLessThan(48); }
+  expect(mesh.columns.count).toBe(mesh.pierCount);
   expect(mesh.archBridges.bayCount > 0).toBe(height > 150);
   for (const x of [-3, 0, 3]) {
     const ray = new Raycaster(new Vector3(x, 503, -10), new Vector3(0, 0, -1), 0, 2250);
@@ -74,7 +76,7 @@ it('keeps interior arches stable when streaming and rebases without rebuilding i
 });
 
 it('leaves lower road clearance open without moving adjacent pier stations', () => {
-  const { mesh, scene, terrain, update } = fixture(350), { spans, corridor: main } = update();
+  const { mesh, scene, terrain, update } = fixture(180), { spans, corridor: main } = update();
   const point = { x: -100, y: 470, z: -384, nx: 0, ny: 1, nz: 0, ground: 0, routeId: 'rail' };
   const corridor = new RoadCorridor([...main.edges, { a: point, b: { ...point, x: 100 } }]);
   mesh.update(spans, corridor, terrain, 2, 0, 0, true); scene.updateMatrixWorld(true);

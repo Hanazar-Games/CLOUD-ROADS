@@ -66,9 +66,13 @@ export class RoadSigns {
       }
       for (let i = 1; i < samples.length; i++) {
         const sample = samples[i], previous = samples[i - 1];
-        if (tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance) || services.some(site => sample.distance >= site.start && sample.distance <= site.end)) continue;
+        if (sample.routeId !== previous.routeId || sample.opening !== undefined
+          || tunnels.some(span => span.start.routeId === sample.routeId && sample.distance >= span.start.distance && sample.distance <= span.end.distance)
+          || services.some(site => site.sample.routeId === sample.routeId && sample.distance >= site.start && sample.distance <= site.end)) continue;
         for (const side of [-1, 1]) {
           const point = this.position(sample, side * (this.profile.outerHalfWidth + 2), 2.4), heading = sample.heading + (side < 0 ? Math.PI : 0);
+          if (this.options.roadType !== 'mountain' && Math.floor(sample.distance / 768) !== Math.floor(previous.distance / 768))
+            this.add({ ...point, y: point.y + 1 }, heading, 3.5, 1.4, signLabels.indexOf(['KEEP\nDISTANCE', 'KEEP\nRIGHT', 'CROSSWIND'][Math.floor(sample.distance / 768) % 3]), 3.6);
           if (Math.floor(sample.distance / 1000) !== Math.floor(previous.distance / 1000)) {
             this.add(point, heading, 1.35, 0.6, 8, 2.6);
             const digits = String(Math.floor(sample.distance / 1000));
@@ -98,6 +102,11 @@ export class RoadSigns {
       for (const site of services) {
         for (const pad of site.ground.pads) {
           const side = pad.side, heading = pad.heading + (side < 0 ? Math.PI : 0);
+          if (site.ground.crossover) {
+            this.add(padPoint(pad, -side * (pad.halfWidth - 0.5), 68, 3.3), pad.heading, 4, 1.6,
+              signLabels.indexOf(site.ground.crossover.kind === 'over' ? 'RETURN\nOVERPASS' : 'RETURN\nUNDERPASS'), 3.5);
+            this.add(padPoint(pad, -side * (pad.halfWidth - 0.5), 68, 1.8), pad.heading, 2.5, 1, signLabels.indexOf('TWO WAY\n20'));
+          }
           this.add(padPoint(pad, -side * (pad.halfWidth - 1), -side * 90, 4), heading, 4, 2, 1, 4.2);
           this.add(padPoint(pad, -side * 10, -12, 2.2), heading, 1.2, 1.2, 2, 2.4);
           this.add(padPoint(pad, -side * 52, -64, 4.58), pad.heading - side * Math.PI / 2, 2.5, 0.8, signLabels.indexOf('EV'));

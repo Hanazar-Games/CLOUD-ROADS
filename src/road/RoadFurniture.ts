@@ -127,12 +127,13 @@ export class RoadFurniture {
     this.glow.pools.material.opacity = this.enabled ? night * 0.24 : 0;
     const x = camera.position.x + originX, z = camera.position.z + originZ;
     const nearest: { point: TunnelLamp; distance: number; intensity: number }[] = [];
-    const collect = (points: readonly TunnelLamp[], intensity: number) => {
-      if (!intensity) return;
+    const collect = (points: readonly (TunnelLamp & { covered?: boolean })[], intensity: number) => {
       for (const point of points) {
+        const power = point.covered ? 85 : intensity;
+        if (!power) continue;
         const distance = (point.x - x) ** 2 + (point.y - camera.position.y) ** 2 + (point.z - z) ** 2;
         if (distance > 100 ** 2 || (nearest.length === this.localLights.length && distance >= nearest.at(-1)!.distance)) continue;
-        nearest.push({ point, distance, intensity });
+        nearest.push({ point, distance, intensity: power });
         nearest.sort((a, b) => a.distance - b.distance);
         if (nearest.length > this.localLights.length) nearest.pop();
       }
