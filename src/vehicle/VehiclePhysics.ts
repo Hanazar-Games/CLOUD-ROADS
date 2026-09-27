@@ -3,6 +3,7 @@ import { Transmission } from './Transmission';
 export interface VehicleInput { throttle: number; steer: number; handbrake: boolean }
 export interface SurfaceContact { height: number; grip: number }
 export type SurfaceSampler = (x: number, z: number) => SurfaceContact;
+export type MotionConstraint = (car: VehiclePhysics, previousX: number, previousZ: number, dt: number) => boolean;
 export interface WheelState { height: number; compression: number; grounded: boolean }
 export interface TrailerState { x: number; y: number; z: number; heading: number; pitch: number; roll: number; wheels: WheelState[] }
 export interface VehicleBody { x: number; y: number; z: number; heading: number; pitch: number; roll: number; front: number; rear: number }
@@ -17,6 +18,7 @@ export class VehiclePhysics {
   readonly transmission: Transmission;
   x = 0; y = 0; z = 0; heading = 0;
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
+  lateralSpeed = 0;
   braking = false; parked = true; jackknifed = false;
   suspension: Suspension = 3;
   damping = 1;
@@ -32,9 +34,8 @@ export class VehiclePhysics {
   readonly wheelbase: number;
   private readonly rearAxle: number;
   private previousHeading = 0;
-  private previousPose = { y: 0, pitch: 0, roll: 0, wheelAngle: 0 };
-  private previousWheels: WheelState[] = [];
-  private previousTrailer?: TrailerState;
+  private previousPose = { y: 0, pitch: 0, roll: 0 };
+  private previousTrailer?: Omit<TrailerState, 'wheels'>;
 
   constructor(readonly kind: VehicleKind = 'roadster') {
     this.profile = vehicleProfiles[kind]; this.wheels = this.profile.wheels.map(wheel);
@@ -48,6 +49,7 @@ export class VehiclePhysics {
   }
 
   get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
+  get motionSpeed(): number { return Math.hypot(this.speed, this.lateralSpeed); }
   get maxSpeed(): number { return this.speedLimit ?? this.profile.maxSpeed; }
   setSpeedLimit(kmh?: number): void {
     if (kmh !== undefined && !Number.isFinite(kmh)) return;
@@ -55,7 +57,7 @@ export class VehiclePhysics {
     this.transmission.maxSpeed = this.maxSpeed;
   }
   park(): void {
-    this.speed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
+    this.speed = this.lateralSpeed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.transmission.reset();
     this.parked = true; this.braking = false; this.saveMotion();
   }
@@ -72,7 +74,7 @@ export class VehiclePhysics {
 
   reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeading = heading): void {
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
-    this.speed = this.steering = this.pitch = this.roll = this.wheelAngle = 0;
+    this.speed = this.lateralSpeed = this.steering = this.pitch = this.roll = this.wheelAngle = 0;
     this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.parked = true; this.braking = this.jackknifed = false;
     this.transmission.reset();
@@ -87,24 +89,47 @@ export class VehiclePhysics {
     this.saveMotion();
   }
 
-  update(dt: number, input: VehicleInput, surface: SurfaceSampler): void {
-    if (!Number.isFinite(dt) || dt <= 0) return;
-    this.saveMotion(); this.accumulator += Math.min(dt, 0.1);
+  update(dt: number, input: VehicleInput, surface: SurfaceSampler, constrain?: MotionConstraint): boolean {
+    if (!Number.isFinite(dt) || dt <= 0) return false;
+    let hit = false;
+    if (!constrain) this.saveMotion();
+    this.accumulator += Math.min(dt, 0.1);
     while (this.accumulator + 1e-10 >= STEP) {
+      const x = this.x, z = this.z, trip = this.trip;
+      if (constrain) this.saveMotion();
       this.step(input, surface); this.accumulator = Math.max(0, this.accumulator - STEP);
+      if (constrain?.(this, x, z, STEP)) {
+        hit = true;
+        this.trip = trip + Math.min(this.trip - trip, Math.hypot(this.x - x, this.z - z));
+      }
     }
+    return hit;
   }
 
-  restoreMotion(x: number, z: number): void {
-    this.x = x; this.z = z; this.heading = this.previousHeading;
-    Object.assign(this, this.previousPose);
-    this.previousWheels.forEach((wheel, i) => Object.assign(this.wheels[i], wheel));
-    if (this.trailer && this.previousTrailer) Object.assign(this.trailer, this.previousTrailer, { wheels: this.previousTrailer.wheels.map(w => ({ ...w })) });
-    this.speed = this.vy = this.pitchVelocity = this.rollVelocity = 0;
+  restoreHeading(surface: SurfaceSampler): void {
+    const vx = Math.sin(this.heading) * this.speed + Math.cos(this.heading) * this.lateralSpeed;
+    const vz = -Math.cos(this.heading) * this.speed + Math.sin(this.heading) * this.lateralSpeed;
+    this.heading = this.previousHeading;
+    this.speed = vx * Math.sin(this.heading) - vz * Math.cos(this.heading);
+    this.lateralSpeed = vx * Math.cos(this.heading) + vz * Math.sin(this.heading);
+    if (this.trailer && this.previousTrailer) { this.trailer.heading = this.previousTrailer.heading; Object.assign(this.trailer, this.hitch()); }
+    this.syncWheels(this.contacts(surface)); this.updateTrailer(0, surface);
   }
 
-  slideMotion(x: number, z: number, heading: number, speed: number, surface: SurfaceSampler): void {
-    this.x = x; this.z = z; this.heading = heading; this.speed = speed;
+  slideMotion(dx: number, dz: number, nx: number, nz: number, dt: number, surface: SurfaceSampler): void {
+    const sin = Math.sin(this.heading), cos = Math.cos(this.heading);
+    let vx = sin * this.speed + cos * this.lateralSpeed, vz = -cos * this.speed + sin * this.lateralSpeed;
+    const inward = Math.min(0, vx * nx + vz * nz);
+    vx -= nx * inward; vz -= nz * inward;
+    const length = Math.hypot(vx, vz), friction = Math.max(0, 1 - Math.abs(inward) * 0.04 / Math.max(0.01, length));
+    vx *= friction; vz *= friction;
+    if (inward < 0 && length > 0.1) {
+      const target = Math.atan2(vx * Math.sign(this.speed || 1), -vz * Math.sign(this.speed || 1));
+      this.heading += clamp(angle(target - this.heading), -1.5 * dt, 1.5 * dt);
+    }
+    this.x += dx; this.z += dz;
+    this.speed = vx * Math.sin(this.heading) - vz * Math.cos(this.heading);
+    this.lateralSpeed = vx * Math.cos(this.heading) + vz * Math.sin(this.heading);
     this.syncWheels(this.contacts(surface)); this.updateTrailer(0, surface);
   }
 
@@ -119,9 +144,11 @@ export class VehiclePhysics {
 
   private saveMotion(): void {
     this.previousHeading = this.heading;
-    this.previousPose = { y: this.y, pitch: this.pitch, roll: this.roll, wheelAngle: this.wheelAngle };
-    this.previousWheels = this.wheels.map(w => ({ ...w }));
-    if (this.trailer) this.previousTrailer = { ...this.trailer, wheels: this.trailer.wheels.map(w => ({ ...w })) };
+    this.previousPose = { y: this.y, pitch: this.pitch, roll: this.roll };
+    if (this.trailer) {
+      const { x, y, z, heading, pitch, roll } = this.trailer;
+      this.previousTrailer = { x, y, z, heading, pitch, roll };
+    }
   }
 
   private contacts(surface: SurfaceSampler): SurfaceContact[] {
@@ -187,8 +214,10 @@ export class VehiclePhysics {
     const requestedYaw = this.speed * Math.tan(this.steering) / this.wheelbase;
     const yawRate = this.steeringAssist ? clamp(requestedYaw, -yawLimit, yawLimit) : requestedYaw * Math.min(1, availableGrip);
     this.heading += yawRate * STEP;
-    this.x += Math.sin(this.heading) * this.speed * STEP; this.z -= Math.cos(this.heading) * this.speed * STEP;
-    this.trip += Math.abs(this.speed) * STEP;
+    this.lateralSpeed = approach(this.lateralSpeed, 0, availableGrip * GRAVITY * STEP);
+    this.x += (Math.sin(this.heading) * this.speed + Math.cos(this.heading) * this.lateralSpeed) * STEP;
+    this.z += (-Math.cos(this.heading) * this.speed + Math.sin(this.heading) * this.lateralSpeed) * STEP;
+    this.trip += Math.hypot(this.speed, this.lateralSpeed) * STEP;
     this.wheelAngle = (this.wheelAngle + this.speed * STEP / config.radius) % (Math.PI * 2);
     let lift = -GRAVITY, pitchForce = 0, rollForce = 0;
     const next = this.contacts(surface);

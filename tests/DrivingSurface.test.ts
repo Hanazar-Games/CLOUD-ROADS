@@ -20,6 +20,106 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('blocks walking through the vehicle just exited while leaving its door reachable', () => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+    car.reset(1000, 0, 0, () => ({ height: 100, grip: 1 }));
+    surface.parkedVehicle = car;
+    const person = { x: 1000, y: 100, z: 0 };
+    expect(surface.constrainWalker(person, 1004, 0)).toBe(true);
+    expect(person.x).toBeCloseTo(1000 + car.profile.width / 2 + 0.42);
+    expect(surface.constrainWalker({ x: 1002, y: 100, z: 0 }, 1001.6, 0)).toBe(false);
+    expect(surface.constrainWalker({ x: 1000, y: 90, z: 0 }, 1004, 0)).toBe(false);
+  });
+
+  it('includes the thickness of elevated service rails in the nearby collision query', () => {
+    const scene = world();
+    scene.services = [{ id: 1, sample: scene.road.samples[0], start: 0, end: 100,
+      ground: { pads: [], access: [], elevated: true, barriers: [{
+        a: { x: 100, y: 100, z: -10 }, b: { x: 100, y: 100, z: 10 },
+      }] } }];
+    const surface = new DrivingSurface(scene), body = { x: 99.53, y: 100, z: 0 };
+    expect(surface.constrainWalker(body, 99, 0)).toBe(true);
+    expect(body.x).toBeCloseTo(99.5, 5);
+  });
+
+  it('blocks a car crossing a guardrail from the outside without snapping it through the rail', () => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+    const sample = scene.road.samples[100];
+    vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank: 0 }));
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+    car.reset(8, 0, 0, () => ({ height: 100, grip: 1 }));
+    car.x = 4;
+    expect(surface.constrain(car, 8, 0)).toBe(true);
+    expect(car.x - car.profile.width / 2).toBeGreaterThan(5.2);
+    vi.restoreAllMocks();
+  });
+
+  it.each([-1, 1])('matches a banked highway rail height on side %i and ignores traffic underneath', side => {
+    const scene = world(true), surface = new DrivingSurface(scene), car = new VehiclePhysics('truck5');
+    const sample = scene.road.samples[100], bank = 0.2;
+    vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank }));
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+    const before = side * 9.4, after = side * 12.9;
+    const plane = (x: number) => ({ height: 100 + Math.tan(bank) * x, grip: 1 });
+    car.reset(before, 0, 0, plane); car.x = after; car.y += Math.tan(bank) * (after - before);
+    expect(surface.constrain(car, before, 0)).toBe(true);
+    expect(Math.abs(car.x) + car.profile.width / 2).toBeLessThan(12.5);
+    car.reset(before, 0, 0, x => ({ ...plane(x), height: plane(x).height - 10 })); car.x = after;
+    expect(surface.constrain(car, before, 0)).toBe(false);
+    vi.restoreAllMocks();
+  });
+
+  it('resolves a glancing impact without snapping the body heading or losing the suspension pose', () => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+    const sample = scene.road.samples[100];
+    vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank: 0 }));
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+    car.reset(3.8, 0, 0.3, surface.sample); car.speed = 20; car.parked = false;
+    car.update(1 / 60, { throttle: 0, steer: 0, handbrake: false }, surface.sample);
+    const heading = car.heading, y = car.y, pitch = car.pitch, roll = car.roll;
+    expect(surface.constrain(car, 3.8, 0)).toBe(true);
+    expect(Math.abs(car.heading - heading)).toBeLessThan(0.04);
+    expect(car.speed).toBeGreaterThan(16);
+    expect(car.y).toBe(y); expect(car.pitch).toBe(pitch); expect(car.roll).toBe(roll);
+    vi.restoreAllMocks();
+  });
+
+  it('keeps high-speed rail contact identical at 20, 60 and 144 render frames per second', () => {
+    const results = [20, 60, 144].map(fps => {
+      const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
+      const sample = scene.road.samples[100];
+      vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank: 0 }));
+      scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+      car.reset(3.7, 0, 0.12, surface.sample); car.parked = false; car.speed = 30;
+      let hits = 0;
+      for (let i = 0; i < fps * 2; i++) {
+        if (car.update(1 / fps, { throttle: 0, steer: 0.1, handbrake: false }, surface.sample, surface.constrain)) hits++;
+        for (const body of car.bodies()) for (const along of [body.front, body.rear])
+          expect(Math.abs(body.x + Math.sin(body.heading) * along) + car.profile.width / 2).toBeLessThan(5.276);
+      }
+      expect(hits).toBeGreaterThan(0); expect(car.speed).toBeGreaterThan(20);
+      vi.restoreAllMocks(); return car;
+    });
+    for (const car of results.slice(1)) for (const field of ['x', 'y', 'z', 'speed', 'lateralSpeed', 'heading', 'trip'] as const)
+      expect(car[field]).toBeCloseTo(results[0][field], 7);
+  });
+
+  it('stops a head-on 400 km/h impact inside the bridge and allows reversing away', () => {
+    const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics('supercar');
+    const sample = scene.road.samples[100];
+    vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank: 0 }));
+    scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
+    car.reset(0, 0, Math.PI / 2, surface.sample); car.setSpeedLimit(400); car.speed = 400 / 3.6; car.parked = false;
+    expect(car.update(0.1, { throttle: 0, steer: 0, handbrake: false }, surface.sample, surface.constrain)).toBe(true);
+    expect(Math.abs(car.speed)).toBeLessThan(0.01);
+    expect(car.x + car.profile.chassisLength / 2).toBeLessThan(5.28);
+    expect(car.trip).toBeLessThan(4);
+    const stopped = car.x;
+    for (let i = 0; i < 120; i++) car.update(1 / 120, { throttle: -1, steer: 0, handbrake: false }, surface.sample, surface.constrain);
+    expect(car.x).toBeLessThan(stopped - 0.5); expect(car.speed).toBeLessThan(-1);
+    vi.restoreAllMocks();
+  });
+
   it('boards every parked vehicle beside its cab on a sloping service pad without boarding from another elevation', () => {
     const base = world();
     base.services = [{ id: 1, sample: base.road.samples[0], start: 0, end: 200,
@@ -105,7 +205,7 @@ describe('DrivingSurface', () => {
     const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
     scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
     const sample = scene.road.samples[300], { right } = roadFrame(sample);
-    car.reset(sample.position.x + right.x * 3.8, sample.position.z + right.z * 3.8, sample.heading + 0.12, surface.sample);
+    car.reset(sample.position.x + right.x * 4.25, sample.position.z + right.z * 4.25, sample.heading + 0.12, surface.sample);
     car.parked = false; car.speed = 18;
     const x = car.x, z = car.z;
     car.update(1 / 60, { throttle: 0, steer: 0, handbrake: false }, surface.sample);
@@ -135,8 +235,10 @@ describe('DrivingSurface', () => {
     const a = padPoint(pad, pad.halfWidth - 1, 0), b = padPoint(pad, pad.halfWidth + 1, 0);
     const body = { ...b };
     expect(surface.constrainWalker(body, a.x, a.z)).toBe(true);
-    const car = new VehiclePhysics(); car.x = b.x; car.y = b.y + 0.8; car.z = b.z; car.speed = 10;
-    expect(surface.constrain(car, a.x, a.z)).toBe(true); expect(car.speed).toBeLessThan(10);
+    const car = new VehiclePhysics(), approach = padPoint(pad, pad.halfWidth - 4, 0);
+    car.reset(approach.x, approach.z, pad.heading + Math.PI / 2, surface.sample);
+    car.x = b.x; car.z = b.z; car.speed = 10;
+    expect(surface.constrain(car, approach.x, approach.z)).toBe(true); expect(car.speed).toBeLessThan(10);
     const truck = new VehiclePhysics('truck5'), before = padPoint(pad, pad.halfWidth - 4, 0), after = padPoint(pad, pad.halfWidth - 1.5, 0);
     truck.reset(before.x, before.z, pad.heading + Math.PI / 2, surface.sample);
     truck.x = after.x; truck.z = after.z;

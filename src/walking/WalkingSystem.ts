@@ -5,6 +5,7 @@ import { DrivingSurface } from '../vehicle/DrivingSurface';
 import type { World } from '../world/World';
 import { WalkingPhysics } from './WalkingPhysics';
 import { padPoint } from '../service/ServiceTerrain';
+import type { VehiclePhysics } from '../vehicle/VehiclePhysics';
 
 export class WalkingSystem {
   readonly person = new WalkingPhysics();
@@ -18,12 +19,14 @@ export class WalkingSystem {
   private readonly speedLabel = element('walking-speed');
   private readonly statusLabel = element('walking-status');
 
-  constructor(private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World) {}
+  constructor(private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World,
+    private readonly getParkedVehicle: () => VehiclePhysics | undefined) {}
 
   start(position?: { x: number; y: number; z: number; heading: number }): boolean {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
     this.surface = new DrivingSurface(world);
+    this.surface.parkedVehicle = this.getParkedVehicle();
     const x = this.camera.position.x + world.origin.x, z = this.camera.position.z + world.origin.z;
     const pad = world.services.flatMap(site => site.ground.pads).find(p => Math.abs((x - p.x) * Math.cos(p.heading) + (z - p.z) * Math.sin(p.heading)) <= p.halfWidth + 2
       && Math.abs((x - p.x) * Math.sin(p.heading) - (z - p.z) * Math.cos(p.heading)) <= p.halfLength + 2);

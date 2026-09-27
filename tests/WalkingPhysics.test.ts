@@ -4,6 +4,20 @@ import { WalkingPhysics, type WalkingInput } from '../src/walking/WalkingPhysics
 const flat = { sample: () => ({ height: 10, grip: 1 }), constrainWalker: () => false };
 const idle: WalkingInput = { forward: 0, lateral: 0, run: false, sprint: false, jump: false };
 
+it('slides along an oblique rail without stopping both movement axes', () => {
+  const person = new WalkingPhysics(); person.reset(0, 10, 0, 0);
+  const rail = { ...flat, constrainWalker: (body: { x: number; z: number }) => {
+    const penetration = (body.x - body.z) / Math.SQRT2 - 1;
+    if (penetration <= 0) return false;
+    body.x -= penetration / Math.SQRT2; body.z += penetration / Math.SQRT2;
+    return true;
+  } };
+  for (let i = 0; i < 180; i++) person.update(1 / 60, { ...idle, forward: 1, sprint: true }, rail);
+  expect(person.speed).toBeGreaterThan(4);
+  expect(person.z).toBeLessThan(-8);
+  expect((person.x - person.z) / Math.SQRT2).toBeLessThanOrEqual(1.00001);
+});
+
 it('reuses stationary foot contacts within a frame but notices changed ground on the next frame', () => {
   const person = new WalkingPhysics(); person.reset(0, 10, 0, 0);
   let height = 10;

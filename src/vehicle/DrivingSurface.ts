@@ -6,7 +6,7 @@ import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
 import { hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
 import { padPoint } from '../service/ServiceTerrain';
-import { constrainObstacle } from '../service/ServiceCollision';
+import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'> };
@@ -14,6 +14,7 @@ type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'servi
 export class DrivingSurface {
   wet = 0;
   level: number | undefined;
+  parkedVehicle?: VehiclePhysics;
   private readonly profile;
   private sites;
   private access;
@@ -151,80 +152,74 @@ export class DrivingSurface {
     return points;
   }
 
-  constrain(car: VehiclePhysics, previousX: number, previousZ: number, dt = 1 / 60): boolean {
-    const bodies = car.bodies(), before = car.bodies(previousX, previousZ, true);
-    for (let b = 0; b < bodies.length; b++) {
-      const body = bodies[b], previous = before[b], steps = Math.ceil((body.front - body.rear) / 1.25);
-      for (let i = 0; i <= steps; i++) {
-        const along = body.rear + (body.front - body.rear) * i / steps;
-        const offset = vehicleOffset(0, along, body.pitch, body.roll), old = vehicleOffset(0, along, previous.pitch, previous.roll);
-        const point = { x: body.x - Math.sin(body.heading) * offset.z, y: body.y + offset.y,
-          z: body.z + Math.cos(body.heading) * offset.z };
-        const px = previous.x - Math.sin(previous.heading) * old.z, pz = previous.z + Math.cos(previous.heading) * old.z;
-        const ox = point.x, oz = point.z;
-        if (this.constrainBody(point, px, pz, car.profile.width / 2, car.profile.radius + car.profile.rest)) {
-          const length = Math.hypot(point.x - ox, point.z - oz);
-          const nx = length > 1e-8 ? (point.x - ox) / length : 0, nz = length > 1e-8 ? (point.z - oz) / length : 0;
-          const fx = Math.sin(car.heading), fz = -Math.cos(car.heading), incidence = fx * nx + fz * nz;
-          const tx = fx - nx * incidence, tz = fz - nz * incidence;
-          const dx = car.x - previousX, dz = car.z - previousZ, normalMotion = dx * nx + dz * nz;
-          const speed = car.speed * Math.hypot(tx, tz) * Math.exp(-0.08 * Math.min(0.1, Math.max(0, dt)));
-          const heading = Math.hypot(tx, tz) > 0.05 ? Math.atan2(tx, -tz) : car.heading;
-          car.restoreMotion(previousX, previousZ);
-          car.slideMotion(previousX + dx - nx * normalMotion, previousZ + dz - nz * normalMotion, heading, speed, this.sample);
-          return true;
+  readonly constrain = (car: VehiclePhysics, previousX: number, previousZ: number, dt = 1 / 60): boolean => {
+    const before = car.bodies(previousX, previousZ, true);
+    let hit = false;
+    for (let pass = 0; pass < 5; pass++) {
+      const bodies = car.bodies();
+      let correctionX = 0, correctionZ = 0, depth = 1e-7;
+      for (let b = 0; b < bodies.length; b++) {
+        const body = bodies[b], previous = before[b], steps = Math.ceil((body.front - body.rear) / 1.25);
+        for (let i = 0; i <= steps; i++) {
+          const along = body.rear + (body.front - body.rear) * i / steps;
+          const offset = vehicleOffset(0, along, body.pitch, body.roll), old = vehicleOffset(0, along, previous.pitch, previous.roll);
+          const point = { x: body.x - Math.sin(body.heading) * offset.z, y: body.y + offset.y,
+            z: body.z + Math.cos(body.heading) * offset.z };
+          const px = previous.x - Math.sin(previous.heading) * old.z, pz = previous.z + Math.cos(previous.heading) * old.z;
+          const ox = point.x, oz = point.z;
+          if (this.constrainBody(point, px, pz, car.profile.width / 2, car.profile.radius + car.profile.rest, car.profile.height)) {
+            const length = Math.hypot(point.x - ox, point.z - oz);
+            if (length > depth) { depth = length; correctionX = point.x - ox; correctionZ = point.z - oz; }
+          }
         }
       }
+      if (depth === 1e-7) break;
+      if (!hit) { car.restoreHeading(this.sample); hit = true; continue; }
+      car.slideMotion(correctionX, correctionZ, correctionX / depth, correctionZ / depth, pass === 1 ? Math.min(0.1, Math.max(0, dt)) : 0, this.sample);
     }
-    return false;
-  }
+    return hit;
+  };
 
-  private constrainBody(car: { x: number; y: number; z: number }, previousX: number, previousZ: number, width: number, ride: number): boolean {
+  private constrainBody(car: { x: number; y: number; z: number }, previousX: number, previousZ: number, width: number, ride: number, height: number): boolean {
     if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride)) return true;
-    const route = this.route(car.x, car.z, car.y - ride), sample = route.road.nearest(car.x, car.z);
-    if (!sample) return false;
-    if (car.y < sample.position.y - 2 || car.y > sample.position.y + 3) return false;
-    const cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
-    const lateral = (car.x - sample.position.x) * cos + (car.z - sample.position.z) * sin;
-    const previous = (previousX - sample.position.x) * cos + (previousZ - sample.position.z) * sin;
-    const center = this.profile.centers.reduce((best, c) => Math.abs(previous - c) < Math.abs(previous - best) ? c : best);
-    const limit = Math.max(0.8, this.profile.halfWidth - width - 0.3);
-    const road = route.road;
-    const along = (car.x - sample.position.x) * sin - (car.z - sample.position.z) * cos;
-    const endpoint = !road.openStart && sample.distance < road.samples[0].distance + 2 && along < 2;
-    const side = Math.sign(lateral - center) || 1;
-    if (sample.opening !== undefined && this.connectedSurface(car.x, car.z, car.y - ride, width)) return false;
-    if (!endpoint && !(center && side * center < 0) && !hasRoadBarrier({ ...route, options: this.world.options }, sample, side)) return false;
-    if (!endpoint && (Math.abs(lateral - center) <= limit || Math.abs(previous - center) > this.profile.halfWidth + 1)) return false;
-    if (!endpoint && Math.abs(lateral - center) < Math.abs(previous - center) - 0.00001) return false;
-    const offset = Math.max(-limit, Math.min(limit, lateral - center)) + center;
-    car.x = sample.position.x + cos * offset + (endpoint ? sin * 2.2 : 0);
-    car.z = sample.position.z + sin * offset - (endpoint ? cos * 2.2 : 0);
-    return true;
+    return this.constrainRoad(car, previousX, previousZ, width + 0.06, car.y - ride, height);
   }
 
   constrainWalker(body: { x: number; y: number; z: number }, previousX: number, previousZ: number): boolean {
-    if (this.constrainService(body, previousX, previousZ, 0.42, body.y)) return true;
-    const route = this.route(body.x, body.z, body.y), sample = route.road.nearest(body.x, body.z);
+    const parked = this.parkedVehicle && constrainVehicle(body, previousX, previousZ, 0.42, body.y, this.parkedVehicle);
+    const world = this.constrainService(body, previousX, previousZ, 0.42, body.y)
+      || this.constrainRoad(body, previousX, previousZ, 0.32, body.y, 1.75);
+    return world || !!parked;
+  }
+
+  private constrainRoad(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height: number): boolean {
+    const route = this.route(body.x, body.z, feet), sample = route.road.nearest(body.x, body.z);
     if (!sample) return false;
     const { x, y, z } = sample.position, cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
-    const along = (body.x - x) * sin - (body.z - z) * cos;
-    const { normal } = roadFrame(sample);
+    let along = (body.x - x) * sin - (body.z - z) * cos;
+    const { right, normal } = roadFrame(sample);
     const roadHeight = y - (normal.x * (body.x - x) + normal.z * (body.z - z)) / normal.y;
-    if (Math.abs(along) > 2 || body.y + 1.75 < roadHeight - 0.2) return false;
+    if (feet + height < roadHeight - 0.2) return false;
+    const endpoint = !route.road.openStart && sample.distance < route.road.samples[0].distance + 2 && along < 2;
+    if (!endpoint && Math.abs(along) > 2) return false;
     const bridge = route.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
     const tunnel = route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
     const previous = (previousX - x) * cos + (previousZ - z) * sin;
     let lateral = (body.x - x) * cos + (body.z - z) * sin, hit = false;
+    if (endpoint && feet < roadHeight + 2 && this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + radius)) {
+      along = 2.2; hit = true;
+    }
     for (const center of this.profile.centers) for (const side of [-1, 1]) {
       const inner = center !== 0 && side * center < 0;
-      if (sample.opening !== undefined && this.connectedSurface(body.x, body.z, body.y, 0.42)) continue;
+      if (sample.opening !== undefined && this.connectedSurface(body.x, body.z, feet, radius)) continue;
       if (!inner && !hasRoadBarrier({ ...route, options: this.world.options }, sample, side)) continue;
-      if (body.y > roadHeight + (tunnel ? 7 : inner ? 0.85 : bridge ? 1.55 : 1.02)) continue;
-      const rail = center + side * (this.profile.halfWidth + (inner ? 0 : 0.2));
+      const offset = center + side * (this.profile.halfWidth + (inner ? 0.2 : tunnel ? 0.65 : bridge ? 0.25 : 0.3));
+      const railHeight = y + right.y * offset;
+      if (feet > railHeight + (inner ? 0.85 : tunnel ? 7 : bridge ? 1.55 : 1.02) || feet + height < railHeight - 0.2) continue;
+      const rail = offset * Math.cos(sample.bank), clearance = radius + (inner || bridge ? 0.175 : 0.08);
       const before = previous - rail, after = lateral - rail;
-      if (before * after > 0 && Math.abs(after) >= 0.42) continue;
-      lateral = rail + (Math.sign(before) || -side) * 0.42;
+      if (before * after > 0 && (Math.abs(after) >= clearance - 1e-7 || Math.abs(after) > Math.abs(before) + 1e-7)) continue;
+      lateral = rail + (Math.sign(before) || -side) * clearance;
       hit = true;
     }
     if (hit) { body.x = x + cos * lateral + sin * along; body.z = z + sin * lateral - cos * along; }
@@ -289,25 +284,24 @@ export class DrivingSurface {
     this.refreshServices();
     let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet) ?? false;
     for (const site of this.sites) for (const pad of site.ground.pads) {
-      if (Math.hypot(body.x - pad.x, body.z - pad.z) > 150) continue;
+      if (pad.x < Math.min(body.x, previousX) - 150 || pad.x > Math.max(body.x, previousX) + 150
+        || pad.z < Math.min(body.z, previousZ) - 150 || pad.z > Math.max(body.z, previousZ) + 150) continue;
       for (const [x, along, width, length, height] of [[15, 28, 22, 30, 5], [53, 30, 27, 36, 7], [57, 74, 24, 20, 4]]) {
         const p = padPoint(pad, x * pad.side, along);
         if (feet < p.y - 0.6 || feet > p.y + height) continue;
         hit = constrainObstacle(body, previousX, previousZ, radius, { ...p, heading: pad.heading, width, front: length / 2, rear: -length / 2 }) || hit;
       }
     }
-    for (const index of this.barrierIndex.within(Math.min(body.x, previousX) - radius, Math.min(body.z, previousZ) - radius,
-      Math.max(body.x, previousX) + radius, Math.max(body.z, previousZ) + radius)) {
+    const reach = radius + 0.08;
+    for (const index of this.barrierIndex.within(Math.min(body.x, previousX) - reach, Math.min(body.z, previousZ) - reach,
+      Math.max(body.x, previousX) + reach, Math.max(body.z, previousZ) + reach)) {
       const { a, b } = this.barriers[index], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+      if (length < 1e-8) continue;
       const t = ((body.x - a.x) * dx + (body.z - a.z) * dz) / (length * length);
-      if (t < -radius / length || t > 1 + radius / length) continue;
       const height = a.y + (b.y - a.y) * Math.max(0, Math.min(1, t));
       if (feet + 1.75 < height || feet > height + 1.5) continue;
-      const nx = -dz / length, nz = dx / length;
-      const before = (previousX - a.x) * nx + (previousZ - a.z) * nz, after = (body.x - a.x) * nx + (body.z - a.z) * nz;
-      if (before * after > 0 && (Math.abs(after) >= radius || Math.abs(after) > Math.abs(before) + 0.00001)) continue;
-      const correction = (Math.sign(before) || 1) * radius - after;
-      body.x += nx * correction; body.z += nz * correction; hit = true;
+      hit = constrainObstacle(body, previousX, previousZ, radius, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2,
+        heading: Math.atan2(dx, -dz), width: 0.16, front: length / 2, rear: -length / 2 }) || hit;
     }
     return hit;
   }

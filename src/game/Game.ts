@@ -63,7 +63,7 @@ export class Game {
     this.weather.setSeason(this.world.season);
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
-    this.walking = new WalkingSystem(this.camera, this.input, () => this.world);
+    this.walking = new WalkingSystem(this.camera, this.input, () => this.world, () => this.driving.parked ? this.driving.car : undefined);
     this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), category => {
       this.settings.show();
       if (category) document.querySelector<HTMLButtonElement>(`[data-settings-target="${category}"]`)!.click();

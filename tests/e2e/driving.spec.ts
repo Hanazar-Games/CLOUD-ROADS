@@ -10,6 +10,38 @@ async function start(page: Page) {
   await expect(page.locator('#vehicle-gear')).toHaveText('P');
 }
 
+test('slides along the highway divider, brakes and reverses away after contact', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.goto('/?seed=COLLISION-HIGHWAY');
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('meadow');
+  await (await control(page, page.locator('#road-type'))).selectOption('highway');
+  await (await control(page, page.locator('#route-style'))).selectOption('0');
+  await (await control(page, page.locator('#max-grade'))).fill('0');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
+  await start(page);
+  await page.keyboard.down('KeyW');
+  await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(30);
+  await page.keyboard.down('KeyA');
+  await expect(page.locator('#vehicle-status')).toContainText('注意整车转弯空间', { timeout: 15000 });
+  await page.keyboard.up('KeyA');
+  const contact = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
+  await expect.poll(async () => {
+    const next = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
+    expect(Math.abs(next[1] - contact[1])).toBeLessThan(2);
+    return Math.hypot(next[0] - contact[0], next[2] - contact[2]);
+  }).toBeGreaterThan(6);
+  await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(10);
+  await page.keyboard.up('KeyW'); await page.keyboard.down('Space');
+  await expect(page.locator('#vehicle-speed')).toHaveText('0');
+  await page.keyboard.up('Space'); await page.keyboard.down('KeyS');
+  await expect(page.locator('#vehicle-gear')).toHaveText('R');
+  await page.keyboard.up('KeyS'); await page.keyboard.press('KeyR');
+  await expect(page.locator('#vehicle-gear')).toHaveText('P');
+  expect(errors).toEqual([]);
+});
+
 test('drives, steers, brakes, reverses and recovers safely without losing trip distance', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);

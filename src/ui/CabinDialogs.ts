@@ -29,7 +29,7 @@ export class CabinDialogs {
   }
   showSeats(floor = this.driving.cabin.selected.floor): void {
     if (!this.driving.active) { this.showMenu(); element('menu-status').textContent = '先进入车辆，再按 P 选择座位。'; return; }
-    const cabin = this.driving.cabin, moving = Math.abs(this.driving.car.speed) > 0.1;
+    const cabin = this.driving.cabin, moving = this.driving.car.motionSpeed > 0.1;
     const decks = [...new Set(cabin.seats.map(s => s.floor))], nav = element('seat-decks'); nav.replaceChildren(); nav.hidden = decks.length < 2;
     for (const deck of decks) {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.deck = String(deck);

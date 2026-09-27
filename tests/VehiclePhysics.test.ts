@@ -10,6 +10,39 @@ function run(car: VehiclePhysics, seconds: number, input = idle, surface = flat,
 function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); return car; }
 
 describe('VehiclePhysics', () => {
+  it('preserves tangential contact velocity, dissipates sliding through grip and clears it on parking', () => {
+    const dry = create(), wet = create();
+    for (const car of [dry, wet]) {
+      car.heading = 0.5; car.speed = 20; car.parked = false;
+      const speed = car.motionSpeed;
+      car.slideMotion(0, 0, -1, 0, 1 / 120, flat);
+      expect(car.motionSpeed).toBeLessThan(speed);
+      expect(Math.sin(car.heading) * car.speed + Math.cos(car.heading) * car.lateralSpeed).toBeCloseTo(0, 9);
+      expect(car.lateralSpeed).toBeLessThan(-1);
+    }
+    run(dry, 0.2); run(wet, 0.2, idle, () => ({ height: 0, grip: 0.3 }));
+    expect(Math.abs(wet.lateralSpeed)).toBeGreaterThan(Math.abs(dry.lateralSpeed));
+    wet.park(); expect(wet.motionSpeed).toBe(0);
+  });
+
+  it('resolves collisions at every fixed step independently of rendering rate', () => {
+    const simulate = (fps: number) => {
+      const car = create(); car.parked = false; car.speed = 60;
+      let hits = 0;
+      for (let i = 0; i < fps; i++) car.update(1 / fps, idle, flat, (body, x, z, dt) => {
+        expect(dt).toBeCloseTo(1 / 120);
+        expect(Math.hypot(body.x - x, body.z - z)).toBeLessThan(0.51);
+        if (body.z < -2) { body.z = -2; body.speed = 0; hits++; return true; }
+        return false;
+      });
+      expect(hits).toBe(1);
+      expect(car.trip).toBeCloseTo(2, 6);
+      return car;
+    };
+    const a = simulate(20), b = simulate(144);
+    expect(a.z).toBe(b.z); expect(a.trip).toBe(b.trip);
+  });
+
   it('progressively limits fast steering without losing low-speed manoeuvrability or self-centering', () => {
     const slow = create(), fast = create();
     slow.speed = 8; fast.speed = 36; slow.parked = fast.parked = false;

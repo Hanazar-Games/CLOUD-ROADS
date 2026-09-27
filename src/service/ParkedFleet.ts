@@ -1,7 +1,7 @@
 import { VehiclePhysics } from '../vehicle/VehiclePhysics';
 import type { ServiceArea } from './ServicePlanner';
 import { parkedAt, type ParkedEntry } from './ServiceParking';
-import { constrainObstacle } from './ServiceCollision';
+import { constrainVehicle } from './ServiceCollision';
 
 export class ParkedFleet {
   entries: ParkedEntry[] = [];
@@ -51,10 +51,9 @@ export class ParkedFleet {
   constrain(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number): boolean {
     let hit = false;
     for (const entry of this.entries) {
-      if (Math.hypot(entry.x - body.x, entry.z - body.z) > 28) continue;
-      const car = this.vehicle(entry), ground = car.y - car.profile.radius - car.profile.rest;
-      if (feet < ground - 1 || feet > ground + car.profile.height) continue;
-      for (const obstacle of car.bodies()) hit = constrainObstacle(body, previousX, previousZ, radius, { ...obstacle, width: car.profile.width }) || hit;
+      if (entry.x < Math.min(body.x, previousX) - 28 || entry.x > Math.max(body.x, previousX) + 28
+        || entry.z < Math.min(body.z, previousZ) - 28 || entry.z > Math.max(body.z, previousZ) + 28) continue;
+      hit = constrainVehicle(body, previousX, previousZ, radius, feet, this.vehicle(entry)) || hit;
     }
     return hit;
   }

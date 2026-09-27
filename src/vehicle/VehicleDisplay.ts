@@ -29,7 +29,7 @@ export class VehicleDisplay {
   update(car: VehiclePhysics, systems: VehicleSystems, dt: number, crane?: CraneSystems, operations?: VehicleOperations): void {
     this.elapsed += dt;
     const lines = [
-      `${systems.leftSignal ? '<' : ' '} ${Math.round(Math.abs(car.speed) * 3.6)} KM/H ${systems.rightSignal ? '>' : ' '}`,
+      `${systems.leftSignal ? '<' : ' '} ${Math.round(car.motionSpeed * 3.6)} KM/H ${systems.rightSignal ? '>' : ' '}`,
       `${car.parked ? 'P' : car.speed < -0.1 ? 'R' : car.speed > 0.1 ? `D${car.transmission.gear}` : 'N'} ${Math.round(car.transmission.rpm / 50) * 50} RPM`,
       `TRIP ${(car.trip / 1000).toFixed(2)} KM`,
       `CH ${systems.radioChannel} ${systems.radioPlaying ? 'ON' : 'OFF'} FAN ${systems.fan}`,

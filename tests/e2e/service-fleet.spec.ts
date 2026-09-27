@@ -13,6 +13,17 @@ async function move(page: Page, key: string, axis: number, amount: number) {
   await expect(metric(page, 'Walking speed')).toHaveText('0.0 km/h');
 }
 
+async function walkTo(page: Page, key: string, axis: number, target: number) {
+  await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await expect(metric(page, 'Walking speed')).toHaveText('0.0 km/h');
+  const direction = Math.sign(target - (await position(page))[axis]);
+  await page.keyboard.down(key);
+  await expect.poll(async () => direction * ((await position(page))[axis] - target), { timeout: 8000, intervals: [40] }).toBeGreaterThan(-0.35);
+  await page.keyboard.up(key);
+  await expect(metric(page, 'Walking speed')).toHaveText('0.0 km/h');
+  expect(Math.abs((await position(page))[axis] - target)).toBeLessThan(0.4);
+}
+
 test('walks through classified parking, drives parked vehicles and leaves the previous car available', async ({ page }) => {
   test.setTimeout(90000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -32,12 +43,15 @@ test('walks through classified parking, drives parked vehicles and leaves the pr
   await expect(metric(page, 'Travel mode')).toHaveText('driving'); await expect(metric(page, 'Service vehicles')).toHaveText(String(count - 1));
   const first = await metric(page, 'Vehicle model').textContent();
   const firstPosition = await metric(page, 'Vehicle position').textContent();
+  const [carX, , carZ] = firstPosition!.split(',').map(Number);
   await page.keyboard.press('KeyF'); await expect(metric(page, 'Travel mode')).toHaveText('walking');
-  await move(page, 'KeyA', 2, 4);
+  // Use the aisle in front of the cars instead of walking through a neighbouring body.
+  await walkTo(page, 'KeyW', 0, carX + 4.5); await walkTo(page, 'KeyA', 2, carZ - 6); await walkTo(page, 'KeyS', 0, carX);
   await expect(page.locator('#boarding-help')).toBeVisible(); await page.keyboard.press('KeyF');
   await expect(metric(page, 'Travel mode')).toHaveText('driving'); await expect(metric(page, 'Vehicle model')).not.toHaveText(first!);
   await expect(metric(page, 'Service vehicles')).toHaveText(String(count - 1));
-  await page.keyboard.press('KeyF'); await move(page, 'KeyD', 2, 4);
+  await page.keyboard.press('KeyF');
+  await walkTo(page, 'KeyW', 0, carX + 4.5); await walkTo(page, 'KeyD', 2, carZ - 2); await walkTo(page, 'KeyS', 0, carX);
   await expect(page.locator('#boarding-help')).toBeVisible(); await page.keyboard.press('KeyF');
   await expect(metric(page, 'Vehicle model')).toHaveText(first!); await expect(metric(page, 'Vehicle position')).toHaveText(firstPosition!);
   await page.keyboard.down('KeyW'); await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(3); await page.keyboard.up('KeyW');

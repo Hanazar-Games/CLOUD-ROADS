@@ -59,6 +59,7 @@ export class WalkingPhysics {
     this.vz += (targetZ - this.vz) * blend;
     if (this.jumpQueued && this.grounded) { this.vy = 6.4; this.grounded = false; }
     this.jumpQueued = false;
+    const previousX = this.x, previousZ = this.z;
     for (const axis of ['x', 'z'] as const) {
       if ((axis === 'x' ? this.vx : this.vz) === 0) continue;
       const beforeX = this.x, beforeZ = this.z;
@@ -68,8 +69,13 @@ export class WalkingPhysics {
         this.x = beforeX; this.z = beforeZ;
         if (axis === 'x') this.vx = 0; else this.vz = 0;
       }
-      if (surface.constrainWalker(this, beforeX, beforeZ)) {
-        if (axis === 'x') this.vx = 0; else this.vz = 0;
+    }
+    const targetPositionX = this.x, targetPositionZ = this.z;
+    if ((this.x !== previousX || this.z !== previousZ) && surface.constrainWalker(this, previousX, previousZ)) {
+      const dx = this.x - targetPositionX, dz = this.z - targetPositionZ, length = Math.hypot(dx, dz);
+      if (length > 1e-8) {
+        const nx = dx / length, nz = dz / length, inward = Math.min(0, this.vx * nx + this.vz * nz);
+        this.vx -= nx * inward; this.vz -= nz * inward;
       }
     }
     const floor = this.floor(surface, this.x, this.z);
