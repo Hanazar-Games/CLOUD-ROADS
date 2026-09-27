@@ -111,8 +111,10 @@ test('shows the current release, archives the previous baseline and isolates dia
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.36');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('服务驿站 · 分类停车与自由换车');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.37');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('近景精修 · 轮毂与驿站立面');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.36');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('服务驿站 · 分类停车与自由换车');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.35');
   await expect(dialog.locator('[data-release="history"]')).toContainText('车队焕新 · 双层客车与极速旅程');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.34');

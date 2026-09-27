@@ -32,6 +32,8 @@ test('animates doors and luggage, blocks departure until shut, and freezes fitti
   await page.keyboard.press('KeyJ'); await expect(metric(page, 'Vehicle operations')).toHaveText('1.00 / 0.00 / 0.00');
   await page.keyboard.down('KeyW'); await page.waitForTimeout(500); await page.keyboard.up('KeyW'); await expect(page.locator('#vehicle-speed')).toHaveText('0');
   await page.keyboard.press('KeyY'); await page.keyboard.press('KeyM');
+  await expect(page.locator('#vehicle-status')).toHaveText('已暂停');
+  await page.waitForTimeout(200); // Let throttled telemetry catch up with the last pre-dialog frame.
   const frozen = await metric(page, 'Vehicle operations').textContent(); await page.waitForTimeout(400);
   await expect(metric(page, 'Vehicle operations')).toHaveText(frozen!); await page.keyboard.press('Escape');
   await expect(metric(page, 'Vehicle operations')).toHaveText('1.00 / 1.00 / 0.00');

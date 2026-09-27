@@ -29,7 +29,7 @@ export class BridgeMesh {
   readonly cableBridges: CableBridgeMesh;
   readonly abutments: BridgeAbutments;
   readonly parapets: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
-  readonly piers: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  readonly piers: InstancedMesh<BufferGeometry, MeshStandardMaterial>;
   readonly columns: InstancedMesh<BufferGeometry, MeshStandardMaterial>;
   readonly roundPiers = new InstancedMesh(new CylinderGeometry(0.5, 0.5, 1, 16), this.material, CAPACITY);
   readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
@@ -49,11 +49,13 @@ export class BridgeMesh {
     this.cableBridges = new CableBridgeMesh(scene, this.material, options);
     this.abutments = new BridgeAbutments(scene, this.material, options);
     this.parapets = new InstancedMesh(this.geometry, this.material, CAPACITY * 3);
-    this.piers = new InstancedMesh(this.geometry, this.material, CAPACITY * this.profile.centers.length * 2);
     const outline = new Shape();
     [[-0.38, -0.5], [0.38, -0.5], [0.5, -0.38], [0.5, 0.38], [0.38, 0.5], [-0.38, 0.5], [-0.5, 0.38], [-0.5, -0.38]]
       .forEach(([x, z], i) => { if (i) outline.lineTo(x, z); else outline.moveTo(x, z); });
     outline.closePath();
+    const cap = new ExtrudeGeometry(outline, { depth: 0.92, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.04, bevelSegments: 1, steps: 1 })
+      .rotateX(-Math.PI / 2).translate(0, -0.46, 0).scale(1 / 1.05, 1, 1 / 1.05);
+    this.piers = new InstancedMesh(cap, this.material, CAPACITY * this.profile.centers.length * 2);
     const shape = new ExtrudeGeometry(outline, { depth: 1, bevelEnabled: false, steps: 1 }).rotateX(-Math.PI / 2).translate(0, -0.5, 0);
     const column = mergeVertices(shape), vertices = column.getAttribute('position'); shape.dispose();
     for (let i = 0; i < vertices.count; i++) {
@@ -291,6 +293,7 @@ export class BridgeMesh {
     for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) { mesh.removeFromParent(); mesh.dispose(); }
     this.heights.clear(); this.railings.material.dispose();
     this.columns.geometry.dispose();
+    this.piers.geometry.dispose();
     this.roundPiers.geometry.dispose();
     this.details.material.dispose();
     this.geometry.dispose();

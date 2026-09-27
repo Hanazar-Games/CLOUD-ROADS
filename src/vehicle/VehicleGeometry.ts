@@ -2,10 +2,20 @@ import { BufferGeometry, LatheGeometry, Mesh, Vector2, type Group } from 'three'
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function tireGeometry(radius: number, width: number): BufferGeometry {
-  return new LatheGeometry([
+  const geometry = new LatheGeometry([
     [0.56, -0.51], [0.8, -0.53], [0.94, -0.45], [0.99, -0.3], [1, -0.12],
     [1, 0.12], [0.99, 0.3], [0.94, 0.45], [0.8, 0.53], [0.56, 0.51],
   ].map(([r, y]) => new Vector2(r * radius, y * width)), 24);
+  geometry.normalizeNormals(); return geometry;
+}
+
+export function rimGeometry(radius: number, width: number): BufferGeometry {
+  const geometry = new LatheGeometry([
+    [0.55, -0.49], [0.66, -0.49], [0.66, -0.43], [0.6, -0.35], [0.6, 0.35],
+    [0.66, 0.43], [0.66, 0.49], [0.55, 0.49], [0.55, 0.4], [0.56, 0.35],
+    [0.56, -0.35], [0.55, -0.4], [0.55, -0.49],
+  ].map(([r, y]) => new Vector2(r * radius, y * width)), 24);
+  geometry.normalizeNormals(); return geometry;
 }
 
 export function mergeVehicleParts(parent: Group): BufferGeometry[] {

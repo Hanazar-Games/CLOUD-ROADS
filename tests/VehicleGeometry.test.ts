@@ -1,6 +1,21 @@
-import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
-import { mergeVehicleParts } from '../src/vehicle/VehicleGeometry';
+import { mergeVehicleParts, rimGeometry } from '../src/vehicle/VehicleGeometry';
+
+it('keeps wheel barrels open with recessed walls and lips inside the tire envelope', () => {
+  const geometry = rimGeometry(0.5, 0.3), material = new MeshStandardMaterial(), mesh = new Mesh(geometry, material);
+  geometry.computeBoundingBox();
+  expect(geometry.boundingBox!.max.y).toBeCloseTo(0.147);
+  expect(geometry.boundingBox!.min.y).toBeCloseTo(-0.147);
+  expect(geometry.boundingBox!.max.x).toBeLessThan(0.5);
+  const ray = new Raycaster(new Vector3(0.15, 1, 0), new Vector3(0, -1, 0));
+  expect(ray.intersectObject(mesh)).toHaveLength(0);
+  ray.set(new Vector3(0.31, 1, 0), new Vector3(0, -1, 0));
+  expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);
+  const normal = new Vector3(), normals = geometry.getAttribute('normal');
+  for (let i = 0; i < normals.count; i++) expect(normal.fromBufferAttribute(normals, i).length()).toBeCloseTo(1, 5);
+  geometry.dispose(); material.dispose();
+});
 
 it('merges rigid parts without changing their surface bounds, normals, material or shadow flags', () => {
   const root = new Group(), paint = new MeshStandardMaterial(), geometries = [];

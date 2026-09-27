@@ -3,7 +3,7 @@ import type { VehiclePhysics, WheelState } from './VehiclePhysics';
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Windshield } from './Windshield';
 import type { VehicleSystems } from './VehicleSystems';
-import { mergeVehicleParts, tireGeometry } from './VehicleGeometry';
+import { mergeVehicleParts, rimGeometry, tireGeometry } from './VehicleGeometry';
 import { flatbedDetails, vehicleDetails, type VehicleBlock as Block, type VehicleDetailKit } from './VehicleDetails';
 import { busBody } from './BusBody';
 import { VehicleFittings } from './VehicleFittings';
@@ -189,21 +189,29 @@ export class VehicleMesh {
     }
     const tireWidth = profile.shape === 'motorcycle' ? 0.15 : profile.width > 2.3 ? 0.3 : 0.24;
     const tireShape = this.geometry(tireGeometry(profile.radius, tireWidth));
-    const rimGeometry = this.geometry(new CylinderGeometry(profile.radius * 0.62, profile.radius * 0.62, tireWidth + 0.012, 16));
+    const rimShape = this.geometry(rimGeometry(profile.radius, tireWidth));
+    const brakeShape = this.geometry(new CylinderGeometry(profile.radius * 0.51, profile.radius * 0.51, tireWidth * 0.18, 24));
     const hubGeometry = this.geometry(new CylinderGeometry(profile.radius * 0.2, profile.radius * 0.2, tireWidth + 0.05, 12));
     const coil = this.geometry(new TubeGeometry(new CatmullRomCurve3(Array.from({ length: 65 }, (_, i) => new Vector3(Math.cos(i * Math.PI / 4) * 0.065, i / 64, Math.sin(i * Math.PI / 4) * 0.065))), 64, 0.012, 4, false));
     const addWheels = (points: readonly WheelPoint[], parent: Group, output: WheelMesh[]) => { for (const point of points) {
       const pivot = new Group(), spin = new Group(); pivot.add(spin); parent.add(pivot);
       pivot.position.set(point.x, 0, -point.along);
-      const tire = new Mesh(tireShape, rubber), rim = new Mesh(rimGeometry, metal);
+      const tire = new Mesh(tireShape, rubber), rim = new Mesh(rimShape, metal), brake = new Mesh(brakeShape, trim);
       tire.rotation.z = rim.rotation.z = Math.PI / 2; tire.castShadow = true; spin.add(tire, rim);
       rim.castShadow = rim.receiveShadow = true;
-      for (let i = 0; i < 5; i++) {
-        const spoke = block(tireWidth + 0.025, 0.025, profile.radius * 1.15, 0, 0, 0, trim, spin); spoke.rotation.x = i * Math.PI / 5;
+      brake.rotation.z = Math.PI / 2; brake.castShadow = brake.receiveShadow = true; spin.add(brake);
+      const spokes = profile.mass > 4000 ? 10 : profile.shape === 'motorcycle' ? 6 : 5;
+      for (const side of [-1, 1]) for (let i = 0; i < spokes; i++) {
+        const angle = i * Math.PI * 2 / spokes;
+        for (const offset of profile.shape === 'supercar' ? [-0.055, 0.055] : [0]) {
+          const turn = angle + offset;
+          const spoke = block(0.024, profile.radius * 0.5, profile.radius * (spokes > 6 ? 0.08 : 0.1), side * tireWidth * 0.45,
+            Math.cos(turn) * profile.radius * 0.4, Math.sin(turn) * profile.radius * 0.4, metal, spin); spoke.rotation.x = turn;
+        }
       }
       const hub = new Mesh(hubGeometry, metal); hub.rotation.z = Math.PI / 2; spin.add(hub);
       hub.castShadow = hub.receiveShadow = true;
-      if (point.steer) block(tireWidth * 0.8, profile.radius * 0.4, 0.09, 0, 0.03, profile.radius * 0.42, paint, pivot);
+      if (point.steer) block(tireWidth * 0.3, profile.radius * 0.4, 0.09, Math.sign(point.x) * tireWidth * 0.18, 0.03, profile.radius * 0.42, paint, pivot);
       for (const side of [-1, 1]) for (let i = 0; i < 6; i++) {
         const angle = i * Math.PI / 3;
         block(0.018, 0.026, 0.026, side * (tireWidth / 2 + 0.026), Math.cos(angle) * profile.radius * 0.29,
@@ -245,10 +253,6 @@ export class VehicleMesh {
     if (profile.shape !== 'motorcycle') {
       const front = -profile.chassisLength / 2;
       for (const y of [-0.17, -0.11, -0.05]) block(profile.width * 0.53, 0.012, 0.014, 0, y, front - 0.04, metal);
-      for (const end of [-1, 1]) {
-        block(0.45, 0.12, 0.015, 0, -0.29, end * (profile.chassisLength / 2 + 0.065), trim);
-        block(0.4, 0.085, 0.019, 0, -0.29, end * (profile.chassisLength / 2 + 0.068), metal);
-      }
     }
     for (const parent of [this.chassis, this.trailerBody, this.steering, ...this.fittings.hinges.map(h => h.root), ...this.wheels.map(wheel => wheel.spin), ...this.trailerWheels.map(wheel => wheel.spin)])
       this.geometries.push(...mergeVehicleParts(parent));

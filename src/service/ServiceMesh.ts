@@ -191,7 +191,7 @@ export class ServiceMesh {
       this.box(this.lights, pad, 14 * pad.side, along, 5.25, 12, 0.1, 0.5, 0xffffff);
       this.lampPositions.push(padPoint(pad, 14 * pad.side, along, 5));
     }
-    this.parking(pad);
+    this.parking(pad, architecture);
     for (const along of [54, 64]) {
       box(15, along, 0.9, 4, 0.16, 1.5, 0x886c4e);
       for (const z of [-1.3, 1.3]) box(15, along + z, 0.5, 4.5, 0.16, 0.45, 0x967950);
@@ -233,9 +233,11 @@ export class ServiceMesh {
     mesh.setColorAt(mesh.count++, this.color.setHex(color));
   }
 
-  private parking(pad: ServicePad): void {
+  private parking(pad: ServicePad, architecture: ServiceArchitecture): void {
     const box = (x: number, a: number, y: number, w: number, h: number, l: number, color = 0xbfc7c1) => this.box(this.buildings, pad, x * pad.side, a, y, w, h, l, color);
     const stripe = (x: number, a: number, w: number, l: number, color = 0xffffff) => this.box(this.markings, pad, x * pad.side, a, 0.032, w, 0.015, l, color, true);
+    const facade = architecture === 'lodge' ? 0xa28e76 : architecture === 'courtyard' ? 0xd5c49e : 0xc9d1cb;
+    const frame = architecture === 'lodge' ? 0x695c49 : architecture === 'courtyard' ? 0x94734f : 0x4c696c;
     const colors = [0x9acaca, 0xe4c982, 0xd6b092, 0xe6ac71, 0xa8cea0];
     for (const slot of parkingSlots()) {
       const across = Math.abs(slot.heading) > 0.1, w = across ? slot.length : slot.width, l = across ? slot.width : slot.length;
@@ -259,15 +261,40 @@ export class ServiceMesh {
     }
     // Shop arcade and accessible toilet block face the pedestrian forecourt.
     box(52, 30, 0.12, 32, 0.24, 42, 0xaab0aa);
-    box(53, 30, 3.5, 27, 7, 36, 0xc3bda9);
+    box(53, 30, 3.5, 27, 7, 36, facade);
     box(52, 30, 7.15, 32, 0.3, 41, 0x617975);
     box(36, 30, 4.1, 7, 0.25, 41, 0x3f6e71);
     for (let a = 15; a <= 45; a += 6) {
       this.box(this.windows, pad, 39.42 * pad.side, a, 2.25, 0.08, 3.6, 5.5, 0xffffff);
       this.box(this.windows, pad, 39.42 * pad.side, a, 5.55, 0.08, 1.8, 5.5, 0xffffff);
-      box(39.3, a - 2.8, 3.5, 0.18, 6.4, 0.16, 0x597477);
-      box(33, a, 2, 0.18, 4, 0.18, 0x668380);
-      box(38.9, a, 1.3, 0.1, 0.5, 0.08, 0xdbd8ba);
+      for (const edge of [-2.8, 2.8]) box(39.3, a + edge, 3.5, 0.22, 6.5, 0.12, frame);
+      for (const y of [0.42, 3.35, 4.15, 4.62, 6.5]) box(39.28, a, y, 0.25, 0.1, 5.65, frame);
+      box(39.24, a, 1.9, 0.22, 2.85, 0.06, frame);
+      box(39.22, a, 0.62, 0.26, 0.28, 5.45, 0x88999a);
+      for (const edge of [-0.18, 0.18]) box(39.08, a + edge, 1.45, 0.12, 0.65, 0.055, 0xd8d6bd);
+      box(33, a, 2, 0.22, 4, 0.22, frame);
+      box(33, a, 0.15, 0.36, 0.3, 0.36, 0x8b9791);
+      if (architecture === 'lodge') for (const offset of [-2, -1, 1, 2]) box(39.18, a + offset, 5.55, 0.18, 1.85, 0.1, frame);
+    }
+    for (const a of [11.9, 48.1]) {
+      box(53, a, 0.35, 26.8, 0.65, 0.15, 0x8e9992);
+      for (const y of [2.3, 4.6]) box(53, a, y, 26.9, 0.06, 0.13, frame);
+      for (const x of [43, 49, 55, 61]) box(x, a, 3.5, 0.06, 6.2, 0.16, frame);
+      box(40, a, 3.4, 0.18, 6.8, 0.18, frame);
+    }
+    for (const a of [12.3, 47.7]) {
+      box(39.08, a, 3.5, 0.17, 7, 0.17, 0x657976);
+      box(38.88, a, 0.24, 0.5, 0.17, 0.17, 0x657976);
+    }
+    for (let a = 11; a < 50; a += 2) stripe(35.2, a, 6, 0.025, 0x717d7b);
+    stripe(31.8, 30, 0.4, 42, 0x273b3e);
+    for (let a = 9.4; a < 51; a += 0.55) stripe(31.8, a, 0.37, 0.065, 0x8e9d95);
+    for (const [a, color] of [[9.8, 0x537b84], [50.2, 0xac7053]]) {
+      box(38.8, a, 0.96, 0.85, 1.92, 1.5, color);
+      box(38.34, a, 1.19, 0.08, 1.05, 1.1, 0x273d42);
+      for (const y of [0.9, 1.15, 1.4]) for (const offset of [-0.35, 0, 0.35]) box(38.28, a + offset, y, 0.06, 0.13, 0.2, y > 1.2 ? 0xc5a66b : 0x9cbbad);
+      box(38.25, a, 0.35, 0.1, 0.17, 0.75, 0x273d42);
+      box(38.25, a + 0.58, 1.1, 0.1, 0.22, 0.1, 0xc8d5c4);
     }
     for (const x of [48, 58]) {
       box(x, 31, 7.6, 5, 0.7, 8, 0x708480);
@@ -277,18 +304,27 @@ export class ServiceMesh {
       this.box(this.lights, pad, 36 * pad.side, a, 3.88, 1.5, 0.08, 0.45, 0xffffff);
       this.lampPositions.push(padPoint(pad, 36 * pad.side, a, 3.8));
     }
-    box(57, 74, 2, 24, 4, 20, 0xc5caba);
+    box(57, 74, 2, 24, 4, 20, facade);
+    box(44.85, 74, 0.22, 0.25, 0.42, 20.1, 0x8b9993);
     box(57, 74, 4.15, 27, 0.3, 23, 0x4d7577);
     box(42.8, 74, 2.7, 5, 0.2, 22, 0x8dafa9);
     for (const a of [68, 74, 80]) {
-      this.box(this.windows, pad, 44.94 * pad.side, a, 1.45, 0.06, 2.9, 2, 0xffffff);
-      box(44.8, a + 0.7, 1.2, 0.12, 0.4, 0.08, 0xe9dfb8);
+      const width = a === 80 ? 2.5 : 1.8;
+      box(44.81, a, 1.42, 0.14, 2.84, width, frame);
+      for (const edge of [-1, 1]) box(44.7, a + edge * (width / 2 + 0.06), 1.46, 0.22, 2.92, 0.12, 0xc1c7bb);
+      box(44.7, a, 2.92, 0.22, 0.12, width + 0.24, 0xc1c7bb);
+      box(44.69, a, 0.28, 0.08, 0.35, width - 0.12, 0xa9b6ad);
+      this.box(this.windows, pad, 44.69 * pad.side, a, 2.18, 0.06, 0.42, width - 0.4, 0xffffff);
+      box(44.62, a + width * 0.34, 1.15, 0.1, 0.34, 0.055, 0xe9dfb8);
+      for (const y of [0.6, 1.5, 2.4]) box(44.62, a - width * 0.44, y, 0.1, 0.12, 0.045, 0xa9b6ad);
+      for (let y = 3.3; y < 3.8; y += 0.1) box(44.8, a, y, 0.09, 0.045, width, frame);
       box(46, a, 4.55, 1.2, 0.7, 1.2, 0x76918d);
       this.box(this.lights, pad, 42 * pad.side, a, 2.52, 1.2, 0.08, 0.4, 0xffffff);
       this.lampPositions.push(padPoint(pad, 42 * pad.side, a, 2.45));
     }
     for (const a of [58, 89]) {
-      box(35, a, 0.5, 4, 0.16, 0.75, 0x917651); box(35, a + 0.4, 0.9, 4, 0.8, 0.1, 0x917651);
+      for (const offset of [-0.24, 0, 0.24]) box(35, a + offset, 0.5, 4, 0.12, 0.2, 0x917651);
+      for (const y of [0.71, 0.95, 1.19]) box(35, a + 0.4, y, 4, 0.18, 0.1, 0x917651);
       for (const x of [33.5, 36.5]) box(x, a, 0.25, 0.15, 0.5, 0.65, 0x4d5f5f);
       for (const x of [40, 41.2]) box(x, a, 0.55, 0.8, 1.1, 0.8, x === 40 ? 0x4b867d : 0x53738b);
     }
