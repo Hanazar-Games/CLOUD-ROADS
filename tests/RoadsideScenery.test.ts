@@ -15,6 +15,15 @@ it('grounds roadside rows and utilities, restricts screens to bridges, and relea
   mesh.update(samples, [], [], [], corridor, terrain, 1, 0, 0, true);
   expect(mesh.hardware.count).toBeGreaterThan(500); expect(mesh.foliage.count).toBeGreaterThan(200);
   expect(mesh.wires.geometry.getAttribute('position').count).toBeGreaterThan(100); expect(mesh.screens.count).toBe(0);
+  const trees = mesh.foliage.count, trunks = mesh.trunks.count;
+  const treeBuffers = mesh.trunks.instanceMatrix.array.slice();
+  mesh.update(samples, [], [], [], corridor, terrain, 1, 0, 0, true, false);
+  expect(mesh.foliage.visible).toBe(false); expect(mesh.trunks.visible).toBe(false);
+  expect(mesh.hardware.visible).toBe(true); expect(mesh.wires.visible).toBe(true);
+  mesh.update(samples, [], [], [], corridor, terrain, 1, 0, 0, true, true);
+  expect(mesh.foliage.visible).toBe(true); expect(mesh.trunks.visible).toBe(true);
+  expect(mesh.foliage.count).toBe(trees); expect(mesh.trunks.count).toBe(trunks);
+  expect(mesh.trunks.instanceMatrix.array).toEqual(treeBuffers);
   const buffers = mesh.hardware.instanceMatrix.array.slice();
   mesh.update(samples, [], [], [], corridor, terrain, 1, 5120, -5120, true);
   expect(mesh.hardware.instanceMatrix.array).toEqual(buffers);

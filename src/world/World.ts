@@ -108,8 +108,8 @@ export class World {
     for (const mesh of [this.tunnelMesh.cover, this.crossingMesh.tunnels.cover]) seasonMaterial(mesh.material, this.season, 'terrain');
     for (const mesh of [this.tunnelMesh.portals, this.crossingMesh.tunnels.portals, this.crossingMesh.parts,
       this.bridgeMesh.piers, this.bridgeMesh.details, this.bridgeMesh.railings, this.furniture.rails, this.furniture.poles,
-      this.serviceMesh.structures, this.serviceMesh.railings, this.serviceMesh.buildings,
-      this.serviceMesh.roofs, this.junctionMesh.parts, this.roadside.hardware, this.roadside.screens]) seasonMaterial(mesh.material, this.season, 'structure');
+      this.serviceMesh.structures, this.serviceMesh.railings, this.serviceMesh.buildings, this.serviceMesh.treeTrunks,
+      this.serviceMesh.roofs, this.junctionMesh.parts, this.roadside.hardware, this.roadside.trunks, this.roadside.screens]) seasonMaterial(mesh.material, this.season, 'structure');
     for (const mesh of [this.serviceMesh.pavement, this.serviceMesh.markings, this.junctionMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
     seasonMaterial(this.serviceMesh.landscaping.material, this.season, 'foliage');
     seasonMaterial(this.roadside.foliage.material, this.season, 'foliage');
@@ -169,8 +169,8 @@ export class World {
     this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
     this.roadside.update(this.renderSamples, this.renderBridges, this.renderTunnels, this.renderServices, this.corridor, this.height,
-      this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
-    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z);
+      this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.chunks.vegetation.enabled);
+    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled);
     this.parkedVehicles.update(this.renderServices, this.origin, camera.position);
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.route === this.network.active.id));

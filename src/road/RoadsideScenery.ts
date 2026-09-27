@@ -14,9 +14,11 @@ type Point = { x: number; y: number; z: number };
 
 export class RoadsideScenery {
   readonly hardware = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.65, metalness: 0.25 }), 24576);
+  readonly trunks = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 1 }), 8192);
   readonly foliage = new InstancedMesh(new IcosahedronGeometry(1, 1), new MeshStandardMaterial({ roughness: 1, flatShading: true }), 8192);
   readonly screens = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa3c2c4, roughness: 0.35, metalness: 0.15 }), 16384);
   readonly wires = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: 0x343f43 }));
+  private readonly batches = [this.hardware, this.trunks, this.foliage, this.screens];
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
   private readonly profile;
@@ -25,15 +27,15 @@ export class RoadsideScenery {
 
   constructor(scene: Scene, private readonly seed: string, private readonly options: Readonly<WorldOptions>) {
     this.profile = roadProfile(options);
-    for (const mesh of [this.hardware, this.foliage, this.screens]) { mesh.count = 0; mesh.castShadow = mesh.receiveShadow = true; }
-    for (const mesh of [this.hardware, this.foliage, this.screens, this.wires]) { mesh.visible = false; scene.add(mesh); }
+    for (const mesh of this.batches) { mesh.count = 0; mesh.castShadow = mesh.receiveShadow = true; }
+    for (const mesh of [...this.batches, this.wires]) { mesh.visible = false; scene.add(mesh); }
   }
 
   update(samples: readonly RoadSample[], bridges: readonly BridgeSpan[], tunnels: readonly TunnelSpan[], services: readonly ServiceArea[],
-    corridor: RoadCorridor, terrain: RoadTerrain, version: number, originX: number, originZ: number, visible: boolean): void {
+    corridor: RoadCorridor, terrain: RoadTerrain, version: number, originX: number, originZ: number, visible: boolean, vegetation = true): void {
     if (version !== this.version) {
       this.version = version; this.x = samples[0]?.position.x ?? 0; this.z = samples[0]?.position.z ?? 0;
-      this.hardware.count = this.foliage.count = this.screens.count = 0;
+      for (const mesh of this.batches) mesh.count = 0;
       const wireData: number[] = [], last = new Map<number, { sample: RoadSample; point: Point; high: boolean }>();
       for (let i = 1; i < samples.length; i++) {
         const s = samples[i], previous = samples[i - 1], d = s.distance;
@@ -65,7 +67,7 @@ export class RoadsideScenery {
           if (!p || Math.abs(p.y - s.position.y) > 7) continue;
           const arid = ['desert', 'dunes', 'badlands'].includes(this.options.terrain), variation = hashSeed(`${this.seed}:tree:${s.routeId}:${Math.floor(d / 32)}`) % 5;
           const height = arid ? 3.8 : 5.5 + variation * 0.3;
-          this.box(this.hardware, { ...p, y: p.y + height / 2 }, 0.25, height, 0.25, s.heading, 0x75644e);
+          this.box(this.trunks, { ...p, y: p.y + height / 2 }, 0.25, height, 0.25, s.heading, 0x75644e);
           this.box(this.foliage, { ...p, y: p.y + height }, arid ? 2.6 : 2.1, arid ? 1.3 : 2.8, 2.1, s.heading, arid ? 0x858d59 : variation % 2 ? 0x56754b : 0x668552);
         }
         const high = hashSeed(`${this.seed}:utility:${s.routeId}:${Math.floor(d / 1536)}`) % 3 === 0;
@@ -109,12 +111,13 @@ export class RoadsideScenery {
       }
       const geometry = new BufferGeometry(); geometry.setAttribute('position', new Float32BufferAttribute(wireData, 3)); geometry.computeBoundingSphere();
       this.wires.geometry.dispose(); this.wires.geometry = geometry;
-      for (const mesh of [this.hardware, this.foliage, this.screens]) {
+      for (const mesh of this.batches) {
         mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
-    for (const mesh of [this.hardware, this.foliage, this.screens, this.wires]) { mesh.position.set(this.x - originX, 0, this.z - originZ); mesh.visible = visible; }
+    for (const mesh of [...this.batches, this.wires]) { mesh.position.set(this.x - originX, 0, this.z - originZ); mesh.visible = visible; }
+    this.trunks.visible = this.foliage.visible = visible && vegetation;
   }
 
   private box(mesh: InstancedMesh, p: Point, w: number, h: number, l: number, heading: number, color: number): void {
@@ -137,7 +140,7 @@ export class RoadsideScenery {
   }
 
   dispose(): void {
-    for (const mesh of [this.hardware, this.foliage, this.screens]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
+    for (const mesh of this.batches) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
     this.wires.removeFromParent(); this.wires.geometry.dispose(); this.wires.material.dispose();
   }
 }

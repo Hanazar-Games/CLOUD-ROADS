@@ -37,6 +37,7 @@ export class AudioSystem {
   private master?: GainNode;
   private sfx?: GainNode;
   private music?: GainNode;
+  private program?: GainNode;
   private engine?: OscillatorNode;
   private engineGain?: GainNode;
   private windGain?: GainNode;
@@ -69,7 +70,7 @@ export class AudioSystem {
   private load = 0;
   private musicDuck = 1;
   private readonly pads: GainNode[] = [];
-  private radioFade = 1;
+  private retuneAt?: number;
   private lastBrake = false;
   private lastOperation = 0;
   private lastShift = 0;
@@ -90,11 +91,23 @@ export class AudioSystem {
   private readonly targets = new WeakMap<AudioParam, number>();
 
   get state(): string { return this.error ? 'unavailable' : this.context?.state ?? 'locked'; }
+  get previewing(): boolean {
+    return this.previewTime > 0 && this.audible && this.state === 'running' && this.sfxVolume > 0 && this.masterVolume > 0
+      && (this.previewKind === 'horn' ? this.effectsVolume : this.engineVolume) > 0;
+  }
 
   tune(channel: number): void {
     if (!Number.isInteger(channel) || channel < 1 || channel > radioStations.length) return;
     const station = radioStations[channel - 1];
-    this.station = channel; this.musicStyle = station.style; this.musicPace = station.pace; this.musicTime = 0; this.radioFade = 0;
+    this.station = channel; this.musicStyle = station.style; this.musicPace = station.pace;
+    const now = this.context?.currentTime ?? 0, fading = this.audible && this.state === 'running';
+    this.retuneAt = now + (fading ? 0.12 : 0);
+    if (this.program) {
+      const level = this.program.gain.value;
+      this.program.gain.cancelScheduledValues(now);
+      this.program.gain.setValueAtTime(fading ? level : 0, now);
+      this.program.gain.linearRampToValueAtTime(0, this.retuneAt);
+    }
   }
 
   toggle(): void {
@@ -119,6 +132,10 @@ export class AudioSystem {
       this.master!.gain.cancelScheduledValues(now); this.master!.gain.setValueAtTime(0, now); this.targets.delete(this.master!.gain);
       if (!audible) {
         this.previewTime = 0;
+        if (this.retuneAt !== undefined) {
+          this.retuneAt = now;
+          this.program!.gain.cancelScheduledValues(now); this.program!.gain.setValueAtTime(0, now);
+        }
         for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.trafficGain]) {
           channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.delete(channel!.gain);
         }
@@ -167,17 +184,18 @@ export class AudioSystem {
     };
     this.harmonicGain = gain(filter, 0.16); this.harmonic = oscillator('sawtooth', this.harmonicGain);
     this.horn = oscillator('triangle', this.hornGain); this.bird = oscillator('sine', this.natureGain);
-    this.melodyGain = gain(this.music); this.melody = oscillator('sine', this.melodyGain);
+    this.program = gain(this.music, this.retuneAt === undefined ? 1 : 0);
+    this.melodyGain = gain(this.program); this.melody = oscillator('sine', this.melodyGain);
     for (let i = 0; i < 4; i++) {
       const voice = context.createOscillator(); voice.type = 'sine'; voice.frequency.value = chords[0][i];
-      const pad = gain(this.music, 0.06); this.pads.push(pad);
+      const pad = gain(this.program, 0.06); this.pads.push(pad);
       voice.connect(pad); voice.start(); this.sources.push(voice); this.voices.push(voice);
     }
     this.pneumaticGain = noiseChannel(1300, 'bandpass');
     this.reverseGain = gain(this.sfx); const reverse = oscillator('sine', this.reverseGain); reverse.frequency.value = 880;
-    this.bassGain = gain(this.music); this.bass = oscillator('sine', this.bassGain);
+    this.bassGain = gain(this.program); this.bass = oscillator('sine', this.bassGain);
     const rhythm = context.createBiquadFilter(); rhythm.type = 'highpass'; rhythm.frequency.value = 2800;
-    this.rhythmGain = gain(this.music); noiseSource.connect(rhythm); rhythm.connect(this.rhythmGain);
+    this.rhythmGain = gain(this.program); noiseSource.connect(rhythm); rhythm.connect(this.rhythmGain);
     this.turboGain = noiseChannel(1600, 'bandpass'); this.serviceGain = noiseChannel(150, 'lowpass');
     this.subEngineGain = gain(filter); this.subEngine = oscillator('sine', this.subEngineGain);
     this.trafficGain = noiseChannel(400, 'lowpass');
@@ -196,7 +214,7 @@ export class AudioSystem {
       this.targets.set(parameter, value); parameter.setTargetAtTime(value, now, smooth);
     };
     const speed = Math.min(110, Math.abs(state.speed)), cabin = state.cockpit ? 0.22 + state.exposure * 0.78 : 1;
-    const preview = this.previewTime > 0; this.previewTime = Math.max(0, this.previewTime - dt);
+    const preview = this.previewing; this.previewTime = preview ? Math.max(0, this.previewTime - dt) : 0;
     const rpm = preview && this.previewKind === 'engine' ? 2200 + Math.sin(this.time * 4) * 700 : state.rpm;
     this.load += ((state.throttle ? 1 : 0) - this.load) * Math.min(1, dt * 5);
     this.musicDuck += ((state.horn ? 0.4 : 1) - this.musicDuck) * Math.min(1, dt * 4);
@@ -236,28 +254,41 @@ export class AudioSystem {
       this.pulse(this.stepGain!, 0.22 * this.effectsVolume, 0.025);
     }
     this.lastSignal = state.signal; this.lastWiper = state.wiper;
-    this.time += dt; this.musicTime += dt * this.musicPace;
-    this.radioFade = Math.min(1, this.radioFade + dt * 0.8);
+    this.time += dt;
+    if (this.retuneAt !== undefined && now < this.retuneAt) return;
+    const retuned = this.retuneAt !== undefined;
+    if (retuned) {
+      this.retuneAt = undefined; this.musicTime = 0;
+      this.program!.gain.cancelScheduledValues(now); this.program!.gain.setValueAtTime(0, now);
+      this.program!.gain.setTargetAtTime(1, now, 0.16);
+    }
+    const musicSet = (parameter: AudioParam, value: number, smooth: number) => {
+      if (!retuned) { set(parameter, value, smooth); return; }
+      this.targets.set(parameter, value); parameter.cancelScheduledValues(now); parameter.setValueAtTime(value, now);
+    };
+    this.musicTime += dt * this.musicPace;
     const station = radioStations[this.station - 1];
     const chord = progressions[(this.station - 1) % progressions.length][Math.floor(this.musicTime / 12) % 4];
-    const musicLevel = this.radioFade * this.musicDuck;
+    const musicLevel = this.musicDuck;
     const transpose = station.pitch * (this.musicStyle === 'night' ? 0.75 : this.musicStyle === 'motion' ? 1.12246 : 1);
     this.melody!.type = station.wave;
     this.chord = chord; this.voices.forEach((voice, i) => {
-      set(voice.frequency, chords[chord][i] * transpose, 0.6);
-      set(this.pads[i].gain, musicLevel * (0.045 + 0.012 * Math.sin(this.musicTime * 0.22 + i)), 0.4);
+      musicSet(voice.frequency, chords[chord][i] * transpose, 0.6);
+      musicSet(this.pads[i].gain, musicLevel * (0.045 + 0.012 * Math.sin(this.musicTime * 0.22 + i)), 0.4);
     });
     const beat = this.musicTime % (this.musicStyle === 'motion' ? 0.6 : 1.2), note = melodyNotes[(Math.floor(this.musicTime / (this.musicStyle === 'motion' ? 0.6 : 1.2)) + this.station * 3) % melodyNotes.length];
-    set(this.melody!.frequency, chords[this.chord][note] * 2 * transpose, 0.025);
+    musicSet(this.melody!.frequency, chords[this.chord][note] * 2 * transpose, 0.025);
     const phrase = Math.floor(this.musicTime / 4.8) % 4;
-    set(this.melodyGain!.gain, musicLevel * (phrase === 3 ? 0.3 : 1) * (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
-    set(this.bass!.frequency, chords[chord][phrase % 2 ? 2 : 0] * transpose / 2, 0.16);
-    set(this.bassGain!.gain, musicLevel * (this.musicStyle === 'motion' ? 0.07 : 0.035) * (0.7 + 0.3 * Math.exp(-beat * 3)), 0.08);
-    set(this.rhythmGain!.gain, this.musicStyle === 'motion' ? musicLevel * 0.014 * Math.exp(-(this.musicTime % 0.3) * 45) : 0, 0.012);
+    musicSet(this.melodyGain!.gain, musicLevel * (phrase === 3 ? 0.3 : 1) * (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
+    musicSet(this.bass!.frequency, chords[chord][phrase % 2 ? 2 : 0] * transpose / 2, 0.16);
+    musicSet(this.bassGain!.gain, musicLevel * (this.musicStyle === 'motion' ? 0.07 : 0.035) * (0.7 + 0.3 * Math.exp(-beat * 3)), 0.08);
+    musicSet(this.rhythmGain!.gain, this.musicStyle === 'motion' ? musicLevel * 0.014 * Math.exp(-(this.musicTime % 0.3) * 45) : 0, 0.012);
   }
 
   preview(kind: 'engine' | 'shift' | 'horn'): boolean {
-    if (!this.audible || this.state !== 'running' || this.sfxVolume <= 0 || this.masterVolume <= 0) return false;
+    this.previewTime = 0;
+    if (!this.audible || this.state !== 'running' || this.sfxVolume <= 0 || this.masterVolume <= 0
+      || (kind === 'horn' ? this.effectsVolume : this.engineVolume) <= 0) return false;
     this.previewTime = 1.2; this.previewKind = kind;
     if (kind === 'shift') this.pulse(this.shiftGain!, 0.13 * this.engineVolume, 0.045);
     return true;

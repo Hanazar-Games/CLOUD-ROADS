@@ -6,15 +6,15 @@ const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
   supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0 };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
-  setValueAtTime(value: number) { this.value = value; }, cancelScheduledValues: vi.fn() });
+  setValueAtTime(value: number) { this.value = value; }, linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
 class AudioContextStub {
   state = 'suspended'; currentTime = 0; sampleRate = 100;
   destination = {}; gains: ReturnType<typeof gain>[] = [];
   resumed: number[][] = [];
   createGain() { const node = gain(); this.gains.push(node); return node; }
-  oscillators: { frequency: ReturnType<typeof param>; stop: ReturnType<typeof vi.fn> }[] = [];
-  createOscillator() { const node = { frequency: param(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; this.oscillators.push(node); return node; }
+  oscillators: { type: string; frequency: ReturnType<typeof param>; stop: ReturnType<typeof vi.fn> }[] = [];
+  createOscillator() { const node = { type: 'sine', frequency: param(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; this.oscillators.push(node); return node; }
   createBiquadFilter() { return { frequency: param(), Q: param(), connect: vi.fn() }; }
   compressors = 0;
   createDynamicsCompressor() { this.compressors++; return { threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), connect: vi.fn() }; }
@@ -111,6 +111,39 @@ it('applies SFX and music volume changes before resuming suspended audio', async
   audio.setActive(true); await Promise.resolve();
   expect(context.resumed.at(-1)![2]).toBe(0);
   audio.dispose();
+});
+
+it('rejects previews of muted sound groups and reports completion and interruption', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.engineVolume = 0;
+  expect(audio.preview('engine')).toBe(false); expect(audio.preview('shift')).toBe(false);
+  audio.effectsVolume = 0; expect(audio.preview('horn')).toBe(false);
+  audio.engineVolume = 1;
+  expect(audio.preview('engine')).toBe(true); expect(audio.previewing).toBe(true);
+  expect(audio.preview('horn')).toBe(false); expect(audio.previewing).toBe(false);
+  audio.preview('engine');
+  audio.update(1.3, idle); expect(audio.previewing).toBe(false);
+  audio.preview('engine'); audio.engineVolume = 0; audio.update(0.1, idle);
+  expect(audio.previewing).toBe(false);
+  audio.effectsVolume = 1; audio.preview('horn'); audio.setActive(false);
+  expect(audio.previewing).toBe(false); audio.dispose();
+});
+
+it('fades out before changing radio voices and coalesces rapid station changes', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve(); audio.update(0.1, idle);
+  const count = context.oscillators.length, waves = context.oscillators.map(o => o.type);
+  audio.tune(7); audio.update(0.02, idle);
+  expect(context.oscillators.map(o => o.type)).toEqual(waves);
+  context.currentTime = 0.05; audio.tune(8); audio.tune(10); audio.update(0.02, idle);
+  expect(context.oscillators.map(o => o.type)).toEqual(waves);
+  context.currentTime = 0.3; audio.update(0.02, idle);
+  expect(context.oscillators.map(o => o.type)).not.toEqual(waves);
+  expect(audio.station).toBe(10); expect(context.oscillators).toHaveLength(count);
+  audio.setActive(false); await Promise.resolve(); audio.tune(1);
+  audio.setActive(true); await Promise.resolve(); audio.update(0.02, idle);
+  expect(context.oscillators.map(o => o.type)).toEqual(waves); audio.dispose();
 });
 
 it('silences transient driving sounds on pause and does not resume a stale wiper stroke', async () => {

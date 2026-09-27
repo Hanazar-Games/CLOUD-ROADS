@@ -44,6 +44,9 @@ test('returns keyboard control when closing settings and boards the parked car f
   await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-trip').textContent())).toBeGreaterThan(0.01);
   await page.keyboard.up('KeyW'); await page.keyboard.press('KeyF');
+  await expect(metric('Travel mode')).toHaveText('driving');
+  await page.keyboard.down('Space'); await expect(page.locator('#vehicle-speed')).toHaveText('0');
+  await page.keyboard.up('Space'); await page.keyboard.press('KeyF');
   await expect(metric('Travel mode')).toHaveText('walking');
   const parked = await metric('Vehicle position').textContent(), trip = await page.locator('#vehicle-trip').textContent();
   await expect(page.locator('#drive-toggle')).toHaveText('回到车辆');

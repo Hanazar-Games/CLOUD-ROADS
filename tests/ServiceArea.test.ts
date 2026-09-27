@@ -85,6 +85,12 @@ it('builds parking, buildings and access pavement, then rebases and releases eve
   ray.set(new Vector3(roofEdge.x, roofEdge.y, roofEdge.z), new Vector3(0, -1, 0));
   expect(ridge.point.y - ray.intersectObject(mesh.roofs)[0].point.y).toBeGreaterThan(1);
   expect(mesh.landscaping.count).toBeGreaterThan(0);
+  expect(mesh.treeTrunks.count).toBeGreaterThan(0);
+  mesh.update([site], 1, 0, 0, false);
+  expect(mesh.landscaping.visible).toBe(false); expect(mesh.treeTrunks.visible).toBe(false);
+  expect(mesh.buildings.visible).toBe(true); expect(mesh.pavement.visible).toBe(true);
+  mesh.update([site], 1, 0, 0, true);
+  expect(mesh.landscaping.visible).toBe(true); expect(mesh.treeTrunks.visible).toBe(true);
   expect(mesh.lampPositions.length).toBeGreaterThan(0);
   const data = mesh.pavement.geometry.getAttribute('position').array.slice();
   mesh.update([site], 1, 5120, -5120);

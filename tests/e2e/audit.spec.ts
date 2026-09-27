@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 import { control, toggleSettings } from './settings';
 import { BiomeSystem } from '../../src/biome/BiomeSystem';
 import { HeightFunction } from '../../src/terrain/HeightFunction';
+import { readFileSync } from 'node:fs';
+
+const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
 
 test('stops held movement when focus leaves the canvas and consumes flight shortcuts', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
@@ -111,8 +114,12 @@ test('shows the current release, archives the previous baseline and isolates dia
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '版本公告' }))).click();
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('[data-release="current"]')).toContainText('0.1.42');
-  await expect(dialog.locator('[data-release="current"]')).toContainText('巡航助手 · 自定义快捷键与匝道细节');
+  await expect(dialog.locator('[data-release="current"]')).toContainText(version);
+  await expect(dialog.locator('[data-release="current"]')).toContainText('旅程检修 · 声音过渡与交互一致性');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.43');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('双向驿站 · 沿线设施与高桥细节');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.42');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('巡航助手 · 自定义快捷键与匝道细节');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.41');
   await expect(dialog.locator('[data-release="history"]')).toContainText('车流变道 · 自定义车道与灯光大道');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.40');

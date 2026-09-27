@@ -58,6 +58,7 @@ export class Game {
   private viewRadius = VIEW_RADIUS;
   private renderScale = 1;
   private readonly audio = new AudioSystem();
+  private audioPreviewPending = false;
   private windowFocused = true;
 
   constructor() {
@@ -102,7 +103,9 @@ export class Game {
       element('music-pace-value').textContent = `${value}%`;
     }, { signal: this.events.signal });
     for (const kind of ['engine', 'shift', 'horn'] as const) element(`preview-${kind}`).addEventListener('click', () => {
-      element('audio-preview-status').textContent = this.audio.preview(kind) ? '正在试听 · 使用当前混音参数' : '请开启声音、解除暂停，并调高总音量与音效音量。';
+      this.audioPreviewPending = this.audio.preview(kind);
+      element('audio-preview-status').textContent = this.audioPreviewPending ? '正在试听 · 使用当前混音参数'
+        : `请开启声音、解除暂停，并调高总音量、全部音效及「${kind === 'horn' ? '喇叭、提示与脚步' : '发动机与换挡'}」音量。`;
     }, { signal: this.events.signal });
     window.addEventListener('blur', () => { this.windowFocused = false; this.audio.setActive(false); }, { signal: this.events.signal });
     window.addEventListener('focus', () => { this.windowFocused = true; }, { signal: this.events.signal });
@@ -498,6 +501,10 @@ export class Game {
   private customGraphics(): void { element<HTMLSelectElement>('graphics-preset').value = 'custom'; }
 
   private syncAudioUI(): void {
+    if (this.audioPreviewPending && !this.audio.previewing) {
+      this.audioPreviewPending = false;
+      element('audio-preview-status').textContent = '试听已结束 · 可调整混音参数后再次试听。';
+    }
     element('audio-toggle').setAttribute('aria-pressed', String(this.audio.enabled));
     element('audio-toggle').textContent = this.audio.error ? '音频不可用' : this.audio.enabled ? '静音' : '开启声音';
     element<HTMLButtonElement>('audio-toggle').disabled = !!this.audio.error;
@@ -597,7 +604,8 @@ export class Game {
       const nearby = this.walking.active ? this.driving.nearbyVehicle(this.walking.person) : undefined;
       const boardable = this.walking.active && (this.driving.canBoard(this.walking.person) || !!nearby);
       element('boarding-help').hidden = !boardable;
-      element('boarding-help').textContent = this.boarding ? '车门打开中 · 请稍候' : nearby ? `F · 开门驾驶${vehicleProfiles[nearby.kind].name}` : 'F · 开门回到车辆';
+      element('boarding-help').textContent = this.boarding ? '车门打开中 · 请稍候'
+        : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
       element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 · ${this.world.traffic.density ? '交通运行中' : '交通已关闭'}`;
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;

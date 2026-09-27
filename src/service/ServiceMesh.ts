@@ -31,7 +31,8 @@ export class ServiceMesh {
   readonly lights = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffebc7, emissive: 0xffd39a, emissiveIntensity: 1.6 }), 512);
   readonly roofs = new InstancedMesh(roofGeometry(), new MeshStandardMaterial({ roughness: 0.7, metalness: 0.2 }), 64);
   readonly landscaping = new InstancedMesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ roughness: 1, flatShading: true }), 512);
-  private readonly batches = [this.buildings, this.windows, this.markings, this.lights, this.roofs, this.landscaping, this.structures, this.railings];
+  readonly treeTrunks = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 1 }), 128);
+  private readonly batches = [this.buildings, this.windows, this.markings, this.lights, this.roofs, this.landscaping, this.treeTrunks, this.structures, this.railings];
   readonly lampPositions: (ServicePoint & { covered?: boolean })[] = [];
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
@@ -41,13 +42,13 @@ export class ServiceMesh {
 
   constructor(scene: Scene, private readonly options: Readonly<WorldOptions>, private readonly terrain: RoadTerrain) {
     for (const mesh of [this.pavement, ...this.batches]) {
-      mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping || mesh === this.structures;
+      mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping || mesh === this.treeTrunks || mesh === this.structures;
       scene.add(mesh);
     }
     for (const mesh of this.batches) mesh.count = 0;
   }
 
-  update(sites: readonly ServiceArea[], version: number, originX: number, originZ: number): void {
+  update(sites: readonly ServiceArea[], version: number, originX: number, originZ: number, vegetation = true): void {
     if (this.version !== version) {
       this.version = version;
       this.anchorX = sites[0]?.sample.position.x ?? 0;
@@ -107,6 +108,7 @@ export class ServiceMesh {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = sites.length > 0;
     }
+    this.landscaping.visible = this.treeTrunks.visible = sites.length > 0 && vegetation;
   }
 
   private crossover(cross: ServiceCrossover, pad: ServicePad, data: number[], vertex: (p: ServicePoint, lift?: number) => Point): void {
@@ -248,7 +250,7 @@ export class ServiceMesh {
     for (const along of [-12, 4, 59]) {
       box(29, along, 0.25, 4, 0.5, 8, 0xafb2a1, true);
       box(29, along, 0.53, 3.7, 0.06, 7.7, 0x5d5943, true);
-      box(29, along, 2, 0.2, 3, 0.2, 0x756044);
+      this.box(this.treeTrunks, pad, 29 * pad.side, along, 2, 0.2, 3, 0.2, 0x756044);
       this.box(this.landscaping, pad, 29 * pad.side, along, 4.1, 2.6, 2.2, 2.6, 0x637e43);
       for (const dz of [-2.5, 2.5]) this.box(this.landscaping, pad, 29 * pad.side, along + dz, 1.1, 1.6, 0.75, 1.5, 0x83964e);
       for (const dz of [-3, -1, 1, 3]) this.box(this.landscaping, pad, 30 * pad.side, along + dz, 0.83, 0.4, 0.3, 0.4,
