@@ -6,6 +6,7 @@ import type { RoadTerrain } from '../road/RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
 import { serviceArchitecture, type ServiceArchitecture } from './ServiceArchitecture';
 import { parkingSlots } from './ServiceParking';
+import { chargingBays, chargingPosts, chargingPostColumns } from './ServiceAmenities';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -192,6 +193,7 @@ export class ServiceMesh {
       this.lampPositions.push(padPoint(pad, 14 * pad.side, along, 5));
     }
     this.parking(pad, architecture);
+    this.amenities(pad);
     for (const along of [54, 64]) {
       box(15, along, 0.9, 4, 0.16, 1.5, 0x886c4e);
       for (const z of [-1.3, 1.3]) box(15, along + z, 0.5, 4.5, 0.16, 0.45, 0x967950);
@@ -222,6 +224,37 @@ export class ServiceMesh {
       this.box(this.lights, pad, -32 * pad.side, along, 7.6, 1.2, 0.15, 1.2, 0xffffff);
       this.lampPositions.push(padPoint(pad, -32 * pad.side, along, 7.4));
     }
+  }
+
+  private amenities(pad: ServicePad): void {
+    const box = (x: number, a: number, y: number, w: number, h: number, l: number, color: number) => this.box(this.buildings, pad, x * pad.side, a, y, w, h, l, color);
+    for (const a of chargingPosts) for (const x of chargingPostColumns) {
+      box(x, a, 2.25, 0.22, 4.5, 0.22, 0x738b8c);
+      box(x, a, 0.14, 0.45, 0.28, 0.45, 0xaeb7ad);
+    }
+    box(-57, -64, 4.55, 11, 0.16, 30, 0x738b8c);
+    for (let a = -77; a <= -51; a += 2) {
+      box(-57, a, 4.67, 10.5, 0.06, 1.8, 0x23465e);
+      for (const x of [-62, -59.5, -57, -54.5, -52]) box(x, a, 4.71, 0.035, 0.015, 1.8, 0x9cbdc8);
+    }
+    for (const a of chargingBays) {
+      box(-62, a, 1.1, 0.8, 2.2, 0.75, 0xe0e8df);
+      box(-61.57, a, 1.5, 0.07, 0.55, 0.55, 0x1d4349);
+      box(-61.52, a, 1.5, 0.035, 0.35, 0.36, 0x62cdb5);
+      for (const side of [-1, 1]) {
+        box(-61.7, a + side * 0.5, 0.9, 0.08, 1.15, 0.08, 0x28373b);
+        box(-61.55, a + side * 0.5, 1.43, 0.24, 0.14, 0.12, 0x28373b);
+      }
+      this.box(this.markings, pad, -54.1 * pad.side, a, 0.039, 0.17, 0.02, 2.8, 0x6fd2ba, true);
+      this.box(this.lights, pad, -57 * pad.side, a, 4.43, 2, 0.06, 0.18, 0xffffff);
+    }
+    box(7, 84, 1.3, 2.8, 2.6, 1.2, 0x637f7b);
+    box(7, 84, 2.67, 3.3, 0.14, 1.8, 0xb8c7ba);
+    box(7, 83.37, 1.5, 2.2, 1.6, 0.05, 0x203f4a);
+    for (const [x, a, w, l] of [[6.4, 83.33, 0.08, 0.06], [7, 83.33, 1.1, 0.06], [7.6, 83.33, 0.08, 0.06]])
+      box(x, a, 1.4, w, x === 7 ? 0.08 : 0.8, l, 0xb4d6c5);
+    for (const x of [5.7, 8.3]) box(x, 83.9, 0.16, 0.38, 0.32, 1.1, 0xa9b5a6);
+    for (let x = -3; x <= 9; x += 2) this.box(this.markings, pad, x * pad.side, 89, 0.037, 0.7, 0.02, 3.4, 0xe1dcc4, true);
   }
 
   private box(mesh: InstancedMesh, pad: ServicePad, x: number, along: number, y: number, w: number, h: number, l: number, color: number, followGrade = false): void {

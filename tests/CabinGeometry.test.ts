@@ -9,7 +9,7 @@ import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig'
 import { CraneSystems } from '../src/vehicle/CraneSystems';
 
 it('keeps every bus eye below its own ceiling, including both double-decker floors', () => {
-  for (const kind of ['minibus', 'coach', 'coach15', 'doubleDecker'] as const) {
+  for (const kind of ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus'] as const) {
     const p = vehicleProfiles[kind], mesh = new VehicleMesh(new Scene(), p);
     mesh.root.updateMatrixWorld(true);
     for (const seat of cabinSeats(p)) {
@@ -22,7 +22,7 @@ it('keeps every bus eye below its own ceiling, including both double-decker floo
 });
 
 it('animates real bus doors, cargo gates and the supercar wing with operations state', () => {
-  for (const kind of ['doubleDecker', 'stake18', 'truck5', 'supercar'] as const) {
+  for (const kind of ['doubleDecker', 'stake18', 'truck5', 'supercar', 'pickup', 'dumptruck', 'van', 'camper', 'ambulance'] as const) {
     const car = new VehiclePhysics(kind), mesh = new VehicleMesh(new Scene(), car.profile), ops = new VehicleOperations(car.profile);
     const action = kind === 'doubleDecker' ? 'doors' : kind === 'supercar' ? 'aux' : 'cargo';
     const parts = mesh.root.getObjectsByProperty('name', `operation-${action}`); expect(parts.length).toBeGreaterThan(0);
@@ -50,6 +50,19 @@ it('unfolds loading ramps behind the bed and lowers the motorcycle stand to the 
     }
     mesh.dispose();
   }
+});
+
+it('opens the pickup bed to the rear and folds the tailgate outside the cargo floor', () => {
+  const car = new VehiclePhysics('pickup'), mesh = new VehicleMesh(new Scene(), car.profile), ops = new VehicleOperations(car.profile);
+  const end = car.profile.length / 2, ray = new Raycaster(new Vector3(0, 0.05, end + 1), new Vector3(0, 0, -1), 0, 1.3);
+  mesh.root.updateMatrixWorld(true);
+  expect(ray.intersectObject(mesh.chassis, true).length).toBeGreaterThan(0);
+  ops.toggle('cargo', 0, true); for (let i = 0; i < 30; i++) ops.update(0.1);
+  mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems(), 0, undefined, ops); mesh.root.updateMatrixWorld(true);
+  expect(ray.intersectObject(mesh.chassis, true).length).toBe(0);
+  const gate = mesh.root.getObjectByName('operation-cargo')!;
+  expect(new Box3().setFromObject(gate).max.z).toBeGreaterThan(end + 0.25);
+  mesh.dispose();
 });
 
 it('shows trip, gear, turn signals and powered equipment on every vehicle display', () => {

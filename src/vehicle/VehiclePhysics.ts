@@ -19,6 +19,7 @@ export class VehiclePhysics {
   x = 0; y = 0; z = 0; heading = 0;
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   lateralSpeed = 0;
+  paint: number;
   braking = false; parked = true; jackknifed = false;
   suspension: Suspension = 3;
   damping = 1;
@@ -39,6 +40,7 @@ export class VehiclePhysics {
 
   constructor(readonly kind: VehicleKind = 'roadster') {
     this.profile = vehicleProfiles[kind]; this.wheels = this.profile.wheels.map(wheel);
+    this.paint = this.profile.paint;
     this.transmission = new Transmission(this.profile);
     this.pitchInertia = this.profile.wheels.reduce((sum, p) => sum + p.along ** 2, 0) / this.wheels.length;
     this.rollInertia = Math.max(0.3, this.profile.wheels.reduce((sum, p) => sum + p.x ** 2, 0) / this.wheels.length);

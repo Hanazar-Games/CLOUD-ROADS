@@ -15,8 +15,8 @@ test('locates a single 20 km exit and drives from the approach without console e
   await expect(metric('Coordinates')).not.toHaveText(before!, { timeout: 30000 });
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
   await expect(metric('Junctions')).toHaveText('1', { timeout: 30000 });
-  await expect(metric('Loaded routes')).toHaveText('3');
-  await expect(page.locator('#junction-status')).toContainText('右侧单出口');
+  await expect(metric('Loaded routes')).toHaveText('5');
+  await expect(page.locator('#junction-status')).toContainText('左转 / 右转 / 回转');
   await (await control(page, page.locator('#drive-toggle'))).click();
   await page.keyboard.down('KeyW');
   await expect(page.locator('#vehicle-speed')).not.toHaveText('0');

@@ -14,6 +14,7 @@ export interface VehicleProfile {
   radius: number; rest: number; travel: number; suspensionRate: number; cg: number; steer: number; steerRate: number;
   wheels: readonly WheelPoint[]; eye: { x: number; y: number; along: number }; paint: number;
   trailer?: TrailerConfig;
+  body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'citybus';
   bus?: { rows: readonly number[]; deckHeight: number };
 }
 const axles = (track: number, positions: number[], steeringAxles = 1): WheelPoint[] => positions.flatMap((along, axle) =>
@@ -30,6 +31,36 @@ const trailer = (length: number): TrailerConfig => {
     wheels: axles(2.08, length === 20 ? [-wheelbase + 1.2, -wheelbase, -wheelbase - 1.2] : [-wheelbase + 0.65, -wheelbase - 0.65]).map(w => ({ ...w, steer: false })) };
 };
 export const vehicleProfiles = {
+  hatchback: { ...base, name: '都市两厢车', shape: 'sedan', body: 'hatchback', length: 3.85, chassisLength: 3.85, width: 1.72, height: 1.62, mass: 1120,
+    power: 85000, force: 6100, maxSpeed: 43, rest: 0.43, radius: 0.3, cg: 0.5, drag: 0.43,
+    wheels: axles(1.48, [1.19, -1.19]), eye: { x: -0.39, y: 0.7, along: -0.1 }, paint: 0xdab659 },
+  wagon: { ...base, name: '长途旅行车', shape: 'suv', body: 'wagon', length: 4.85, chassisLength: 4.85, width: 1.88, height: 1.72, mass: 1750,
+    power: 175000, force: 10200, maxSpeed: 55, rest: 0.45, cg: 0.57, drag: 0.56,
+    wheels: axles(1.62, [1.48, -1.48]), eye: { x: -0.44, y: 0.76, along: 0 }, paint: 0x547b71 },
+  pickup: { ...base, name: '四驱工具皮卡', shape: 'suv', body: 'pickup', length: 5.45, chassisLength: 5.45, width: 2.02, height: 2.08, mass: 2650,
+    power: 210000, force: 15700, maxSpeed: 46, radius: 0.42, rest: 0.64, travel: 0.38, cg: 0.83, drag: 1.1,
+    wheels: axles(1.76, [1.7, -1.7]), eye: { x: -0.48, y: 0.8, along: 0.45 }, paint: 0x99684b },
+  van: { ...heavy, name: '城市厢式面包车', shape: 'truck', body: 'van', length: 5.8, chassisLength: 5.8, width: 2.02, height: 2.8, mass: 3100,
+    power: 120000, force: 16600, maxSpeed: 40, radius: 0.36, rest: 0.57, travel: 0.28, cg: 0.95, brake: 8.5, drag: 1.8,
+    wheels: axles(1.72, [1.8, -1.8]), eye: { x: -0.49, y: 1.25, along: 1.8 }, paint: 0xc9d6d5 },
+  camper: { ...heavy, name: '6.4 米旅居房车', shape: 'truck', body: 'camper', length: 6.4, chassisLength: 6.4, width: 2.3, height: 3.35, mass: 4900,
+    power: 150000, force: 25000, maxSpeed: 33, radius: 0.4, rest: 0.65, cg: 1.3, drag: 3.1,
+    wheels: axles(1.94, [1.95, -1.95]), eye: { x: -0.55, y: 1.35, along: 2.2 }, paint: 0xe0d4b9 },
+  ambulance: { ...heavy, name: '医疗救护车', shape: 'truck', body: 'ambulance', length: 6.1, chassisLength: 6.1, width: 2.15, height: 3.15, mass: 4100,
+    power: 180000, force: 22000, maxSpeed: 43, radius: 0.38, rest: 0.61, cg: 1.14, brake: 8.7, drag: 2.4,
+    wheels: axles(1.83, [1.85, -1.85]), eye: { x: -0.51, y: 1.3, along: 2.05 }, paint: 0xe2e4dd },
+  firetruck: { ...heavy, name: '8.6 米消防救援车', shape: 'truck', body: 'firetruck', length: 8.6, chassisLength: 8.6, height: 3.65, mass: 16500,
+    power: 310000, force: 90000, maxSpeed: 32, cg: 1.5, wheels: axles(2.08, [2.9, -0.95, -1.95]),
+    eye: { x: -0.65, y: 1.65, along: 3.3 }, paint: 0xb9362e },
+  dumptruck: { ...heavy, name: '三轴工程自卸车', shape: 'truck', body: 'dumptruck', length: 8.2, chassisLength: 8.2, height: 3.7, mass: 24500,
+    power: 370000, force: 140000, maxSpeed: 26, cg: 1.6, drag: 5.7, wheels: axles(2.08, [2.7, -0.85, -1.85]),
+    eye: { x: -0.65, y: 1.75, along: 3.1 }, paint: 0xd5a241 },
+  tanker: { ...heavy, name: '10 米三轴罐车', shape: 'truck', body: 'tanker', length: 10, chassisLength: 10, height: 3.8, mass: 26500,
+    power: 335000, force: 128000, maxSpeed: 26, cg: 1.65, drag: 4.5, steerRate: 0.78, wheels: axles(2.08, [3.5, -1.2, -2.3]),
+    eye: { x: -0.65, y: 1.75, along: 4 }, paint: 0x598eac },
+  citybus: { ...heavy, name: '10.5 米城市公交', shape: 'bus', body: 'citybus', length: 10.5, chassisLength: 10.5, height: 3.1, mass: 12000,
+    power: 220000, force: 65000, maxSpeed: 23, radius: 0.43, rest: 0.67, cg: 1.12, drag: 3.5,
+    wheels: axles(2.08, [3.2, -3.2]), eye: { x: -0.65, y: 1.35, along: 4.5 }, bus: { rows: [10], deckHeight: 0 }, paint: 0x4ca292 },
   roadster: { ...base, name: '敞篷跑车' },
   sedan: { ...base, name: '旅行轿车', shape: 'sedan', length: 4.7, chassisLength: 4.7, height: 1.65, mass: 1600,
     power: 150000, force: 8800, rest: 0.46, wheels: axles(1.6, [1.43, -1.43]), eye: { x: -0.43, y: 0.7, along: -0.2 }, paint: 0x769caf },

@@ -17,27 +17,28 @@ function visit(network: RoadNetwork, distance = 20000): void {
   for (let i = 0; i < 180; i++) network.update(point.x, point.z, point.y + 1, 4000);
 }
 
-it('creates exactly one exit at each 20 km milestone, without startup or duplicate branches', () => {
+it('creates one interchange with three directions at each 20 km milestone without duplicate branches', () => {
   const settings = { ...options, routeStyle: 0 as const };
   const road = new RoadSpine('milestones', flat, settings), network = new RoadNetwork('milestones', flat, settings, road);
   for (let i = 0; i < 160; i++) network.update(128, 128, 101, 4000);
   expect(network.junctions).toHaveLength(0);
   expect(network.routes).toHaveLength(2);
-  const ids: string[] = [];
+  const ids: string[][] = [];
   for (const distance of [20000, 40000, 60000]) {
     visit(network, distance);
     const junctions = network.junctions.filter(j => j.route === 'root');
     expect(junctions).toHaveLength(1);
     expect(junctions[0].distance).toBeCloseTo(distance, 4);
-    expect(junctions[0].exits).toHaveLength(1);
-    ids.push(junctions[0].exits[0]);
+    expect(junctions[0].exits).toHaveLength(3);
+    expect(junctions[0].ramps.map(r => r.direction)).toEqual(['left', 'right', 'return']);
+    ids.push(junctions[0].exits);
   }
-  expect(new Set(ids).size).toBe(3);
+  expect(new Set(ids.flat()).size).toBe(9);
   const replay = road.fork();
   while (!replay.advanceToDistance(24000)) { /* Recreate a discarded exit window. */ }
   const p = replay.segments.find(s => s.start.distance <= 20000 && s.end.distance >= 20000)!.atDistance(20000).position;
   for (let i = 0; i < 300; i++) network.update(p.x, p.z, p.y + 1, 4000);
-  expect(network.junctions.find(j => j.route === 'root')?.exits).toEqual([ids[0]]);
+  expect(network.junctions.find(j => j.route === 'root')?.exits).toEqual(ids[0]);
 });
 
 it.each(['mountain', 'highway'] as const)('can disable %s junctions while retaining the continuous road in both directions', roadType => {
@@ -115,26 +116,26 @@ it('returns through the start and bounds cached branches across repeated choices
     const samplePosition = { ...branch.road.samples.at(-5)!.position };
     settle(samplePosition);
     expect(network.active.id).toBe(branch.id);
-    expect(network.routes.length).toBeLessThanOrEqual(7);
+    expect(network.routes.length).toBeLessThanOrEqual(11);
     const version = network.version;
     for (let i = 0; i < 20; i++) network.update(samplePosition.x, samplePosition.z, samplePosition.y + 1, 4000);
     expect(network.version).toBe(version);
   }
 });
 
-it.each([['mountain', false, 'roadster'], ['mountain', true, 'roadster'], ['highway', true, 'semi20']] as const)('drives through a %s exit (interchange %s) with %s and continues streaming', (roadType, interchanges, kind) => {
+it.each([['mountain', false, 'roadster', 0], ['mountain', true, 'roadster', 0], ['highway', true, 'semi20', 0], ['highway', true, 'semi20', 1], ['highway', true, 'semi20', 2]] as const)('drives through a %s exit (interchange %s) with %s on ramp %s and continues streaming', (roadType, interchanges, kind, exit) => {
   const settings = { ...options, roadType, interchanges, routeStyle: 0 as const };
   const root = new RoadSpine('drive-fork', flat, settings), network = new RoadNetwork('drive-fork', flat, settings, root);
   visit(network);
-  const junction = network.junctions[0], branch = network.routes.find(route => route.id === junction.exits[0])!;
+  const junction = network.junctions[0], branch = network.routes.find(route => route.id === junction.exits[exit])!;
   const surface = new DrivingSurface({ seed:'drive-fork', options:settings, network, road:root, bridges:[], tunnels:[], services:[], groundHeight:()=>100 });
   const car = new VehiclePhysics(kind), lane = roadProfile(settings).centers.at(-1)! + settings.roadWidth / 4;
   const start = branch.road.samples[0], r = roadFrame(start).right;
   car.reset(start.position.x + r.x * lane, start.position.z + r.z * lane, start.heading, surface.sample);
   car.parked = false; car.speed = 10;
   let reached = 0;
-  const finish = interchanges ? 2400 : 600;
-  for (let frame = 0; frame < 15000 && reached < finish; frame++) {
+  const finish = branch.definition.prefix.at(-1)!.end.distance + 160;
+  for (let frame = 0; frame < 24000 && reached < finish; frame++) {
     const near = branch.road.nearest(car.x, car.z)!, targetDistance = near.distance + 20;
     const target = branch.road.samples.find(p => p.distance >= targetDistance)!;
     const { right } = roadFrame(target);

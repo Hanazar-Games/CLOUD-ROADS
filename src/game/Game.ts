@@ -596,8 +596,8 @@ export class Game {
       const junctionSearch = this.world.junctionSearchProgress;
       element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || this.world.searching || !junctions;
       element('junction-view').textContent = junctionSearch === null ? '下一匝道' : `定位中 · ${Math.round(junctionSearch * 100)}%`;
-      element('junction-status').textContent = junction ? `${junction.kind === 'stack' ? '环形立交' : '平面出口'} · 右侧单出口 · ${Math.max(0, Math.round((junction.distance - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
-        : junctions ? '每 20 km 一处 · 每处一条右侧出口' : '出口关闭 · 主线双向延伸';
+      element('junction-status').textContent = junction ? `${junction.kind === 'stack' ? '多向立交 · 左转 / 右转 / 回转' : '平面分流'} · ${Math.max(0, Math.round(((junction.ramps.find(r => r.sample.distance > (this.world.roadSample?.distance ?? 0) - 30)?.sample.distance ?? junction.distance) - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
+        : junctions ? '每 20 km 一组 · 按方向标牌分流' : '出口关闭 · 主线双向延伸';
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;

@@ -6,7 +6,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
 import type { RoadSample } from './RoadSegment';
-import { createSignAtlas, SIGN_ROWS, signLabels } from './SignAtlas';
+import { createSignAtlas, SIGN_ROWS, SIGN_GUTTER, SIGN_TILE_WIDTH, SIGN_TILE_HEIGHT, signLabels } from './SignAtlas';
 import type { Junction } from './RoadNetwork';
 
 const CAPACITY = 2048;
@@ -15,6 +15,7 @@ export class RoadSigns {
   private readonly atlas = createSignAtlas();
   readonly boards = new InstancedMesh(new PlaneGeometry(), new MeshStandardMaterial({ map: this.atlas, emissiveMap: this.atlas, emissive: 0xffffff, emissiveIntensity: 0.06, roughness: 0.72 }), CAPACITY);
   readonly posts = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x84918b, metalness: 0.45, roughness: 0.6 }), CAPACITY);
+  readonly backs = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x536c65, metalness: 0.35, roughness: 0.65 }), CAPACITY);
   private readonly tiles = new InstancedBufferAttribute(new Float32Array(CAPACITY), 1);
   private readonly matrix = new Matrix4();
   private readonly profile;
@@ -28,32 +29,39 @@ export class RoadSigns {
     this.boards.material.onBeforeCompile = shader => {
       shader.vertexShader = `attribute float signTile;\n${shader.vertexShader}`.replace('#include <uv_vertex>', `
         #include <uv_vertex>
-        vMapUv = (uv + vec2(mod(signTile, 4.0), floor(signTile / 4.0))) / vec2(4.0, ${SIGN_ROWS}.0);
+        vec2 inset = vec2(${SIGN_GUTTER / SIGN_TILE_WIDTH}, ${SIGN_GUTTER / SIGN_TILE_HEIGHT});
+        vMapUv = (mix(inset, 1.0 - inset, uv) + vec2(mod(signTile, 4.0), floor(signTile / 4.0))) / vec2(4.0, ${SIGN_ROWS}.0);
         vEmissiveMapUv = vMapUv;
       `);
     };
-    this.boards.count = this.posts.count = 0;
-    this.boards.visible = this.posts.visible = false;
-    scene.add(this.boards, this.posts);
+    this.boards.count = this.posts.count = this.backs.count = 0;
+    this.boards.visible = this.posts.visible = this.backs.visible = false;
+    scene.add(this.boards, this.posts, this.backs);
   }
 
   update(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[], services: readonly ServiceArea[], version: number, originX: number, originZ: number, passes: readonly RoadSample[] = [], junctions: readonly Junction[] = []): void {
     if (version !== this.version) {
       this.version = version; this.anchorX = samples[0]?.position.x ?? 0; this.anchorZ = samples[0]?.position.z ?? 0;
-      this.boards.count = this.posts.count = 0;
-      for (const junction of junctions) {
-        const sample = junction.sample, offset = this.profile.outerHalfWidth + 3;
-        for (const [ahead, tile] of [[500, 31], [200, 32]]) {
-          const approach = samples.find(p => p.distance >= junction.distance - ahead);
-          if (approach && Math.abs(approach.distance - junction.distance + ahead) < 16) this.add(this.position(approach, offset, 4.2), approach.heading, 5, 2, tile, 4.4);
+      this.boards.count = this.posts.count = this.backs.count = 0;
+      for (const junction of junctions) for (const [i, ramp] of junction.ramps.entries()) {
+        const sample = ramp.sample, offset = this.profile.outerHalfWidth + 3, distance = sample.distance;
+        const direction = signLabels.indexOf(ramp.direction === 'left' ? 'LEFT\nLOOP >' : ramp.direction === 'return' ? 'RETURN >' : 'RIGHT >');
+        const advance = signLabels.indexOf(`${ramp.direction === 'left' ? 'LEFT LOOP >' : ramp.direction === 'return' ? 'RETURN >' : 'RIGHT >'}\n200 M`);
+        const approaches = i ? [[200, advance]] : [[500, signLabels.indexOf('JUNCTION\n500 M')], [200, advance]];
+        for (const [ahead, tile] of approaches) {
+          const approach = samples.find(p => p.distance >= distance - ahead);
+          if (approach && Math.abs(approach.distance - distance + ahead) < 16) this.add(this.position(approach, offset, 4.2), approach.heading, 5, 2, tile, 4.4);
         }
-        this.add(this.position(sample, offset, 3.5), sample.heading, 4.4, 1.6, junction.kind === 'stack' ? 29 : 28, 3.7);
+        this.add(this.position(sample, offset, 3.5), sample.heading, 4.4, 1.6, direction, 3.7);
         this.add(this.position(sample, -offset, 3.5), sample.heading, 3, 1.6, 30, 3.7);
-        const gantry = samples.find(p => p.distance >= junction.distance - 90);
-        if (gantry && Math.abs(gantry.distance - junction.distance + 90) < 3) {
+        const gantry = samples.find(p => p.distance >= distance - 90);
+        if (gantry && Math.abs(gantry.distance - distance + 90) < 3) {
           const center = this.profile.centers.at(-1)!;
-          this.add(this.position(gantry, center - 1.8, 6.1), gantry.heading, 3.2, 1.1, 30);
-          this.add(this.position(gantry, center + 1.8, 6.1), gantry.heading, 3.2, 1.1, 28);
+          for (const [offset, tile] of [[center - 1.8, 30], [center + 1.8, direction]]) {
+            const face = this.position(gantry, offset, 6.1), ahead = gantry.distance - distance + 90 + 0.3;
+            face.x -= gantry.tangent.x * ahead; face.y -= gantry.tangent.y * ahead; face.z -= gantry.tangent.z * ahead;
+            this.add(face, gantry.heading, 3.2, 1.1, tile);
+          }
         }
       }
       for (let i = 1; i < samples.length; i++) {
@@ -92,6 +100,8 @@ export class RoadSigns {
           const side = pad.side, heading = pad.heading + (side < 0 ? Math.PI : 0);
           this.add(padPoint(pad, -side * (pad.halfWidth - 1), -side * 90, 4), heading, 4, 2, 1, 4.2);
           this.add(padPoint(pad, -side * 10, -12, 2.2), heading, 1.2, 1.2, 2, 2.4);
+          this.add(padPoint(pad, -side * 52, -64, 4.58), pad.heading - side * Math.PI / 2, 2.5, 0.8, signLabels.indexOf('EV'));
+          this.add(padPoint(pad, side * 7, 83.35, 2.2), pad.heading, 1.8, 0.5, signLabels.indexOf('INFO'));
           this.add(padPoint(pad, side * 14, -49.6, 5.62), pad.heading, 3.5, 0.5, 3);
           this.add(padPoint(pad, side * 2.9, 28, 3.8), pad.heading + side * Math.PI / 2, 2, 0.6, 4);
           this.add(padPoint(pad, side * 3.8, 28, 4.65), pad.heading + side * Math.PI / 2, 5, 0.65, 23);
@@ -113,12 +123,12 @@ export class RoadSigns {
           y: point.y - 0.85, z: point.z + Math.sin(heading) * (i - (digits.length - 1) / 2) * 0.42 }, heading, 0.43, 0.52, 12 + Number(digit)));
       }
       this.tiles.needsUpdate = true;
-      for (const mesh of [this.boards, this.posts]) {
+      for (const mesh of [this.boards, this.posts, this.backs]) {
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
-    for (const mesh of [this.boards, this.posts]) { mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ); mesh.visible = mesh.count > 0; }
+    for (const mesh of [this.boards, this.posts, this.backs]) { mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ); mesh.visible = mesh.count > 0; }
   }
 
   private position(sample: RoadSample, offset: number, height: number): ServicePoint {
@@ -132,6 +142,9 @@ export class RoadSigns {
     this.matrix.set(cos * width, 0, -sin, point.x - this.anchorX, 0, height, 0, point.y,
       sin * width, 0, cos, point.z - this.anchorZ, 0, 0, 0, 1);
     this.boards.setMatrixAt(this.boards.count, this.matrix); this.tiles.setX(this.boards.count++, tile);
+    this.matrix.set(cos * (width + 0.05), 0, -sin * 0.07, point.x - this.anchorX + sin * 0.04,
+      0, height + 0.05, 0, point.y, sin * (width + 0.05), 0, cos * 0.07, point.z - this.anchorZ - cos * 0.04, 0, 0, 0, 1);
+    this.backs.setMatrixAt(this.backs.count++, this.matrix);
     if (post) {
       this.matrix.makeScale(0.14, post, 0.14).setPosition(point.x - this.anchorX, point.y - post / 2, point.z - this.anchorZ);
       this.posts.setMatrixAt(this.posts.count++, this.matrix);
@@ -139,7 +152,7 @@ export class RoadSigns {
   }
 
   dispose(): void {
-    for (const mesh of [this.boards, this.posts]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
+    for (const mesh of [this.boards, this.posts, this.backs]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); mesh.dispose(); }
     this.atlas.dispose();
   }
 }

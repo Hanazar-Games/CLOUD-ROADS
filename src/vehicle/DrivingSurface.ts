@@ -7,6 +7,7 @@ import { hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
 import { padPoint } from '../service/ServiceTerrain';
 import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision';
+import { serviceObstacles } from '../service/ServiceAmenities';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'> };
@@ -286,7 +287,7 @@ export class DrivingSurface {
     for (const site of this.sites) for (const pad of site.ground.pads) {
       if (pad.x < Math.min(body.x, previousX) - 150 || pad.x > Math.max(body.x, previousX) + 150
         || pad.z < Math.min(body.z, previousZ) - 150 || pad.z > Math.max(body.z, previousZ) + 150) continue;
-      for (const [x, along, width, length, height] of [[15, 28, 22, 30, 5], [53, 30, 27, 36, 7], [57, 74, 24, 20, 4]]) {
+      for (const [x, along, width, length, height] of serviceObstacles) {
         const p = padPoint(pad, x * pad.side, along);
         if (feet < p.y - 0.6 || feet > p.y + height) continue;
         hit = constrainObstacle(body, previousX, previousZ, radius, { ...p, heading: pad.heading, width, front: length / 2, rear: -length / 2 }) || hit;

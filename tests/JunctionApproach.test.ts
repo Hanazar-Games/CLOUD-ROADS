@@ -37,7 +37,7 @@ it.each([
   const sample = road.segments.find(s => s.start.distance <= 20000 && s.end.distance >= 20000)!.atDistance(20000);
   for (let i = 0; i < 200; i++) network.update(sample.position.x, sample.position.z, sample.position.y + 1, 4000);
   const junction = network.junctions.find(j => j.route === 'root')!;
-  expect(junction.distance).toBe(20000); expect(junction.exits).toHaveLength(1);
+  expect(junction.distance).toBe(20000); expect(junction.exits).toHaveLength(junction.kind === 'stack' ? 3 : 1);
   expect(Math.abs(junction.sample.grade)).toBeLessThan(0.001);
   expect(network.active.tunnels.some(t => t.start.distance < 20280 && t.end.distance > 19900)).toBe(false);
   const branch = network.routes.find(r => r.id === junction.exits[0])!;

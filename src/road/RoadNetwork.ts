@@ -9,7 +9,8 @@ import { RoadSpine } from './RoadSpine';
 import { roadProfile } from './RoadProfile';
 import { JUNCTION_INTERVAL, junctionsEnabled } from './JunctionSchedule';
 
-export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack'; exits: string[] }
+export interface JunctionRamp { id: string; sample: RoadSample; direction: 'left' | 'right' | 'return' }
+export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack'; exits: string[]; ramps: JunctionRamp[] }
 interface RouteDefinition { id: string; seed: string; origin?: RoadControlPoint; prefix: RoadSegment[]; parent?: RouteDefinition; openings?: RoadSpine['openings'] }
 export interface NetworkRoute {
   id: string; seed: string; road: RoadSpine; definition: RouteDefinition;
@@ -74,8 +75,10 @@ export class RoadNetwork {
       return distance(b) - distance(a);
     });
     for (const route of candidates) {
-      if (this.cache.size <= 7) break;
+      if (this.cache.size <= 11) break;
       if (route === this.active || route.id === parent?.id || route.id === 'root' || route.id === 'back') continue;
+      if (this.junctions.some(j => (j.route === this.active.id || j.route === parent?.id) && j.exits.includes(route.id)
+        && Math.hypot(j.sample.position.x - x, j.sample.position.z - z) < 4000)) continue;
       this.cache.delete(route.id); this.version++;
       for (let i = this.junctions.length - 1; i >= 0; i--) if (this.junctions[i].route === route.id) this.junctions.splice(i, 1);
     }
@@ -120,30 +123,46 @@ export class RoadNetwork {
       const sample = segment.atDistance(distance);
       const childId = `branch-${hashSeed(seed).toString(36)}-${hashSeed(`${seed}:id`).toString(36)}`;
       let kind: Junction['kind'] = this.options.interchanges && this.options.maxGrade >= 0.025 ? 'stack' : 'fork';
-      let prefix = this.ramp(sample, childId, kind);
-      const altitudeFits = !absoluteElevation(this.options) || prefix.every(s => [s.start.position.y, s.end.position.y]
-        .every(y => y >= this.options.altitudeMin - 0.05 && y <= this.options.altitudeMax + 0.05));
-      if (kind === 'stack' && (!altitudeFits || !this.clearance(prefix, route.road))) { kind = 'fork'; prefix = this.ramp(sample, childId, kind); }
-      const junction: Junction = { id, route: route.id, distance, sample, kind, exits: [childId] };
+      const makeRamps = (type: Junction['kind']) => (type === 'stack' ? ['left', 'right', 'return'] as const : ['right'] as const).map((direction, index) => {
+        const d = distance + index * 420;
+        const entry = route.road.segments.find(s => s.start.distance <= d && s.end.distance >= d)?.atDistance(d);
+        if (!entry) return undefined;
+        const id = index ? `${childId}-${direction}` : childId;
+        return { id, sample: entry, direction, prefix: this.ramp(entry, id, type, direction) };
+      });
+      let planned = makeRamps(kind);
+      if (planned.some(ramp => !ramp)) continue;
+      if (kind === 'stack' && planned.some(ramp => !this.clearance(ramp!.prefix, route.road)
+        || absoluteElevation(this.options) && ramp!.prefix.some(s => [s.start.position.y, s.end.position.y]
+          .some(y => y < this.options.altitudeMin - 0.05 || y > this.options.altitudeMax + 0.05)))) {
+        kind = 'fork'; planned = makeRamps(kind);
+      }
+      const ramps = planned.map(ramp => ramp!);
+      const junction: Junction = { id, route: route.id, distance, sample, kind, exits: ramps.map(ramp => ramp.id),
+        ramps: ramps.map(({ id, sample, direction }) => ({ id, sample, direction })) };
       route.road.openings.splice(0, route.road.openings.length, ...route.road.openings.filter(range => range.end >= current.distance - 8000));
-      const start = prefix.at(-1)!.end;
-      const child = this.add({ id: childId, seed: childId, origin: { ...start, junction: undefined, elevated: undefined, nextMountain: start.distance + 600 }, prefix, parent: route.definition });
-      child.road.openings.splice(0, 1, { start: 0, end: 280, side: -1 });
-      child.road.version++;
-      if (!route.road.openings.some(range => range.start === distance - 12)) route.road.openings.push({ start: distance - 12, end: distance + 280, side: 1 });
+      for (const { id, sample: entry, prefix } of ramps) {
+        const start = prefix.at(-1)!.end;
+        const child = this.add({ id, seed: id, origin: { ...start, junction: undefined, elevated: undefined, nextMountain: start.distance + 600 }, prefix, parent: route.definition });
+        child.road.openings.splice(0, 1, { start: 0, end: 280, side: -1 }); child.road.version++;
+        if (!route.road.openings.some(range => range.start === entry.distance - 12)) route.road.openings.push({ start: entry.distance - 12, end: entry.distance + 280, side: 1 });
+      }
       if (existing) this.junctions.splice(this.junctions.indexOf(existing), 1);
       this.junctions.push(junction); route.road.version++; this.version++;
     }
   }
 
-  private ramp(entry: RoadSample, id: string, kind: Junction['kind']): RoadSegment[] {
+  private ramp(entry: RoadSample, id: string, kind: Junction['kind'], direction: JunctionRamp['direction']): RoadSegment[] {
     const prefix: RoadSegment[] = [];
     let start: RoadControlPoint = { ...entry, position: { ...entry.position, y: entry.position.y + 0.015 }, distance: 0, routeId: id,
       mountain: undefined, climb: undefined, structure: undefined, nextStructure: undefined, opening: undefined, junction: true, bank: 0 };
     const grade = Math.min(this.options.maxGrade, 0.06);
-    const pieces = kind === 'stack' ? [[0.32, 260, 0], [Math.PI / 2, 360, grade], [Math.PI, 480, grade * 0.8], [Math.PI * 1.5, 480, 0], [Math.PI * 1.5, 600, 0]] : [[0.32, 260, 0], [0.85, 300, 0]];
+    const pieces = kind === 'fork' ? [[0.32, 260, 0], [0.85, 300, 0]]
+      : direction === 'left' ? [[0.32, 260, 0], [Math.PI / 2, 360, grade], [Math.PI, 480, grade * 0.8], [Math.PI * 1.5, 480, 0], [Math.PI * 1.5, 600, 0]]
+        : direction === 'right' ? [[0.32, 260, 0], [Math.PI / 2, 520, 0], [Math.PI / 2, 900, 0]]
+          : [[0.32, 260, 0], [Math.PI / 2, 700, grade], [Math.PI, 900, 0], [Math.PI, 1500, 0]];
     for (const [i, [turn, length, grade]] of pieces.entries()) {
-      const piece = new RoadSegment({ ...start, elevated: kind === 'stack' && i > 0 }, entry.heading + turn, grade, length);
+      const piece = new RoadSegment({ ...start, elevated: kind === 'stack' && direction !== 'right' && i > 0 }, entry.heading + turn, grade, length);
       prefix.push(piece); start = piece.end;
     }
     return prefix;

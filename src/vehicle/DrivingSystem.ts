@@ -39,6 +39,7 @@ export class DrivingSystem {
     const options = { signal: this.events.signal };
     const selector = element<HTMLSelectElement>('vehicle-kind');
     selector.replaceChildren(...Object.entries(vehicleProfiles).map(([kind, profile]) => new Option(profile.name, kind)));
+    selector.value = this.car.kind;
     element<HTMLSelectElement>('suspension').replaceChildren(...suspensionLevels.map(level => new Option(suspensionNames[level], String(level), level === 3, level === 3)));
     selector.addEventListener('change', () => {
       if (Object.hasOwn(vehicleProfiles, selector.value)) this.selectVehicle(selector.value as VehicleKind);
@@ -204,7 +205,9 @@ export class DrivingSystem {
     for (const [id, value] of [['suspension-damping', car.damping], ['vehicle-power', car.powerScale], ['vehicle-brake', car.brakeScale], ['vehicle-steering', car.steeringScale]] as const) {
       element<HTMLInputElement>(id).value = String(Math.round(value * 100)); element(`${id}-value`).textContent = `${Math.round(value * 100)}%`;
     }
-    element<HTMLSelectElement>('vehicle-paint').value = 'default';
+    const paint = element<HTMLSelectElement>('vehicle-paint');
+    paint.value = car.paint === car.profile.paint ? 'default' : car.paint.toString(16).padStart(6, '0');
+    this.mesh.setPaint(car.paint);
     this.describeVehicle(); this.updateSeatCamera();
     return this.start(true);
   }
@@ -394,7 +397,8 @@ export class DrivingSystem {
 
   private applyPaint(): void {
     const value = element<HTMLSelectElement>('vehicle-paint').value;
-    this.mesh.setPaint(value === 'default' ? this.car.profile.paint : parseInt(value, 16));
+    this.car.paint = value === 'default' ? this.car.profile.paint : parseInt(value, 16);
+    this.mesh.setPaint(this.car.paint);
   }
 
   describeTuning(): void {

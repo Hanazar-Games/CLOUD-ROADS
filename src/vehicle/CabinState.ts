@@ -7,7 +7,7 @@ export function cabinSeats(p: VehicleProfile): CabinSeat[] {
   const seats: CabinSeat[] = [{ ...p.eye, id: 'driver', label: '驾驶员', role: 'driver', row: 0, column: 0, floor: 1 }];
   if (p.shape === 'motorcycle') return seats;
   if (p.shape !== 'bus') seats.push({ ...p.eye, x: -p.eye.x, id: 'front', label: '前排乘客', role: 'passenger', row: 0, column: 4, floor: 1 });
-  if (p.shape === 'sedan' || p.shape === 'suv') for (const [i, x] of [-p.width * 0.25, 0, p.width * 0.25].entries())
+  if ((p.shape === 'sedan' || p.shape === 'suv') && p.body !== 'pickup') for (const [i, x] of [-p.width * 0.25, 0, p.width * 0.25].entries())
     seats.push({ id: `rear-${i}`, label: `后排 ${i + 1}`, role: 'passenger', x, y: p.eye.y, along: -0.55, row: 1, column: i * 2, floor: 1 });
   if (p.bus) for (const [deck, rows] of p.bus.rows.entries()) {
     const front = p.bus.rows.length > 1 ? p.chassisLength / 2 - 3 : p.eye.along - 1, back = -p.chassisLength / 2 + 0.7;

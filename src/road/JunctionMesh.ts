@@ -27,12 +27,12 @@ export class JunctionMesh {
       this.x = junctions[0]?.sample.position.x ?? 0; this.z = junctions[0]?.sample.position.z ?? 0;
       this.parts.count = this.markings.count = 0;
       const width = this.profile.outerHalfWidth;
-      for (const junction of junctions) {
+      for (const junction of junctions) for (const ramp of junction.ramps) {
         const road = routes.find(route => route.id === junction.route)?.road;
-        const branch = routes.find(route => route.id === junction.exits[0])?.road;
+        const branch = routes.find(route => route.id === ramp.id)?.road;
         if (!road || !branch) continue;
         const at = (distance: number) => road.segments.find(s => distance >= s.start.distance && distance <= s.end.distance)?.atDistance(distance);
-        const approach = at(junction.distance - 90);
+        const approach = at(ramp.sample.distance - 90);
         if (approach) {
           for (const side of [-1, 1]) {
             this.box(this.parts, approach, side * (width + 1.8), 3.5, 0.38, 7, 0.38, 0x78868b);
@@ -42,7 +42,7 @@ export class JunctionMesh {
           for (let offset = -width; offset <= width; offset += 2) this.box(this.parts, approach, offset, 6.7, 0.12, 0.7, 0.16, 0x78868b);
         }
         for (const ahead of [160, 80]) {
-          const sample = at(junction.distance - ahead);
+          const sample = at(ramp.sample.distance - ahead);
           if (!sample) continue;
           const lane = this.profile.centers.at(-1)! + (this.profile.halfWidth - 1.2) / 2;
           this.box(this.markings, sample, lane, 0.03, 0.16, 0.025, 6);
@@ -52,10 +52,10 @@ export class JunctionMesh {
             0.035, 0.16, 0.025, 1.2, 0xeeeedd, 0.75 - side * 0.6, 1.75 - Math.cos(0.75) * 0.5 - side * Math.sin(0.75) * 0.35);
         }
         for (let distance = 8; distance < 260; distance += 12) {
-          const sample = at(junction.distance + distance);
+          const sample = at(ramp.sample.distance + distance);
           if (sample) this.box(this.markings, sample, width - 1.2, 0.04, 0.23, 0.025, 4);
         }
-        const terminal = at(junction.distance + 285);
+        const terminal = at(ramp.sample.distance + 285);
         if (terminal) {
           this.box(this.parts, terminal, width + 0.35, 0.47, 0.65, 0.78, 3.6, 0xddaf40);
           for (let i = -1; i <= 1; i++) this.box(this.parts, terminal, width + 0.35, 0.88, 0.68, 0.04, 0.4, 0x303a3c, 0, i);

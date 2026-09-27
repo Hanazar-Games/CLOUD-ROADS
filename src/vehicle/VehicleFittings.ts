@@ -15,7 +15,7 @@ export class VehicleFittings {
     for (const { root, action, axis, angle } of this.hinges) root.rotation[axis] = (operations?.[action] ?? 0) * angle;
     if (this.beacon) this.beacon.emissiveIntensity = operations?.target.aux ? (Math.sin(this.time * 13) > 0 ? 3 : 0.15) : 0;
   }
-  cargo(parent: Group, width: number, start: number, end: number, floor: number, top: number, kind: 'box' | 'stake' | 'flatbed', kit: VehicleDetailKit, rideHeight: number): void {
+  cargo(parent: Group, width: number, start: number, end: number, floor: number, top: number, kind: 'box' | 'stake' | 'flatbed', kit: VehicleDetailKit, rideHeight: number, ribs = true): void {
     const { block, paint, trim, metal } = kit, length = end - start, middle = (start + end) / 2;
     block(width - 0.05, 0.14, length, 0, floor, middle, paint, parent);
     if (kind === 'flatbed') {
@@ -38,7 +38,7 @@ export class VehicleFittings {
         block(0.05, 0.45, length, side * width / 2, floor + 0.27, middle, paint, parent);
         for (let y = floor + 0.65; y <= top; y += 0.32) block(0.055, 0.045, length, side * width / 2, y, middle, metal, parent);
       }
-      for (let z = start + 0.08; z <= end; z += kind === 'stake' ? 0.8 : 0.65)
+      for (let z = start + 0.08; ribs && z <= end; z += kind === 'stake' ? 0.8 : 0.65)
         block(0.07, height, 0.055, side * width / 2, (top + floor) / 2, z, metal, parent);
       const gate = this.hinge('cargo', parent, side * width / 2, floor, end, 'y', side * Math.PI * 0.8);
       block(width / 2 - 0.05, kind === 'box' ? height : 0.45, 0.065, -side * width / 4, kind === 'box' ? height / 2 : 0.27, 0, paint, gate);

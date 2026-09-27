@@ -168,7 +168,7 @@ export class World {
   get searching(): boolean { return !!this.scout; }
 
   get nextJunction() {
-    return this.network.junctions.filter(j => j.route === this.network.active.id && j.distance > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
+    return this.network.junctions.filter(j => j.route === this.network.active.id && j.ramps.at(-1)!.sample.distance > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
   }
 
   inspectJunction(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {

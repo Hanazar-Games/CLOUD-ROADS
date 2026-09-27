@@ -1,4 +1,4 @@
-import { BufferGeometry, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Scene, type Vector3 } from 'three';
+import { BufferGeometry, Color, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Scene, type Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { VehicleMesh } from '../vehicle/VehicleMesh';
 import { VehiclePhysics } from '../vehicle/VehiclePhysics';
@@ -25,9 +25,11 @@ function template(kind: VehicleKind): BufferGeometry[] {
     const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
     geometry.applyMatrix4(transform.multiplyMatrices(inverse[part], object.matrixWorld));
     for (const name of Object.keys(geometry.attributes)) if (name !== 'position' && name !== 'normal') geometry.deleteAttribute(name);
-    const colors = new Float32Array(geometry.getAttribute('position').count * 3), color = material.color;
+    const count = geometry.getAttribute('position').count, mask = material.name === 'vehicle-paint' ? 1 : 0;
+    const colors = new Float32Array(count * 3), color = mask ? new Color(0xffffff) : material.color;
     for (let i = 0; i < colors.length; i += 3) { colors[i] = color.r; colors[i + 1] = color.g; colors[i + 2] = color.b; }
-    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3)); parts[part].push(geometry);
+    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('paintMask', new Float32BufferAttribute(new Float32Array(count).fill(mask), 1)); parts[part].push(geometry);
   });
   const geometries = parts.map(group => mergeGeometries(group)!);
   parts.flat().forEach(p => p.dispose()); model.dispose(); return geometries;
@@ -39,9 +41,20 @@ export class ParkedVehicles {
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65 });
   private readonly matrix = new Matrix4();
   private readonly tilt = new Matrix4();
+  private readonly color = new Color();
   private version = -1;
   private anchorX = 0; private anchorZ = 0;
-  constructor(private readonly scene: Scene, seed: string) { this.fleet = new ParkedFleet(seed); }
+  constructor(private readonly scene: Scene, seed: string) {
+    this.fleet = new ParkedFleet(seed);
+    this.material.onBeforeCompile = shader => {
+      shader.vertexShader = `attribute float paintMask;\n${shader.vertexShader}`.replace('#include <color_vertex>', `
+        #include <color_vertex>
+        #if defined(USE_INSTANCING_COLOR) && defined(USE_COLOR)
+          vColor.xyz = color.xyz * mix(vec3(1.0), instanceColor, paintMask);
+        #endif
+      `);
+    };
+  }
   update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3): void {
     this.fleet.sync(sites);
     const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600);
@@ -65,10 +78,12 @@ export class ParkedVehicles {
           this.matrix.makeRotationY(-body.heading).setPosition(body.x - this.anchorX, body.y, body.z - this.anchorZ);
           this.matrix.multiply(this.tilt.makeRotationX(body.pitch));
           this.matrix.multiply(this.tilt.makeRotationZ(body.roll));
-          mesh.setMatrixAt(mesh.count++, this.matrix);
+          mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(car.paint));
         }
       }
-      for (const meshes of this.batches.values()) for (const mesh of meshes) if (mesh.count) { mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); }
+      for (const meshes of this.batches.values()) for (const mesh of meshes) if (mesh.count) {
+        mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor!.needsUpdate = true; mesh.computeBoundingSphere();
+      }
     }
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.position.set(this.anchorX - origin.x, 0, this.anchorZ - origin.z); mesh.visible = mesh.count > 0; }
   }

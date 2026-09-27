@@ -12,6 +12,7 @@ import { cabinSeats } from './CabinState';
 import { CraneMesh } from './CraneMesh';
 import type { CraneSystems } from './CraneSystems';
 import { VehicleDisplay } from './VehicleDisplay';
+import { fleetBody } from './FleetBody';
 
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
 
@@ -45,6 +46,7 @@ export class VehicleMesh {
 
   constructor(scene: Scene, private readonly profile: VehicleProfile = vehicleProfiles.roadster) {
     const paint = this.paint = this.material(profile.paint, 0.4, 0.25), trim = this.material(0x202b2c), rubber = this.material(0x171c1d);
+    paint.name = 'vehicle-paint';
     const metal = this.material(0xaeb9b5, 0.35, 0.7), leather = this.material(profile.bus ? 0x294454 : profile.shape === 'supercar' ? 0x283138 : 0x675447);
     const upholstery = this.material(profile.bus ? 0x72959d : profile.shape === 'supercar' ? 0xab593d : 0x9b8c70, 0.95);
     const glass = this.material(profile.shape === 'roadster' ? 0xc3e2e4 : 0x627e88, 0.15, 0.15);
@@ -116,6 +118,11 @@ export class VehicleMesh {
       for (const side of [-1, 1]) block(0.3, 0.16, 0.04, side * profile.width * 0.35, 0.05, profile.length / 2 + 0.025, this.tail);
     } else this.buildBody(block, paint, trim, metal, glass, leather, lamp, kit);
     vehicleDetails(profile, this.chassis, kit);
+    fleetBody(profile, this.chassis, kit, this.fittings, this.rideHeight);
+    if (profile.body === 'ambulance' || profile.body === 'firetruck') {
+      const beacon = this.fittings.beacon = this.material(0x347bbf, 0.2); beacon.emissive.setHex(0x268aff);
+      for (const side of [-1, 1]) block(0.4, 0.16, 0.28, side * 0.65, Math.min(profile.height - this.rideHeight - 0.1, profile.eye.y + 0.48), -profile.eye.along, beacon);
+    }
     if (profile.shape === 'flatbed') this.fittings.cargo(this.chassis, profile.width, -profile.length / 2 + 2.8, profile.length / 2, 0.3, 0.5, 'flatbed', kit, this.rideHeight);
     if (profile.shape === 'supercar') {
       const wing = this.fittings.hinge('aux', this.chassis, 0, 0.24, profile.length / 2 - 0.3, 'x', -0.45);
@@ -331,16 +338,16 @@ export class VehicleMesh {
     }
     block(w - 0.18, 0.24, length - 0.12, 0, -0.2, 0, trim);
     const passenger = p.shape === 'sedan' || p.shape === 'suv' || p.shape === 'supercar';
-    const cabFront = passenger ? -0.8 : nose + 0.08;
-    const cabBack = passenger ? p.shape === 'suv' ? length / 2 - 0.08 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (length > 6 ? 2.5 : 2);
+    const cabFront = passenger ? p.body === 'pickup' ? -1.35 : -0.8 : nose + 0.08;
+    const cabBack = passenger ? p.body === 'pickup' ? 0.3 : p.shape === 'suv' || p.body === 'hatchback' ? length / 2 - 0.12 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (length > 6 ? 2.5 : 2);
     const cabLength = cabBack - cabFront, cabCenter = (cabFront + cabBack) / 2;
     const sill = p.shape === 'supercar' ? 0.08 : passenger ? 0.18 : 0.58;
-    const roof = passenger ? top : Math.min(top, p.eye.y + 0.4);
+    const roof = passenger || p.body === 'van' ? top : Math.min(top, p.eye.y + 0.4);
     if (passenger) {
       const bottom = -0.35, wheelY = p.radius - this.rideHeight, arch = p.radius + 0.05;
       const belt = Math.max(sill + 0.04, wheelY + arch + 0.07), end = length / 2;
       block(w - 0.32, 0.08, length - 0.15, 0, bottom, 0, trim);
-      for (const [front, back] of [[nose, cabFront], [cabBack, end]])
+      for (const [front, back] of p.body === 'pickup' ? [[nose, cabFront]] : [[nose, cabFront], [cabBack, end]])
         block(w - 0.32, sill - bottom, back - front, 0, (sill + bottom) / 2, (front + back) / 2, paint);
       const outline = new Shape(); outline.moveTo(nose, bottom); outline.lineTo(nose + 0.1, belt - 0.04);
       outline.lineTo(nose + 0.45, belt); outline.lineTo(end - 0.2, belt); outline.lineTo(end, bottom);
@@ -355,14 +362,14 @@ export class VehicleMesh {
         const panel = new Mesh(shell, paint); panel.rotation.y = -Math.PI / 2;
         panel.position.x = side < 0 ? -w / 2 + 0.06 : w / 2; panel.castShadow = panel.receiveShadow = true; this.chassis.add(panel);
       }
-      for (const z of [nose + 0.025, end - 0.025]) block(w - 0.08, sill - bottom, 0.05, 0, (sill + bottom) / 2, z, paint);
-    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane') {
+      for (const z of p.body === 'pickup' ? [nose + 0.025] : [nose + 0.025, end - 0.025]) block(w - 0.08, sill - bottom, 0.05, 0, (sill + bottom) / 2, z, paint);
+    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane' || p.body === 'dumptruck' || p.body === 'tanker' || p.body === 'firetruck') {
       block(w, sill + 0.55, cabLength, 0, (sill - 0.55) / 2, cabCenter);
       block(1.35, 0.22, length - cabLength, 0, -0.3, (cabBack + length / 2) / 2, trim);
     } else block(w, sill + 0.55, length, 0, (sill - 0.55) / 2, 0);
     if (passenger) {
       block(w - 0.05, 0.13, cabFront - nose, 0, sill + 0.035, (nose + cabFront) / 2);
-      block(w - 0.05, 0.12, length / 2 - cabBack, 0, sill, (length / 2 + cabBack) / 2);
+      if (p.body !== 'pickup') block(w - 0.05, 0.12, length / 2 - cabBack, 0, sill, (length / 2 + cabBack) / 2);
     }
     const rake = passenger ? p.shape === 'suv' ? 0.24 : 0.48 : 0.06;
     block(w - 0.16, 0.09, cabLength - rake * 2, 0, roof - 0.045, cabCenter);
@@ -421,8 +428,8 @@ export class VehicleMesh {
     this.steering.rotation.x = -0.45; this.chassis.add(this.steering);
     this.steering.add(new Mesh(this.geometry(new TorusGeometry(0.18, 0.018, 6, 24)), trim));
     block(0.31, 0.035, 0.03, 0, 0, 0, metal, this.steering);
-    if (p.shape === 'truck') {
-      this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight);
+    if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'firetruck') {
+      this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight, !p.body);
     } else if (p.shape === 'tractor') {
       block(1.6, 0.14, 1.25, 0, 0.08, -p.trailer!.hitchAlong, metal);
       for (const side of [-1, 1]) block(0.36, 0.36, 1.1, side * 0.92, -0.08, -0.1, metal);

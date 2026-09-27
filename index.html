@@ -49,7 +49,7 @@
             <p id="vehicle-tuning-help" class="panel-help">辅助默认开启；强度越高，高速转向越缓。关闭后取消按车速收小转角和稳定性限幅，允许高速急转，偏街机操控。动力与制动仍受抓地力限制，手刹保持原强度。恢复默认同时重置限速与转向辅助。</p>
             <button id="vehicle-tuning-reset" type="button">恢复默认动力与转向</button>
             <label for="vehicle-paint">车身配色</label>
-            <select id="vehicle-paint"><option value="default">车型原色</option><option value="d8dedb">冰川白</option><option value="29485e">深海蓝</option><option value="377d78">山谷青</option><option value="a73d32">赤焰红</option><option value="dca632">工程黄</option><option value="353d43">石墨灰</option></select>
+            <select id="vehicle-paint"><option value="default">车型原色</option><option value="d8dedb">冰川白</option><option value="29485e">深海蓝</option><option value="377d78">山谷青</option><option value="a73d32">赤焰红</option><option value="dca632">工程黄</option><option value="353d43">石墨灰</option><option value="7d658e">暮光紫</option><option value="9b7453">岩棕</option><option value="83b3bb">湖蓝</option><option value="d4bc97">沙金</option></select>
           </details>
           <label for="driving-view">驾驶视角 · C 切换</label>
           <select id="driving-view"><option value="chase">跟车</option><option value="cockpit">驾驶舱</option><option value="hood">引擎盖</option></select>
@@ -129,7 +129,7 @@
             <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
             <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。超过 150 米的高桥在平缓桥段使用连续拱结构；急弯、陡坡保留实心墩。全直道方向固定，仍可上下起伏。</p>
             <label for="junctions"><input id="junctions" type="checkbox" checked /> 山路岔路 · 可转入支路</label>
-            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 环形立交 · 高速出口 / 山路升级</label>
+            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 多向立交 · 高速出口 / 山路升级</label>
             <p class="panel-help">每 20 km 一处，每处仅一条右侧出口。山路开启岔路后可升级立交；高速由立交开关控制。坡度低于 2.5% 或净空不足时采用平面出口。应用后重新生成。</p>
             <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
@@ -248,7 +248,7 @@
         <div class="actions road-actions"><button id="junction-view" type="button" disabled>下一匝道</button></div>
         <div class="actions road-actions"><button id="crossing-view" type="button" disabled>桥下交通景观</button></div>
         <p class="panel-help">深谷大桥下可遇到山谷公路或铁路高架，两端连接山体隧道。它们是沿途景观，驾驶路线请沿主路和岔路探索。</p>
-        <p class="panel-help">起点前后都有道路；主线每 20 km 一处右侧单出口。驶入支路后按该路线里程继续生成。「下一匝道」可定位远处出口，环形立交跨越主线，入弯请减速。</p>
+        <p class="panel-help">起点前后都有道路；主线每 20 km 一组立交。依次从右侧驶入左转环道、右转匝道或回转支路，也可沿主线直行；每条支路都继续无限生成。坡度或海拔空间不足时降级为平面分流。「下一匝道」可定位入口，入弯请减速。</p>
         <div class="actions road-actions"><button id="service-view" type="button" disabled>下一服务区</button></div>
         <div class="actions road-actions"><button id="pass-view" type="button" disabled>下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>

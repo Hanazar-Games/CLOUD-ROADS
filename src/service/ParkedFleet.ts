@@ -30,6 +30,7 @@ export class ParkedFleet {
     let car = this.cars.get(entry.id);
     if (!car) {
       car = new VehiclePhysics(entry.kind);
+      car.paint = entry.paint;
       car.reset(entry.x, entry.z, entry.heading, (x, z) => ({ height: entry.y + entry.grade * ((x - entry.x) * Math.sin(entry.padHeading) - (z - entry.z) * Math.cos(entry.padHeading)), grip: 1 }));
       this.cars.set(entry.id, car);
     }
@@ -43,7 +44,7 @@ export class ParkedFleet {
   }
   park(car: VehiclePhysics, id = `visitor:${++this.serial}`): void {
     car.park();
-    const entry: ParkedEntry = { id, slot: -1, kind: car.kind, x: car.x, y: car.y, z: car.z, heading: car.heading, grade: 0, padHeading: car.heading };
+    const entry: ParkedEntry = { id, slot: -1, kind: car.kind, paint: car.paint, x: car.x, y: car.y, z: car.z, heading: car.heading, grade: 0, padHeading: car.heading };
     this.returned.delete(id); this.returned.set(id, { entry, car });
     while (this.returned.size > 64) this.returned.delete(this.returned.keys().next().value!);
     this.refresh();
