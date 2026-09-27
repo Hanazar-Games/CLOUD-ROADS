@@ -6,7 +6,7 @@ import { parsePreset, PresetStore, PRESET_MAX_BYTES, type SettingRules, type Set
 const controls = ['vehicle-kind', 'hud-style', 'transmission-mode', 'vehicle-max-speed', 'vehicle-power', 'vehicle-brake', 'vehicle-steering',
   'steering-assist', 'steering-assist-strength', 'vehicle-paint', 'driving-view', 'driving-fov', 'camera-distance', 'camera-height', 'suspension', 'suspension-damping',
   'vehicle-lights', 'light-power', 'light-range', 'vehicle-wipers', 'vehicle-windows', 'cabin-fan',
-  'season-kind', 'weather-kind', 'fog-density', 'daylight', 'frame-limit', 'radio-station', 'music-style', 'music-pace', 'speed',
+  'traffic-density', 'season-kind', 'weather-kind', 'fog-density', 'daylight', 'frame-limit', 'radio-station', 'music-style', 'music-pace', 'speed',
   ...audioChannels.map(([name]) => `${name}-volume`)];
 const graphics = ['render-scale', 'shadow-quality', 'antialiasing', 'view-distance', 'map-detail', 'cloud-quality'];
 const toggles = ['vegetation-toggle', 'cloud-toggle', 'lights-toggle', 'audio-toggle', 'cabin-light', 'ambient-light', 'vehicle-roof'];

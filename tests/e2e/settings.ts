@@ -1,5 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+export async function ignite(page: Page): Promise<void> {
+  if (!await page.locator('#drive-hud').isVisible()) return;
+  await closeSettings(page);
+  if (await page.locator('#vehicle-ignition').getAttribute('aria-pressed') === 'false') await page.keyboard.press('F2');
+  await expect(page.locator('[data-metric="Ignition"]')).toHaveText('running');
+}
+
 export async function openSettings(page: Page): Promise<void> {
   const dialog = page.locator('#explorer');
   if (!await dialog.evaluate(node => (node as HTMLDialogElement).open)) await page.locator('#controls-toggle').click();

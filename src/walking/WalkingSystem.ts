@@ -26,6 +26,7 @@ export class WalkingSystem {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
     this.surface = new DrivingSurface(world);
+    this.surface.walking = true;
     this.surface.parkedVehicle = this.getParkedVehicle();
     const x = this.camera.position.x + world.origin.x, z = this.camera.position.z + world.origin.z;
     const pad = world.services.flatMap(site => site.ground.pads).find(p => Math.abs((x - p.x) * Math.cos(p.heading) + (z - p.z) * Math.sin(p.heading)) <= p.halfWidth + 2
@@ -63,6 +64,7 @@ export class WalkingSystem {
   update(dt: number, frozen: boolean): void {
     if (!this.active || !this.surface) return;
     const world = this.getWorld(), person = this.person, look = this.input.consumeLook();
+    this.surface.parkedVehicle = this.getParkedVehicle();
     const focused = document.activeElement === this.canvas && document.hasFocus();
     const held = frozen || !world.roadReady || !focused;
     if (held) { this.jumpRequested = false; person.releaseInput(); }

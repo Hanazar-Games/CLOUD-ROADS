@@ -30,12 +30,13 @@ export class VehicleDisplay {
     this.elapsed += dt;
     const lines = [
       `${systems.leftSignal ? '<' : ' '} ${Math.round(car.motionSpeed * 3.6)} KM/H ${systems.rightSignal ? '>' : ' '}`,
-      `${car.parked ? 'P' : car.speed < -0.1 ? 'R' : car.speed > 0.1 ? `D${car.transmission.gear}` : 'N'} ${Math.round(car.transmission.rpm / 50) * 50} RPM`,
+      `${car.parked ? 'P' : car.speed < -0.1 ? 'R' : car.speed > 0.1 ? `D${car.transmission.gear}` : 'N'} ${Math.round(car.engineRpm / 50) * 50} RPM`,
       `TRIP ${(car.trip / 1000).toFixed(2)} KM`,
       `CH ${systems.radioChannel} ${systems.radioPlaying ? 'ON' : 'OFF'} FAN ${systems.fan}`,
       `L ${systems.beam === 'off' ? '-' : systems.beam === 'high' ? 'HI' : 'ON'} W ${systems.wiperRate ? 'ON' : '-'} G ${systems.washerSpray ? 'ON' : '-'}`,
       `AIR ${systems.fan} ${systems.ambientLight ? 'LED' : '---'} ${systems.cabinLight ? 'READ' : '----'}`,
     ];
+    if (car.ignition !== 'running') lines[5] = car.ignition === 'starting' ? 'ENGINE STARTING' : 'ENGINE OFF - F2';
     if (operations && !operations.driveReady) lines[5] = operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
     if (crane) lines.splice(3, 3,
       `CRANE ${crane.stowed ? 'PARK' : crane.enabled ? 'ON' : 'STOW'}`,

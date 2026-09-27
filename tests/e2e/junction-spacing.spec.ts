@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control } from './settings';
+import { ignite, control } from './settings';
 
 test('locates a single 20 km exit and drives from the approach without console errors', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
@@ -17,7 +17,7 @@ test('locates a single 20 km exit and drives from the approach without console e
   await expect(metric('Junctions')).toHaveText('1', { timeout: 30000 });
   await expect(metric('Loaded routes')).toHaveText('5');
   await expect(page.locator('#junction-status')).toContainText('左转 / 右转 / 回转');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await page.keyboard.down('KeyW');
   await expect(page.locator('#vehicle-speed')).not.toHaveText('0');
   await page.keyboard.up('KeyW');

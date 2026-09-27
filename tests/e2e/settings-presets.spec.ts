@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { closeSettings, openSettings } from './settings';
+import { ignite, closeSettings, openSettings } from './settings';
 
 const category = async (page: Page, name: string) => { await openSettings(page); await page.locator(`[data-settings-target="${name}"]`).click(); };
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
@@ -34,7 +34,7 @@ test('applies absolute altitude, mountain and vegetation controls and retains th
   await expect(metric(page, 'Mountain density')).toHaveText('150%');
   await expect(metric(page, 'Vegetation density')).toHaveText('0%');
   await expect(metric(page, 'Tree canopies')).toHaveText('0');
-  await page.locator('#drive-toggle').click(); await expect(page.locator('#drive-hud')).toBeVisible();
+  await page.locator('#drive-toggle').click(); await ignite(page); await expect(page.locator('#drive-hud')).toBeVisible();
   await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(3); await page.keyboard.up('KeyW');
   await category(page, 'world'); await page.locator('#random-world').click();
@@ -94,7 +94,7 @@ test('rejects invalid imports and remains usable when browser storage is blocked
   await expect(page.locator('#preset-apply')).toBeDisabled();
   const downloadPromise = page.waitForEvent('download'); await page.locator('#preset-export').click();
   expect((await downloadPromise).suggestedFilename()).toMatch(/\.json$/);
-  await closeSettings(page); await page.locator('#drive-toggle').click();
+  await closeSettings(page); await page.locator('#drive-toggle').click(); await ignite(page);
   await expect(page.locator('#drive-hud')).toBeVisible(); expect(errors).toEqual([]);
 });
 
@@ -105,7 +105,7 @@ test('applies factory speed and parked equipment preferences after leaving a mov
   await expect(page.locator('#preset-status')).toContainText('已保存');
   await category(page, 'equipment'); await page.locator('#vehicle-roof').click();
   await category(page, 'driving'); await page.locator('#vehicle-max-speed').fill('40'); await closeSettings(page);
-  await page.locator('#drive-toggle').click(); await page.keyboard.down('KeyW');
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(6);
   await category(page, 'presets'); await page.keyboard.up('KeyW'); await page.locator('#preset-apply').click();
   await expect(page.locator('#preset-status')).toContainText('已应用');
@@ -128,7 +128,7 @@ test('provides all vehicle panels, HUD styles and a reachable menu in a narrow w
     await page.locator('#panel-driving').click(); await expect(page.locator('#vehicle-kind')).toBeInViewport();
   }
   await page.locator('#vehicle-kind').selectOption('roadster');
-  await closeSettings(page); await page.locator('#drive-toggle').click();
+  await closeSettings(page); await page.locator('#drive-toggle').click(); await ignite(page);
   await page.setViewportSize({ width: 390, height: 450 });
   for (const style of ['digital', 'dial', 'minimal']) {
     await category(page, 'driving'); await page.locator('#hud-style').selectOption(style); await closeSettings(page);

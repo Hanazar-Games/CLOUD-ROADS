@@ -8,14 +8,16 @@ import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleCo
 import { padPoint } from '../service/ServiceTerrain';
 import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision';
 import { serviceObstacles } from '../service/ServiceAmenities';
+import { vehicleSupport } from './VehicleSolids';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>
-  & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'> };
+  & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
 
 export class DrivingSurface {
   wet = 0;
   level: number | undefined;
   parkedVehicle?: VehiclePhysics;
+  walking = false;
   private readonly profile;
   private sites;
   private access;
@@ -33,6 +35,15 @@ export class DrivingSurface {
   }
 
   readonly sample = (x: number, z: number, ceiling = Infinity): SurfaceContact => {
+    const ground = this.ground(x, z, ceiling);
+    if (!this.walking || !Number.isFinite(ceiling)) return ground;
+    const supports = [this.parkedVehicle && vehicleSupport(this.parkedVehicle, x, z, ceiling),
+      this.world.parkedVehicles?.fleet.support(x, z, ceiling), this.world.traffic?.support(x, z, ceiling)];
+    for (const height of supports) if (height !== undefined && height > ground.height) ground.height = height;
+    return ground;
+  };
+
+  private ground(x: number, z: number, ceiling = Infinity): SurfaceContact {
     const reference = Number.isFinite(ceiling) ? ceiling : this.level;
     const samples = (this.world.network?.routes ?? [this.world]).flatMap(route => {
       const sample = route.road.nearest(x, z); return sample ? [{ sample, route }] : [];
@@ -72,7 +83,7 @@ export class DrivingSurface {
     }
     const height = this.world.groundHeight(x, z);
     return { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
-  };
+  }
 
   spawn(x: number, z: number, vehicle: VehicleProfile = vehicleProfiles.roadster): { x: number; z: number; heading: number; trailerHeading: number } | undefined {
     const road = this.world.road, nearest = road.nearest(x, z);
@@ -105,6 +116,8 @@ export class DrivingSurface {
           if (!sample) return false;
           const lateral = (x - sample.position.x) * Math.cos(sample.heading) + (z - sample.position.z) * Math.sin(sample.heading);
           if (!this.profile.centers.some(center => Math.abs(lateral - center) + vehicle.width / 2 + 0.18 < this.profile.halfWidth)) return false;
+          const point = { x, y: sample.position.y, z };
+          if (this.constrainService(point, x, z, vehicle.width / 2 + 0.15, point.y, vehicle.height)) return false;
         }
         return true;
       });
@@ -182,7 +195,7 @@ export class DrivingSurface {
   };
 
   private constrainBody(car: { x: number; y: number; z: number }, previousX: number, previousZ: number, width: number, ride: number, height: number): boolean {
-    if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride)) return true;
+    if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride, height)) return true;
     return this.constrainRoad(car, previousX, previousZ, width + 0.06, car.y - ride, height);
   }
 
@@ -281,9 +294,10 @@ export class DrivingSurface {
     this.barrierIndex = new RoadIndex(this.barriers);
   }
 
-  private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number): boolean {
+  private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75): boolean {
     this.refreshServices();
-    let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet) ?? false;
+    let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet, height) ?? false;
+    hit = (this.world.traffic?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
     for (const site of this.sites) for (const pad of site.ground.pads) {
       if (pad.x < Math.min(body.x, previousX) - 150 || pad.x > Math.max(body.x, previousX) + 150
         || pad.z < Math.min(body.z, previousZ) - 150 || pad.z > Math.max(body.z, previousZ) + 150) continue;

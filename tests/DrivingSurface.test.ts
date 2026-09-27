@@ -20,6 +20,26 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('shares solid vehicle tops with walking without lifting the driving surface onto parked cars', () => {
+    const scene = world(), fleet = new ParkedFleet('solid-roofs'), car = new VehiclePhysics('sedan');
+    car.reset(1000, 0, 0, () => ({ height: 100, grip: 1 })); fleet.park(car);
+    const surface = new DrivingSurface({ ...scene, parkedVehicles: { fleet } });
+    expect(surface.sample(1000, 0, 103).height).toBe(-50);
+    surface.walking = true;
+    expect(surface.sample(1000, 0, 103).height).toBeCloseTo(101.65);
+    expect(surface.sample(1000, 0, 100.45).height).toBe(-50);
+    expect(surface.canBoard(car, { x: 1000, y: 101.65, z: 0 })).toBe(false);
+  });
+
+  it('sweeps a fast car against parked vehicles and preserves a glancing tangential velocity', () => {
+    const scene = world(), fleet = new ParkedFleet('solid-impact'), surface = new DrivingSurface({ ...scene, groundHeight: () => 100, parkedVehicles: { fleet } });
+    const obstacle = new VehiclePhysics('truck8'); obstacle.reset(1000, 0, 0, surface.sample); fleet.park(obstacle);
+    const car = new VehiclePhysics('supercar'); car.reset(1006, 0, -Math.PI / 2 + 0.25, surface.sample);
+    car.parked = false; car.speed = 90; car.setSpeedLimit(400);
+    expect(car.update(0.1, { throttle: 0, steer: 0, handbrake: false }, surface.sample, surface.constrain)).toBe(true);
+    expect(car.x).toBeGreaterThan(1000 + obstacle.profile.width / 2);
+    expect(car.motionSpeed).toBeGreaterThan(5);
+  });
   it('blocks walking through the vehicle just exited while leaving its door reachable', () => {
     const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics();
     car.reset(1000, 0, 0, () => ({ height: 100, grip: 1 }));
@@ -109,7 +129,7 @@ describe('DrivingSurface', () => {
     const sample = scene.road.samples[100];
     vi.spyOn(scene.road, 'nearest').mockImplementation((_x, z) => ({ ...sample, position: { x: 0, y: 100, z }, heading: 0, grade: 0, bank: 0 }));
     scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 80, openStart: true, openEnd: true }];
-    car.reset(0, 0, Math.PI / 2, surface.sample); car.setSpeedLimit(400); car.speed = 400 / 3.6; car.parked = false;
+    car.reset(0, 0, Math.PI / 2, surface.sample); car.ignition = 'running'; car.setSpeedLimit(400); car.speed = 400 / 3.6; car.parked = false;
     expect(car.update(0.1, { throttle: 0, steer: 0, handbrake: false }, surface.sample, surface.constrain)).toBe(true);
     expect(Math.abs(car.speed)).toBeLessThan(0.01);
     expect(car.x + car.profile.chassisLength / 2).toBeLessThan(5.28);

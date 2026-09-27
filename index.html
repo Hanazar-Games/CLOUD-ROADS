@@ -18,7 +18,7 @@
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
         <p id="settings-help">调整你的旅程。设置期间暂停行驶；音量可以即时试听。</p>
-        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
+        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="traffic" aria-controls="settings-traffic">NPC 交通</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
         <details class="world-options" open>
           <summary>驾驶与视角</summary>
@@ -92,11 +92,17 @@
           <label for="cabin-fan">空调风机 · N · 0–6 档</label>
           <select id="cabin-fan"><option value="0">关闭</option><option value="1">1 档 · 轻风</option><option value="2">2 档 · 标准</option><option value="3">3 档</option><option value="4">4 档</option><option value="5">5 档</option><option value="6">6 档 · 强风</option></select>
           <section id="crane-controls" hidden><button id="crane-power" type="button">启动吊车 · O</button><p id="crane-status" role="status"></p><p class="panel-help">停车按 P 进入后部操作席。O 展开支腿，W/S 升降吊臂、A/D 回转、Q/E 伸缩、Z/X 收放吊钩；再次 O 自动收车。支腿与吊臂收妥后才能行驶。当前无载荷吊装。</p></section>
-          <div class="actions"><button id="vehicle-doors" type="button" hidden></button><button id="vehicle-cargo" type="button" hidden></button><button id="vehicle-aux" type="button" hidden></button></div>
-          <p id="operation-status" class="panel-help" role="status">车型操作：J 乘客门、Y 行李舱或尾门、I 尾翼 / 警示灯 / 支架。车门、舱门和支架收妥才能行驶；当前为无载荷开合动画。</p>
+          <div class="actions"><button id="vehicle-ignition" type="button">点火 · F2</button><button id="vehicle-doors" type="button" hidden></button><button id="vehicle-cargo" type="button" hidden></button><button id="vehicle-aux" type="button" hidden></button></div>
+          <p id="operation-status" class="panel-help" role="status">F2 点火 / 熄火，J 驾驶室或乘客门，Y 行李舱或尾门，I 尾翼 / 警示灯 / 支架。停车后操作车门，收妥后才能行驶。</p>
           <p id="equipment-status" class="equipment-status" role="status">车载设备就绪</p>
           <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃与座舱设备。</p>
 </div></section>
+<section class="settings-category" id="settings-traffic" aria-labelledby="heading-traffic"><h3 id="heading-traffic">NPC 交通</h3>
+          <label class="slider-label" for="traffic-density">交通密度 <output id="traffic-density-value">35%</output></label>
+          <input id="traffic-density" type="range" min="0" max="100" step="5" value="35" />
+          <p class="panel-help">0% 关闭交通；100% 最多 24 辆附近车辆。NPC 使用不同车型与车漆，双向行驶、弯前减速并避让。停稳后靠近车门按 F 可接管。</p>
+          <p id="traffic-status" class="panel-help" aria-live="polite">正在等待道路</p>
+        </section>
 <section class="settings-category" id="settings-world" aria-labelledby="heading-world"><h3 id="heading-world">世界与道路</h3>
         <form id="seed-form">
           <label for="seed">世界种子 <span>WORLD SEED</span></label>
@@ -273,7 +279,7 @@
         <header><div><p class="eyebrow">VEHICLE / CONTROL PANEL</p><h2 id="vehicle-panel-title">载具面板</h2></div><button type="button" data-close>返回旅程 · Esc</button></header>
         <div class="vehicle-panel-scroll"><p id="vehicle-panel-state"></p><dl id="vehicle-panel-specs" class="vehicle-specs"></dl><p id="vehicle-panel-equipment" class="equipment-status"></p>
         <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表</button><button id="panel-equipment" type="button">车载设备</button><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div>
-        <div class="actions"><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button></div>
+        <div class="actions"><button id="panel-ignition" type="button">点火 · F2</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button></div>
         <p id="vehicle-panel-help" class="panel-help"></p></div>
       </dialog>
       <div class="crosshair" aria-hidden="true">+</div>
@@ -283,8 +289,8 @@
         <div class="speed-dial" aria-hidden="true"><svg viewBox="0 0 200 140"><path class="dial-track" d="M 34 121 A 76 76 0 1 1 166 121" /><path class="dial-progress" id="dial-progress" d="M 34 121 A 76 76 0 1 1 166 121" pathLength="100" /><path class="dial-ticks" d="M 34 121 A 76 76 0 1 1 166 121" pathLength="100" /><g id="dial-needle"><path d="M 100 83 L 42 117" /><circle cx="100" cy="83" r="5" /></g><text x="18" y="138">0</text><text id="dial-max" x="182" y="138" text-anchor="end">173</text></svg></div>
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
-        <p id="vehicle-status">W 起步 · S 倒车</p>
-        <p class="rpm-reading"><span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">850</span> RPM</p>
+        <p id="vehicle-status">F2 点火 · W 起步</p>
+        <p class="rpm-reading"><span id="ignition-status">发动机关闭</span> · <span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">0</span> RPM</p>
         <p id="seat-reading" class="rpm-reading"></p><p id="radio-reading" class="rpm-reading"></p>
         <p id="cabin-status" class="rpm-reading">敞篷开启 · 玻璃水 3.0 L</p>
         <p id="drive-condition">夏季 · 路面正常</p>

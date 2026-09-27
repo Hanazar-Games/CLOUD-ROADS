@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('operates headlights and wipers, freezes controls in dialogs and adapts to motorcycles', async ({ page }) => {
   const errors: string[] = [];
@@ -13,7 +13,7 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   await (await control(page, page.locator('#vehicle-lights'))).selectOption('off');
   await (await control(page, page.locator('#suspension-damping'))).fill('130');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Vehicle lights')).toHaveText('off');
   await expect(metric('Wiper rate')).toHaveText('1.6');
   await expect.poll(async () => Number(await metric('Wiper sweep').textContent())).toBeGreaterThan(0.2);

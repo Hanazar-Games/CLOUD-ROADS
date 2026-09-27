@@ -31,6 +31,8 @@ import { SeasonState, type Season } from '../season/SeasonState';
 import { seasonMaterial } from '../season/SeasonMaterial';
 import { JUNCTION_INTERVAL, junctionsEnabled } from '../road/JunctionSchedule';
 import { JunctionMesh } from '../road/JunctionMesh';
+import { TrafficSystem } from '../traffic/TrafficSystem';
+import { TrafficVehicles } from '../traffic/TrafficVehicles';
 
 export interface GroundSample {
   height: number;
@@ -52,6 +54,8 @@ export class World {
   readonly furniture: RoadFurniture;
   readonly serviceMesh: ServiceMesh;
   readonly parkedVehicles: ParkedVehicles;
+  readonly traffic: TrafficSystem;
+  readonly trafficVehicles: TrafficVehicles;
   readonly signs: RoadSigns;
   readonly crossingMesh: CrossingMesh;
   readonly junctionMesh: JunctionMesh;
@@ -90,6 +94,8 @@ export class World {
     this.furniture = new RoadFurniture(scene, seed, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
     this.parkedVehicles = new ParkedVehicles(scene, seed);
+    this.traffic = new TrafficSystem(seed, options);
+    this.trafficVehicles = new TrafficVehicles(scene, this.traffic);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
     this.junctionMesh = new JunctionMesh(scene, options);
@@ -108,6 +114,7 @@ export class World {
   setSeason(kind: Season): void { this.season.set(kind); this.chunks.vegetation.setSeason(this.season); }
 
   resetCamera(camera: PerspectiveCamera): void {
+    this.traffic.clear();
     this.network.reset();
     this.scout = undefined; this.serviceView = undefined;
     this.roadReady = false;
@@ -421,6 +428,7 @@ export class World {
     this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
     this.tunnelMesh.dispose(); this.furniture.dispose();
     this.serviceMesh.dispose(); this.parkedVehicles.dispose(); this.scout = undefined;
+    this.trafficVehicles.dispose(); this.traffic.clear();
     this.signs.dispose();
     this.crossingMesh.dispose(); this.crossingPlanner.clear();
     this.junctionMesh.dispose();

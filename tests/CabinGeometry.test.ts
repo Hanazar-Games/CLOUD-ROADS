@@ -8,6 +8,21 @@ import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
 import { CraneSystems } from '../src/vehicle/CraneSystems';
 
+it('opens physical cabin doors with their windows on every enclosed non-bus vehicle', () => {
+  for (const kind of Object.keys(vehicleProfiles) as VehicleKind[]) {
+    const car = new VehiclePhysics(kind);
+    if (car.profile.bus || car.profile.shape === 'motorcycle') continue;
+    const mesh = new VehicleMesh(new Scene(), car.profile), ops = new VehicleOperations(car.profile);
+    const doors = mesh.root.getObjectsByProperty('name', 'operation-doors');
+    expect(doors.length, kind).toBe(2);
+    expect(doors.every(door => !!door.getObjectByName('driver-window')), kind).toBe(true);
+    ops.toggle('doors', 0, true); for (let i = 0; i < 30; i++) ops.update(0.1);
+    mesh.sync(car, { x: 0, z: 0 }, new VehicleSystems(), 0, undefined, ops);
+    expect(doors.every(door => Math.abs(door.rotation.y) > 0.8), kind).toBe(true);
+    mesh.dispose();
+  }
+});
+
 it('keeps every bus eye below its own ceiling, including both double-decker floors', () => {
   for (const kind of ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus'] as const) {
     const p = vehicleProfiles[kind], mesh = new VehicleMesh(new Scene(), p);

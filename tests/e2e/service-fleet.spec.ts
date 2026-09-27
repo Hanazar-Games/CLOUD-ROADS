@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { control } from './settings';
+import { ignite, control } from './settings';
 
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 const position = async (page: Page) => (await metric(page, 'Walking position').textContent())!.split(',').map(Number);
@@ -59,6 +59,7 @@ test('walks through classified parking, drives parked vehicles and leaves the pr
   await expect(page.locator('#boarding-help')).toBeVisible(); await page.keyboard.press('KeyF');
   await expect(metric(page, 'Vehicle model')).toHaveText(first!); await expect(metric(page, 'Vehicle position')).toHaveText(firstPosition!);
   await expect(page.locator('#vehicle-paint')).toHaveValue(paint);
+  await expect(metric(page, 'Travel mode')).toHaveText('driving'); await ignite(page);
   await page.keyboard.down('KeyW'); await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(3); await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);
 });

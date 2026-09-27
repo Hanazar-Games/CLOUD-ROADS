@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { closeSettings, control } from './settings';
+import { ignite, closeSettings, control } from './settings';
 
 test('holds windows at arbitrary heights and uses six fan speeds, ten radio channels and independent cabin lights', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/?seed=FLEET-FLAT'); await page.locator('#drive-toggle').click();
+  await page.goto('/?seed=FLEET-FLAT'); await page.locator('#drive-toggle').click(); await ignite(page);
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.keyboard.down('Period'); await expect.poll(async () => Number(await metric('Window opening').textContent())).toBeGreaterThan(0.2);
   await page.keyboard.up('Period'); await page.waitForTimeout(300); const window = await metric('Window opening').textContent();
@@ -21,7 +21,7 @@ test('holds windows at arbitrary heights and uses six fan speeds, ten radio chan
 test('maps bus seats to real passenger cameras, prevents passenger driving and retains per-seat adjustments', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT');
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('coach'); await closeSettings(page);
-  await page.locator('#drive-toggle').click(); await page.keyboard.press('KeyP');
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.press('KeyP');
   await expect(page.getByRole('dialog', { name: '选择座位' })).toBeVisible();
   expect(await page.locator('#seat-map button').count()).toBeGreaterThan(30);
   await page.locator('[data-seat="row-3-3"]').click();
@@ -43,7 +43,7 @@ test('maps bus seats to real passenger cameras, prevents passenger driving and r
 test('operates a parked crane from its rear seat and requires stowing before driving', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT');
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('crane'); await closeSettings(page);
-  await page.locator('#drive-toggle').click(); await page.keyboard.press('KeyP'); await page.locator('[data-seat="operator"]').click();
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.press('KeyP'); await page.locator('[data-seat="operator"]').click();
   await page.keyboard.press('KeyO'); await expect(page.locator('[data-metric="Crane state"]')).toHaveText('active');
   await page.waitForTimeout(3000); await page.keyboard.down('KeyW'); await page.keyboard.down('KeyD'); await page.keyboard.down('KeyE');
   await page.waitForTimeout(1500); await page.keyboard.up('KeyW'); await page.keyboard.up('KeyD'); await page.keyboard.up('KeyE');
@@ -67,7 +67,7 @@ test('operates a parked crane from its rear seat and requires stowing before dri
 test('keeps every coach seat and menu controls reachable in a short narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 450 }); await page.goto('/?seed=FLEET-FLAT');
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('coach'); await closeSettings(page);
-  await page.locator('#drive-toggle').click(); await page.keyboard.press('KeyP');
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.press('KeyP');
   const dialog = page.locator('#seat-dialog');
   const bounds = await dialog.boundingBox(); expect(bounds!.y).toBeGreaterThanOrEqual(0); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(450);
   await page.locator('#seat-map button').last().click();

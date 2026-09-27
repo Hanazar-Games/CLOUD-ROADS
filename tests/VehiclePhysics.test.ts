@@ -7,7 +7,7 @@ const forward = { ...idle, throttle: 1 };
 function run(car: VehiclePhysics, seconds: number, input = idle, surface = flat, fps = 60) {
   for (let i = 0; i < seconds * fps; i++) car.update(1 / fps, input, surface);
 }
-function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); return car; }
+function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); car.ignition = 'running'; return car; }
 
 describe('VehiclePhysics', () => {
   it('preserves tangential contact velocity, dissipates sliding through grip and clears it on parking', () => {

@@ -5,7 +5,7 @@ import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 const flat = () => ({ height: 0, grip: 1 });
 it('applies a forward speed ceiling and restores the vehicle default without changing reverse limits', () => {
-  const car = new VehiclePhysics(); car.reset(0, 0, 0, flat); car.setSpeedLimit(40);
+  const car = new VehiclePhysics(); car.reset(0, 0, 0, flat); car.ignition = 'running'; car.setSpeedLimit(40);
   for (let i = 0; i < 1200; i++) car.update(1 / 60, { throttle: 1, steer: 0, handbrake: false }, flat);
   expect(car.speed * 3.6).toBeCloseTo(40, 5);
   car.setSpeedLimit(300); expect(car.transmission.maxSpeed).toBeCloseTo(300 / 3.6);

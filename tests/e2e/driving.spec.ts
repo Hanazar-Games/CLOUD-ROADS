@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 async function start(page: Page) {
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 25_000 });
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric(page, 'Travel mode')).toHaveText('driving');
   await expect(page.locator('#world')).toBeFocused();
   await expect(page.locator('#vehicle-gear')).toHaveText('P');
@@ -167,7 +167,7 @@ test('keeps driving controls and instruments reachable in small windows', async 
     await expect(page.locator('#settings-close')).toBeInViewport();
     await toggleSettings(page);
   }
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(page.locator('#drive-hud')).toBeHidden();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
 });

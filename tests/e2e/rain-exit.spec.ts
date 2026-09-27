@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('wipes accumulated windshield water and freezes it while paused', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -11,7 +11,7 @@ test('wipes accumulated windshield water and freezes it while paused', async ({ 
   await (await control(page, page.locator('#driving-view'))).selectOption('cockpit');
   await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
   await (await control(page, page.locator('#vehicle-wipers'))).selectOption('off');
-  await expect(page.locator('#drive-toggle')).toBeEnabled(); await (await control(page, page.locator('#drive-toggle'))).click();
+  await expect(page.locator('#drive-toggle')).toBeEnabled(); await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect.poll(async () => parseFloat((await metric('Wiped water').textContent())!), { timeout: 15000 }).toBeGreaterThan(90);
   await page.keyboard.press('F8'); await page.waitForTimeout(250);
   const water = await metric('Glass water').textContent(); await page.waitForTimeout(500);
@@ -33,8 +33,9 @@ test('leaves a parked vehicle on a high bridge with F and boards it without rese
   await page.goto('/?seed=VALLEY-22'); await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(page.locator('#bridge-view')).toBeEnabled(); await (await control(page, page.locator('#bridge-view'))).click();
-  await (await control(page, page.locator('#drive-toggle'))).click(); await expect(metric('Travel mode')).toHaveText('driving');
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page); await expect(metric('Travel mode')).toHaveText('driving');
   await page.keyboard.down('KeyW'); await page.waitForTimeout(1600); await page.keyboard.up('KeyW');
+  await page.keyboard.down('Space'); await expect(page.locator('#vehicle-speed')).toHaveText('0'); await page.keyboard.up('Space');
   await page.keyboard.press('KeyF'); await expect(metric('Travel mode')).toHaveText('walking');
   await expect(metric('Parked vehicle')).toHaveText('yes'); await expect(metric('Walking grounded')).toHaveText('yes');
   const vehicle = (await metric('Vehicle position').textContent())!.split(',').map(Number);

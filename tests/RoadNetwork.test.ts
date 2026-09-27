@@ -132,7 +132,7 @@ it.each([['mountain', false, 'roadster', 0], ['mountain', true, 'roadster', 0], 
   const car = new VehiclePhysics(kind), lane = roadProfile(settings).centers.at(-1)! + settings.roadWidth / 4;
   const start = branch.road.samples[0], r = roadFrame(start).right;
   car.reset(start.position.x + r.x * lane, start.position.z + r.z * lane, start.heading, surface.sample);
-  car.parked = false; car.speed = 10;
+  car.ignition = 'running'; car.parked = false; car.speed = 10;
   let reached = 0;
   const finish = branch.definition.prefix.at(-1)!.end.distance + 160;
   for (let frame = 0; frame < 24000 && reached < finish; frame++) {

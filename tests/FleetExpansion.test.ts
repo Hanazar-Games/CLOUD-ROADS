@@ -28,7 +28,7 @@ it('provides separate selectable decks at distinct heights with one driver', () 
 it('drives the 350 km/h supercar to its factory limit on level ground and retains a lower custom limit', () => {
   const car = new VehiclePhysics('supercar'), flat = () => ({ height: 0, grip: 1 });
   expect(car.maxSpeed * 3.6).toBeCloseTo(350);
-  car.reset(0, 0, 0, flat);
+  car.reset(0, 0, 0, flat); car.ignition = 'running';
   for (let i = 0; i < 120 * 120; i++) car.update(1 / 120, { throttle: 1, steer: 0, handbrake: false }, flat);
   expect(car.speed * 3.6).toBeGreaterThan(348); expect(car.speed).toBeLessThanOrEqual(car.maxSpeed);
   car.setSpeedLimit(120); car.update(1 / 60, { throttle: 1, steer: 0, handbrake: false }, flat);

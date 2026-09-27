@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('retains tuning, paint and detailed vegetation across vehicle, world and graphics recovery', async ({ page }) => {
   test.setTimeout(90_000);
@@ -27,10 +27,10 @@ test('retains tuning, paint and detailed vegetation across vehicle, world and gr
     await expect(page.locator('#vehicle-summary')).toContainText('马力');
     for (const view of ['cockpit', 'hood', 'chase']) {
       await (await control(page, page.locator('#driving-view'))).selectOption(view);
-      await (await control(page, page.locator('#drive-toggle'))).click();
+      await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
       await expect(page.locator('#drive-hud')).toBeVisible();
       await expect(metric('Vehicle model')).toHaveText(await page.locator('#vehicle-kind option:checked').textContent() ?? '');
-      await (await control(page, page.locator('#drive-toggle'))).click();
+      await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
       await toggleSettings(page);
     }
   }

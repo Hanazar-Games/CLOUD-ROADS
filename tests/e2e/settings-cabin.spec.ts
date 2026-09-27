@@ -1,15 +1,15 @@
 import { expect, test } from '@playwright/test';
-import { closeSettings, control, openSettings } from './settings';
+import { ignite, closeSettings, control, openSettings } from './settings';
 
 test('opens categorized modal settings, freezes driving and restores fresh keyboard control', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT');
-  await page.locator('#drive-toggle').click();
+  await page.locator('#drive-toggle').click(); await ignite(page);
   await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(5);
   await page.locator('#controls-toggle').click();
   const dialog = page.getByRole('dialog', { name: '旅程设置' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveCount(8);
+  await expect(dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveCount(9);
   const position = page.locator('[data-metric="Vehicle position"]');
   await page.waitForTimeout(250); const parked = await position.textContent();
   await page.keyboard.press('KeyF'); await page.waitForTimeout(300);
@@ -20,7 +20,7 @@ test('opens categorized modal settings, freezes driving and restores fresh keybo
 });
 
 test('animates windows, roof and washer water, and preserves pause through settings', async ({ page }) => {
-  await page.goto('/?seed=FLEET-FLAT'); await page.locator('#drive-toggle').click();
+  await page.goto('/?seed=FLEET-FLAT'); await page.locator('#drive-toggle').click(); await ignite(page);
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.keyboard.press('KeyT'); await page.keyboard.down('Period'); await expect(metric('Window opening')).toHaveText('1.00'); await page.keyboard.up('Period'); await page.keyboard.press('KeyG');
   await expect(metric('Roof opening')).toHaveText('0.00', { timeout: 15000 });
@@ -62,7 +62,7 @@ test('shifts automatically, allows manual shifts and blocks roof motion at speed
   await (await control(page, page.locator('#route-style'))).selectOption('0');
   await (await control(page, page.locator('#max-grade'))).fill('0');
   await page.getByRole('button', { name: '应用并返回起点' }).click();
-  await page.locator('#drive-toggle').click(); await page.keyboard.down('KeyW');
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.down('KeyW');
   await expect(page.locator('[data-metric="Transmission"]')).toHaveText('auto / 2', { timeout: 20000 });
   await page.keyboard.up('KeyW'); await page.keyboard.press('BracketRight');
   await expect(page.locator('[data-metric="Transmission"]')).toHaveText(/manual \/ [23]/);

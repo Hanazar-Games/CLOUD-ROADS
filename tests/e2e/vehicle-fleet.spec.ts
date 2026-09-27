@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('switches every vehicle in place, drives long rigs, and preserves choices through world and graphics resets', async ({ page }) => {
   test.setTimeout(240_000);
@@ -16,7 +16,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#vehicle-kind option')).toHaveCount(27);
   await expect(page.locator('#suspension option')).toHaveCount(5);
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   for (const kind of ['hatchback', 'wagon', 'pickup', 'van', 'camper', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'citybus', 'sedan', 'supercar', 'suv', 'truck5', 'truck8', 'flatbed12', 'crane', 'semi15', 'semi20', 'stake18', 'heavySemi', 'minibus', 'coach', 'coach15', 'doubleDecker', 'motorcycle', 'roadster']) {
     await toggleSettings(page);
     await (await control(page, page.locator('#vehicle-kind'))).selectOption(kind);
@@ -26,7 +26,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
     await (await control(page, page.locator('#suspension'))).selectOption('5');
     await toggleSettings(page);
     await (await control(page, page.locator('#world'))).focus();
-    await page.keyboard.down('KeyW');
+    await ignite(page); await page.keyboard.down('KeyW');
     await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(12);
     await page.keyboard.up('KeyW'); await page.keyboard.down('Space');
     await expect(page.locator('#vehicle-speed')).toHaveText('0');
@@ -67,7 +67,7 @@ test('previews weather and fog while paused and keeps the vehicle stationary', a
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('motorcycle');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await page.keyboard.press('F8'); await toggleSettings(page);
   const position = await metric('Vehicle position').textContent();
   await (await control(page, page.locator('#cloud-toggle'))).click();

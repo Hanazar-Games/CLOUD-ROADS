@@ -54,7 +54,7 @@ export class CabinDialogs {
     this.driving.describeEquipment();
     const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';
     element('vehicle-panel-title').textContent = p.name;
-    element('vehicle-panel-state').textContent = active ? `${cabin.selected.label} · ${cabin.driver ? '驾驶权限' : '乘坐 / 设备操作'} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h · ${car.transmission.gear} 挡 / ${Math.round(car.transmission.rpm)} RPM · 行程 ${(car.trip / 1000).toFixed(2)} km` : '车型预览 · 开始驾驶后可选择座位';
+    element('vehicle-panel-state').textContent = active ? `${cabin.selected.label} · ${cabin.driver ? '驾驶权限' : '乘坐 / 设备操作'} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h · ${car.transmission.gear} 挡 / ${Math.round(car.engineRpm)} RPM · 行程 ${(car.trip / 1000).toFixed(2)} km` : '车型预览 · 开始驾驶后可选择座位';
     const specs = [['车身尺寸', `${p.length} × ${p.width} × ${p.height} m`], ['整备质量', `${(p.mass / 1000).toLocaleString('zh-CN')} t`],
       ['当前输出', `${Math.round(p.power * car.powerScale / 1000)} kW`], ['速度上限', `${Math.round(car.maxSpeed * 3.6)} km/h`],
       ['底盘轴距', `${car.wheelbase.toFixed(2)} m`], ['可选座位', `${cabin.seats.length} 席`],

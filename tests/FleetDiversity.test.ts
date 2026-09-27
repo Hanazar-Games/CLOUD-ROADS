@@ -18,7 +18,7 @@ it('offers ten distinct additions in appropriately sized service parking zones',
 
 it.each(additions)('accelerates, steers and brakes %s without unstable suspension', kind => {
   const car = new VehiclePhysics(kind), surface = () => ({ height: 0, grip: 1 });
-  car.reset(0, 0, 0, surface);
+  car.reset(0, 0, 0, surface); car.ignition = 'running';
   for (let i = 0; i < 600; i++) car.update(1 / 60, { throttle: 1, steer: 0.15, handbrake: false }, surface);
   expect(car.speed).toBeGreaterThan(5); expect(car.speed).toBeLessThanOrEqual(car.maxSpeed);
   expect(car.heading).toBeGreaterThan(0.05);

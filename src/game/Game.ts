@@ -113,6 +113,10 @@ export class Game {
         else { this.driving.action(code); this.walking.action(code); }
       }
     };
+    element('traffic-density').addEventListener('input', () => {
+      const density = Number(element<HTMLInputElement>('traffic-density').value);
+      this.world.traffic.density = density; element('traffic-density-value').textContent = `${density}%`;
+    }, { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
       else if (this.walking.active && (this.driving.canBoard(this.walking.person) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
@@ -347,6 +351,7 @@ export class Game {
       this.world.dispose();
       this.world = world;
       this.weather.setSeason(world.season);
+      this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.chunks.setViewRadius(this.viewRadius);
       this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
@@ -424,25 +429,30 @@ export class Game {
   }
 
   private stopWalking(): void {
+    this.boarding = undefined;
     if (!this.walking.active) return;
     this.walking.stop();
     this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
   }
 
-  private stopTravel(): void { this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
+  private stopTravel(): void { this.boarding = undefined; this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
+
+  private boarding?: DrivingSystem['car'];
 
   private interactVehicle(): void {
+    if (this.boarding) return;
     if (this.driving.active) {
       const point = this.driving.exitLocation();
       if (!point) return;
+      this.driving.operations.target.doors = this.driving.operations.label('doors') ? 1 : 0;
       this.driving.stop(true); this.walking.start(point);
     } else if (this.walking.active) {
       const entry = this.driving.nearbyVehicle(this.walking.person);
       if (entry) {
-        const { x, y, z, heading } = this.walking.person; this.stopWalking();
-        if (!this.driving.boardVehicle(entry)) this.walking.start({ x, y, z, heading });
+        if (this.driving.prepareBoarding(entry)) this.boarding = this.driving.car;
       } else if (this.driving.canBoard(this.walking.person)) {
-        this.stopWalking(); this.driving.start(true);
+        this.driving.operations.target.doors = this.driving.operations.label('doors') ? 1 : 0;
+        this.boarding = this.driving.car;
       }
     }
   }
@@ -512,8 +522,9 @@ export class Game {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const silent = this.paused || this.releaseNotes.open || this.cabinDialogs.open || !this.input.enabled;
     const frozen = silent || this.settings.open;
+    if (this.boarding && (!this.walking.active || !this.driving.parked || this.boarding !== this.driving.car)) this.boarding = undefined;
     if (this.driving.active) this.driving.update(dt, frozen, this.weather.wetness);
-    else if (this.walking.active) this.walking.update(dt, frozen);
+    else if (this.walking.active) this.walking.update(dt, frozen || !!this.boarding);
     else this.flight.update(dt, frozen);
     this.world.update(this.camera, !frozen, this.driving.active ? this.driving.car.heading + (this.driving.car.speed < -0.1 ? Math.PI : 0)
       : this.walking.active ? this.walking.person.heading : undefined, this.driving.active ? this.driving.car : this.walking.active ? this.walking.person : undefined);
@@ -529,14 +540,29 @@ export class Game {
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
       Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain, frozen ? 0 : dt);
     this.walking.sync();
+    if (this.boarding && !frozen && this.world.roadReady && document.hasFocus() && document.activeElement === this.canvas
+      && (!this.driving.operations.label('doors') || this.driving.operations.doors > 0.98)) {
+      const { x, y, z, heading } = this.walking.person;
+      this.boarding = undefined; this.stopWalking();
+      if (this.driving.start(true)) this.driving.operations.target.doors = 0;
+      else this.walking.start({ x, y, z, heading });
+    }
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
+    const anchor = this.driving.active ? this.driving.car : this.walking.active ? this.walking.person
+      : { x: this.camera.position.x + this.world.origin.x, y: this.camera.position.y, z: this.camera.position.z + this.world.origin.z };
+    const obstacles = this.world.traffic.density ? this.world.parkedVehicles.fleet.entries.filter(e => Math.hypot(e.x - anchor.x, e.z - anchor.z) < 1500)
+      .map(e => this.world.parkedVehicles.fleet.vehicle(e)) : [];
+    if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
+    this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
+    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter));
     this.audio.setActive(!silent && !document.hidden && this.windowFocused && document.hasFocus());
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: this.input.down('KeyW') && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
-      rpm: this.driving.car.transmission.rpm, shifts: this.driving.car.transmission.shifts,
+      rpm: this.driving.car.engineRpm, shifts: this.driving.car.transmission.shifts, ignition: this.driving.car.ignition,
+      traffic: moving ? this.world.traffic.entries.reduce((level, e) => Math.min(1, level + Math.max(0, 1 - Math.hypot(e.car.x - anchor.x, e.car.y - anchor.y, e.car.z - anchor.z) / 70) ** 2 * (0.15 + e.car.speed / 30)), 0) : 0,
       exposure: this.driving.systems.cabinExposure, wet: this.weather.wetness, night: this.sky.sun.night,
       nature: !['desert', 'dunes', 'badlands', 'volcanic'].includes(this.world.options.terrain) && this.world.season.kind !== 'winter',
       horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
@@ -564,7 +590,8 @@ export class Game {
       const nearby = this.walking.active ? this.driving.nearbyVehicle(this.walking.person) : undefined;
       const boardable = this.walking.active && (this.driving.canBoard(this.walking.person) || !!nearby);
       element('boarding-help').hidden = !boardable;
-      element('boarding-help').textContent = nearby ? `F · 驾驶${vehicleProfiles[nearby.kind].name}` : 'F · 回到车辆';
+      element('boarding-help').textContent = this.boarding ? '车门打开中 · 请稍候' : nearby ? `F · 开门驾驶${vehicleProfiles[nearby.kind].name}` : 'F · 开门回到车辆';
+      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 · ${this.world.traffic.density ? '交通运行中' : '交通已关闭'}`;
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight);
@@ -624,7 +651,11 @@ export class Game {
         'FXAA': this.clouds.material.uniforms.antialias.value ? 'on' : 'off', 'Cloud steps': this.clouds.material.uniforms.cloudSteps.value,
         'Valley crossings': this.world.crossings.map(site => site.kind).join(', ') || 'none',
         'Audio state': this.audio.state,
-        'Engine RPM': String(Math.round(this.driving.car.transmission.rpm)),
+        'Engine RPM': String(Math.round(this.driving.car.engineRpm)),
+        'Ignition': this.driving.car.ignition,
+        'NPC vehicles': this.world.traffic.entries.length,
+        'NPC density': `${this.world.traffic.density}%`,
+        'NPC motion': this.world.traffic.entries.map(e => `${e.id}:${e.distance.toFixed(1)}`).join(', '),
         'Transmission': `${this.driving.car.transmission.mode} / ${this.driving.car.transmission.gear}`,
         'Window opening': this.driving.systems.windowOpen.toFixed(2),
         'Roof opening': this.driving.systems.roofOpen.toFixed(2),

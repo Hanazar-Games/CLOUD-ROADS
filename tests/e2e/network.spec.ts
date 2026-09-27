@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('randomizes a new trip while reproducing explicit seeds', async ({ page }) => {
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
@@ -23,7 +23,7 @@ test('reverses across the starting seam and loads the opposite route', async ({ 
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await page.keyboard.down('KeyS');
   await expect(metric('Active route')).toHaveText('back', { timeout: 20000 });
   await expect.poll(async () => Number((await metric('Vehicle position').textContent())!.split(',')[2])).toBeGreaterThan(160);
@@ -40,7 +40,7 @@ test('uses signals and adjustable headlights across the fleet and isolates dialo
   await (await control(page, page.locator('#vehicle-lights'))).selectOption('high');
   await (await control(page, page.locator('#light-range'))).fill('800'); await (await control(page, page.locator('#light-power'))).fill('175');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await page.keyboard.press('KeyQ'); await expect(metric('Vehicle signal')).toHaveText('left');
   await expect(page.locator('#turn-left')).toHaveClass('lit');
   await expect(page.locator('#turn-left')).not.toHaveClass('lit');

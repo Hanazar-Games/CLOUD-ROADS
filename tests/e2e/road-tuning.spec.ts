@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeSettings, openSettings } from './settings';
+import { ignite, closeSettings, openSettings } from './settings';
 
 test('applies highway radius and retains it through new worlds and road type changes', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT'); await openSettings(page);
@@ -15,7 +15,7 @@ test('applies highway radius and retains it through new worlds and road type cha
   await openSettings(page); await expect(page.locator('#highway-radius')).toHaveValue('800');
   await page.locator('#road-type').selectOption('mountain'); await expect(page.locator('#highway-radius')).toBeDisabled();
   await page.locator('#road-type').selectOption('highway'); await expect(page.locator('#highway-radius')).toHaveValue('800');
-  await closeSettings(page); await page.locator('#drive-toggle').click(); await expect(page.locator('#drive-hud')).toBeVisible();
+  await closeSettings(page); await page.locator('#drive-toggle').click(); await ignite(page); await expect(page.locator('#drive-hud')).toBeVisible();
 });
 
 test('limits speed, configures steering assistance and restores per-vehicle defaults', async ({ page }) => {
@@ -26,7 +26,7 @@ test('limits speed, configures steering assistance and restores per-vehicle defa
   await page.locator('#steering-assist').uncheck(); await expect(page.locator('#steering-assist-strength')).toBeDisabled();
   await page.locator('#vehicle-kind').selectOption('sedan'); await expect(page.locator('#vehicle-max-speed')).toHaveValue('40');
   await expect(page.locator('#steering-assist')).not.toBeChecked(); await closeSettings(page);
-  await page.locator('#drive-toggle').click(); await page.keyboard.down('KeyW');
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.down('KeyW');
   await expect(page.locator('#vehicle-speed')).toHaveText('40', { timeout: 15000 });
   await page.waitForTimeout(500); await expect(page.locator('#vehicle-speed')).toHaveText('40'); await page.keyboard.up('KeyW');
   await openSettings(page); await page.locator('#steering-assist').check();
@@ -61,7 +61,7 @@ test('keeps the weather menu stable and survives repeated weather changes', asyn
     }
   }
   await page.locator('#weather-kind').selectOption('clear'); await closeSettings(page);
-  await page.locator('#drive-toggle').click(); await page.keyboard.down('KeyW');
+  await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(2);
   await page.keyboard.up('KeyW'); expect(errors).toEqual([]);
 });

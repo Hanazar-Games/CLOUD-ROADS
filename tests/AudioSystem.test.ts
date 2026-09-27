@@ -4,7 +4,7 @@ import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
-  supercar: false, braking: false, operations: 0, service: 0 };
+  supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0 };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
   setValueAtTime(value: number) { this.value = value; }, cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
@@ -25,6 +25,25 @@ class AudioContextStub {
   async close() { this.state = 'closed'; }
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('mutes propulsion when off, keeps cabin equipment powered and fades bounded traffic audio', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.update(0.1, { ...idle, driving: true, fan: 3 });
+  expect(context.gains[3].gain.value).toBeGreaterThan(0);
+  const running = context.gains.map(g => g.gain.value);
+  audio.update(0.1, { ...idle, driving: true, ignition: 'off', rpm: 0, fan: 3 });
+  expect(context.gains[3].gain.value).toBe(0);
+  expect(context.gains.some((g, i) => i > 3 && g.gain.value > 0 && g.gain.value === running[i])).toBe(true);
+  audio.update(0.1, { ...idle, driving: true, ignition: 'starting', rpm: 240 });
+  expect(context.gains[3].gain.value).toBeGreaterThan(0);
+  const count = context.gains.length;
+  audio.update(0.1, { ...idle, traffic: 1 }); const near = context.gains.at(-1)!.gain.value;
+  expect(near).toBeGreaterThan(0);
+  audio.update(0.1, { ...idle, traffic: 0.5 }); expect(context.gains.at(-1)!.gain.value).toBeCloseTo(near / 2);
+  audio.setActive(false); await Promise.resolve(); expect(context.gains.at(-1)!.gain.value).toBe(0);
+  expect(context.gains).toHaveLength(count); audio.dispose();
+});
 
 it('voices the supercar separately and keeps music and operational effects on a bounded audio graph', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });

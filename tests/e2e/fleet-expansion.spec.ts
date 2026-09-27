@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { control, closeSettings } from './settings';
+import { ignite, control, closeSettings } from './settings';
 
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 const choose = async (page: Page, kind: string) => {
@@ -10,7 +10,7 @@ test('uses exact bus row counts and selects both double-decker floors without gr
   await page.goto('/?seed=FLEET-FLAT');
   for (const [kind, count] of [['minibus', 37], ['coach', 53], ['coach15', 73], ['citybus', 41]] as const) {
     await choose(page, kind);
-    if (!await page.locator('#drive-hud').isVisible()) await page.locator('#drive-toggle').click();
+    if (!await page.locator('#drive-hud').isVisible()) await page.locator('#drive-toggle').click(); await ignite(page);
     await page.keyboard.press('KeyP'); await expect(page.locator('#seat-map button')).toHaveCount(count);
     await page.keyboard.press('Escape');
   }
@@ -28,7 +28,7 @@ test('uses exact bus row counts and selects both double-decker floors without gr
 });
 
 test('animates doors and luggage, blocks departure until shut, and freezes fittings in menus', async ({ page }) => {
-  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'coach'); await page.locator('#drive-toggle').click();
+  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'coach'); await page.locator('#drive-toggle').click(); await ignite(page);
   await page.keyboard.press('KeyJ'); await expect(metric(page, 'Vehicle operations')).toHaveText('1.00 / 0.00 / 0.00');
   await page.keyboard.down('KeyW'); await page.waitForTimeout(500); await page.keyboard.up('KeyW'); await expect(page.locator('#vehicle-speed')).toHaveText('0');
   await page.keyboard.press('KeyY'); await page.keyboard.press('KeyM');
@@ -45,7 +45,7 @@ test('animates doors and luggage, blocks departure until shut, and freezes fitti
 
 test('provides supercar factory speed, wing and stake-trailer gates from the vehicle panel', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'supercar'); await page.locator('#drive-toggle').click();
+  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'supercar'); await page.locator('#drive-toggle').click(); await ignite(page);
   await expect(metric(page, 'Vehicle speed limit')).toHaveText('350.0 km/h');
   await page.locator('#hud-vehicle-panel').click(); await page.locator('#panel-aux').click();
   await expect(page.locator('#panel-aux')).toHaveAttribute('aria-pressed', 'true'); await page.keyboard.press('Escape');
@@ -61,7 +61,7 @@ test('interlocks the pickup tailgate and dump bed and operates emergency beacons
   await page.goto('/?seed=FLEET-FLAT');
   for (const kind of ['pickup', 'dumptruck']) {
     await choose(page, kind);
-    if (!await page.locator('#drive-hud').isVisible()) await page.locator('#drive-toggle').click();
+    if (!await page.locator('#drive-hud').isVisible()) await page.locator('#drive-toggle').click(); await ignite(page);
     await page.keyboard.press('KeyY'); await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 1.00 / 0.00');
     await page.keyboard.down('KeyW'); await page.waitForTimeout(350); await page.keyboard.up('KeyW');
     await expect(page.locator('#vehicle-speed')).toHaveText('0');

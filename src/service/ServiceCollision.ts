@@ -1,12 +1,19 @@
 import type { VehiclePhysics } from '../vehicle/VehiclePhysics';
+import { solidHeight, vehicleSolids } from '../vehicle/VehicleSolids';
 
 export interface Obstacle { x: number; z: number; heading: number; width: number; front: number; rear: number }
 
-export function constrainVehicle(body: { x: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, car: VehiclePhysics): boolean {
-  const ground = car.y - car.profile.radius - car.profile.rest;
-  if (feet < ground - 1 || feet > ground + car.profile.height) return false;
+export function constrainVehicle(body: { x: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, car: VehiclePhysics, height = 1.75): boolean {
+  const reach = car.profile.length + radius + 2;
+  if (car.x < Math.min(body.x, previousX) - reach || car.x > Math.max(body.x, previousX) + reach
+    || car.z < Math.min(body.z, previousZ) - reach || car.z > Math.max(body.z, previousZ) + reach) return false;
   let hit = false;
-  for (const obstacle of car.bodies()) hit = constrainObstacle(body, previousX, previousZ, radius, { ...obstacle, width: car.profile.width }) || hit;
+  for (const obstacle of vehicleSolids(car)) {
+    const x = Math.max(obstacle.x - reach, Math.min(obstacle.x + reach, body.x));
+    const z = Math.max(obstacle.z - reach, Math.min(obstacle.z + reach, body.z));
+    if (feet >= solidHeight(obstacle, x, z) - 0.06 || feet + height < solidHeight(obstacle, x, z, obstacle.bottom)) continue;
+    hit = constrainObstacle(body, previousX, previousZ, radius, obstacle) || hit;
+  }
   return hit;
 }
 

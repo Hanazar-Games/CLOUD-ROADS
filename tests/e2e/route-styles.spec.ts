@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('applies winding levels, drives them and preserves choices during far streaming and recovery', async ({ page }) => {
   test.setTimeout(120000);
@@ -30,7 +30,7 @@ test('applies winding levels, drives them and preserves choices during far strea
   expect(Number(await metric('Bridges').textContent())).toBeGreaterThan(0);
   expect(Number(await metric('Bridge piers').textContent())).toBeGreaterThan(10);
   await expect(page.locator('#view-distance')).toHaveValue('16');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Travel mode')).toHaveText('driving');
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(20);

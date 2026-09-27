@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('applies muted SFX and BGM channels before the native audio context resumes', async ({ page }) => {
   await page.addInitScript(() => {
@@ -40,14 +40,14 @@ test('returns keyboard control when closing settings and boards the parked car f
   await page.goto('/?seed=FLEET-FLAT');
   await (await control(page, page.locator('#terrain-kind'))).selectOption('meadow');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-trip').textContent())).toBeGreaterThan(0.01);
   await page.keyboard.up('KeyW'); await page.keyboard.press('KeyF');
   await expect(metric('Travel mode')).toHaveText('walking');
   const parked = await metric('Vehicle position').textContent(), trip = await page.locator('#vehicle-trip').textContent();
   await expect(page.locator('#drive-toggle')).toHaveText('回到车辆');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Travel mode')).toHaveText('driving');
   const before = parked!.split(',').map(Number), after = (await metric('Vehicle position').textContent())!.split(',').map(Number);
   expect([after[0], after[2]]).toEqual([before[0], before[2]]);
@@ -60,7 +60,7 @@ test('returns keyboard control when closing settings and boards the parked car f
 
 test('keeps modal settings and its close control inside short walking viewports', async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 520 });
-  await page.goto('/?seed=FLEET-FLAT'); await (await control(page, page.locator('#drive-toggle'))).click();
+  await page.goto('/?seed=FLEET-FLAT'); await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await page.keyboard.press('KeyF'); await expect(page.locator('#boarding-help')).toBeVisible();
   await toggleSettings(page);
   for (const size of [{ width: 480, height: 520 }, { width: 800, height: 450 }, { width: 390, height: 450 }]) {
@@ -78,7 +78,7 @@ test('updates parked lights and wipers and still freezes them while paused', asy
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('truck5');
   await (await control(page, page.locator('#vehicle-lights'))).selectOption('high');
   await (await control(page, page.locator('#vehicle-wipers'))).selectOption('high');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Vehicle lights')).toHaveText('high');
   await page.keyboard.press('KeyF'); await expect(metric('Parked vehicle')).toHaveText('yes');
   await toggleSettings(page);

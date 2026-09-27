@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('customizes all winding levels and grades, renders roadside flowers and drives a level straight highway', async ({ page }) => {
   test.setTimeout(120000);
@@ -37,7 +37,7 @@ test('customizes all winding levels and grades, renders roadside flowers and dri
   await expect(metric('Route style')).toHaveText('全直道 · 零弯道');
   await expect(metric('Maximum grade')).toHaveText('0%');
   await expect(metric('Hairpins')).toHaveText('0');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(45);
   await page.keyboard.up('KeyW'); await page.keyboard.press('F8');

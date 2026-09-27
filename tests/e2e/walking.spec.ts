@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 async function start(page: Page) {
@@ -74,7 +74,7 @@ test('switches walking, driving and flight on a tall bridge and survives setting
   await (await control(page, page.locator('#release-open'))).click(); await page.keyboard.press('Space'); await page.keyboard.press('KeyR');
   await expect(metric(page, 'Walking position')).toHaveText(held!);
   await page.keyboard.press('Escape');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric(page, 'Travel mode')).toHaveText('driving');
   await expect(page.locator('#walk-hud')).toBeHidden();
   await (await control(page, page.locator('#walk-toggle'))).click();

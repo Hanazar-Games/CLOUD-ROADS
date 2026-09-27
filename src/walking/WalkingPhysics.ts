@@ -27,6 +27,7 @@ export class WalkingPhysics {
   update(dt: number, input: WalkingInput, surface: WalkingSurface): void {
     if (!Number.isFinite(dt) || dt <= 0) return;
     this.floorX = NaN;
+    surface.constrainWalker(this, this.x, this.z);
     this.jumpQueued ||= input.jump && !this.jumpHeld;
     this.jumpHeld = input.jump;
     this.accumulator += Math.min(dt, 0.1);

@@ -20,6 +20,9 @@ export class VehiclePhysics {
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   lateralSpeed = 0;
   paint: number;
+  roofOpen = 1;
+  ignition: 'off' | 'starting' | 'running' = 'off';
+  private ignitionTime = 0;
   braking = false; parked = true; jackknifed = false;
   suspension: Suspension = 3;
   damping = 1;
@@ -52,6 +55,11 @@ export class VehiclePhysics {
 
   get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
   get motionSpeed(): number { return Math.hypot(this.speed, this.lateralSpeed); }
+  get engineRpm(): number { return this.ignition === 'off' ? 0 : this.ignition === 'starting' ? 240 : this.transmission.rpm; }
+  toggleIgnition(): void {
+    this.ignition = this.ignition === 'off' ? 'starting' : 'off';
+    this.ignitionTime = this.profile.mass > 4000 ? 1.25 : 0.75;
+  }
   get maxSpeed(): number { return this.speedLimit ?? this.profile.maxSpeed; }
   setSpeedLimit(kmh?: number): void {
     if (kmh !== undefined && !Number.isFinite(kmh)) return;
@@ -180,22 +188,26 @@ export class VehiclePhysics {
   }
 
   private step(input: VehicleInput, surface: SurfaceSampler): void {
+    if (this.ignition === 'starting') {
+      this.ignitionTime -= STEP;
+      if (this.ignitionTime <= 0) this.ignition = 'running';
+    }
     const contacts = this.contacts(surface), { spring, damping } = suspensionTuning(this.suspension, this.profile, this.damping), config = this.profile;
     const throttle = clamp(input.throttle, -1, 1), count = this.wheels.length;
-    if (throttle && !input.handbrake) this.parked = false;
+    if (throttle && !input.handbrake && this.ignition === 'running') this.parked = false;
     const grip = contacts.reduce((sum, c, i) => sum + c.grip * Number(this.wheels[i].grounded), 0) / count;
     const trailerContacts = this.trailerContacts(surface);
     const brakingGrip = (grip * count + trailerContacts.reduce((sum, c, i) => sum + c.grip * Number(this.trailer!.wheels[i].grounded), 0)) / (count + trailerContacts.length);
     const grade = this.slope(contacts, 'along'), oldSpeed = this.speed;
     const slopeForce = GRAVITY * grade / Math.hypot(1, grade);
     this.braking = input.handbrake || throttle * this.speed < 0;
-    this.transmission.update(STEP, this.speed, this.parked ? 0 : throttle);
+    this.transmission.update(STEP, this.speed, this.parked || this.ignition !== 'running' ? 0 : throttle);
     if (input.handbrake || this.parked || this.braking) {
       const deceleration = Math.min(config.brake * (input.handbrake || this.parked ? 1.2 : clamp(this.brakeScale, 0.5, 1.5)), GRAVITY * 0.94) * brakingGrip;
       this.speed = approach(this.speed - slopeForce * STEP, 0, deceleration * STEP);
     } else {
       const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) * clamp(this.powerScale, 0.5, 1.5) / config.mass;
-      const drive = throttle * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : this.transmission.driveScale);
+      const drive = (this.ignition === 'running' ? throttle : 0) * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : this.transmission.driveScale);
       this.speed += (drive - slopeForce) * STEP;
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + (1 - grip) * 0.5) * STEP);
     }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control } from './settings';
+import { ignite, control } from './settings';
 
 test('applies graphics controls immediately and retains them after reloading a world', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
@@ -112,7 +112,7 @@ test('shows bridge and railway scenery while retaining the active route', async 
   await expect(page.locator('[data-metric="Coordinates"]')).not.toHaveText(position!);
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20000 });
   await expect(page.locator('[data-metric="Active route"]')).toHaveText('root');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(page.locator('#drive-hud')).toBeVisible();
   await expect(page.locator('#error')).toBeHidden();
 });

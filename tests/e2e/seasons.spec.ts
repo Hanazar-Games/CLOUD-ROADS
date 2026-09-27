@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings, sceneShot } from './settings';
+import { ignite, control, toggleSettings, sceneShot } from './settings';
 
 test('switches all four seasons in place without generating new chunks or resetting the car', async ({ page }) => {
   const errors: string[] = [];
@@ -11,7 +11,7 @@ test('switches all four seasons in place without generating new chunks or resett
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Landscape')).toHaveText('森林山谷');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
-  await (await control(page, page.locator('#drive-toggle'))).click(); await toggleSettings(page); await (await control(page, page.locator('#pause'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page); await toggleSettings(page); await (await control(page, page.locator('#pause'))).click();
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
   const position = await metric('Vehicle position').textContent(), chunks = await metric('Generated chunks').textContent();
   for (const [season, name] of [['spring', '春季'], ['autumn', '秋季'], ['winter', '冬季'], ['summer', '夏季']]) {

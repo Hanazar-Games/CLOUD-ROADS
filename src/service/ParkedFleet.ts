@@ -2,6 +2,7 @@ import { VehiclePhysics } from '../vehicle/VehiclePhysics';
 import type { ServiceArea } from './ServicePlanner';
 import { parkedAt, type ParkedEntry } from './ServiceParking';
 import { constrainVehicle } from './ServiceCollision';
+import { vehicleSupport } from '../vehicle/VehicleSolids';
 
 export class ParkedFleet {
   entries: ParkedEntry[] = [];
@@ -44,17 +45,27 @@ export class ParkedFleet {
   }
   park(car: VehiclePhysics, id = `visitor:${++this.serial}`): void {
     car.park();
+    car.roofOpen = car.roofOpen < 0.5 ? 0 : 1;
     const entry: ParkedEntry = { id, slot: -1, kind: car.kind, paint: car.paint, x: car.x, y: car.y, z: car.z, heading: car.heading, grade: 0, padHeading: car.heading };
     this.returned.delete(id); this.returned.set(id, { entry, car });
     while (this.returned.size > 64) this.returned.delete(this.returned.keys().next().value!);
     this.refresh();
   }
-  constrain(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number): boolean {
+  support(x: number, z: number, ceiling: number): number | undefined {
+    let height: number | undefined;
+    for (const entry of this.entries) {
+      if (Math.abs(entry.x - x) > 28 || Math.abs(entry.z - z) > 28) continue;
+      const top = vehicleSupport(this.vehicle(entry), x, z, ceiling);
+      if (top !== undefined && (height === undefined || top > height)) height = top;
+    }
+    return height;
+  }
+  constrain(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75): boolean {
     let hit = false;
     for (const entry of this.entries) {
       if (entry.x < Math.min(body.x, previousX) - 28 || entry.x > Math.max(body.x, previousX) + 28
         || entry.z < Math.min(body.z, previousZ) - 28 || entry.z > Math.max(body.z, previousZ) + 28) continue;
-      hit = constrainVehicle(body, previousX, previousZ, radius, feet, this.vehicle(entry)) || hit;
+      hit = constrainVehicle(body, previousX, previousZ, radius, feet, this.vehicle(entry), height) || hit;
     }
     return hit;
   }

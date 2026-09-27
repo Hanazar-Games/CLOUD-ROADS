@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings } from './settings';
+import { ignite, control, toggleSettings } from './settings';
 
 test('drives gentle highways, preserves the route choice and streams a distant saddle', async ({ page }) => {
   test.setTimeout(120000);
@@ -18,7 +18,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Road layout')).toHaveText('双向四车道'); await ready();
   await expect(metric('Hairpins')).toHaveText('0');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(65);
@@ -37,7 +37,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await expect(metric('Mountain stage')).toHaveText('垭口');
   expect(Number(await metric('Hairpins').textContent())).toBeGreaterThan(0);
   expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBeLessThanOrEqual(3);
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Travel mode')).toHaveText('driving');
   await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');

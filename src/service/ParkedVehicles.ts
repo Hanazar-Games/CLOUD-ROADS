@@ -7,10 +7,11 @@ import type { VehicleKind } from '../vehicle/VehicleConfig';
 import { ParkedFleet } from './ParkedFleet';
 import type { ServiceArea } from './ServicePlanner';
 
-function template(kind: VehicleKind): BufferGeometry[] {
+export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGeometry[] {
   const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile), parts: BufferGeometry[][] = [[]];
   car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
-  model.sync(car, { x: 0, z: 0 }, new VehicleSystems()); model.root.updateMatrixWorld(true);
+  const systems = new VehicleSystems(); systems.roofOpen = roofClosed ? 0 : 1;
+  model.sync(car, { x: 0, z: 0 }, systems); model.root.updateMatrixWorld(true);
   const trailer = model.root.getObjectByName('trailer'), inverse = [model.root.matrixWorld.clone().invert()], transform = new Matrix4();
   if (trailer) { inverse.push(trailer.matrixWorld.clone().invert()); parts.push([]); }
   model.root.traverse(object => {
@@ -29,6 +30,7 @@ function template(kind: VehicleKind): BufferGeometry[] {
     const colors = new Float32Array(count * 3), color = mask ? new Color(0xffffff) : material.color;
     for (let i = 0; i < colors.length; i += 3) { colors[i] = color.r; colors[i + 1] = color.g; colors[i + 2] = color.b; }
     geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    geometry.setAttribute('glassMask', new Float32BufferAttribute(new Float32Array(count).fill(material.transparent && material.opacity < 0.9 ? 1 : 0), 1));
     geometry.setAttribute('paintMask', new Float32BufferAttribute(new Float32Array(count).fill(mask), 1)); parts[part].push(geometry);
   });
   const geometries = parts.map(group => mergeGeometries(group)!);
@@ -37,7 +39,7 @@ function template(kind: VehicleKind): BufferGeometry[] {
 
 export class ParkedVehicles {
   readonly fleet: ParkedFleet;
-  private readonly batches = new Map<VehicleKind, InstancedMesh[]>();
+  private readonly batches = new Map<string, InstancedMesh[]>();
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65 });
   private readonly matrix = new Matrix4();
   private readonly tilt = new Matrix4();
@@ -58,20 +60,21 @@ export class ParkedVehicles {
   update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3): void {
     this.fleet.sync(sites);
     const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600);
-    const missing = near.find(e => !this.batches.has(e.kind));
+    const key = (entry: typeof near[number]) => `${entry.kind}${entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
+    const missing = near.find(e => !this.batches.has(key(e)));
     if (missing) {
-      const meshes = template(missing.kind).map((geometry, part) => {
+      const meshes = vehicleTemplate(missing.kind, key(missing).endsWith(':closed')).map((geometry, part) => {
         const mesh = new InstancedMesh(geometry, this.material, 256); mesh.count = 0; mesh.receiveShadow = true;
         mesh.name = `${missing.kind}:${part ? 'trailer' : 'vehicle'}`; this.scene.add(mesh); return mesh;
       });
-      this.batches.set(missing.kind, meshes); this.version = -1;
+      this.batches.set(key(missing), meshes); this.version = -1;
     }
     const anchorChanged = Math.hypot(camera.x + origin.x - this.anchorX, camera.z + origin.z - this.anchorZ) > 300;
     if (this.version !== this.fleet.version || anchorChanged) {
       this.version = this.fleet.version; this.anchorX = camera.x + origin.x; this.anchorZ = camera.z + origin.z;
       for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
       for (const entry of near) {
-        const meshes = this.batches.get(entry.kind); if (!meshes || meshes[0].count >= 256) continue;
+        const meshes = this.batches.get(key(entry)); if (!meshes || meshes[0].count >= 256) continue;
         const car = this.fleet.vehicle(entry);
         for (let i = 0; i < meshes.length; i++) {
           const body = i ? car.trailer! : car, mesh = meshes[i];

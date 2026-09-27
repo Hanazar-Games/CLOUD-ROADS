@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { control, toggleSettings, sceneShot } from './settings';
+import { ignite, control, toggleSettings, sceneShot } from './settings';
 
 test('renders continuous concrete bridges and elevated services through distant streaming and context recovery', async ({ page }) => {
   test.setTimeout(120000);
@@ -46,7 +46,7 @@ test('renders continuous concrete bridges and elevated services through distant 
   await expect(metric('GPU textures')).toHaveText(textures!);
   await (await control(page, page.locator('#walk-toggle'))).click();
   await expect(metric('Walking grounded')).toHaveText('yes');
-  await (await control(page, page.locator('#drive-toggle'))).click();
+  await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Travel mode')).toHaveText('driving');
   expect(errors).toEqual([]);
 });

@@ -15,7 +15,7 @@ export class VehicleOperations {
     if (action === 'cargo' && p.body === 'pickup') return '皮卡尾板';
     if (action === 'cargo' && p.body === 'firetruck') return '';
     if (action === 'aux' && (p.body === 'ambulance' || p.body === 'firetruck')) return '救援警示灯';
-    if (action === 'doors') return p.bus ? '乘客门' : '';
+    if (action === 'doors') return p.bus ? '乘客门' : p.shape === 'motorcycle' ? '' : '驾驶室车门';
     if (action === 'cargo') return p.bus ? '行李舱' : p.shape === 'flatbed' || p.trailer?.body === 'flatbed' ? '装载坡板' : p.shape === 'truck' || p.trailer ? '货厢尾门' : '';
     return p.shape === 'supercar' ? '主动尾翼' : p.shape === 'crane' ? '工程警示灯' : p.shape === 'motorcycle' ? '驻车支架' : '';
   }

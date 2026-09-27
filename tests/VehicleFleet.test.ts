@@ -7,6 +7,7 @@ import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 
 const flat: SurfaceSampler = () => ({ height: 0, grip: 1 });
 const drive = (car: VehiclePhysics, seconds: number, steer = 0, throttle = 1, surface = flat, fps = 60) => {
+  car.ignition = 'running';
   for (let i = 0; i < seconds * fps; i++) car.update(1 / fps, { throttle, steer, handbrake: false }, surface);
 };
 
