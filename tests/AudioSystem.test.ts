@@ -4,7 +4,7 @@ import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
-  supercar: false, braking: false, operations: 0 };
+  supercar: false, braking: false, operations: 0, service: 0 };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
   setValueAtTime(value: number) { this.value = value; }, cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
@@ -47,6 +47,23 @@ it('selects ten radio presets without allocating an audio context and rejects in
   const audio = new AudioSystem();
   for (let i = 1; i <= 10; i++) { audio.tune(i); expect(audio.station).toBe(i); expect(audio.musicPace).toBeGreaterThanOrEqual(0.6); }
   audio.tune(11); audio.tune(NaN); expect(audio.station).toBe(10); expect(audio.state).toBe('locked');
+});
+
+it('fades service ambience with distance and honors the nature volume and pause', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.update(0, idle);
+  const before = context.gains.map(node => node.gain.value);
+  audio.update(0, { ...idle, service: 1 });
+  const changed = context.gains.filter((node, i) => node.gain.value !== before[i]);
+  expect(changed).toHaveLength(1);
+  const level = changed[0].gain, near = level.value;
+  expect(near).toBeGreaterThan(0);
+  audio.update(0, { ...idle, service: 0.5 }); expect(level.value).toBeCloseTo(near / 2);
+  audio.natureVolume = 0; audio.update(0, { ...idle, service: 1 }); expect(level.value).toBe(0);
+  audio.natureVolume = 1; audio.update(0, { ...idle, service: 1 }); expect(level.value).toBeGreaterThan(0);
+  audio.setActive(false); await Promise.resolve(); expect(level.value).toBe(0);
+  audio.dispose();
 });
 
 it('uses one output limiter and refuses preview while muted or inactive', async () => {

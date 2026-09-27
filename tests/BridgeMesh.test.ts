@@ -79,7 +79,7 @@ describe('BridgeMesh', () => {
       const result: number[] = [], matrix = new Matrix4();
       for (let i = 0; i < mesh.piers.count; i++) {
         mesh.piers.getMatrixAt(i, matrix);
-        if (matrix.elements[13] < 55) {
+        if (matrix.elements[13] < 55 && Math.abs(matrix.elements[5] - 3) < 1e-6) {
           const z = matrix.elements[14] + mesh.piers.position.z;
           if (z < -200 && z > -2000) result.push(z);
         }

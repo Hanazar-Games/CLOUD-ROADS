@@ -220,6 +220,14 @@ export class BridgeMesh {
       const top = y - (depth + 1.71 + normal.x * dx + normal.z * dz) / normal.y
         + (Math.abs(normal.x) + Math.abs(normal.z)) * width / (2 * normal.y) + 0.02;
       this.box(round ? this.roundPiers : this.columns, x + dx, (base + top) / 2, z + dz, width, top - base, abutment ? 4 : width, upright);
+      this.box(this.piers, x + dx, Math.min(top - 0.3, ground(x + dx, z + dz) + 0.3), z + dz, width + 0.5, 0.6, width + 0.5, upright);
+      const joints = round || abutment ? 0 : Math.min(10, Math.floor((top - base) / 8));
+      for (let i = 1; i <= joints; i++) {
+        const level = base + (top - base) * i / (joints + 1), taper = 1 - 0.3 * (level - base) / (top - base);
+        for (const side of [-1, 1]) this.box(this.details,
+          x + dx + verticalFrame.right.x * side * (width * taper / 2 + 0.008), level,
+          z + dz + verticalFrame.right.z * side * (width * taper / 2 + 0.008), 0.02, 0.035, width * taper * 0.7, upright);
+      }
     }
     this.box(this.piers, x - normal.x * (depth + 1.11), y - normal.y * (depth + 1.11), z - normal.z * (depth + 1.11),
       Math.max(deckWidth + (strength > 1 ? 8 : 0), separation * 2 + width * 0.7 + 1), 1.2, tier === 2 ? 6 : 4, sample);

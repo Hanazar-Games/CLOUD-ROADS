@@ -9,6 +9,8 @@ import { padPoint } from '../src/service/ServiceTerrain';
 import { hasRoadBarrier } from '../src/road/RoadProtection';
 import type { BridgeSpan } from '../src/bridge/BridgeDetector';
 import { SeasonState } from '../src/season/SeasonState';
+import { ParkedFleet } from '../src/service/ParkedFleet';
+import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
 
 function world(highway = false) {
   const options = { ...DEFAULT_OPTIONS, roadType: highway ? 'highway' as const : 'mountain' as const };
@@ -18,6 +20,18 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('boards every parked vehicle beside its cab on a sloping service pad without boarding from another elevation', () => {
+    const base = world();
+    base.services = [{ id: 1, sample: base.road.samples[0], start: 0, end: 200,
+      ground: { pads: [{ x: 1000, y: 100, z: 0, side: 1, heading: 0, grade: 0.02, halfWidth: 80, halfLength: 110 }], access: [], elevated: true, barriers: [] } }];
+    for (const kind of Object.keys(vehicleProfiles) as VehicleKind[]) {
+      const fleet = new ParkedFleet('doors'), surface = new DrivingSurface({ ...base, parkedVehicles: { fleet } }), car = new VehiclePhysics(kind);
+      car.reset(1000, 0, 0, surface.sample); fleet.park(car);
+      const door = surface.exit(car); expect(door, kind).toBeDefined();
+      expect(surface.canBoard(car, door!), kind).toBe(true);
+      expect(surface.canBoard(car, { ...door!, y: door!.y - 5 }), kind).toBe(false);
+    }
+  });
   it.each([-0.2, 0.2])('exits a long coach beside its cab on a %s grade', grade => {
     const scene = world(), surface = new DrivingSurface(scene), car = new VehiclePhysics('coach');
     const sample = scene.road.samples[100];
@@ -118,12 +132,12 @@ describe('DrivingSurface', () => {
     scene.services = new ServicePlanner('driving-surface', { sample: () => -50 }, scene.options).detect(scene.road.samples);
     const site = scene.services[0], pad = site.ground.pads[0];
     expect(site.ground.elevated).toBe(true);
-    const a = padPoint(pad, 32, 0), b = padPoint(pad, 34, 0);
+    const a = padPoint(pad, pad.halfWidth - 1, 0), b = padPoint(pad, pad.halfWidth + 1, 0);
     const body = { ...b };
     expect(surface.constrainWalker(body, a.x, a.z)).toBe(true);
     const car = new VehiclePhysics(); car.x = b.x; car.y = b.y + 0.8; car.z = b.z; car.speed = 10;
     expect(surface.constrain(car, a.x, a.z)).toBe(true); expect(car.speed).toBeLessThan(10);
-    const truck = new VehiclePhysics('truck5'), before = padPoint(pad, 29, 0), after = padPoint(pad, 31.5, 0);
+    const truck = new VehiclePhysics('truck5'), before = padPoint(pad, pad.halfWidth - 4, 0), after = padPoint(pad, pad.halfWidth - 1.5, 0);
     truck.reset(before.x, before.z, pad.heading + Math.PI / 2, surface.sample);
     truck.x = after.x; truck.z = after.z;
     expect(surface.constrain(truck, before.x, before.z)).toBe(true);

@@ -5,8 +5,11 @@ import type { World } from '../world/World';
 import type { SurfaceContact, VehiclePhysics } from './VehiclePhysics';
 import { hasRoadBarrier } from '../road/RoadProtection';
 import { vehicleOffset, vehicleProfiles, type VehicleProfile } from './VehicleConfig';
+import { padPoint } from '../service/ServiceTerrain';
+import { constrainObstacle } from '../service/ServiceCollision';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>;
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>
+  & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'> };
 
 export class DrivingSurface {
   wet = 0;
@@ -119,8 +122,14 @@ export class DrivingSurface {
   }
 
   canBoard(car: VehiclePhysics, person: { x: number; y: number; z: number }): boolean {
-    return this.exits(car).some(point => Math.hypot(point.x - person.x, point.z - person.z) < 2.2
-      && Math.abs(point.y - person.y) < 0.6 && !this.constrainWalker({ ...point }, person.x, person.z));
+    return this.boardingDistance(car, person) < 2.2;
+  }
+
+  boardingDistance(car: VehiclePhysics, person: { x: number; y: number; z: number }): number {
+    let distance = Infinity;
+    for (const point of this.exits(car)) if (Math.abs(point.y - person.y) < 0.6 && !this.constrainWalker({ ...point }, person.x, person.z))
+      distance = Math.min(distance, Math.hypot(point.x - person.x, point.z - person.z));
+    return distance;
   }
 
   private exits(car: VehiclePhysics): { x: number; y: number; z: number; heading: number }[] {
@@ -278,7 +287,15 @@ export class DrivingSurface {
 
   private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number): boolean {
     this.refreshServices();
-    let hit = false;
+    let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet) ?? false;
+    for (const site of this.sites) for (const pad of site.ground.pads) {
+      if (Math.hypot(body.x - pad.x, body.z - pad.z) > 150) continue;
+      for (const [x, along, width, length, height] of [[15, 28, 22, 30, 5], [53, 30, 27, 36, 7], [57, 74, 24, 20, 4]]) {
+        const p = padPoint(pad, x * pad.side, along);
+        if (feet < p.y - 0.6 || feet > p.y + height) continue;
+        hit = constrainObstacle(body, previousX, previousZ, radius, { ...p, heading: pad.heading, width, front: length / 2, rear: -length / 2 }) || hit;
+      }
+    }
     for (const index of this.barrierIndex.within(Math.min(body.x, previousX) - radius, Math.min(body.z, previousZ) - radius,
       Math.max(body.x, previousX) + radius, Math.max(body.z, previousZ) + radius)) {
       const { a, b } = this.barriers[index], dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);

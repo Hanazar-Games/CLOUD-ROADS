@@ -12,6 +12,7 @@ import { randomSeed, startingSeed } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { absoluteElevation, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
+import { vehicleProfiles } from '../vehicle/VehicleConfig';
 import { WalkingSystem } from '../walking/WalkingSystem';
 import { graphicsPresets, renderPixelRatio } from './GraphicsSettings';
 import { AudioSystem, audioChannels, type MusicStyle } from '../audio/AudioSystem';
@@ -114,7 +115,7 @@ export class Game {
     };
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
-      else if (this.walking.active && this.driving.canBoard(this.walking.person)) this.interactVehicle();
+      else if (this.walking.active && (this.driving.canBoard(this.walking.person) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
       else { this.stopWalking(); this.driving.start(); }
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
@@ -435,8 +436,14 @@ export class Game {
       const point = this.driving.exitLocation();
       if (!point) return;
       this.driving.stop(true); this.walking.start(point);
-    } else if (this.walking.active && this.driving.canBoard(this.walking.person)) {
-      this.stopWalking(); this.driving.start(true);
+    } else if (this.walking.active) {
+      const entry = this.driving.nearbyVehicle(this.walking.person);
+      if (entry) {
+        const { x, y, z, heading } = this.walking.person; this.stopWalking();
+        if (!this.driving.boardVehicle(entry)) this.walking.start({ x, y, z, heading });
+      } else if (this.driving.canBoard(this.walking.person)) {
+        this.stopWalking(); this.driving.start(true);
+      }
     }
   }
 
@@ -535,6 +542,7 @@ export class Game {
       horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
       washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor || this.driving.operations.moving,
       supercar: this.driving.car.kind === 'supercar', braking: this.driving.car.braking, operations: this.driving.operations.events,
+      service: this.world.services.reduce((level, site) => Math.max(level, ...site.ground.pads.map(pad => Math.max(0, 1 - Math.hypot(pad.x - this.camera.position.x - this.world.origin.x, pad.y - this.camera.position.y, pad.z - this.camera.position.z - this.world.origin.z) / 160))), 0),
       walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
@@ -553,8 +561,10 @@ export class Game {
       this.hudTime = 0;
       this.syncAudioUI();
       if (!this.driving.active) this.driving.describeEquipment();
-      const boardable = this.walking.active && this.driving.canBoard(this.walking.person);
+      const nearby = this.walking.active ? this.driving.nearbyVehicle(this.walking.person) : undefined;
+      const boardable = this.walking.active && (this.driving.canBoard(this.walking.person) || !!nearby);
       element('boarding-help').hidden = !boardable;
+      element('boarding-help').textContent = nearby ? `F · 驾驶${vehicleProfiles[nearby.kind].name}` : 'F · 回到车辆';
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight);
@@ -682,6 +692,8 @@ export class Game {
         'Wiper rate': this.driving.systems.wiperRate.toFixed(1),
         'Glass water': `${Math.round(this.driving.glassWater * 100)}%`, 'Wiped water': `${Math.round(this.driving.sweptWater * 100)}%`,
         'Parked vehicle': this.driving.parked ? 'yes' : 'no',
+        'Service vehicles': this.world.parkedVehicles.fleet.entries.length,
+        'Parking batches': this.world.parkedVehicles.drawBatches,
         'Driving camera': this.driving.cameraRig.view,
         'Camera FOV': `${this.camera.fov}°`, 'Camera height': `${Math.round(this.driving.cameraRig.height * 100)} cm`,
         'Cloud region': this.clouds.enabled ? cloudNames[this.clouds.sample.region] : '关闭',

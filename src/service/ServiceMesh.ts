@@ -5,6 +5,7 @@ import type { WorldOptions } from '../world/WorldOptions';
 import type { RoadTerrain } from '../road/RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
 import { serviceArchitecture, type ServiceArchitecture } from './ServiceArchitecture';
+import { parkingSlots } from './ServiceParking';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -25,7 +26,7 @@ export class ServiceMesh {
   readonly pavement = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x41494a, roughness: 0.87 }));
   readonly buildings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.78 }), 8000);
   readonly windows = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x395764, metalness: 0.3, roughness: 0.22, emissive: 0xffd6a1, emissiveIntensity: 0 }), 2000);
-  readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xece7ce, roughness: 0.8 }), 4000);
+  readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xece7ce, roughness: 0.8 }), 16000);
   readonly lights = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffebc7, emissive: 0xffd39a, emissiveIntensity: 1.6 }), 512);
   readonly roofs = new InstancedMesh(roofGeometry(), new MeshStandardMaterial({ roughness: 0.7, metalness: 0.2 }), 64);
   readonly landscaping = new InstancedMesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ roughness: 1, flatShading: true }), 512);
@@ -56,11 +57,11 @@ export class ServiceMesh {
       const vertex = (point: ServicePoint, height = 0): Point => [point.x - this.anchorX, point.y + height, point.z - this.anchorZ];
       for (const site of sites) {
         for (const pad of site.ground.pads) {
-          quad(data, vertex(padPoint(pad, -33, -75)), vertex(padPoint(pad, 33, -75)), vertex(padPoint(pad, -33, 75)), vertex(padPoint(pad, 33, 75)));
+          quad(data, vertex(padPoint(pad, -pad.halfWidth, -pad.halfLength)), vertex(padPoint(pad, pad.halfWidth, -pad.halfLength)), vertex(padPoint(pad, -pad.halfWidth, pad.halfLength)), vertex(padPoint(pad, pad.halfWidth, pad.halfLength)));
           this.build(pad, serviceArchitecture(this.options.terrain, site.id));
-          if (site.ground.elevated) for (const along of [-60, -20, 20, 60]) {
-            this.box(this.structures, pad, 0, along, -1.7, 66, 0.6, 2, 0xffffff, true);
-            for (const x of [-24, 0, 24]) this.column(pad, x, along, -2);
+          if (site.ground.elevated) for (let along = -pad.halfLength + 20; along < pad.halfLength; along += 30) {
+            this.box(this.structures, pad, 0, along, -1.7, pad.halfWidth * 2, 0.6, 2, 0xffffff, true);
+            for (let x = -Math.floor((pad.halfWidth - 12) / 32) * 32; x < pad.halfWidth; x += 32) this.column(pad, x, along, -2);
           }
         }
         for (const { a, b } of site.ground.access) {
@@ -68,8 +69,8 @@ export class ServiceMesh {
           const ay = a.slopeX * nx + a.slopeZ * nz, by = b.slopeX * nx + b.slopeZ * nz;
           quad(data, vertex({ x: a.x - nx, y: a.y - ay, z: a.z - nz }, 0.015), vertex({ x: a.x + nx, y: a.y + ay, z: a.z + nz }, 0.015),
             vertex({ x: b.x - nx, y: b.y - by, z: b.z - nz }, 0.015), vertex({ x: b.x + nx, y: b.y + by, z: b.z + nz }, 0.015));
-          const insidePad = site.ground.pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < 33
-            && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < 75);
+          const insidePad = site.ground.pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
+            && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < pad.halfLength);
           if (site.ground.elevated && !insidePad) {
             this.edge(this.structures, a, b, 7.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx / 3.5 + (a.slopeZ + b.slopeZ) / 2 * nz / 3.5);
             if (Math.floor(a.z / 32) !== Math.floor(b.z / 32)) this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
@@ -125,11 +126,10 @@ export class ServiceMesh {
   private build(pad: ServicePad, architecture: ServiceArchitecture): void {
     const box = (x: number, along: number, y: number, w: number, h: number, l: number, color: number, followGrade = false) =>
       this.box(this.buildings, pad, x * pad.side, along, y, w, h, l, color, followGrade);
-    const stripe = (x: number, along: number, w: number, l: number) => this.box(this.markings, pad, x * pad.side, along, 0.025, w, 0.012, l, 0xffffff, true);
     const facade = architecture === 'courtyard' ? 0xc7ac86 : architecture === 'lodge' ? 0x8c7357 : 0xc1cbd0;
-    box(0, 0, -0.8, 66, 1.3, 150, 0x7e827b, true);
-    for (const x of [-33, 33]) box(x, 0, 0.14, 0.35, 0.28, 150, 0xb8b6a5, true);
-    for (const along of [-75, 75]) box(6.5, along, 0.14, 53, 0.28, 0.35, 0xb8b6a5, true);
+    box(0, 0, -0.8, pad.halfWidth * 2, 1.3, pad.halfLength * 2, 0x7e827b, true);
+    for (const x of [-pad.halfWidth, pad.halfWidth]) box(x, 0, 0.14, 0.35, 0.28, pad.halfLength * 2, 0xb8b6a5, true);
+    for (const along of [-pad.halfLength, pad.halfLength]) box(5.5, along, 0.14, pad.halfWidth * 2 - 11, 0.28, 0.35, 0xb8b6a5, true);
     box(15, 28, 0.25, 23, 0.8, 32, 0x98978d, true);
     box(15, 28, 2.8, 22, 5, 30, facade);
     const roofColor = architecture === 'courtyard' ? 0x9b6244 : 0x35594f;
@@ -191,16 +191,7 @@ export class ServiceMesh {
       this.box(this.lights, pad, 14 * pad.side, along, 5.25, 12, 0.1, 0.5, 0xffffff);
       this.lampPositions.push(padPoint(pad, 14 * pad.side, along, 5));
     }
-    for (let i = 0; i <= 12; i++) stripe(-10, -6 + i * 5, 6.5, 0.12);
-    stripe(-13.2, 24, 0.12, 60);
-    for (const along of [-3.5, 11.5, 36.5, 51.5]) {
-      const tint = along < 0 ? 0xc4cbc8 : along < 20 ? 0x426477 : along < 40 ? 0xb9b0a0 : 0x966152;
-      box(-10, along, 0.72, 4.2, 0.95, 1.85, tint);
-      box(-10.3, along, 1.38, 2.25, 0.68, 1.7, tint);
-      this.box(this.windows, pad, -10.3 * pad.side, along, 1.4, 2.28, 0.48, 1.72, 0xffffff);
-      for (const x of [-11.4, -8.6]) for (const z of [-0.9, 0.9]) box(x, along + z, 0.34, 0.64, 0.58, 0.23, 0x22292a);
-    }
-    for (const along of [-11, -9, -7, -5, -3, -1]) stripe(-21, along, 6, 0.55);
+    this.parking(pad);
     for (const along of [54, 64]) {
       box(15, along, 0.9, 4, 0.16, 1.5, 0x886c4e);
       for (const z of [-1.3, 1.3]) box(15, along + z, 0.5, 4.5, 0.16, 0.45, 0x967950);
@@ -240,6 +231,68 @@ export class ServiceMesh {
       sin * w, 0, cos * l, p.z - this.anchorZ, 0, 0, 0, 1);
     mesh.setMatrixAt(mesh.count, this.matrix);
     mesh.setColorAt(mesh.count++, this.color.setHex(color));
+  }
+
+  private parking(pad: ServicePad): void {
+    const box = (x: number, a: number, y: number, w: number, h: number, l: number, color = 0xbfc7c1) => this.box(this.buildings, pad, x * pad.side, a, y, w, h, l, color);
+    const stripe = (x: number, a: number, w: number, l: number, color = 0xffffff) => this.box(this.markings, pad, x * pad.side, a, 0.032, w, 0.015, l, color, true);
+    const colors = [0x9acaca, 0xe4c982, 0xd6b092, 0xe6ac71, 0xa8cea0];
+    for (const slot of parkingSlots()) {
+      const across = Math.abs(slot.heading) > 0.1, w = across ? slot.length : slot.width, l = across ? slot.width : slot.length;
+      for (const x of [-1, 1]) stripe(slot.x + x * w / 2, slot.along, 0.11, l, colors[slot.zone]);
+      for (const a of [-1, 1]) stripe(slot.x, slot.along + a * l / 2, w, 0.11, colors[slot.zone]);
+      if (slot.zone === 0) box(slot.x + (slot.x < -48 ? -2.3 : 2.3), slot.along, 0.08, 0.18, 0.16, 1.7, 0xb6aa77);
+    }
+    for (const x of [-74, -48, -26, 30, 55, 76]) for (const a of [-70, -35, 0, 65, 98]) {
+      if (x > 20 && a > 0 && a < 90) continue;
+      stripe(x, a, 0.17, 4);
+      const tip = padPoint(pad, x * pad.side, a + 2);
+      for (const side of [-1, 1]) this.edge(this.markings, padPoint(pad, (x + side) * pad.side, a + 0.5), tip, 0.17, 0.015, 0.035);
+    }
+    for (let a = -102; a <= 102; a += 8) stripe(-74, a, 0.12, 3, 0xf0ca71);
+    for (const x of [-69, -66, -63, -60, -57, -54, -51, -48, -45, -42, -39, -36, -33, -30, -27, -24, -21, -18, -15, -12, -9, -6, -3, 0]) stripe(x, 94, 1.25, 6);
+    for (let a = 4; a < 88; a += 4) stripe(-4, a, 0.18, 2);
+    for (const x of [-70, -27, 32, 76]) for (const a of [-104, 102]) {
+      box(x, a, 4, 0.17, 8, 0.17, 0x647477);
+      this.box(this.lights, pad, x * pad.side, a, 8, 1.5, 0.15, 0.6, 0xffffff);
+      this.lampPositions.push(padPoint(pad, x * pad.side, a, 7.8));
+    }
+    // Shop arcade and accessible toilet block face the pedestrian forecourt.
+    box(52, 30, 0.12, 32, 0.24, 42, 0xaab0aa);
+    box(53, 30, 3.5, 27, 7, 36, 0xc3bda9);
+    box(52, 30, 7.15, 32, 0.3, 41, 0x617975);
+    box(36, 30, 4.1, 7, 0.25, 41, 0x3f6e71);
+    for (let a = 15; a <= 45; a += 6) {
+      this.box(this.windows, pad, 39.42 * pad.side, a, 2.25, 0.08, 3.6, 5.5, 0xffffff);
+      this.box(this.windows, pad, 39.42 * pad.side, a, 5.55, 0.08, 1.8, 5.5, 0xffffff);
+      box(39.3, a - 2.8, 3.5, 0.18, 6.4, 0.16, 0x597477);
+      box(33, a, 2, 0.18, 4, 0.18, 0x668380);
+      box(38.9, a, 1.3, 0.1, 0.5, 0.08, 0xdbd8ba);
+    }
+    for (const x of [48, 58]) {
+      box(x, 31, 7.6, 5, 0.7, 8, 0x708480);
+      for (let a = 28; a <= 34; a += 1) box(x, a, 8, 4.6, 0.08, 0.12, 0x394b4f);
+    }
+    for (const a of [18, 30, 42]) {
+      this.box(this.lights, pad, 36 * pad.side, a, 3.88, 1.5, 0.08, 0.45, 0xffffff);
+      this.lampPositions.push(padPoint(pad, 36 * pad.side, a, 3.8));
+    }
+    box(57, 74, 2, 24, 4, 20, 0xc5caba);
+    box(57, 74, 4.15, 27, 0.3, 23, 0x4d7577);
+    box(42.8, 74, 2.7, 5, 0.2, 22, 0x8dafa9);
+    for (const a of [68, 74, 80]) {
+      this.box(this.windows, pad, 44.94 * pad.side, a, 1.45, 0.06, 2.9, 2, 0xffffff);
+      box(44.8, a + 0.7, 1.2, 0.12, 0.4, 0.08, 0xe9dfb8);
+      box(46, a, 4.55, 1.2, 0.7, 1.2, 0x76918d);
+      this.box(this.lights, pad, 42 * pad.side, a, 2.52, 1.2, 0.08, 0.4, 0xffffff);
+      this.lampPositions.push(padPoint(pad, 42 * pad.side, a, 2.45));
+    }
+    for (const a of [58, 89]) {
+      box(35, a, 0.5, 4, 0.16, 0.75, 0x917651); box(35, a + 0.4, 0.9, 4, 0.8, 0.1, 0x917651);
+      for (const x of [33.5, 36.5]) box(x, a, 0.25, 0.15, 0.5, 0.65, 0x4d5f5f);
+      for (const x of [40, 41.2]) box(x, a, 0.55, 0.8, 1.1, 0.8, x === 40 ? 0x4b867d : 0x53738b);
+    }
+    for (let a = 60; a < 90; a += 5) stripe(40, a, 0.4, 0.4, 0xf3d687);
   }
 
   dispose(): void {

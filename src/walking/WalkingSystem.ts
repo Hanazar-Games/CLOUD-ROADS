@@ -4,6 +4,7 @@ import type { InputManager } from '../input/InputManager';
 import { DrivingSurface } from '../vehicle/DrivingSurface';
 import type { World } from '../world/World';
 import { WalkingPhysics } from './WalkingPhysics';
+import { padPoint } from '../service/ServiceTerrain';
 
 export class WalkingSystem {
   readonly person = new WalkingPhysics();
@@ -23,7 +24,11 @@ export class WalkingSystem {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
     this.surface = new DrivingSurface(world);
-    const spawn = position ?? this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z);
+    const x = this.camera.position.x + world.origin.x, z = this.camera.position.z + world.origin.z;
+    const pad = world.services.flatMap(site => site.ground.pads).find(p => Math.abs((x - p.x) * Math.cos(p.heading) + (z - p.z) * Math.sin(p.heading)) <= p.halfWidth + 2
+      && Math.abs((x - p.x) * Math.sin(p.heading) - (z - p.z) * Math.cos(p.heading)) <= p.halfLength + 2);
+    const entrance = pad ? { ...padPoint(pad, -pad.side * (pad.halfWidth - 6), -pad.halfLength + 18), heading: pad.heading } : undefined;
+    const spawn = position ?? entrance ?? this.surface.spawn(x, z);
     if (!spawn) return false;
     this.person.reset(spawn.x, position?.y ?? this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);
     this.hudTime = 1;

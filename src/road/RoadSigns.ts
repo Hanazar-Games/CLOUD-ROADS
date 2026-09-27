@@ -6,7 +6,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
 import type { RoadSample } from './RoadSegment';
-import { createSignAtlas, SIGN_ROWS } from './SignAtlas';
+import { createSignAtlas, SIGN_ROWS, signLabels } from './SignAtlas';
 import type { Junction } from './RoadNetwork';
 
 const CAPACITY = 2048;
@@ -90,11 +90,16 @@ export class RoadSigns {
       for (const site of services) {
         for (const pad of site.ground.pads) {
           const side = pad.side, heading = pad.heading + (side < 0 ? Math.PI : 0);
-          this.add(padPoint(pad, -side * 32, -side * 64, 4), heading, 4, 2, 1, 4.2);
+          this.add(padPoint(pad, -side * (pad.halfWidth - 1), -side * 90, 4), heading, 4, 2, 1, 4.2);
           this.add(padPoint(pad, -side * 10, -12, 2.2), heading, 1.2, 1.2, 2, 2.4);
           this.add(padPoint(pad, side * 14, -49.6, 5.62), pad.heading, 3.5, 0.5, 3);
           this.add(padPoint(pad, side * 2.9, 28, 3.8), pad.heading + side * Math.PI / 2, 2, 0.6, 4);
           this.add(padPoint(pad, side * 3.8, 28, 4.65), pad.heading + side * Math.PI / 2, 5, 0.65, 23);
+          for (const [label, x, along] of [['CARS', -61, 89], ['BUS', -13, 90], ['TRUCK', 43, -98], ['SEMI', 66, -101], ['BIKE', 6, -106]] as const)
+            this.add(padPoint(pad, side * x, along, 2.8), heading, 3.8, 1.1, signLabels.indexOf(label), 3);
+          for (const [label, x, along, height] of [['MALL', 39.3, 30, 6.8], ['CAFE', 32.4, 18, 3.5], ['MARKET', 32.4, 42, 3.5],
+            ['WC\nMEN', 40.2, 68, 2.7], ['WC\nWOMEN', 40.2, 74, 2.7], ['WC\nACCESS', 40.2, 80, 2.7]] as const)
+            this.add(padPoint(pad, side * x, along, height), pad.heading + side * Math.PI / 2, 3.2, 0.9, signLabels.indexOf(label));
           const target = site.sample.distance - side * 720;
           const sample = samples.reduce((best, point) => Math.abs(point.distance - target) < Math.abs(best.distance - target) ? point : best);
           if (Math.abs(sample.distance - target) < 5) this.add(this.position(sample, side * (this.profile.outerHalfWidth + 3), 4.5), sample.heading + (side < 0 ? Math.PI : 0), 4, 2.2, 0, 4.7);

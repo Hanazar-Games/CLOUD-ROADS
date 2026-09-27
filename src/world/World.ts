@@ -22,6 +22,7 @@ import type { ServiceArea } from '../service/ServicePlanner';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule';
 import { ServiceMesh } from '../service/ServiceMesh';
 import { padPoint } from '../service/ServiceTerrain';
+import { ParkedVehicles } from '../service/ParkedVehicles';
 import { RoadSigns } from '../road/RoadSigns';
 import type { Crossing } from '../road/Crossings';
 import { CrossingPlanner } from '../road/CrossingPlanner';
@@ -50,6 +51,7 @@ export class World {
   readonly tunnelMesh: TunnelMesh;
   readonly furniture: RoadFurniture;
   readonly serviceMesh: ServiceMesh;
+  readonly parkedVehicles: ParkedVehicles;
   readonly signs: RoadSigns;
   readonly crossingMesh: CrossingMesh;
   readonly junctionMesh: JunctionMesh;
@@ -87,6 +89,7 @@ export class World {
     this.tunnelMesh = new TunnelMesh(scene, seed, options);
     this.furniture = new RoadFurniture(scene, seed, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
+    this.parkedVehicles = new ParkedVehicles(scene, seed);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
     this.junctionMesh = new JunctionMesh(scene, options);
@@ -155,6 +158,7 @@ export class World {
     this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
     this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z);
+    this.parkedVehicles.update(this.renderServices, this.origin, camera.position);
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
@@ -416,7 +420,7 @@ export class World {
     for (const mesh of this.extraRoads.values()) mesh.dispose(); this.extraRoads.clear();
     this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
     this.tunnelMesh.dispose(); this.furniture.dispose();
-    this.serviceMesh.dispose(); this.scout = undefined;
+    this.serviceMesh.dispose(); this.parkedVehicles.dispose(); this.scout = undefined;
     this.signs.dispose();
     this.crossingMesh.dispose(); this.crossingPlanner.clear();
     this.junctionMesh.dispose();

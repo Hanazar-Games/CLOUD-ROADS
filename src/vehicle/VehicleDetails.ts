@@ -33,6 +33,25 @@ export function flatbedDetails(width: number, start: number, end: number, parent
 export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDetailKit): void {
   const { block, cylinder, paint, trim, metal, lamp, amber } = kit;
   const nose = -p.chassisLength / 2, end = p.chassisLength / 2;
+  if (p.shape !== 'motorcycle') {
+    for (const z of [nose - 0.04, end + 0.04]) {
+      block(0.48, 0.14, 0.04, 0, -0.2, z, trim, parent);
+      block(0.41, 0.095, 0.045, 0, -0.2, z, metal, parent);
+      for (let i = 0; i < 6; i++) block(0.022, 0.045, 0.047, -0.15 + i * 0.06, -0.2, z, trim, parent);
+      for (const side of [-1, 1]) {
+        block(0.13, 0.035, 0.035, side * p.width * 0.34, -0.28, z, amber, parent);
+        block(0.06, 0.035, 0.05, side * p.width * 0.22, -0.27, z, trim, parent);
+      }
+    }
+    for (const side of [-1, 1]) {
+      const cap = cylinder(0.07, 0.012, side * (p.width / 2 + 0.018), -0.02, end - 0.65, metal, parent); cap.rotation.z = Math.PI / 2;
+      block(0.017, 0.02, 0.13, side * (p.width / 2 + 0.028), -0.02, end - 0.65, trim, parent);
+    }
+  } else {
+    for (let i = 0; i < 9; i++) block(0.29, 0.025, 0.37, 0, -0.18 + i * 0.035, 0, metal, parent);
+    block(0.17, 0.13, 0.025, 0, 0.04, end + 0.015, metal, parent);
+    for (let z = 0.05; z < 0.68; z += 0.08) block(0.025, 0.035, 0.035, -0.13, -0.27, z, trim, parent);
+  }
   if (p.mass < 4000) {
     const bike = p.shape === 'motorcycle', sport = p.shape === 'supercar';
     for (const side of [-1, 1]) {

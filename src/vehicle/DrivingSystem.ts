@@ -12,6 +12,7 @@ import { CabinState } from './CabinState';
 import { CraneSystems } from './CraneSystems';
 import { radioStations } from '../audio/RadioStations';
 import { VehicleOperations, operationKeys, type VehicleOperation } from './VehicleOperations';
+import type { ParkedEntry } from '../service/ServiceParking';
 
 export class DrivingSystem {
   car = new VehiclePhysics();
@@ -22,9 +23,11 @@ export class DrivingSystem {
   readonly cameraRig;
   active = false;
   parked = false;
+  private fleetId: string | undefined;
   private mesh;
   private readonly events = new AbortController();
   private surface: DrivingSurface | undefined;
+  private boardingSurface: { world: World; surface: DrivingSurface } | undefined;
   private collisionTime = 0;
   private exitBlockedTime = 0;
   private hudTime = 0;
@@ -135,6 +138,7 @@ export class DrivingSystem {
       this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
       this.cabin = new CabinState(this.car.profile); this.crane = new CraneSystems();
       this.operations = new VehicleOperations(this.car.profile);
+      this.fleetId = undefined;
     }
     this.parked = false; this.exitBlockedTime = 0; this.hudTime = 0.1;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
@@ -147,6 +151,7 @@ export class DrivingSystem {
   }
 
   stop(park = false): void {
+    this.boardingSurface = undefined;
     if (!this.active && !this.parked) return;
     this.parked = park;
     if (park) this.car.park();
@@ -168,6 +173,40 @@ export class DrivingSystem {
     return this.parked && this.getWorld().roadReady && !this.getWorld().searching
       && Math.hypot(person.x - this.car.x, person.z - this.car.z) < this.car.profile.chassisLength / 2 + 4
       && !!this.surface?.canBoard(this.car, person);
+  }
+
+  nearbyVehicle(person: { x: number; y: number; z: number }): ParkedEntry | undefined {
+    const world = this.getWorld();
+    if (!world.roadReady || world.searching) return;
+    if (this.boardingSurface?.world !== world) this.boardingSurface = { world, surface: new DrivingSurface(world) };
+    const surface = this.boardingSurface.surface, fleet = world.parkedVehicles.fleet;
+    let best: ParkedEntry | undefined, distance = this.parked ? Math.min(2.2, surface.boardingDistance(this.car, person)) : 2.2;
+    for (const entry of fleet.entries) {
+      const gap = Math.hypot(entry.x - person.x, entry.z - person.z);
+      if (gap > vehicleProfiles[entry.kind].chassisLength / 2 + 4) continue;
+      const doorDistance = surface.boardingDistance(fleet.vehicle(entry), person);
+      if (doorDistance < distance) { best = entry; distance = doorDistance; }
+    }
+    return best;
+  }
+
+  boardVehicle(entry: ParkedEntry): boolean {
+    const world = this.getWorld();
+    if (this.active || !world.roadReady || world.searching || !this.input.enabled) return false;
+    const car = world.parkedVehicles.fleet.take(entry.id); if (!car) return false;
+    if (this.parked) world.parkedVehicles.fleet.park(this.car, this.fleetId);
+    this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
+    this.surface = new DrivingSurface(world); this.cabin = new CabinState(car.profile); this.crane = new CraneSystems();
+    this.operations = new VehicleOperations(car.profile); this.systems.configure(car.profile.shape);
+    this.parked = true; element<HTMLSelectElement>('vehicle-kind').value = car.kind;
+    element<HTMLSelectElement>('suspension').value = String(car.suspension);
+    element<HTMLSelectElement>('transmission-mode').value = car.transmission.mode;
+    for (const [id, value] of [['suspension-damping', car.damping], ['vehicle-power', car.powerScale], ['vehicle-brake', car.brakeScale], ['vehicle-steering', car.steeringScale]] as const) {
+      element<HTMLInputElement>(id).value = String(Math.round(value * 100)); element(`${id}-value`).textContent = `${Math.round(value * 100)}%`;
+    }
+    element<HTMLSelectElement>('vehicle-paint').value = 'default';
+    this.describeVehicle(); this.updateSeatCamera();
+    return this.start(true);
   }
 
   get glassWater(): number { return this.mesh.glassWater; }
@@ -331,6 +370,7 @@ export class DrivingSystem {
       next.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
     }
     this.parked = false;
+    this.fleetId = undefined;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
     this.cabin = new CabinState(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
     this.operations = new VehicleOperations(next.profile);

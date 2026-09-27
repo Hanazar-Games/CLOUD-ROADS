@@ -219,6 +219,7 @@ export class VehicleMesh {
     } };
     addWheels(profile.wheels, this.root, this.wheels);
     if (profile.trailer) {
+      this.trailerRoot.name = 'trailer';
       this.root.add(this.trailerRoot); this.trailerRoot.add(this.trailerBody);
       const trailer = profile.trailer, center = trailer.length / 2 - trailer.front;
       const top = profile.height - this.rideHeight;

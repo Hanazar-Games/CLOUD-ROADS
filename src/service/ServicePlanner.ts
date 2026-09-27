@@ -6,6 +6,7 @@ import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from './ServiceSchedule';
 import { padPoint, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
+import { PARK_HALF_WIDTH, PARK_HALF_LENGTH } from './ServiceParking';
 
 export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround }
 
@@ -18,10 +19,10 @@ export class ServicePlanner {
   }
 
   private pad(sample: RoadSample, side: number): ServicePad {
-    const offset = side * (this.profile.outerHalfWidth + 50);
+    const offset = side * (this.profile.outerHalfWidth + PARK_HALF_WIDTH + 17);
     return { x: sample.position.x + Math.cos(sample.heading) * offset, y: sample.position.y,
       z: sample.position.z + Math.sin(sample.heading) * offset, heading: sample.heading,
-      grade: Math.max(-0.02, Math.min(0.02, sample.grade)), side, halfWidth: 33, halfLength: 75 };
+      grade: Math.max(-0.02, Math.min(0.02, sample.grade)), side, halfWidth: PARK_HALF_WIDTH, halfLength: PARK_HALF_LENGTH };
   }
 
   private clear(pad: ServicePad, index: RoadIndex, edges: RoadEdge[]): boolean {
@@ -65,8 +66,8 @@ export class ServicePlanner {
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;
           for (const side of this.options.roadType === 'highway' ? [-1, 1] : [1]) {
             if (!this.clear(this.pad(sample, side), roadIndex, edges)) { cost = Infinity; break; }
-            const offset = side * (this.profile.outerHalfWidth + 50);
-            for (const along of [-75, 0, 75]) {
+            const offset = side * (this.profile.outerHalfWidth + PARK_HALF_WIDTH + 17);
+            for (const along of [-PARK_HALF_LENGTH, 0, PARK_HALF_LENGTH]) {
               const x = sample.position.x + Math.cos(sample.heading) * offset + Math.sin(sample.heading) * along;
               const z = sample.position.z + Math.sin(sample.heading) * offset - Math.cos(sample.heading) * along;
               cost += Math.abs(this.terrain.sample(x, z) - sample.position.y) * 0.3;
@@ -87,7 +88,7 @@ export class ServicePlanner {
             const t = Math.max(0, Math.min(1, (220 - Math.abs(along)) / 140)), blend = t * t * (3 - 2 * t);
             const { right, normal } = roadFrame(point), lateral = side * (this.profile.outerHalfWidth - 1.5);
             const road = { x: point.position.x + right.x * lateral, y: point.position.y + right.y * lateral, z: point.position.z + right.z * lateral };
-            const parking = padPoint(pad, -side * 27, along);
+            const parking = padPoint(pad, -side * (pad.halfWidth - 6), along);
             const x = road.x + (parking.x - road.x) * blend, z = road.z + (parking.z - road.z) * blend;
             const separation = Math.abs((x - point.position.x) * Math.cos(point.heading) + (z - point.position.z) * Math.sin(point.heading)) - this.profile.outerHalfWidth;
             const settle = Math.max(0, Math.min(1, (separation - 6) / 12)), vertical = settle * settle * (3 - 2 * settle);
@@ -98,19 +99,19 @@ export class ServicePlanner {
           }
           for (let i = 1; i < points.length; i++) access.push({ a: points[i - 1], b: points[i] });
         }
-        const elevated = pads.some(pad => [-33, 0, 33].some(x => [-75, 0, 75].some(along => {
+        const elevated = pads.some(pad => [-pad.halfWidth, 0, pad.halfWidth].some(x => [-pad.halfLength, 0, pad.halfLength].some(along => {
           const p = padPoint(pad, x, along); return p.y - this.terrain.sample(p.x, p.z) > 5;
         }))) || access.some(({ a, b }) => [a, b].some(p => p.y - this.terrain.sample(p.x, p.z) > 5));
         const barriers: ServiceGround['barriers'] = [];
         if (elevated) {
           for (const pad of pads) {
-            for (const side of [-1, 1]) barriers.push({ a: padPoint(pad, side * 33, -75), b: padPoint(pad, side * 33, 75) });
-            for (const along of [-75, 75]) barriers.push({ a: padPoint(pad, -pad.side * 22, along), b: padPoint(pad, pad.side * 33, along) });
+            for (const side of [-1, 1]) barriers.push({ a: padPoint(pad, side * pad.halfWidth, -pad.halfLength), b: padPoint(pad, side * pad.halfWidth, pad.halfLength) });
+            for (const along of [-pad.halfLength, pad.halfLength]) barriers.push({ a: padPoint(pad, -pad.side * (pad.halfWidth - 11), along), b: padPoint(pad, pad.side * pad.halfWidth, along) });
           }
           for (const { a, b } of access) {
             const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
-            const insidePad = pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < 33
-              && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < 77);
+            const insidePad = pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
+              && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < pad.halfLength + 2);
             if (insidePad) continue;
             for (const side of [-1, 1]) {
               const point = (p: ServiceAccessPoint) => ({ x: p.x + nx * side * 3.7, y: p.y + (p.slopeX * nx + p.slopeZ * nz) * side * 3.7, z: p.z + nz * side * 3.7 });
