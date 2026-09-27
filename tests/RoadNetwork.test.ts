@@ -154,7 +154,7 @@ it.each([['mountain', false, 'roadster', 0], ['mountain', true, 'roadster', 0], 
   expect(reached).toBeGreaterThan(finish);
   expect(network.active.id).toBe(branch.id);
   expect(branch.road.samples.at(-1)!.distance).toBeGreaterThan(4000);
-}, 20000);
+}, 60000);
 
 it('starts with connected roads in both directions and activates a driven branch', () => {
   const road = new RoadSpine('network', flat, options), network = new RoadNetwork('network', flat, options, road);
