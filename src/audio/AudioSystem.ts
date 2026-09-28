@@ -6,7 +6,7 @@ export interface SoundState {
   rpm: number; shifts: number; exposure: number; wet: number; nature: boolean; night: number;
   horn: boolean; fan: number; washer: number; motor: boolean;
   supercar: boolean; braking: boolean; operations: number; service: number;
-  ignition: 'off' | 'starting' | 'running'; traffic: number;
+  ignition: 'off' | 'starting' | 'running'; traffic: number; tireSlip: number;
 }
 const chords = [[130.81, 164.81, 196, 293.66], [87.31, 130.81, 174.61, 261.63], [110, 164.81, 220, 329.63], [98, 146.83, 196, 293.66]];
 const progressions = [[0, 1, 2, 3], [2, 3, 0, 1], [0, 2, 1, 3], [1, 3, 2, 0]];
@@ -46,6 +46,8 @@ export class AudioSystem {
   private clickGain?: GainNode;
   private stepGain?: GainNode;
   private tireGain?: GainNode;
+  private skidGain?: GainNode;
+  private skidTone?: OscillatorNode;
   private cabinGain?: GainNode;
   private hornGain?: GainNode;
   private shiftGain?: GainNode;
@@ -139,7 +141,7 @@ export class AudioSystem {
           this.retuneAt = now;
           this.program!.gain.cancelScheduledValues(now); this.program!.gain.setValueAtTime(0, now);
         }
-        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.trafficGain]) {
+        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.trafficGain, this.tireGain, this.skidGain]) {
           channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.delete(channel!.gain);
         }
       }
@@ -204,6 +206,7 @@ export class AudioSystem {
     this.rhythmGain = gain(this.program); noiseSource.connect(rhythm); rhythm.connect(this.rhythmGain);
     this.turboGain = noiseChannel(1600, 'bandpass'); this.serviceGain = noiseChannel(150, 'lowpass');
     this.subEngineGain = gain(filter); this.subEngine = oscillator('sine', this.subEngineGain);
+    this.skidGain = noiseChannel(1250, 'bandpass'); this.skidTone = oscillator('triangle', this.skidGain);
     this.trafficGain = noiseChannel(400, 'lowpass');
   }
 
@@ -238,6 +241,9 @@ export class AudioSystem {
     set(this.windGain!.gain, (0.045 + speed * 0.004) * cabin * (1 - state.shelter) * this.weatherVolume);
     set(this.rainGain!.gain, state.rain * 0.17 * (0.35 + cabin * 0.65) * (1 - state.shelter) * this.weatherVolume);
     set(this.tireGain!.gain, Math.min(0.15, speed * 0.004) * (1 + state.wet * 0.65) * (0.55 + cabin * 0.45) * this.tireVolume);
+    const slide = state.driving ? Math.max(0, Math.min(1, state.tireSlip) - 0.08) : 0;
+    set(this.skidTone!.frequency, (state.mass > 4000 ? 480 : state.motorcycle ? 850 : 650) + slide * 240);
+    set(this.skidGain!.gain, slide * 0.07 * (1 - state.wet * 0.55) * (0.4 + cabin * 0.6) * this.tireVolume, 0.06);
     set(this.wiperGain!.gain, state.driving && dt > 0 ? Math.min(0.07, Math.abs(state.wiper - this.lastWiper) / dt * 0.045) * this.cabinVolume : 0, 0.025);
     set(this.cabinGain!.gain, state.driving ? (state.fan * 0.009 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);
     set(this.horn!.frequency, state.mass > 4000 ? 155 : state.motorcycle ? 490 : 350);

@@ -4,7 +4,7 @@ import { parsePreset, validatePreset, PresetStore, type SettingRules } from '../
 
 const rules: SettingRules = { 'vehicle-kind': { choices: ['roadster', 'crane'] }, 'hud-style': { choices: ['digital', 'dial', 'minimal'] },
   'steering-assist': { boolean: true }, 'vehicle-max-speed': { min: 20, max: 400 } };
-const preset = () => ({ format: 'cloud-roads-preset', version: 2, name: '雨中山路', seed: 'preset-seed', world: { ...DEFAULT_OPTIONS },
+const preset = () => ({ format: 'cloud-roads-preset', version: 3, name: '雨中山路', seed: 'preset-seed', world: { ...DEFAULT_OPTIONS },
   factorySpeed: true, settings: { 'vehicle-kind': 'crane', 'hud-style': 'dial', 'steering-assist': false, 'vehicle-max-speed': 79 } });
 
 it('round-trips settings without runtime position, speed, mileage or device consumption', () => {
@@ -46,13 +46,13 @@ it('reports corrupt storage without overwriting it or making the game depend on 
   expect(() => blocked.list()).toThrow();
 });
 
-it('keeps earlier preset storage untouched without blocking saves of the current road layout', () => {
-  const legacy = JSON.stringify([{ ...preset(), version: 1,
-    world: Object.fromEntries(Object.entries(DEFAULT_OPTIONS).filter(([key]) => !['roadLanes', 'oneWay'].includes(key))) }]);
-  const data = new Map([['cloud-roads.presets', legacy]]);
+it('keeps earlier preset storage untouched without blocking saves of the current settings', () => {
+  const legacy = JSON.stringify([{ ...preset(), version: 2 }]);
+  const data = new Map([['cloud-roads.presets.v2', legacy]]);
   const store = new PresetStore({ getItem: key => data.get(key) ?? null, setItem: (key, value) => { data.set(key, value); } }, rules);
   expect(store.list()).toEqual([]);
   const value = parsePreset(JSON.stringify(preset()), rules); store.save(value);
   expect(store.list()).toEqual([value]);
-  expect(data.get('cloud-roads.presets')).toBe(legacy);
+  expect(data.get('cloud-roads.presets.v2')).toBe(legacy);
+  expect(() => parsePreset(JSON.stringify({ ...preset(), version: 2 }), rules)).toThrow();
 });

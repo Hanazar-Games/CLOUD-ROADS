@@ -15,6 +15,8 @@ import { VehicleOperations, operationKeys, type VehicleOperation } from './Vehic
 import type { ParkedEntry } from '../service/ServiceParking';
 import { Autopilot, pilotModes, type AutopilotSettings } from './Autopilot';
 
+const driftTuning = [['road-grip', 'gripScale', 1], ['handbrake-strength', 'handbrakeStrength', 1], ['countersteer-assist', 'countersteerAssist', 0.6]] as const;
+
 export class DrivingSystem {
   car = new VehiclePhysics();
   readonly systems = new VehicleSystems();
@@ -108,6 +110,13 @@ export class DrivingSystem {
       this.describeVehicle();
     }, options);
     element('vehicle-paint').addEventListener('change', () => this.applyPaint(), options);
+    for (const [id, field] of driftTuning) element(id).addEventListener('input', () => {
+      this.car[field] = Number(element<HTMLInputElement>(id).value) / 100; this.describeTuning();
+    }, options);
+    element('drift-reset').addEventListener('click', () => {
+      for (const [, field, value] of driftTuning) this.car[field] = value;
+      this.describeTuning();
+    }, options);
     element('driving-view').addEventListener('change', () => {
       const view = element<HTMLSelectElement>('driving-view').value as DrivingView;
       if (drivingViews.includes(view)) { this.cameraRig.view = view; this.cameraRig.reset(); }
@@ -221,6 +230,7 @@ export class DrivingSystem {
     const world = this.getWorld();
     if (this.active || !world.roadReady || world.searching || !this.input.enabled) return false;
     const car = world.traffic.take(entry.id) ?? world.parkedVehicles.fleet.take(entry.id); if (!car) return false;
+    for (const [, field] of driftTuning) car[field] = this.car[field];
     if (this.parked) world.parkedVehicles.fleet.park(this.car, this.fleetId);
     this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
     this.surface = new DrivingSurface(world); this.cabin = new CabinState(car.profile); this.crane = new CraneSystems();
@@ -372,7 +382,7 @@ export class DrivingSystem {
       const manual = { throttle: canDrive ? axis('KeyW', 'KeyS') : 0, steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') };
       const obstacles = this.autopilot.active ? [...world.traffic.entries.map(e => e.car), ...world.parkedVehicles.fleet.entries
         .filter(e => Math.hypot(e.x - this.car.x, e.z - this.car.z) < 300).map(e => world.parkedVehicles.fleet.vehicle(e))] : [];
-      const controls = this.autopilot.update(dt, this.car, world.network.routes, obstacles, manual, this.surface.sample(this.car.x, this.car.z).grip);
+      const controls = this.autopilot.update(dt, this.car, world.network.routes, obstacles, manual, this.surface.sample(this.car.x, this.car.z).grip * this.car.gripScale);
       this.appliedThrottle = controls.throttle;
       const hit = this.car.update(dt, controls, this.surface.sample, this.surface.constrain);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
@@ -399,7 +409,10 @@ export class DrivingSystem {
         : this.exitBlockedTime > 0 ? '请停稳车辆，并在车旁有空位时下车'
         : this.car.ignition === 'off' ? '发动机已熄火 · F2 点火'
         : this.car.ignition === 'starting' ? '点火中 · 请稍候'
-        : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
+        : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正'
+        : this.car.drifting ? `漂移 ${Math.round(Math.abs(this.car.slipAngle) * 180 / Math.PI)}° · 松开 Space，反打方向回正`
+        : this.car.handbrake > 0.05 ? this.car.motionSpeed > 0.5 ? '手刹 · 转向可甩尾' : '手刹驻车'
+        : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
       element('vehicle-status').textContent = this.input.bindings.format(element('vehicle-status').textContent!);
       this.describePilot();
@@ -448,6 +461,7 @@ export class DrivingSystem {
     const next = new VehiclePhysics(kind);
     next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
     next.powerScale = this.car.powerScale; next.brakeScale = this.car.brakeScale; next.steeringScale = this.car.steeringScale;
+    for (const [, field] of driftTuning) next[field] = this.car[field];
     next.setSpeedLimit(this.car.speedLimit === undefined ? undefined : this.car.maxSpeed * 3.6);
     next.steeringAssist = this.car.steeringAssist; next.steeringAssistStrength = this.car.steeringAssistStrength;
     next.transmission.mode = this.car.transmission.mode;
@@ -501,6 +515,10 @@ export class DrivingSystem {
     const strength = element<HTMLInputElement>('steering-assist-strength');
     strength.value = String(Math.round(this.car.steeringAssistStrength * 100)); strength.disabled = !this.car.steeringAssist;
     element('steering-assist-strength-value').textContent = `${strength.value}%${this.car.steeringAssist ? '' : ' · 已关闭'}`;
+    for (const [id, field] of driftTuning) {
+      const value = String(Math.round(this.car[field] * 100));
+      element<HTMLInputElement>(id).value = value; element(`${id}-value`).textContent = `${value}%`;
+    }
   }
 
   describeEquipment(): void {

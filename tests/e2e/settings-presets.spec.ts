@@ -50,6 +50,7 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await page.goto('/?seed=FLEET-FLAT'); await category(page, 'driving');
   await page.locator('#vehicle-kind').selectOption('suv'); await page.locator('#hud-style').selectOption('dial');
   await page.locator('#vehicle-max-speed').fill('75'); await page.locator('#steering-assist').uncheck();
+  await page.locator('#road-grip').fill('45'); await page.locator('#handbrake-strength').fill('75'); await page.locator('#countersteer-assist').fill('35');
   await category(page, 'weather'); await page.locator('#weather-kind').selectOption('rain');
   await category(page, 'world'); await page.locator('#mountain-density').fill('125');
   await category(page, 'presets'); await page.locator('#preset-name').fill('雨中山路'); await page.locator('#preset-save').click();
@@ -59,6 +60,8 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
+  expect(saved.version).toBe(3); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.settings['handbrake-strength']).toBe(75); expect(saved.settings['countersteer-assist']).toBe(35);
   await page.reload(); await category(page, 'presets');
   await expect(page.locator('#preset-list option')).toHaveText(['雨中山路']);
   await expect(metric(page, 'Mountain density')).toHaveText('100%');
@@ -66,6 +69,8 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await expect(metric(page, 'Mountain density')).toHaveText('125%');
   await category(page, 'driving'); await expect(page.locator('#vehicle-kind')).toHaveValue('suv');
   await expect(page.locator('#vehicle-max-speed')).toHaveValue('75'); await expect(page.locator('#steering-assist')).not.toBeChecked();
+  await expect(page.locator('#road-grip')).toHaveValue('45'); await expect(page.locator('#handbrake-strength')).toHaveValue('75');
+  await expect(page.locator('#countersteer-assist')).toHaveValue('35');
   await expect(page.locator('#drive-hud')).toHaveAttribute('data-style', 'dial');
   await page.locator('#vehicle-max-speed').fill('40');
   await category(page, 'presets'); await page.locator('#preset-import').setInputFiles({ name: 'trip.json', mimeType: 'application/json', buffer });

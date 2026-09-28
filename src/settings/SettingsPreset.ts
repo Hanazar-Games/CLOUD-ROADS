@@ -3,16 +3,16 @@ import { validWorldOptions, type WorldOptions } from '../world/WorldOptions';
 export type SettingRule = { boolean: true } | { choices: readonly string[] } | { min: number; max: number; step?: number };
 export type SettingRules = Record<string, SettingRule>;
 export interface SettingsPreset {
-  format: 'cloud-roads-preset'; version: 2; name: string; seed: string; world: WorldOptions;
+  format: 'cloud-roads-preset'; version: 3; name: string; seed: string; world: WorldOptions;
   factorySpeed: boolean; settings: Record<string, string | number | boolean>;
 }
-export const PRESET_STORAGE_KEY = 'cloud-roads.presets.v2';
+export const PRESET_STORAGE_KEY = 'cloud-roads.presets.v3';
 export const PRESET_MAX_BYTES = 65536;
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 export function validatePreset(value: unknown, rules: SettingRules): value is SettingsPreset {
   if (!record(value) || Object.keys(value).sort().join() !== 'factorySpeed,format,name,seed,settings,version,world'
-    || value.format !== 'cloud-roads-preset' || value.version !== 2 || typeof value.factorySpeed !== 'boolean'
+    || value.format !== 'cloud-roads-preset' || value.version !== 3 || typeof value.factorySpeed !== 'boolean'
     || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 60
     || typeof value.seed !== 'string' || !value.seed.trim() || value.seed.length > 128
     || !validWorldOptions(value.world) || !record(value.settings)) return false;
@@ -32,7 +32,7 @@ export function parsePreset(text: string, rules: SettingRules): SettingsPreset {
   if (text.length > PRESET_MAX_BYTES) throw new Error('预设文件不能超过 64 KB。');
   let data: unknown;
   try { data = JSON.parse(text); } catch { throw new Error('文件不是有效的 JSON。'); }
-  if (!validatePreset(data, rules)) throw new Error('预设格式或参数范围不正确，请使用本版（格式 2）导出的 JSON。当前设置未改变。');
+  if (!validatePreset(data, rules)) throw new Error('预设格式或参数范围不正确，请使用本版（格式 3）导出的 JSON。当前设置未改变。');
   return data;
 }
 

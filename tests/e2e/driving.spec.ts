@@ -55,7 +55,7 @@ test('drives, steers, brakes, reverses and recovers safely without losing trip d
   await expect(metric(page, 'Vehicle position')).not.toHaveText(home!);
   await page.keyboard.down('Space');
   await expect(page.locator('#vehicle-speed')).toHaveText('0');
-  await expect(page.locator('#vehicle-status')).toHaveText('制动');
+  await expect(page.locator('#vehicle-status')).toHaveText('手刹驻车');
   await page.keyboard.up('Space');
   await page.keyboard.down('KeyS');
   await expect(page.locator('#vehicle-gear')).toHaveText('R');

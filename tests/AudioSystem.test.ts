@@ -4,7 +4,7 @@ import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
-  supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0 };
+  supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0, tireSlip: 0 };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
   setValueAtTime(value: number) { this.value = value; }, linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
@@ -25,6 +25,22 @@ class AudioContextStub {
   async close() { this.state = 'closed'; }
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('follows tire slip, wetness and tire volume without stale squeal on pause or leaving the vehicle', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const moving = { ...idle, driving: true, speed: 18 };
+  audio.update(0, moving); const before = context.gains.map(g => g.gain.value);
+  audio.update(0, { ...moving, tireSlip: 0.8 });
+  const changed = context.gains.filter((g, i) => g.gain.value > before[i]);
+  expect(changed).toHaveLength(1); const skid = changed[0], dry = skid.gain.value;
+  audio.update(0.1, { ...moving, tireSlip: 0.8, wet: 1 }); expect(skid.gain.value).toBeLessThan(dry);
+  audio.tireVolume = 0; audio.update(0.1, { ...moving, tireSlip: 1 }); expect(skid.gain.value).toBe(0);
+  audio.tireVolume = 1; audio.update(0.1, { ...moving, tireSlip: 1 });
+  audio.setActive(false); await Promise.resolve(); expect(skid.gain.value).toBe(0);
+  audio.setActive(true); await Promise.resolve(); audio.update(0.1, { ...idle, tireSlip: 1 }); expect(skid.gain.value).toBe(0);
+  audio.dispose();
+});
 
 it('mutes propulsion when off, keeps cabin equipment powered and fades bounded traffic audio', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });

@@ -20,6 +20,15 @@ function setup() {
 }
 const manual = { throttle: 0, steer: 0, handbrake: false };
 
+it('refuses engagement during a slide and yields without locking rear tires if traction is lost', () => {
+  const { auto, car, routes, options } = setup();
+  car.speed = 15; car.parked = false; car.lateralSpeed = 5; car.tireSlip = 0.8;
+  expect(auto.update(1 / 60, car, routes, [], manual, 0.3)).toEqual(manual); expect(auto.active).toBe(false);
+  expect(auto.engage(car, routes, options)).toBe(false);
+  car.lateralSpeed = car.tireSlip = 0; car.handbrake = 0.5; expect(auto.engage(car, routes, options)).toBe(false);
+  car.handbrake = 0; expect(auto.engage(car, routes, options)).toBe(true);
+});
+
 it('holds a lane using vehicle physics and respects the configured cruise limit', () => {
   const { auto, car, routes } = setup(); auto.configure({ mode: 'full', comfort: 4, minKmh: 20, maxKmh: 45 });
   for (let i = 0; i < 1200; i++) car.update(1 / 60, auto.update(1 / 60, car, routes, [], manual, 1), ground);

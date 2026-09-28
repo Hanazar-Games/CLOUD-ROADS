@@ -486,7 +486,7 @@ export class VehicleMesh {
       pivot.position.set(offset.x, states[i].height - y, offset.z);
       pivot.rotation.y = -car.wheelSteering(point);
       pivot.rotation.z = car.kind === 'motorcycle' ? roll : 0;
-      spin.rotation.x = -car.wheelAngle;
+      spin.rotation.x = -(states === car.wheels && !point.steer ? car.rearWheelAngle : car.wheelAngle);
       spring.position.set(offset.x * 0.85, pivot.position.y, offset.z);
       spring.scale.y = Math.max(0.08, -pivot.position.y + offset.y);
     });

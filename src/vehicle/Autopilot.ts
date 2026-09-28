@@ -33,6 +33,7 @@ export class Autopilot {
   engage(car: VehiclePhysics, routes: readonly PilotRoute[], options: Readonly<WorldOptions>): boolean {
     this.cancel();
     if (car.ignition !== 'running' || car.speed < -0.1) { this.status = '请先点火并停止倒车'; return false; }
+    if (car.drifting || car.handbrake > 0.05) { this.status = '请先松开手刹并恢复抓地'; return false; }
     const profile = roadProfile(options);
     const candidates = routes.flatMap(route => {
       const sample = route.road.nearest(car.x, car.z);
@@ -59,6 +60,7 @@ export class Autopilot {
     if (manual.handbrake || manual.throttle < 0 || speedControl && manual.throttle > 0 || steeringControl && manual.steer !== 0) {
       this.cancel('驾驶员已接管'); return manual;
     }
+    if (car.drifting) { this.cancel('车辆正在侧滑，请接管'); return manual; }
     if (car.ignition !== 'running' || car.speed < -0.2 || car.jackknifed) { this.cancel('车辆状态改变，请接管'); return { ...manual, handbrake: true }; }
     let route = routes.find(r => r.id === this.routeId), near = route?.road.nearest(car.x, car.z);
     if (route && near && this.direction < 0 && near.distance < 8 && ['root', 'back'].includes(route.id)) {

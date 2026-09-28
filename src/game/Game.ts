@@ -601,6 +601,7 @@ export class Game {
       horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
       washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor || this.driving.operations.moving,
       supercar: this.driving.car.kind === 'supercar', braking: this.driving.car.braking, operations: this.driving.operations.events,
+      tireSlip: this.driving.car.tireSlip,
       service: this.world.services.reduce((level, site) => Math.max(level, ...site.ground.pads.map(pad => Math.max(0, 1 - Math.hypot(pad.x - this.camera.position.x - this.world.origin.x, pad.y - this.camera.position.y, pad.z - this.camera.position.z - this.world.origin.z) / 160))), 0),
       walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
@@ -702,6 +703,11 @@ export class Game {
         'Vehicle operations': `${this.driving.operations.doors.toFixed(2)} / ${this.driving.operations.cargo.toFixed(2)} / ${this.driving.operations.aux.toFixed(2)}`,
         'Vehicle speed limit': `${(this.driving.car.maxSpeed * 3.6).toFixed(1)} km/h`,
         'Steering assist': this.driving.car.steeringAssist ? `${Math.round(this.driving.car.steeringAssistStrength * 100)}%` : 'off',
+        'Drift angle': (this.driving.car.slipAngle * 180 / Math.PI).toFixed(1),
+        'Lateral speed': this.driving.car.lateralSpeed.toFixed(2),
+        'Tire slip': this.driving.car.tireSlip.toFixed(2),
+        'Handbrake pressure': this.driving.car.handbrake.toFixed(2),
+        'Road grip': `${Math.round(this.driving.car.gripScale * 100)}%`,
         'Cabin fan': String(this.driving.systems.fan),
         'Radio channel': String(this.audio.station),
         'Cabin lighting': `${this.driving.systems.ambientLight ? 'ambient' : 'off'} / ${this.driving.systems.cabinLight ? 'reading' : 'off'}`,

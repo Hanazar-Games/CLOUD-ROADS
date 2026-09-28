@@ -46,10 +46,21 @@
             <label for="steering-assist"><input id="steering-assist" type="checkbox" checked /> 随速度增大转弯半径</label>
             <label class="speed-label" for="steering-assist-strength">高速转向辅助强度 <output id="steering-assist-strength-value">100%</output></label>
             <input id="steering-assist-strength" type="range" min="25" max="200" step="5" value="100" aria-describedby="vehicle-tuning-help" />
-            <p id="vehicle-tuning-help" class="panel-help">辅助默认开启；强度越高，高速转向越缓。关闭后取消按车速收小转角和稳定性限幅，允许高速急转，偏街机操控。动力与制动仍受抓地力限制，手刹保持原强度。恢复默认同时重置限速与转向辅助。</p>
+            <p id="vehicle-tuning-help" class="panel-help">辅助默认开启；强度越高，高速转向越缓。关闭后允许更大转角，轮胎侧向力仍受抓地力限制。漂移时反打方向允许更快回转，帮助接住车身。恢复默认同时重置限速与转向辅助。</p>
             <button id="vehicle-tuning-reset" type="button">恢复默认动力与转向</button>
             <label for="vehicle-paint">车身配色</label>
             <select id="vehicle-paint"><option value="default">车型原色</option><option value="d8dedb">冰川白</option><option value="29485e">深海蓝</option><option value="377d78">山谷青</option><option value="a73d32">赤焰红</option><option value="dca632">工程黄</option><option value="353d43">石墨灰</option><option value="7d658e">暮光紫</option><option value="9b7453">岩棕</option><option value="83b3bb">湖蓝</option><option value="d4bc97">沙金</option></select>
+          </details>
+          <details class="world-options">
+            <summary>漂移与抓地力</summary>
+            <label class="speed-label" for="road-grip">路面抓地力 <output id="road-grip-value">100%</output></label>
+            <input id="road-grip" type="range" min="25" max="150" step="5" value="100" aria-describedby="drift-help" />
+            <label class="speed-label" for="handbrake-strength">手刹强度 <output id="handbrake-strength-value">100%</output></label>
+            <input id="handbrake-strength" type="range" min="40" max="100" step="5" value="100" aria-describedby="drift-help" />
+            <label class="speed-label" for="countersteer-assist">漂移反打辅助 <output id="countersteer-assist-value">60%</output></label>
+            <input id="countersteer-assist" type="range" min="0" max="100" step="5" value="60" aria-describedby="drift-help" />
+            <p id="drift-help" class="panel-help">行驶中转向并按住 Space，让后轮逐渐锁止并甩尾；松开手刹、反打方向恢复抓地。持续拉手刹会减速，长车响应较慢。抓地力越低越滑，制动距离也更长，与雨雪和路外地面效果叠加，作用于玩家车辆并随换车保留。反打辅助只调整前轮方向，0% 为完全手动。静止时 Space 保持驻车。</p>
+            <button id="drift-reset" type="button">恢复默认漂移参数</button>
           </details>
           <label for="driving-view">驾驶视角 · C 切换</label>
           <select id="driving-view"><option value="chase">跟车</option><option value="cockpit">驾驶舱</option><option value="hood">引擎盖</option></select>
@@ -66,7 +77,7 @@
           <p id="suspension-summary" class="panel-help"></p>
           <p id="suspension-compression" class="panel-help">开始驾驶后显示轮端压缩量</p>
           <div class="actions road-actions"><button id="view-reset" type="button">视角回正</button><button id="vehicle-reset" type="button" disabled>回到道路 · R</button></div>
-          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · Space 手刹。拖动鼠标观察，C 切换视角，F8 暂停。打开设置时车辆暂停，关闭设置继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
+          <p class="panel-help">W 加速 · S 刹车 / 倒车 · A D 转向 · 按住 Space 手刹漂移。拖动鼠标观察，C 切换视角，F8 暂停。打开设置时车辆暂停，关闭设置继续。换车会在附近可容纳整车的路段停稳；长车自动增加跟车距离，进隧道临时使用驾驶舱。封闭驾驶舱限制抬高，避免穿过车顶。</p>
         </details>
 </section>
 <section class="settings-category" id="settings-autopilot" aria-labelledby="heading-autopilot"><h3 id="heading-autopilot">自动驾驶</h3>

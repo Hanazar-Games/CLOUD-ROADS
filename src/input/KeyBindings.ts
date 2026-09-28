@@ -1,7 +1,7 @@
 export const bindingActions = [
   ['KeyW', 'KeyW', '驾驶 / 移动', '油门 / 前进 / 升吊臂'], ['KeyS', 'KeyS', '驾驶 / 移动', '制动与倒车 / 后退 / 降吊臂'],
   ['KeyA', 'KeyA', '驾驶 / 移动', '左转 / 左移 / 吊车左回转'], ['KeyD', 'KeyD', '驾驶 / 移动', '右转 / 右移 / 吊车右回转'],
-  ['Space', 'Space', '驾驶 / 移动', '手刹 / 跳跃 / 飞行上升'], ['ShiftLeft', 'ShiftLeft', '驾驶 / 移动', '跑步 / 飞行下降（左键）'],
+  ['Space', 'Space', '驾驶 / 移动', '按住手刹漂移 / 跳跃 / 飞行上升'], ['ShiftLeft', 'ShiftLeft', '驾驶 / 移动', '跑步 / 飞行下降（左键）'],
   ['ShiftRight', 'ShiftRight', '驾驶 / 移动', '跑步 / 飞行下降（右键）'], ['ControlLeft', 'ControlLeft', '驾驶 / 移动', '飞行加速（左键）'],
   ['ControlRight', 'ControlRight', '驾驶 / 移动', '飞行加速（右键）'], ['F2', 'F2', '驾驶 / 移动', '点火 / 熄火'],
   ['KeyF', 'KeyF', '驾驶 / 移动', '安全上下车'], ['KeyR', 'KeyR', '驾驶 / 移动', '回到道路'],
