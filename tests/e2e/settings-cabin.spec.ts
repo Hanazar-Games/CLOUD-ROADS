@@ -10,7 +10,7 @@ test('opens categorized modal settings, freezes driving and restores fresh keybo
   const dialog = page.getByRole('dialog', { name: '旅程设置' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveText([
-    '驾驶与视角', '自动驾驶', '快捷键', '车载设备', 'NPC 交通', '世界与道路', '天气与时间', '性能与画质', '声音与音乐', '我的预设', '探索工具',
+    '驾驶与视角', '自动驾驶', '快捷键', '车载设备', 'NPC 交通', '地下停车场', '世界与道路', '天气与时间', '性能与画质', '声音与音乐', '我的预设', '探索工具',
   ]);
   const position = page.locator('[data-metric="Vehicle position"]');
   await page.waitForTimeout(250); const parked = await position.textContent();

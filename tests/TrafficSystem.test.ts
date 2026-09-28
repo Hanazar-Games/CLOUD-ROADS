@@ -15,6 +15,20 @@ function setup(patch: Partial<WorldOptions> = {}) {
   return { traffic, network, anchor, options };
 }
 
+it('keeps the default budget and exposes a larger configurable cap that trims immediately', () => {
+  const { traffic, network, anchor } = setup({ roadLanes: 3, roadWidth: 12 });
+  expect(traffic.limit).toBe(24);
+  traffic.limit = 120; traffic.density = 100;
+  expect(traffic.targetCount).toBe(120);
+  for (let i = 0; i < 360; i++) traffic.update(0.1, network.routes, anchor);
+  expect(traffic.entries.length).toBeGreaterThan(24);
+  expect(traffic.entries.length).toBeLessThanOrEqual(120);
+  traffic.limit = 12; traffic.update(0, network.routes, anchor);
+  expect(traffic.entries.length).toBeLessThanOrEqual(12);
+  traffic.limit = NaN; expect(traffic.limit).toBe(12);
+  traffic.limit = 1000; expect(traffic.limit).toBe(120);
+}, 15000);
+
 it('seeds bounded traffic with diverse vehicles, paints and opposite directions', () => {
   const { traffic, network, anchor } = setup(); traffic.density = 100;
   for (let i = 0; i < 300; i++) traffic.update(0.1, network.routes, anchor);

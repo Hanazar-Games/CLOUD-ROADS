@@ -34,6 +34,8 @@ import { JUNCTION_INTERVAL, junctionsEnabled } from '../road/JunctionSchedule';
 import { JunctionMesh } from '../road/JunctionMesh';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { TrafficVehicles } from '../traffic/TrafficVehicles';
+import { Garage, garageLocation } from '../garage/Garage';
+import { GarageMesh } from '../garage/GarageMesh';
 
 export interface GroundSample {
   height: number;
@@ -58,6 +60,8 @@ export class World {
   readonly parkedVehicles: ParkedVehicles;
   readonly traffic: TrafficSystem;
   readonly trafficVehicles: TrafficVehicles;
+  readonly garage: Garage;
+  readonly garageMesh: GarageMesh;
   readonly signs: RoadSigns;
   readonly crossingMesh: CrossingMesh;
   readonly junctionMesh: JunctionMesh;
@@ -82,9 +86,12 @@ export class World {
   private readonly forward = new Vector3();
   private corridor = new RoadCorridor([]);
   private corridorVersion = -1;
+  private garagePlaced = false;
 
   constructor(private readonly scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.height = new HeightFunction(seed, options.terrain, options.roadType, options);
+    this.garage = new Garage(seed, garageLocation(this.height));
+    this.garageMesh = new GarageMesh(scene, this.garage);
     this.crossingPlanner = new CrossingPlanner(seed, this.height);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
@@ -135,6 +142,14 @@ export class World {
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
     const position = travelPosition ?? { x, y: camera.position.y, z };
     this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
+    if (this.roadReady && !this.garagePlaced) {
+      this.garage.relocate(garageLocation(this.height, (gx, gz) => this.network.routes.some(route => {
+        const sample = route.road.nearest(gx, gz);
+        return sample && Math.hypot(gx - sample.position.x, gz - sample.position.z) < 120
+          || route.services.some(site => site.ground.pads.some(pad => Math.hypot(gx - pad.x, gz - pad.z) < 260));
+      })));
+      this.garagePlaced = true;
+    }
     if (this.roadReady && this.corridorVersion !== this.network.version) {
       this.services = this.network.active.services;
       this.bridges = this.network.active.bridges;
@@ -171,7 +186,8 @@ export class World {
     this.roadside.update(this.renderSamples, this.renderBridges, this.renderTunnels, this.renderServices, this.corridor, this.height,
       this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.chunks.vegetation.enabled);
     this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled);
-    this.parkedVehicles.update(this.renderServices, this.origin, camera.position);
+    this.parkedVehicles.update(this.renderServices, this.origin, camera.position, this.garage);
+    this.garageMesh.update(this.origin, camera.position);
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
@@ -232,11 +248,12 @@ export class World {
       corridors.push(RoadCorridor.fromSamples(samples, bridges, this.options, tunnels, services.map(site => site.ground)));
       remaining -= segments.length;
     }
-    this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, this.renderServices.map(site => site.ground));
+    const grounds = [...this.renderServices.map(site => site.ground), this.garage.ground];
+    this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, grounds);
     this.crossings = this.crossingPlanner.plan(this.renderRoutes.map(route => route.source.samples), this.corridor)
       .sort((a, b) => Math.hypot(a.anchor.position.x - x, a.anchor.position.z - z) - Math.hypot(b.anchor.position.x - x, b.anchor.position.z - z))
       .filter((site, i, all) => all.slice(0, i).every(other => Math.hypot(site.anchor.position.x - other.anchor.position.x, site.anchor.position.z - other.anchor.position.z) > 2000)).slice(0, 3);
-    this.corridor = new RoadCorridor([...this.corridor.edges, ...this.crossings.flatMap(site => site.edges)], this.options, this.renderServices.map(site => site.ground));
+    this.corridor = new RoadCorridor([...this.corridor.edges, ...this.crossings.flatMap(site => site.edges)], this.options, grounds);
     for (const [id, mesh] of this.extraRoads) if (!this.renderRoutes.slice(1).some(route => route.id === id)) { mesh.dispose(); this.extraRoads.delete(id); }
   }
   get serviceSearchProgress(): number | null { return this.scout?.kind === 'service' ? this.scout.progress : null; }
@@ -318,6 +335,7 @@ export class World {
   }
 
   private tunnelShelter(x: number, y: number, z: number): number {
+    if (this.garage.shelter(x, y, z)) return 1;
     const service = this.renderServices.reduce((best, site) => Math.max(best, crossoverShelter(site.ground.crossover, x, y, z)), 0);
     if (service) return service;
     const sample = this.roadSample;
@@ -432,6 +450,7 @@ export class World {
   }
 
   dispose(): void {
+    this.garageMesh.dispose();
     for (const mesh of this.extraRoads.values()) mesh.dispose(); this.extraRoads.clear();
     this.chunks.dispose(); this.roadDebug.dispose(); this.roadMesh.dispose(); this.bridgeMesh.dispose();
     this.tunnelMesh.dispose(); this.furniture.dispose();

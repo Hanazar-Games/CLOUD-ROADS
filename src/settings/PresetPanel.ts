@@ -7,7 +7,7 @@ const controls = ['vehicle-kind', 'hud-style', 'transmission-mode', 'vehicle-max
   'steering-assist', 'steering-assist-strength', 'road-grip', 'handbrake-strength', 'countersteer-assist',
   'vehicle-paint', 'driving-view', 'driving-fov', 'camera-distance', 'camera-height', 'suspension', 'suspension-damping',
   'vehicle-lights', 'light-power', 'light-range', 'vehicle-wipers', 'vehicle-windows', 'cabin-fan',
-  'traffic-density', 'season-kind', 'weather-kind', 'fog-density', 'daylight', 'frame-limit', 'radio-station', 'music-style', 'music-pace', 'speed',
+  'traffic-density', 'traffic-limit', 'garage-density', 'garage-kind', 'garage-paint', 'season-kind', 'weather-kind', 'fog-density', 'daylight', 'frame-limit', 'radio-station', 'music-style', 'music-pace', 'speed',
   ...audioChannels.map(([name]) => `${name}-volume`)];
 const graphics = ['render-scale', 'shadow-quality', 'antialiasing', 'view-distance', 'map-detail', 'cloud-quality'];
 const toggles = ['vegetation-toggle', 'cloud-toggle', 'lights-toggle', 'audio-toggle', 'cabin-light', 'ambient-light', 'vehicle-roof'];
@@ -73,7 +73,7 @@ export class PresetPanel {
       settings[id] = node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
-    const preset = { format: 'cloud-roads-preset', version: 3, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
+    const preset = { format: 'cloud-roads-preset', version: 4, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
     return parsePreset(JSON.stringify(preset), this.rules);
   }
   private async importFile(): Promise<void> {

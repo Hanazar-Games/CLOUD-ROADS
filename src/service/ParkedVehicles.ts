@@ -6,6 +6,7 @@ import { VehicleSystems } from '../vehicle/VehicleSystems';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
 import { ParkedFleet } from './ParkedFleet';
 import type { ServiceArea } from './ServicePlanner';
+import type { Garage } from '../garage/Garage';
 
 export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGeometry[] {
   const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile), parts: BufferGeometry[][] = [[]];
@@ -45,6 +46,7 @@ export class ParkedVehicles {
   private readonly tilt = new Matrix4();
   private readonly color = new Color();
   private version = -1;
+  private garageFloor: number | undefined;
   private anchorX = 0; private anchorZ = 0;
   constructor(private readonly scene: Scene, seed: string) {
     this.fleet = new ParkedFleet(seed);
@@ -57,9 +59,12 @@ export class ParkedVehicles {
       `);
     };
   }
-  update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3): void {
-    this.fleet.sync(sites);
-    const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600);
+  update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3, garage?: Garage): void {
+    this.fleet.sync(sites, garage?.entries);
+    const floor = garage?.floor(camera.x + origin.x, camera.y, camera.z + origin.z);
+    if (floor !== this.garageFloor) { this.garageFloor = floor; this.version = -1; }
+    const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600
+      && (e.slot < 0 || !e.id.startsWith('garage:') || floor !== undefined && Math.abs(e.y - camera.y) < 9));
     const key = (entry: typeof near[number]) => `${entry.kind}${entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
     const missing = near.find(e => !this.batches.has(key(e)));
     if (missing) {

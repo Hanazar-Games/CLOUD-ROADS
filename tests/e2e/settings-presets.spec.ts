@@ -60,7 +60,7 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(3); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(4); expect(saved.settings['road-grip']).toBe(45);
   expect(saved.settings['handbrake-strength']).toBe(75); expect(saved.settings['countersteer-assist']).toBe(35);
   await page.reload(); await category(page, 'presets');
   await expect(page.locator('#preset-list option')).toHaveText(['雨中山路']);

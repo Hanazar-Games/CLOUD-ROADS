@@ -3,6 +3,7 @@ import type { ServiceArea } from './ServicePlanner';
 import { parkedAt, type ParkedEntry } from './ServiceParking';
 import { constrainVehicle } from './ServiceCollision';
 import { vehicleSupport } from '../vehicle/VehicleSolids';
+import { vehicleProfiles } from '../vehicle/VehicleConfig';
 
 export class ParkedFleet {
   entries: ParkedEntry[] = [];
@@ -13,11 +14,12 @@ export class ParkedFleet {
   private readonly returned = new Map<string, { entry: ParkedEntry; car: VehiclePhysics }>();
   private readonly cars = new Map<string, VehiclePhysics>();
   private generated: ParkedEntry[] = [];
+  private extras: readonly ParkedEntry[] = [];
   constructor(private readonly seed: string) {}
-  sync(sites: readonly ServiceArea[]): void {
+  sync(sites: readonly ServiceArea[], extras: readonly ParkedEntry[] = this.extras): void {
     const signature = sites.map(s => `${s.sample.routeId}:${s.id}:${s.ground.pads[0]?.x}:${s.ground.pads[0]?.z}`).join('|');
-    if (signature === this.signature) return;
-    this.signature = signature; this.generated = sites.flatMap(site => parkedAt(this.seed, site));
+    if (signature === this.signature && extras === this.extras) return;
+    this.signature = signature; this.extras = extras; this.generated = [...sites.flatMap(site => parkedAt(this.seed, site)), ...extras];
     const visible = new Set(this.generated.map(e => e.id));
     for (const id of this.cars.keys()) if (!visible.has(id)) this.cars.delete(id);
     this.refresh();
@@ -54,7 +56,8 @@ export class ParkedFleet {
   support(x: number, z: number, ceiling: number): number | undefined {
     let height: number | undefined;
     for (const entry of this.entries) {
-      if (Math.abs(entry.x - x) > 28 || Math.abs(entry.z - z) > 28) continue;
+      if (Math.abs(entry.x - x) > 28 || Math.abs(entry.z - z) > 28 || Number.isFinite(ceiling)
+        && (entry.y - 2 > ceiling || entry.y + vehicleProfiles[entry.kind].height + 4 < ceiling)) continue;
       const top = vehicleSupport(this.vehicle(entry), x, z, ceiling);
       if (top !== undefined && (height === undefined || top > height)) height = top;
     }
@@ -64,7 +67,8 @@ export class ParkedFleet {
     let hit = false;
     for (const entry of this.entries) {
       if (entry.x < Math.min(body.x, previousX) - 28 || entry.x > Math.max(body.x, previousX) + 28
-        || entry.z < Math.min(body.z, previousZ) - 28 || entry.z > Math.max(body.z, previousZ) + 28) continue;
+        || entry.z < Math.min(body.z, previousZ) - 28 || entry.z > Math.max(body.z, previousZ) + 28
+        || entry.y > feet + height + 2 || entry.y + vehicleProfiles[entry.kind].height + 2 < feet) continue;
       hit = constrainVehicle(body, previousX, previousZ, radius, feet, this.vehicle(entry), height) || hit;
     }
     return hit;

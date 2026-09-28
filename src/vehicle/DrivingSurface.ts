@@ -10,7 +10,7 @@ import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision
 import { serviceObstacles } from '../service/ServiceAmenities';
 import { vehicleSupport } from './VehicleSolids';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season'>>
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
 
 export class DrivingSurface {
@@ -45,6 +45,9 @@ export class DrivingSurface {
 
   private ground(x: number, z: number, ceiling = Infinity): SurfaceContact {
     const reference = Number.isFinite(ceiling) ? ceiling : this.level;
+    const garage = this.world.garage?.surface(x, z, reference, ceiling);
+    if (garage !== undefined) return { height: garage, grip: this.world.garage!.shelter(x, garage + 0.5, z) ? 1
+      : (1 - this.wet * 0.38) * (this.world.season?.grip(garage) ?? 1) };
     const surfaces: SurfaceContact[] = [];
     const add = (height: number, sheltered = false) => {
       if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9))
@@ -135,6 +138,7 @@ export class DrivingSurface {
   }
 
   inTunnel(x: number, z: number, margin = 0): boolean {
+    if (this.world.garage?.shelter(x, (this.level ?? Infinity) + 1.5, z)) return true;
     if (this.level !== undefined && this.world.services.some(site => crossoverShelter(site.ground.crossover, x, this.level!, z) > 0.5)) return true;
     const route = this.route(x, z), sample = route.road.nearest(x, z);
     return !!sample && Math.hypot(x - sample.position.x, z - sample.position.z) < this.profile.outerHalfWidth + 1
@@ -253,7 +257,7 @@ export class DrivingSurface {
 
   ceiling(x: number, z: number, feet: number): number {
     this.refreshServices();
-    let ceiling = Infinity;
+    let ceiling = this.world.garage?.ceiling(x, z, feet) ?? Infinity;
     for (const site of this.sites) if (site.ground.elevated) for (const pad of site.ground.pads) {
       const dx = x - pad.x, dz = z - pad.z;
       const along = dx * Math.sin(pad.heading) - dz * Math.cos(pad.heading), height = pad.y + pad.grade * along;
@@ -315,6 +319,7 @@ export class DrivingSurface {
   private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75): boolean {
     this.refreshServices();
     let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet, height) ?? false;
+    hit = (this.world.garage?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
     hit = (this.world.traffic?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
     for (const site of this.sites) for (const pad of site.ground.pads) {
       if (pad.x < Math.min(body.x, previousX) - 150 || pad.x > Math.max(body.x, previousX) + 150

@@ -32,9 +32,11 @@ export class WalkingSystem {
     const pad = world.services.flatMap(site => site.ground.pads).find(p => Math.abs((x - p.x) * Math.cos(p.heading) + (z - p.z) * Math.sin(p.heading)) <= p.halfWidth + 2
       && Math.abs((x - p.x) * Math.sin(p.heading) - (z - p.z) * Math.cos(p.heading)) <= p.halfLength + 2);
     const entrance = pad ? { ...padPoint(pad, -pad.side * (pad.halfWidth - 6), -pad.halfLength + 18), heading: pad.heading } : undefined;
-    const spawn = position ?? entrance ?? this.surface.spawn(x, z);
+    const floor = world.garage.floor(x, this.camera.position.y, z);
+    const garage = floor === undefined ? undefined : world.garage.spawn(floor);
+    const spawn = position ?? garage ?? entrance ?? this.surface.spawn(x, z);
     if (!spawn) return false;
-    this.person.reset(spawn.x, position?.y ?? this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);
+    this.person.reset(spawn.x, position?.y ?? garage?.y ?? this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);
     this.hudTime = 1;
     this.pitch = this.stride = 0; this.jumpRequested = false; this.input.clear(); this.active = true;
     this.setUI();

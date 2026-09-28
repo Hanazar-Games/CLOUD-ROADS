@@ -9,7 +9,7 @@ import { vehicleProfiles, type VehicleKind } from '../vehicle/VehicleConfig';
 import { constrainVehicle } from '../service/ServiceCollision';
 import { vehicleSupport } from '../vehicle/VehicleSolids';
 
-export const MAX_TRAFFIC = 24;
+export const MAX_TRAFFIC = 120;
 const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15'];
 const paints = [0xd8dedb, 0x29485e, 0x377d78, 0xa73d32, 0xdca632, 0x353d43, 0x7d658e, 0x9b7453, 0x83b3bb, 0xd4bc97];
 type Position = { x: number; y: number; z: number };
@@ -22,6 +22,7 @@ export interface TrafficEntry {
 export class TrafficSystem {
   readonly entries: TrafficEntry[] = [];
   private amount = 35;
+  private capacity = 24;
   private serial = 0;
   private spawnTime = 0;
   private routes: readonly NetworkRoute[] = [];
@@ -33,6 +34,9 @@ export class TrafficSystem {
   }
   get density(): number { return this.amount; }
   set density(value: number) { if (Number.isFinite(value)) this.amount = Math.max(0, Math.min(100, value)); }
+  get limit(): number { return this.capacity; }
+  set limit(value: number) { if (Number.isFinite(value)) this.capacity = Math.round(Math.max(12, Math.min(MAX_TRAFFIC, value))); }
+  get targetCount(): number { return Math.ceil(this.amount / 100 * this.capacity); }
   clear(): void { this.entries.length = 0; this.spawnTime = 0; this.routes = []; }
   take(id: string): VehiclePhysics | undefined {
     const index = this.entries.findIndex(e => e.id === id);
@@ -42,7 +46,7 @@ export class TrafficSystem {
 
   update(dt: number, routes: readonly NetworkRoute[], anchor: Position, parked: readonly VehiclePhysics[] = [], walker?: Position): void {
     this.routes = routes;
-    const target = Math.ceil(this.amount / 100 * MAX_TRAFFIC);
+    const target = this.targetCount;
     for (let i = this.entries.length - 1; i >= 0; i--) {
       const e = this.entries[i], route = routes.find(r => r.id === e.routeId);
       if (!route || !this.sample(route, e.distance) || Math.hypot(e.car.x - anchor.x, e.car.z - anchor.z) > 1400 || !target) this.entries.splice(i, 1);
@@ -91,13 +95,13 @@ export class TrafficSystem {
     const heading = sample.heading + (entry.direction < 0 ? Math.PI : 0) + yaw, rearRight = roadFrame(rear).right;
     const hitchX = x + Math.sin(heading) * (p.trailer?.hitchAlong ?? 0), hitchZ = z - Math.cos(heading) * (p.trailer?.hitchAlong ?? 0);
     const trailerHeading = Math.atan2(hitchX - rear.position.x - rearRight.x * offset, rear.position.z + rearRight.z * offset - hitchZ);
-    const wheel = car.wheelAngle, trip = car.trip, speed = car.speed;
+    const wheel = car.wheelAngle, rearWheel = car.rearWheelAngle, trip = car.trip, speed = car.speed;
     car.reset(x, z, heading, (px, pz) => {
       const nearRear = p.trailer && Math.hypot(px - rear.position.x, pz - rear.position.z) < Math.hypot(px - sample.position.x, pz - sample.position.z);
       const ground = nearRear ? rear : sample, up = nearRear ? roadFrame(rear).normal : normal;
       return { height: ground.position.y - (up.x * (px - ground.position.x) + up.z * (pz - ground.position.z)) / up.y, grip: 1 };
     }, true, p.trailer ? trailerHeading : heading);
-    car.wheelAngle = wheel; car.trip = trip; car.speed = speed; car.parked = false; car.ignition = 'running';
+    car.wheelAngle = wheel; car.rearWheelAngle = rearWheel; car.trip = trip; car.speed = speed; car.parked = false; car.ignition = 'running';
     car.steering = Math.atan(sample.curvature * entry.direction * car.wheelbase);
     return true;
   }
@@ -231,7 +235,7 @@ export class TrafficSystem {
     }
     if (hit) { entry.offset = previousOffset; if (entry.change) entry.change.elapsed = Math.max(0, entry.change.elapsed - dt); this.place(entry, route, entry.distance); }
     else {
-      entry.distance = distance; car.trip += move; car.wheelAngle += move / car.profile.radius;
+      entry.distance = distance; car.trip += move; car.wheelAngle += move / car.profile.radius; car.rearWheelAngle += move / car.profile.radius;
       if (entry.change && entry.change.elapsed >= 0.8 + (car.profile.length > 8 ? 5.5 : 4)) {
         entry.lane = entry.change.lane; entry.change = undefined; entry.signal = 0; entry.cooldown = 7;
       }

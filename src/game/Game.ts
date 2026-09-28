@@ -25,6 +25,7 @@ import { seasonNames, type Season } from '../season/SeasonState';
 import { WorldSettings } from '../settings/WorldSettings';
 import { PresetPanel } from '../settings/PresetPanel';
 import { KeyBindingPanel } from '../settings/KeyBindingPanel';
+import { GaragePanel } from '../garage/GaragePanel';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -52,6 +53,7 @@ export class Game {
   private readonly walking: WalkingSystem;
   private readonly cabinDialogs: CabinDialogs;
   private readonly keyBindingPanel: KeyBindingPanel;
+  private readonly garagePanel: GaragePanel;
   private paused = false;
   private wireframe = false;
   private hudTime = 0;
@@ -74,6 +76,9 @@ export class Game {
       if (category) document.querySelector<HTMLButtonElement>(`[data-settings-target="${category}"]`)!.click();
     }, this.input.bindings);
     this.keyBindingPanel = new KeyBindingPanel(this.input);
+    this.garagePanel = new GaragePanel(() => this.world, point => {
+      this.settings.close(); this.stopTravel(); this.walking.start(point); this.setPaused(false); this.canvas.focus();
+    });
     this.world.resetCamera(this.camera);
     element('phase-label').textContent = '/ DRIVE';
     this.renderer.toneMapping = ACESFilmicToneMapping;
@@ -127,6 +132,10 @@ export class Game {
     element('traffic-density').addEventListener('input', () => {
       const density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.density = density; element('traffic-density-value').textContent = `${density}%`;
+    }, { signal: this.events.signal });
+    element('traffic-limit').addEventListener('input', () => {
+      this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
+      element('traffic-limit-value').textContent = `${this.world.traffic.limit} 辆`;
     }, { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
@@ -363,6 +372,8 @@ export class Game {
       this.world = world;
       this.weather.setSeason(world.season);
       this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
+      this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
+      this.garagePanel.apply();
       this.world.chunks.setViewRadius(this.viewRadius);
       this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
@@ -584,7 +595,7 @@ export class Game {
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
     const anchor = this.driving.active ? this.driving.car : this.walking.active ? this.walking.person
       : { x: this.camera.position.x + this.world.origin.x, y: this.camera.position.y, z: this.camera.position.z + this.world.origin.z };
-    const obstacles = this.world.traffic.density ? this.world.parkedVehicles.fleet.entries.filter(e => Math.hypot(e.x - anchor.x, e.z - anchor.z) < 1500)
+    const obstacles = this.world.traffic.density ? this.world.parkedVehicles.fleet.entries.filter(e => (e.slot < 0 || !e.id.startsWith('garage:')) && Math.hypot(e.x - anchor.x, e.z - anchor.z) < 1500)
       .map(e => this.world.parkedVehicles.fleet.vehicle(e)) : [];
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
@@ -627,12 +638,13 @@ export class Game {
       element('boarding-help').textContent = this.access ? this.access.sequence.closing ? '车门关闭中 · 请稍候'
         : `车门打开中 · 准备${this.access.sequence.entering ? '上' : '下'}车`
         : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
-      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 · ${this.world.traffic.density ? '交通运行中' : '交通已关闭'}`;
+      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? '交通运行中' : '交通已关闭'}`;
+      this.garagePanel.update();
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight);
       const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
-      const condition = this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
+      const condition = this.world.garage.shelter(x, y, z) ? '地下车库 · 干燥路面' : this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
       element('season-status').textContent = `${seasonNames[season.kind]} · ${season.temperature(y).toFixed(1)} °C · ${precipitation} · ${condition}`;
       element('drive-condition').textContent = `${seasonNames[season.kind]} · ${season.temperature(roadHeight).toFixed(0)} °C · ${condition}`;
       element('drive-condition').dataset.snow = String(snow > 0.15 && this.world.shelter < 0.9);
@@ -692,6 +704,11 @@ export class Game {
         'Ignition': this.driving.car.ignition,
         'NPC vehicles': this.world.traffic.entries.length,
         'NPC density': `${this.world.traffic.density}%`,
+        'NPC limit': this.world.traffic.limit,
+        'NPC target': this.world.traffic.targetCount,
+        'Garage floor': this.world.garage.floor(x, y, z) ?? 'outside',
+        'Garage position': `${this.world.garage.position.x}, ${this.world.garage.position.y.toFixed(2)}, ${this.world.garage.position.z}`,
+        'Garage vehicles': this.world.parkedVehicles.fleet.entries.filter(e => e.id.startsWith('garage:')).length,
         'NPC motion': this.world.traffic.entries.map(e => `${e.id}:${e.distance.toFixed(1)}`).join(', '),
         'Transmission': `${this.driving.car.transmission.mode} / ${this.driving.car.transmission.gear}`,
         'Window opening': this.driving.systems.windowOpen.toFixed(2),
@@ -792,6 +809,7 @@ export class Game {
   }
 
   dispose(): void {
+    this.garagePanel.dispose();
     this.keyBindingPanel.dispose();
     this.presets.dispose(); this.worldSettings.dispose();
     this.cabinDialogs.dispose();

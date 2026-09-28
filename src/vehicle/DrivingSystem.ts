@@ -171,6 +171,7 @@ export class DrivingSystem {
       this.operations = new VehicleOperations(this.car.profile);
       this.fleetId = undefined;
     }
+    this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
     this.parked = false; this.exitBlockedTime = 0; this.hudTime = 0.1;
     this.cameraRig.reset(); this.input.clear(); this.active = true;
     this.updateSeatCamera();
@@ -218,7 +219,7 @@ export class DrivingSystem {
       x: e.car.x, y: e.car.y, z: e.car.z, heading: e.car.heading, slot: -1, grade: 0, padHeading: e.car.heading }));
     for (const entry of [...fleet.entries, ...traffic]) {
       const gap = Math.hypot(entry.x - person.x, entry.z - person.z);
-      if (gap > vehicleProfiles[entry.kind].chassisLength / 2 + 4) continue;
+      if (gap > vehicleProfiles[entry.kind].chassisLength / 2 + 4 || Math.abs(entry.y - person.y) > 5) continue;
       const car = world.traffic.entries.find(e => e.id === entry.id)?.car ?? fleet.vehicle(entry);
       const doorDistance = surface.boardingDistance(car, person);
       if (doorDistance < distance) { best = entry; distance = doorDistance; }

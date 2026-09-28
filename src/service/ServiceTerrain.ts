@@ -5,7 +5,7 @@ export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slope
 export interface ServicePad extends ServicePoint { heading: number; grade: number; side: number; halfWidth: number; halfLength: number }
 export interface ServiceBarrier extends RoadEdge<ServicePoint> { height?: number }
 export interface ServiceCrossover { kind: 'over' | 'under'; access: RoadEdge<ServiceAccessPoint>[]; barriers: ServiceBarrier[]; supports: ServicePoint[]; deck: number; roof?: number }
-export interface ServiceGround { pads: ServicePad[]; access: RoadEdge<ServiceAccessPoint>[]; elevated: boolean; barriers: ServiceBarrier[]; crossover?: ServiceCrossover }
+export interface ServiceGround { pads: ServicePad[]; access: RoadEdge<ServiceAccessPoint>[]; elevated: boolean; barriers: ServiceBarrier[]; crossover?: ServiceCrossover; excavation?: ServicePoint & { radius: number; bottom: number } }
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 export function padPoint(pad: ServicePad, x: number, along: number, height = 0): ServicePoint {
@@ -54,6 +54,14 @@ export class ServiceTerrain {
 
   height(x: number, z: number, ground: number, roadDistance: number, roadHalfWidth: number): number {
     const foundation = ground;
+    for (const site of this.sites) if (site.excavation) {
+      const hole = site.excavation, distance = Math.hypot(x - hole.x, z - hole.z);
+      const rim = hole.y - 0.3;
+      if (distance < hole.radius + 28) {
+        const target = distance <= hole.radius ? hole.bottom : hole.bottom + (rim - hole.bottom) * smooth((distance - hole.radius) / 8);
+        ground += (Math.min(ground, target) - ground) * (1 - smooth((distance - hole.radius - 12) / 16));
+      }
+    }
     let crossingFloor = Infinity;
     const crossing = this.crossIndex.nearest(x, z, 22);
     if (crossing) {
@@ -83,7 +91,8 @@ export class ServiceTerrain {
   }
 
   contains(x: number, z: number): boolean {
-    return this.pads.some(pad => { const p = this.local(pad, x, z); return Math.abs(p.x) < pad.halfWidth + 8 && Math.abs(p.along) < pad.halfLength + 8; })
+    return this.sites.some(site => site.excavation && Math.hypot(x - site.excavation.x, z - site.excavation.z) < site.excavation.radius + 20)
+      || this.pads.some(pad => { const p = this.local(pad, x, z); return Math.abs(p.x) < pad.halfWidth + 8 && Math.abs(p.along) < pad.halfLength + 8; })
       || !!this.index.nearest(x, z, 10) || !!this.crossIndex.nearest(x, z, 12);
   }
 
@@ -97,7 +106,8 @@ export class ServiceTerrain {
   }
 
   forChunk(cx: number, cz: number): ServiceGround[] {
-    return this.sites.filter(site => site.pads.some(pad => Math.abs(pad.x - (cx + 0.5) * 256) < 350 && Math.abs(pad.z - (cz + 0.5) * 256) < 350)
+    return this.sites.filter(site => site.excavation && Math.abs(site.excavation.x - (cx + 0.5) * 256) < 256 && Math.abs(site.excavation.z - (cz + 0.5) * 256) < 256
+      || site.pads.some(pad => Math.abs(pad.x - (cx + 0.5) * 256) < 350 && Math.abs(pad.z - (cz + 0.5) * 256) < 350)
       || [...site.access, ...site.crossover?.access ?? []].some(edge => Math.abs(edge.a.x - (cx + 0.5) * 256) < 170 && Math.abs(edge.a.z - (cz + 0.5) * 256) < 170));
   }
 }
