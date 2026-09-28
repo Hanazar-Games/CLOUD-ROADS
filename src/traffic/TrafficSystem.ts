@@ -10,7 +10,7 @@ import { constrainVehicle } from '../service/ServiceCollision';
 import { vehicleSupport } from '../vehicle/VehicleSolids';
 
 export const MAX_TRAFFIC = 120;
-const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15'];
+const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck'];
 const paints = [0xd8dedb, 0x29485e, 0x377d78, 0xa73d32, 0xdca632, 0x353d43, 0x7d658e, 0x9b7453, 0x83b3bb, 0xd4bc97];
 type Position = { x: number; y: number; z: number };
 export interface TrafficEntry {

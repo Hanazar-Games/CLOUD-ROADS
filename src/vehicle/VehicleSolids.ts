@@ -13,8 +13,8 @@ export function vehicleSolids(car: VehiclePhysics): VehicleSolid[] {
   if (passenger) {
     const sill = p.shape === 'supercar' ? 0.145 : p.shape === 'roadster' ? 0.22 : 0.28;
     add(body, body.front, body.rear, sill);
-    if (p.shape !== 'roadster') add(body, p.body === 'pickup' ? 1.15 : 0.55,
-      p.body === 'pickup' ? -0.2 : p.shape === 'suv' || p.body === 'hatchback' ? body.rear + 0.3 : -1.1, p.height - ride, p.width - 0.16);
+    if (p.shape !== 'roadster') add(body, p.body === 'limousine' ? 2.1 : p.body === 'pickup' ? 1.15 : 0.55,
+      p.body === 'limousine' ? -2.2 : p.body === 'pickup' ? -0.2 : p.shape === 'suv' || p.body === 'hatchback' ? body.rear + 0.3 : -1.1, p.height - ride, p.width - 0.16);
     else {
       add(body, 0.5, -0.95, 0.43, p.width - 0.3);
       if (car.roofOpen < 0.05) add(body, 0.625, -1.225, 1.1225, 1.63, 1.05);

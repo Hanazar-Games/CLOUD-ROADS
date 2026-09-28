@@ -644,7 +644,7 @@ export class Game {
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight);
       const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
-      const condition = this.world.garage.shelter(x, y, z) ? '地下车库 · 干燥路面' : this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
+      const condition = this.world.garages.some(g => g.shelter(x, y, z)) ? '地下车库 · 干燥路面' : this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
       element('season-status').textContent = `${seasonNames[season.kind]} · ${season.temperature(y).toFixed(1)} °C · ${precipitation} · ${condition}`;
       element('drive-condition').textContent = `${seasonNames[season.kind]} · ${season.temperature(roadHeight).toFixed(0)} °C · ${condition}`;
       element('drive-condition').dataset.snow = String(snow > 0.15 && this.world.shelter < 0.9);
@@ -706,9 +706,10 @@ export class Game {
         'NPC density': `${this.world.traffic.density}%`,
         'NPC limit': this.world.traffic.limit,
         'NPC target': this.world.traffic.targetCount,
-        'Garage floor': this.world.garage.floor(x, y, z) ?? 'outside',
+        'Garage floor': this.world.garages.map(g => g.floor(x, y, z)).find(floor => floor !== undefined) ?? 'outside',
         'Garage position': `${this.world.garage.position.x}, ${this.world.garage.position.y.toFixed(2)}, ${this.world.garage.position.z}`,
-        'Garage vehicles': this.world.parkedVehicles.fleet.entries.filter(e => e.id.startsWith('garage:')).length,
+        'Garage vehicles': this.world.parkedVehicles.fleet.entries.filter(e => e.id.startsWith('garage:main:')).length,
+        'Service garages': this.world.garages.length - 1,
         'NPC motion': this.world.traffic.entries.map(e => `${e.id}:${e.distance.toFixed(1)}`).join(', '),
         'Transmission': `${this.driving.car.transmission.mode} / ${this.driving.car.transmission.gear}`,
         'Window opening': this.driving.systems.windowOpen.toFixed(2),
@@ -740,6 +741,8 @@ export class Game {
         'Road wetness': `${Math.round(this.weather.wetness * 100)}%`,
         Tunnels: this.world.tunnels.length, 'Tunnel shelter': `${Math.round(this.world.shelter * 100)}%`,
         'Service areas': this.world.services.length,
+        'Service facilities': this.world.services.map(s => s.facility ?? 'garden').join(', ') || '—',
+        'Service merge lanes': this.world.services.filter(s => s.mergeEnd).length,
         'Arch bays': this.world.bridgeMesh.archBridges.bayCount, 'Arch ribs': this.world.bridgeMesh.archBridges.ribs.count,
         'Cable spans': this.world.bridgeMesh.cableBridges.spanCount, 'Bridgeheads': this.world.bridgeMesh.abutments.endCount,
         'Climb range': absoluteElevation(this.world.options) ? `${this.world.options.elevationMode} ${this.world.options.altitudeMin}–${this.world.options.altitudeMax} m`

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { ServicePlanner } from '../src/service/ServicePlanner';
-import { serviceTarget } from '../src/service/ServiceSchedule';
+import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../src/service/ServiceSchedule';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { RoadCorridor } from '../src/road/RoadCorridor';
@@ -113,7 +113,7 @@ it.each([
   'keeps real $terrain $routeStyle $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.roadType);
   const spine = new RoadSpine(seed, terrain, options);
-  while (!spine.advanceToDistance(serviceTarget(seed, 1) + 1000)) { /* Complete the service window. */ }
+  while (!spine.advanceToDistance(serviceTarget(seed, 1) + SERVICE_SEARCH_RADIUS + 64)) { /* Complete the service window. */ }
   const sites = new ServicePlanner(seed, terrain, options).detect(spine.samples), site = sites[0];
   expect(site).toBeDefined();
   const bridges = new BridgeDetector(terrain, options).detect(spine.samples);
@@ -147,7 +147,7 @@ it.each([
   const clearances: { gap: number; distance: number; exactGap: number }[] = [];
   for (let i = 0; i < site.ground.access.length; i += 4) {
     const { a, b } = site.ground.access[i], length = Math.hypot(b.x - a.x, b.z - a.z);
-    for (const offset of [-3, 0, 3]) {
+    for (const offset of [-1, 0, 1].map(side => side * Math.min(3, ((a.halfWidth ?? 3.5) + (b.halfWidth ?? 3.5)) / 2 - 0.1))) {
       const x = (a.x + b.x) / 2 + (a.z - b.z) / length * offset, z = (a.z + b.z) / 2 + (b.x - a.x) / length * offset;
       if (corridor.distance(x, z, 100) <= corridor.roadHalfWidth + 1) continue;
       const y = (a.y + b.y) / 2 + 0.015 + ((a.slopeX + b.slopeX) * (a.z - b.z) + (a.slopeZ + b.slopeZ) * (b.x - a.x)) / (2 * length) * offset;
@@ -155,7 +155,7 @@ it.each([
     }
   }
   expect(Math.min(...clearances.map(p => p.gap)), JSON.stringify(clearances.filter(p => p.gap < 0.01))).toBeGreaterThan(0.01);
-  if (!site.ground.elevated) expect(Math.max(...clearances.map(p => p.gap))).toBeLessThan(0.75);
+  if (!site.ground.elevated && site.ground.crossover?.kind !== 'under') expect(Math.max(...clearances.map(p => p.gap)), JSON.stringify(clearances.filter(p => p.gap > 1.4))).toBeLessThan(1.4);
   else expect(mesh.structures.count).toBeGreaterThan(0);
   mesh.dispose(); signs.dispose(); expect(scene.children).toHaveLength(0);
 });

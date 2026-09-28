@@ -64,8 +64,8 @@ export class VehicleMesh {
     };
     const amber = this.material(0xe6a02d, 0.3); amber.emissive.setHex(0xd57516); amber.emissiveIntensity = 0.25;
     const kit = { block, paint, trim, metal, glass, lamp, amber, wood: this.material(0x8b7859, 0.95),
-      cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group) => {
-        const mesh = new Mesh(this.geometry(new CylinderGeometry(radius, radius, length, 12)), material);
+      cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group, bottomRadius = radius) => {
+        const mesh = new Mesh(this.geometry(new CylinderGeometry(radius, bottomRadius, length, 16)), material);
         mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh;
       } };
     if (profile.shape === 'roadster') {
@@ -375,12 +375,12 @@ export class VehicleMesh {
     }
     block(w - 0.18, 0.24, length - 0.12, 0, -0.2, 0, trim);
     const passenger = p.shape === 'sedan' || p.shape === 'suv' || p.shape === 'supercar';
-    const cabFront = passenger ? p.body === 'pickup' ? -1.35 : -0.8 : nose + 0.08;
-    const cabBack = passenger ? p.body === 'pickup' ? 0.3 : p.shape === 'suv' || p.body === 'hatchback' ? length / 2 - 0.12 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (length > 6 ? 2.5 : 2);
+    const cabFront = passenger ? p.body === 'limousine' ? -2.45 : p.body === 'pickup' ? -1.35 : -0.8 : nose + 0.08;
+    const cabBack = passenger ? p.body === 'limousine' ? 2.5 : p.body === 'pickup' ? 0.3 : p.shape === 'suv' || p.body === 'hatchback' ? length / 2 - 0.12 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (length > 6 ? 2.5 : 2);
     const cabLength = cabBack - cabFront, cabCenter = (cabFront + cabBack) / 2;
     const sill = p.shape === 'supercar' ? 0.08 : passenger ? 0.18 : 0.58;
-    const roof = passenger || p.body === 'van' ? top : Math.min(top, p.eye.y + 0.4);
-    const driverBack = passenger ? Math.min(cabCenter + 0.1, cabBack) : cabBack;
+    const roof = p.body === 'expedition' ? top - 0.4 : passenger || p.body === 'van' ? top : Math.min(top, p.eye.y + 0.4);
+    const driverBack = p.body === 'limousine' ? -0.65 : passenger ? Math.min(cabCenter + 0.1, cabBack) : cabBack;
     const doorFront = cabFront + 0.06, doorBack = driverBack - 0.06;
     if (passenger) {
       const bottom = -0.35, wheelY = p.radius - this.rideHeight, arch = p.radius + 0.05;
@@ -403,7 +403,7 @@ export class VehicleMesh {
         panel.position.x = side < 0 ? -w / 2 + 0.06 : w / 2; panel.castShadow = panel.receiveShadow = true; this.chassis.add(panel);
       }
       for (const z of p.body === 'pickup' ? [nose + 0.025] : [nose + 0.025, end - 0.025]) block(w - 0.08, sill - bottom, 0.05, 0, (sill + bottom) / 2, z, paint);
-    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane' || p.body === 'dumptruck' || p.body === 'tanker' || p.body === 'firetruck') {
+    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane' || p.body === 'dumptruck' || p.body === 'tanker' || p.body === 'firetruck' || p.body === 'mixer') {
       block(w, 0.24, cabLength, 0, -0.43, cabCenter);
       for (const z of [cabFront + 0.025, cabBack - 0.025]) block(w, sill + 0.31, 0.05, 0, (sill - 0.31) / 2, z);
       block(1.35, 0.22, length - cabLength, 0, -0.3, (cabBack + length / 2) / 2, trim);
@@ -470,7 +470,7 @@ export class VehicleMesh {
     this.steering.rotation.x = -0.45; this.chassis.add(this.steering);
     this.steering.add(new Mesh(this.geometry(new TorusGeometry(0.18, 0.018, 6, 24)), trim));
     block(0.31, 0.035, 0.03, 0, 0, 0, metal, this.steering);
-    if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'firetruck') {
+    if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'firetruck' && p.body !== 'mixer') {
       this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight, !p.body);
     } else if (p.shape === 'tractor') {
       block(1.6, 0.14, 1.25, 0, 0.08, -p.trailer!.hitchAlong, metal);

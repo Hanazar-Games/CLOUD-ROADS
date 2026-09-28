@@ -7,7 +7,7 @@ interface ProtectionContext {
   options: Readonly<WorldOptions>;
   bridges: readonly { start: RoadSample; end: RoadSample }[];
   tunnels: readonly { start: RoadSample; end: RoadSample }[];
-  services: readonly { start: number; end: number }[];
+  services: readonly { start: number; end: number; mergeEnd?: number }[];
 }
 
 export function hasBridgeScreen(seed: string, sample: RoadSample, options: Readonly<WorldOptions>): boolean {
@@ -25,7 +25,8 @@ export function hasRoadBarrier(context: ProtectionContext, sample: RoadSample, s
   return hashSeed(`${context.seed}:guardrail:${Math.floor(distance / 160)}:${side}`) % 4 !== 0;
 }
 
-export function isServiceAccess(options: Readonly<WorldOptions>, services: readonly { start: number; end: number }[], distance: number, side: number): boolean {
-  return (options.roadType === 'highway' || side > 0) && services.some(site =>
-    distance >= site.start + 15 && distance <= site.start + 90 || distance >= site.end - 90 && distance <= site.end - 15);
+export function isServiceAccess(options: Readonly<WorldOptions>, services: readonly { start: number; end: number; mergeEnd?: number }[], distance: number, side: number): boolean {
+  return (options.roadType === 'highway' && !options.oneWay || side > 0) && services.some(site =>
+    site.mergeEnd ? Math.abs(distance - (site.start + site.end) / 2) >= 155 && Math.abs(distance - (site.start + site.end) / 2) <= site.mergeEnd
+      : distance >= site.start + 15 && distance <= site.start + 90 || distance >= site.end - 90 && distance <= site.end - 15);
 }

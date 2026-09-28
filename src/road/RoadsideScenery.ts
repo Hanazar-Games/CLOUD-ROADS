@@ -40,7 +40,7 @@ export class RoadsideScenery {
       for (let i = 1; i < samples.length; i++) {
         const s = samples[i], previous = samples[i - 1], d = s.distance;
         const tunnel = tunnels.some(b => b.start.routeId === s.routeId && d >= b.start.distance - 12 && d <= b.end.distance + 12);
-        const access = s.opening !== undefined || services.some(site => site.sample.routeId === s.routeId && d >= site.start - 20 && d <= site.end + 20);
+        const access = s.opening !== undefined || services.some(site => site.sample.routeId === s.routeId && d >= Math.min(site.start, site.sample.distance - (site.mergeEnd ?? 0)) - 20 && d <= Math.max(site.end, site.sample.distance + (site.mergeEnd ?? 0)) + 20);
         if (s.routeId !== previous.routeId || tunnel || access) { last.clear(); continue; }
         const bridge = bridges.some(b => b.start.routeId === s.routeId && previous.distance >= b.start.distance && d <= b.end.distance);
         const cos = Math.cos(s.heading), sin = Math.sin(s.heading), width = this.profile.outerHalfWidth;

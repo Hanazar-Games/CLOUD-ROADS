@@ -10,7 +10,7 @@ import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision
 import { serviceObstacles } from '../service/ServiceAmenities';
 import { vehicleSupport } from './VehicleSolids';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage'>>
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage' | 'garages'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
 
 export class DrivingSurface {
@@ -45,9 +45,11 @@ export class DrivingSurface {
 
   private ground(x: number, z: number, ceiling = Infinity): SurfaceContact {
     const reference = Number.isFinite(ceiling) ? ceiling : this.level;
-    const garage = this.world.garage?.surface(x, z, reference, ceiling);
-    if (garage !== undefined) return { height: garage, grip: this.world.garage!.shelter(x, garage + 0.5, z) ? 1
-      : (1 - this.wet * 0.38) * (this.world.season?.grip(garage) ?? 1) };
+    for (const garage of this.garages) {
+      const height = garage.surface(x, z, reference, ceiling);
+      if (height !== undefined) return { height, grip: garage.shelter(x, height + 0.5, z) ? 1
+        : (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
+    }
     const surfaces: SurfaceContact[] = [];
     const add = (height: number, sheltered = false) => {
       if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9))
@@ -78,13 +80,13 @@ export class DrivingSurface {
       const height = pad.y + pad.grade * along;
       if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength) add(height);
     }
-    for (const i of this.accessIndex.within(x - 3.5, z - 3.5, x + 3.5, z + 3.5)) {
+    for (const i of this.accessIndex.within(x - 8, z - 8, x + 8, z + 8)) {
       const { a, b } = this.access[i], dx = b.x - a.x, dz = b.z - a.z;
       const along = ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz);
       const joint = 0.4 / Math.hypot(dx, dz);
       if (along < -joint || along > 1 + joint) continue;
       const t = along;
-      if (Math.hypot(x - a.x - dx * t, z - a.z - dz * t) > 3.5) continue;
+      if (Math.hypot(x - a.x - dx * t, z - a.z - dz * t) > (a.halfWidth ?? 3.5) + ((b.halfWidth ?? 3.5) - (a.halfWidth ?? 3.5)) * t) continue;
       const height = a.y + (b.y - a.y) * t + 0.015
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
@@ -138,7 +140,7 @@ export class DrivingSurface {
   }
 
   inTunnel(x: number, z: number, margin = 0): boolean {
-    if (this.world.garage?.shelter(x, (this.level ?? Infinity) + 1.5, z)) return true;
+    if (this.garages.some(g => g.shelter(x, (this.level ?? Infinity) + 1.5, z))) return true;
     if (this.level !== undefined && this.world.services.some(site => crossoverShelter(site.ground.crossover, x, this.level!, z) > 0.5)) return true;
     const route = this.route(x, z), sample = route.road.nearest(x, z);
     return !!sample && Math.hypot(x - sample.position.x, z - sample.position.z) < this.profile.outerHalfWidth + 1
@@ -257,15 +259,15 @@ export class DrivingSurface {
 
   ceiling(x: number, z: number, feet: number): number {
     this.refreshServices();
-    let ceiling = this.world.garage?.ceiling(x, z, feet) ?? Infinity;
+    let ceiling = Math.min(Infinity, ...this.garages.map(g => g.ceiling(x, z, feet)));
     for (const site of this.sites) if (site.ground.elevated) for (const pad of site.ground.pads) {
       const dx = x - pad.x, dz = z - pad.z;
       const along = dx * Math.sin(pad.heading) - dz * Math.cos(pad.heading), height = pad.y + pad.grade * along;
       if (feet < height - 0.15 && Math.abs(along) <= pad.halfLength
         && Math.abs(dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading)) <= pad.halfWidth) ceiling = Math.min(ceiling, height - 1.45);
     }
-    const access = this.accessIndex.nearest(x, z, 3.8);
-    if (access && this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[access.index])
+    const access = this.accessIndex.nearest(x, z, 8);
+    if (access && access.distanceSquared <= ((this.access[access.index].a.halfWidth ?? 3.5) + 0.3) ** 2 && this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[access.index])
       || site.ground.crossover?.access.includes(this.access[access.index]))) {
       const { a, b } = this.access[access.index], t = access.t;
       const height = a.y + (b.y - a.y) * t
@@ -307,6 +309,8 @@ export class DrivingSurface {
     }) ?? false;
   }
 
+  private get garages() { return this.world.garages ?? (this.world.garage ? [this.world.garage] : []); }
+
   private refreshServices(): void {
     if (this.sites === this.world.services) return;
     this.sites = this.world.services;
@@ -319,12 +323,13 @@ export class DrivingSurface {
   private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75): boolean {
     this.refreshServices();
     let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet, height) ?? false;
-    hit = (this.world.garage?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
+    for (const garage of this.garages) hit = garage.constrain(body, previousX, previousZ, radius, feet, height) || hit;
     hit = (this.world.traffic?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
     for (const site of this.sites) for (const pad of site.ground.pads) {
       if (pad.x < Math.min(body.x, previousX) - 150 || pad.x > Math.max(body.x, previousX) + 150
         || pad.z < Math.min(body.z, previousZ) - 150 || pad.z > Math.max(body.z, previousZ) + 150) continue;
-      for (const [x, along, width, length, height] of serviceObstacles) {
+      for (const [x, along, width, length, obstacleHeight] of serviceObstacles) {
+        const height = site.facility === 'mall' && x === 53 ? 16 : obstacleHeight;
         const p = padPoint(pad, x * pad.side, along);
         if (feet < p.y - 0.6 || feet > p.y + height) continue;
         hit = constrainObstacle(body, previousX, previousZ, radius, { ...p, heading: pad.heading, width, front: length / 2, rear: -length / 2 }) || hit;

@@ -4,7 +4,7 @@ import type { VehicleProfile } from './VehicleConfig';
 export type VehicleBlock = (w: number, h: number, l: number, x: number, y: number, z: number, material?: MeshStandardMaterial, parent?: Group) => Mesh;
 export interface VehicleDetailKit {
   block: VehicleBlock;
-  cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group) => Mesh;
+  cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group, bottomRadius?: number) => Mesh;
   paint: MeshStandardMaterial; trim: MeshStandardMaterial; metal: MeshStandardMaterial;
   glass: MeshStandardMaterial; lamp: MeshStandardMaterial; wood: MeshStandardMaterial; amber: MeshStandardMaterial;
 }

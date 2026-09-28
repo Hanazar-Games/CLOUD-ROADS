@@ -11,7 +11,9 @@ export class VehicleOperations {
   constructor(readonly profile: VehicleProfile) {}
   label(action: VehicleOperation): string {
     const p = this.profile;
-    if (action === 'cargo' && p.body === 'tanker') return '';
+    if (action === 'cargo' && (p.body === 'tanker' || p.body === 'mixer')) return '';
+    if (action === 'aux' && p.body === 'mixer') return '卸料溜槽';
+    if (action === 'aux' && p.body === 'schoolbus') return '侧面停车提示牌';
     if (action === 'cargo' && p.body === 'dumptruck') return '自卸货斗';
     if (action === 'cargo' && p.body === 'pickup') return '皮卡尾板';
     if (action === 'cargo' && p.body === 'firetruck') return '';

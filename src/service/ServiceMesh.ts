@@ -1,4 +1,5 @@
 import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Vector2, type Scene } from 'three';
+import { RoadIndex } from '../road/RoadIndex';
 import type { ServiceArea } from './ServicePlanner';
 import { padPoint, type ServicePad, type ServicePoint, type ServiceCrossover } from './ServiceTerrain';
 import type { WorldOptions } from '../world/WorldOptions';
@@ -25,10 +26,10 @@ export class ServiceMesh {
   private readonly materialOrigin = new Vector2();
   readonly structures = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.materialOrigin), 8000);
   readonly railings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xaebdc0, metalness: 0.6, roughness: 0.45 }), 16000);
-  readonly pavement = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x41494a, roughness: 0.87 }));
+  readonly pavement = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x41494a, roughness: 0.87, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
   readonly buildings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.78 }), 8000);
   readonly windows = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x395764, metalness: 0.3, roughness: 0.22, emissive: 0xffd6a1, emissiveIntensity: 0 }), 2000);
-  readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xece7ce, roughness: 0.8 }), 16000);
+  readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xece7ce, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 16000);
   readonly lights = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffebc7, emissive: 0xffd39a, emissiveIntensity: 1.6 }), 512);
   readonly roofs = new InstancedMesh(roofGeometry(), new MeshStandardMaterial({ roughness: 0.7, metalness: 0.2 }), 64);
   readonly landscaping = new InstancedMesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ roughness: 1, flatShading: true }), 512);
@@ -59,31 +60,58 @@ export class ServiceMesh {
       const data: number[] = [];
       const vertex = (point: ServicePoint, height = 0): Point => [point.x - this.anchorX, point.y + height, point.z - this.anchorZ];
       for (const site of sites) {
+        const underpass = new RoadIndex(site.ground.crossover?.kind === 'under' ? site.ground.crossover.access : []);
         for (const pad of site.ground.pads) {
           quad(data, vertex(padPoint(pad, -pad.halfWidth, -pad.halfLength)), vertex(padPoint(pad, pad.halfWidth, -pad.halfLength)), vertex(padPoint(pad, -pad.halfWidth, pad.halfLength)), vertex(padPoint(pad, pad.halfWidth, pad.halfLength)));
-          this.build(pad, serviceArchitecture(this.options.terrain, site.id));
-          if (site.ground.elevated) for (let along = -pad.halfLength + 20; along < pad.halfLength; along += 30) {
+          this.build(pad, serviceArchitecture(this.options.terrain, site.id), site);
+          if (site.ground.elevated) for (let along = -Math.floor((pad.halfLength - 20) / 30) * 30; along < pad.halfLength; along += 30) {
             this.box(this.structures, pad, 0, along, -1.7, pad.halfWidth * 2, 0.6, 2, 0xffffff, true);
             for (let x = -Math.floor((pad.halfWidth - 12) / 32) * 32; x < pad.halfWidth; x += 32) this.column(pad, x, along, -2);
           }
         }
         for (const { a, b } of site.ground.access) {
-          const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length * 3.5, nz = (b.x - a.x) / length * 3.5;
+          const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
+          const aw = a.halfWidth ?? 3.5, bw = b.halfWidth ?? 3.5;
           const ay = a.slopeX * nx + a.slopeZ * nz, by = b.slopeX * nx + b.slopeZ * nz;
-          quad(data, vertex({ x: a.x - nx, y: a.y - ay, z: a.z - nz }, 0.015), vertex({ x: a.x + nx, y: a.y + ay, z: a.z + nz }, 0.015),
-            vertex({ x: b.x - nx, y: b.y - by, z: b.z - nz }, 0.015), vertex({ x: b.x + nx, y: b.y + by, z: b.z + nz }, 0.015));
+          quad(data, vertex({ x: a.x - nx * aw, y: a.y - ay * aw, z: a.z - nz * aw }, 0.015), vertex({ x: a.x + nx * aw, y: a.y + ay * aw, z: a.z + nz * aw }, 0.015),
+            vertex({ x: b.x - nx * bw, y: b.y - by * bw, z: b.z - nz * bw }, 0.015), vertex({ x: b.x + nx * bw, y: b.y + by * bw, z: b.z + nz * bw }, 0.015));
           const insidePad = site.ground.pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
             && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < pad.halfLength);
-          if (site.ground.elevated && !insidePad) {
-            this.edge(this.structures, a, b, 7.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx / 3.5 + (a.slopeZ + b.slopeZ) / 2 * nz / 3.5);
-            if (Math.floor(a.z / 32) !== Math.floor(b.z / 32)) this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
+          if (!insidePad) {
+            this.edge(this.structures, a, b, Math.max(aw, bw) * 2 + 0.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx + (a.slopeZ + b.slopeZ) / 2 * nz);
+            if (site.ground.elevated && !underpass.nearest(a.x, a.z, 7) && Math.floor(a.z / 32) !== Math.floor(b.z / 32)) this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
           }
-          if (!insidePad) for (const side of [-1, 1]) this.edge(this.markings,
-            { x: a.x + nx * side * 0.91, y: a.y + ay * side * 0.91, z: a.z + nz * side * 0.91 },
-            { x: b.x + nx * side * 0.91, y: b.y + by * side * 0.91, z: b.z + nz * side * 0.91 }, 0.14, 0.018, 0.04);
+          if (!insidePad) for (const side of [-1, 1]) {
+            if (a.merge && side !== a.side && Math.floor(Math.hypot(a.x - site.sample.position.x, a.z - site.sample.position.z) / 4) % 3 !== 0) continue;
+            const wa = Math.max(0.05, aw - (a.merge && side === a.side ? 0.7 : 0.08)), wb = Math.max(0.05, bw - (a.merge && side === a.side ? 0.7 : 0.08));
+            this.edge(this.markings, { x: a.x + nx * side * wa, y: a.y + ay * side * wa, z: a.z + nz * side * wa },
+              { x: b.x + nx * side * wb, y: b.y + by * side * wb, z: b.z + nz * side * wb }, 0.14, 0.018, 0.04);
+          }
+        }
+        if (site.mergeEnd) for (const side of this.options.oneWay ? [1] : [-1, 1]) for (const distance of [300, 475, 555]) {
+          const direction = this.options.oneWay ? site.sample.routeId === 'back' ? -1 : 1 : side;
+          const edge = site.ground.access.find(({ a }) => a.merge && a.side === side
+            && Math.abs((a.x - site.sample.position.x) * Math.sin(site.sample.heading) - (a.z - site.sample.position.z) * Math.cos(site.sample.heading) - direction * distance) < 3);
+          if (!edge) continue;
+          const { a, b } = edge, length = Math.hypot(b.x - a.x, b.z - a.z), dx = (b.x - a.x) / length * direction, dz = (b.z - a.z) / length * direction;
+          const nx = (a.z - b.z) / length * side, nz = (b.x - a.x) / length * side;
+          const point = (along: number, lateral: number) => {
+            const x = a.x + dx * along + nx * lateral, z = a.z + dz * along + nz * lateral;
+            return { x, z, y: a.y + a.slopeX * (x - a.x) + a.slopeZ * (z - a.z) };
+          };
+          const end = point(3, distance > 400 ? -0.8 : 0);
+          this.edge(this.markings, point(-3, 0), end, 0.2, 0.025, 0.045);
+          for (const wing of [-1, 1]) this.edge(this.markings, point(1.3, (distance > 400 ? -0.8 : 0) + wing * 0.65), end, 0.18, 0.025, 0.045);
         }
         if (site.ground.crossover) this.crossover(site.ground.crossover, site.ground.pads[0], data, vertex);
-        for (const { a, b } of [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]) {
+        const rails = [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []], joins = new Map<string, number>();
+        const key = (p: ServicePoint) => `${Math.round(p.x * 10)},${Math.round(p.y * 10)},${Math.round(p.z * 10)}`;
+        for (const rail of rails) for (const p of [rail.a, rail.b]) joins.set(key(p), (joins.get(key(p)) ?? 0) + 1);
+        for (const { a, b } of rails) {
+          for (const [end, other] of [[a, b], [b, a]]) if (joins.get(key(end)) === 1) {
+            const length = Math.hypot(other.x - end.x, other.z - end.z), t = Math.min(0.45, 1.2 / length);
+            this.edge(this.markings, end, { x: end.x + (other.x - end.x) * t, y: end.y + (other.y - end.y) * t, z: end.z + (other.z - end.z) * t }, 0.18, 0.24, 0.95, 0, 0xe6bb5e);
+          }
           for (const height of [0.45, 0.95, 1.4]) this.edge(this.railings, a, b, 0.14, 0.14, height);
           const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 4));
           for (let i = 0; i <= count; i++) {
@@ -169,12 +197,16 @@ export class ServiceMesh {
     mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(color));
   }
 
-  private build(pad: ServicePad, architecture: ServiceArchitecture): void {
+  private build(pad: ServicePad, architecture: ServiceArchitecture, site: ServiceArea): void {
     const box = (x: number, along: number, y: number, w: number, h: number, l: number, color: number, followGrade = false) =>
       this.box(this.buildings, pad, x * pad.side, along, y, w, h, l, color, followGrade);
     const facade = architecture === 'courtyard' ? 0xc7ac86 : architecture === 'lodge' ? 0x8c7357 : 0xc1cbd0;
     box(0, 0, -0.8, pad.halfWidth * 2, 1.3, pad.halfLength * 2, 0x7e827b, true);
-    for (const x of [-pad.halfWidth, pad.halfWidth]) box(x, 0, 0.14, 0.35, 0.28, pad.halfLength * 2, 0xb8b6a5, true);
+    for (const x of [-pad.halfWidth, pad.halfWidth]) {
+      if (x > 0 && site.garages?.some(g => g.id.endsWith(`:${pad.side}`))) {
+        for (const a of [-1, 1]) box(x, a * (pad.halfLength + 32) / 2, 0.14, 0.35, 0.28, pad.halfLength - 32, 0xb8b6a5, true);
+      } else box(x, 0, 0.14, 0.35, 0.28, pad.halfLength * 2, 0xb8b6a5, true);
+    }
     for (const along of [-pad.halfLength, pad.halfLength]) box(5.5, along, 0.14, pad.halfWidth * 2 - 11, 0.28, 0.35, 0xb8b6a5, true);
     box(15, 28, 0.25, 23, 0.8, 32, 0x98978d, true);
     box(15, 28, 2.8, 22, 5, 30, facade);
@@ -237,6 +269,7 @@ export class ServiceMesh {
       this.box(this.lights, pad, 14 * pad.side, along, 5.25, 12, 0.1, 0.5, 0xffffff);
       this.lampPositions.push(padPoint(pad, 14 * pad.side, along, 5));
     }
+    this.facility(pad, site);
     this.parking(pad, architecture);
     this.amenities(pad);
     serviceDetails(architecture, box,
@@ -271,6 +304,40 @@ export class ServiceMesh {
       box(-32, along, 3.8, 0.2, 7.6, 0.2, 0x58696d);
       this.box(this.lights, pad, -32 * pad.side, along, 7.6, 1.2, 0.15, 1.2, 0xffffff);
       this.lampPositions.push(padPoint(pad, -32 * pad.side, along, 7.4));
+    }
+  }
+
+  private facility(pad: ServicePad, site: ServiceArea): void {
+    const box = (x: number, a: number, y: number, w: number, h: number, l: number, color: number) => this.box(this.buildings, pad, x * pad.side, a, y, w, h, l, color);
+    if (site.facility === 'mall') {
+      for (const floor of [1, 2]) {
+        const base = 7.7 + (floor - 1) * 4;
+        box(53, 30, base + 1.8, 26, 3.6, 35, 0x8fa5ab);
+        box(53, 30, base + 3.8, 28, 0.35, 37, 0xd1d8d2);
+        for (const side of [-1, 1]) for (let a = 15; a <= 45; a += 5) {
+          this.box(this.windows, pad, (53 + side * 13.05) * pad.side, a, base + 1.7, 0.08, 2.6, 4.4, 0xffffff);
+          box(53 + side * 13.15, a - 2.4, base + 1.7, 0.12, 3.5, 0.14, 0x405c69);
+        }
+        for (const a of [12.45, 47.55]) for (const x of [44, 50, 56, 62]) {
+          this.box(this.windows, pad, x * pad.side, a, base + 1.7, 5.5, 2.6, 0.08, 0xffffff);
+          box(x - 2.9, a, base + 1.7, 0.12, 3.5, 0.14, 0x405c69);
+        }
+      }
+      for (const x of [45, 60]) box(x, 31, 16.3, 4.5, 1, 6, 0x627780);
+    }
+    if (site.facility === 'track') {
+      this.box(this.buildings, pad, 10 * pad.side, 144, 0.015, 70, 0.03, 60, 0x6f8a56, true);
+      const point = (angle: number, lane: number) => padPoint(pad, (10 + Math.cos(angle) * (27 + lane)) * pad.side, 144 + Math.sin(angle) * (19 + lane), 0.05);
+      for (let i = 0; i < 96; i++) {
+        const a = i / 96 * Math.PI * 2, b = (i + 1) / 96 * Math.PI * 2;
+        this.edge(this.markings, point(a, 2.2), point(b, 2.2), 4.6, 0.025, 0, 0, 0xb16e57);
+        for (const lane of [0, 1.1, 2.2, 3.3, 4.4]) this.edge(this.markings, point(a, lane), point(b, lane), 0.08, 0.026, 0.02);
+      }
+      for (let i = 0; i < 7; i++) this.box(this.markings, pad, (39 + i % 2 * 0.5) * pad.side, 141 + i * 0.5, 0.09, 0.5, 0.025, 0.5, i % 2 ? 0xf0eee0 : 0x3a4346, true);
+      for (const a of [132, 154]) {
+        box(51, a, 0.5, 1.4, 0.15, 6, 0x94775c);
+        for (const dz of [-2, 2]) box(51, a + dz, 0.25, 0.9, 0.5, 0.16, 0x53646a);
+      }
     }
   }
 

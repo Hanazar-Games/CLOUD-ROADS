@@ -8,7 +8,7 @@ export function serviceCrossover(seed: string, id: number, pads: ServicePad[], s
   const right = pads.find(p => p.side === 1), left = pads.find(p => p.side === -1);
   if (!right || !left) return;
   const kind = hashSeed(`${seed}:return:${id}`) % 2 ? 'over' : 'under';
-  const radius = outerWidth + 23, run = 260, entry = 80, apron = 40, turn = entry + apron + run;
+  const radius = outerWidth + 23, run = 260, entry = Math.max(right.halfLength, left.halfLength) - 30, apron = 40, turn = entry + apron + run;
   const center = { ...right, x: (right.x + left.x) / 2, z: (right.z + left.z) / 2, grade: 0 };
   const edges = samples.slice(1).map((s, i) => ({ a: samples[i].position, b: s.position })), index = new RoadIndex(edges);
   const outline: { x: number; z: number; along: number; blend: number; end: boolean }[] = [];
@@ -41,9 +41,10 @@ export function serviceCrossover(seed: string, id: number, pads: ServicePad[], s
     const nearest = connectionIndex.nearest(p.x, p.z, 12);
     if (!nearest) continue;
     const { a, b } = connections[nearest.index], t = nearest.t;
+    if (nearest.distanceSquared > ((a.halfWidth ?? 3.5) + 3.8) ** 2) continue;
     const y = a.y + (b.y - a.y) * t + (a.slopeX + (b.slopeX - a.slopeX) * t) * (p.x - a.x - (b.x - a.x) * t)
       + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (p.z - a.z - (b.z - a.z) * t);
-    if (Math.abs(p.y - y) > 0.6) return;
+    if (Math.abs(p.y - y) > 0.6 && Math.abs(p.y - y) < 6) return;
   }
   const barriers: ServiceCrossover['barriers'] = [];
   for (const { a, b } of access) {

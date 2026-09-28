@@ -1,7 +1,7 @@
 import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 
 export interface ServicePoint { x: number; y: number; z: number }
-export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slopeZ: number }
+export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slopeZ: number; halfWidth?: number; merge?: boolean; side?: number }
 export interface ServicePad extends ServicePoint { heading: number; grade: number; side: number; halfWidth: number; halfLength: number }
 export interface ServiceBarrier extends RoadEdge<ServicePoint> { height?: number }
 export interface ServiceCrossover { kind: 'over' | 'under'; access: RoadEdge<ServiceAccessPoint>[]; barriers: ServiceBarrier[]; supports: ServicePoint[]; deck: number; roof?: number }
@@ -86,6 +86,16 @@ export class ServiceTerrain {
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
       ground += (Math.min(elevated ? ground : foundation + 5, target) - ground) * (1 - smooth((Math.sqrt(nearest.distanceSquared) - 6) / 16)) * roadBlend;
+    }
+    for (const i of this.index.within(x - 10, z - 10, x + 10, z + 10)) {
+      const { a, b } = this.access[i];
+      if (!a.merge) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz)));
+      const px = a.x + dx * t, pz = a.z + dz * t, width = (a.halfWidth ?? 3.5) + ((b.halfWidth ?? 3.5) - (a.halfWidth ?? 3.5)) * t;
+      if (Math.hypot(x - px, z - pz) > width + 3) continue;
+      const floor = a.y + (b.y - a.y) * t - 0.42 + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - px)
+        + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - pz);
+      ground = Math.min(ground, floor);
     }
     return Math.min(ground, crossingFloor);
   }

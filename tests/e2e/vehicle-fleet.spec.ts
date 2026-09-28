@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { ignite, control, toggleSettings } from './settings';
 
 test('switches every vehicle in place, drives long rigs, and preserves choices through world and graphics resets', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -14,10 +14,10 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   await (await control(page, page.locator('#max-grade'))).fill('0');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
-  await expect(page.locator('#vehicle-kind option')).toHaveCount(27);
+  await expect(page.locator('#vehicle-kind option')).toHaveCount(37);
   await expect(page.locator('#suspension option')).toHaveCount(5);
   await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
-  for (const kind of ['hatchback', 'wagon', 'pickup', 'van', 'camper', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'citybus', 'sedan', 'supercar', 'suv', 'truck5', 'truck8', 'flatbed12', 'crane', 'semi15', 'semi20', 'stake18', 'heavySemi', 'minibus', 'coach', 'coach15', 'doubleDecker', 'motorcycle', 'roadster']) {
+  for (const kind of ['hatchback', 'wagon', 'pickup', 'van', 'camper', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'citybus', 'sedan', 'supercar', 'suv', 'truck5', 'truck8', 'flatbed12', 'crane', 'semi15', 'semi20', 'stake18', 'heavySemi', 'minibus', 'coach', 'coach15', 'doubleDecker', 'motorcycle', 'roadster', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck']) {
     await toggleSettings(page);
     await (await control(page, page.locator('#vehicle-kind'))).selectOption(kind);
     await expect(page.locator('#vehicle-kind')).toHaveValue(kind);

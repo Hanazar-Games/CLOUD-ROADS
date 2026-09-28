@@ -62,7 +62,7 @@ export class RoadFurniture {
         if (tunnels.some(span => span.start.routeId === sample.routeId && distance >= span.start.distance - 8 && distance <= span.end.distance + 8)) continue;
         const sides = [-this.profile.outerHalfWidth - 0.3, this.profile.outerHalfWidth + 0.3];
         const routeServices = services.filter(site => site.sample.routeId === sample.routeId);
-        const serviceAccess = routeServices.some(site => distance >= site.start && distance <= site.end);
+        const serviceAccess = routeServices.some(site => distance >= Math.min(site.start, site.sample.distance - (site.mergeEnd ?? 0)) && distance <= Math.max(site.end, site.sample.distance + (site.mergeEnd ?? 0)));
         const onBridge = bridges.some(span => span.start.routeId === sample.routeId && distance >= span.start.distance && distance <= span.end.distance);
         if (!onBridge) {
           const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,

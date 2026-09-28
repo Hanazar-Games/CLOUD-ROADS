@@ -6,6 +6,7 @@ import { VehicleSystems } from '../vehicle/VehicleSystems';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
 import { ParkedFleet } from './ParkedFleet';
 import type { ServiceArea } from './ServicePlanner';
+import type { ParkedEntry } from './ServiceParking';
 import type { Garage } from '../garage/Garage';
 
 export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGeometry[] {
@@ -46,7 +47,9 @@ export class ParkedVehicles {
   private readonly tilt = new Matrix4();
   private readonly color = new Color();
   private version = -1;
-  private garageFloor: number | undefined;
+  private garageFloor: string | undefined;
+  private garageEntries: readonly (readonly ParkedEntry[])[] = [];
+  private extraEntries: ParkedEntry[] = [];
   private anchorX = 0; private anchorZ = 0;
   constructor(private readonly scene: Scene, seed: string) {
     this.fleet = new ParkedFleet(seed);
@@ -59,9 +62,14 @@ export class ParkedVehicles {
       `);
     };
   }
-  update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3, garage?: Garage): void {
-    this.fleet.sync(sites, garage?.entries);
-    const floor = garage?.floor(camera.x + origin.x, camera.y, camera.z + origin.z);
+  update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3, garage?: Garage, serviceGarages: readonly Garage[] = []): void {
+    const garages = [...garage ? [garage] : [], ...serviceGarages], entries = garages.map(g => g.entries);
+    if (entries.length !== this.garageEntries.length || entries.some((e, i) => e !== this.garageEntries[i])) {
+      this.garageEntries = entries; this.extraEntries = entries.flat();
+    }
+    this.fleet.sync(sites, this.extraEntries);
+    const current = garages.find(g => g.floor(camera.x + origin.x, camera.y, camera.z + origin.z) !== undefined);
+    const floor = current ? `${current.id}:${current.floor(camera.x + origin.x, camera.y, camera.z + origin.z)}` : undefined;
     if (floor !== this.garageFloor) { this.garageFloor = floor; this.version = -1; }
     const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600
       && (e.slot < 0 || !e.id.startsWith('garage:') || floor !== undefined && Math.abs(e.y - camera.y) < 9));

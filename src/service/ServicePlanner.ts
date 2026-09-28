@@ -8,8 +8,11 @@ import { SERVICE_SEARCH_RADIUS, serviceTarget } from './ServiceSchedule';
 import { padPoint, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
 import { PARK_HALF_WIDTH, PARK_HALF_LENGTH } from './ServiceParking';
 import { serviceCrossover } from './ServiceCrossover';
+import { serviceFacility, type ServiceFacility } from './ServiceArchitecture';
+import { MERGE_END, serviceMerge } from './ServiceMerge';
+import { Garage, GARAGE_APRON } from '../garage/Garage';
 
-export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround }
+export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number }
 
 export class ServicePlanner {
   private readonly profile;
@@ -19,11 +22,11 @@ export class ServicePlanner {
     this.profile = roadProfile(options);
   }
 
-  private pad(sample: RoadSample, side: number): ServicePad {
+  private pad(sample: RoadSample, side: number, facility?: ServiceFacility): ServicePad {
     const offset = side * (this.profile.outerHalfWidth + PARK_HALF_WIDTH + 17);
     return { x: sample.position.x + Math.cos(sample.heading) * offset, y: sample.position.y,
       z: sample.position.z + Math.sin(sample.heading) * offset, heading: sample.heading,
-      grade: Math.max(-0.02, Math.min(0.02, sample.grade)), side, halfWidth: PARK_HALF_WIDTH, halfLength: PARK_HALF_LENGTH };
+      grade: facility === 'garage' ? 0 : Math.max(-0.02, Math.min(0.02, sample.grade)), side, halfWidth: PARK_HALF_WIDTH, halfLength: facility === 'track' ? 180 : PARK_HALF_LENGTH };
   }
 
   private clear(pad: ServicePad, index: RoadIndex, edges: RoadEdge[]): boolean {
@@ -51,7 +54,7 @@ export class ServicePlanner {
     const edges: RoadEdge[] = [];
     for (const id of this.cache.keys()) if (serviceTarget(this.seed, id) < first - 2000 || serviceTarget(this.seed, id) > last + 2000) this.cache.delete(id);
     for (let id = Math.max(1, Math.floor(first / 15000)); id <= Math.ceil(last / 15000); id++) {
-      const target = serviceTarget(this.seed, id);
+      const target = serviceTarget(this.seed, id), facility = serviceFacility(this.seed, id);
       if (target - SERVICE_SEARCH_RADIUS < first || target + SERVICE_SEARCH_RADIUS > last) continue;
       let site = this.cache.get(id);
       if (!site) {
@@ -65,8 +68,8 @@ export class ServicePlanner {
           if (sample.structure?.kind === 'tunnel' && sample.distance > sample.structure.start - 245 && sample.distance < sample.structure.end + 245) continue;
           bucket = Math.floor(sample.distance / 24);
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;
-          for (const side of this.options.roadType === 'highway' ? [-1, 1] : [1]) {
-            if (!this.clear(this.pad(sample, side), roadIndex, edges)) { cost = Infinity; break; }
+          for (const side of this.options.roadType === 'highway' && !this.options.oneWay ? [-1, 1] : [1]) {
+            if (!this.clear(this.pad(sample, side, facility), roadIndex, edges)) { cost = Infinity; break; }
             const offset = side * (this.profile.outerHalfWidth + PARK_HALF_WIDTH + 17);
             for (const along of [-PARK_HALF_LENGTH, 0, PARK_HALF_LENGTH]) {
               const x = sample.position.x + Math.cos(sample.heading) * offset + Math.sin(sample.heading) * along;
@@ -77,9 +80,11 @@ export class ServicePlanner {
           if (cost < score) { score = cost; chosen = sample; }
         }
         if (!chosen) continue;
+        const merging = this.options.roadType === 'highway' && chosen.distance - MERGE_END >= first && chosen.distance + MERGE_END <= last
+          && !samples.some(p => Math.abs(p.distance - chosen!.distance) < MERGE_END + 10 && p.structure?.kind === 'tunnel');
         const sample = chosen, pads: ServicePad[] = [], access: ServiceGround['access'] = [];
-        for (const side of this.options.roadType === 'highway' ? [-1, 1] : [1]) {
-          const pad = this.pad(sample, side);
+        for (const side of this.options.roadType === 'highway' && !this.options.oneWay ? [-1, 1] : [1]) {
+          const pad = this.pad(sample, side, facility);
           pads.push(pad);
           const points: ServiceAccessPoint[] = [];
           for (let i = 0; i < samples.length; i++) {
@@ -87,12 +92,12 @@ export class ServicePlanner {
             const along = point.distance - sample.distance;
             if (Math.abs(along) > 220 || Math.floor(point.distance / 4) === Math.floor((samples[i - 1]?.distance ?? -4) / 4)) continue;
             const t = Math.max(0, Math.min(1, (220 - Math.abs(along)) / 140)), blend = t * t * (3 - 2 * t);
-            const { right, normal } = roadFrame(point), lateral = side * (this.profile.outerHalfWidth - 1.5);
+            const { right, normal } = roadFrame(point), lateral = side * (this.profile.outerHalfWidth + (merging ? this.profile.laneWidth / 2 - 0.75 : -1.5));
             const road = { x: point.position.x + right.x * lateral, y: point.position.y + right.y * lateral, z: point.position.z + right.z * lateral };
             const parking = padPoint(pad, -side * (pad.halfWidth - 6), along);
             const x = road.x + (parking.x - road.x) * blend, z = road.z + (parking.z - road.z) * blend;
             const separation = Math.abs((x - point.position.x) * Math.cos(point.heading) + (z - point.position.z) * Math.sin(point.heading)) - this.profile.outerHalfWidth;
-            const settle = Math.max(0, Math.min(1, (separation - 6) / 12)), vertical = settle * settle * (3 - 2 * settle);
+            const settle = Math.max(0, Math.min(1, (separation - 6 - (merging ? this.profile.laneWidth : 0)) / 12)), vertical = settle * settle * (3 - 2 * settle);
             const roadY = point.position.y - (normal.x * (x - point.position.x) + normal.z * (z - point.position.z)) / normal.y;
             points.push({ x, y: roadY + (parking.y - roadY) * vertical, z,
               slopeX: -normal.x / normal.y * (1 - vertical) + Math.sin(pad.heading) * pad.grade * vertical,
@@ -100,15 +105,22 @@ export class ServicePlanner {
           }
           for (let i = 1; i < points.length; i++) access.push({ a: points[i - 1], b: points[i] });
         }
+        const auxiliary = merging ? serviceMerge(samples, sample.distance, this.options) : undefined;
         const elevated = pads.some(pad => [-pad.halfWidth, 0, pad.halfWidth].some(x => [-pad.halfLength, 0, pad.halfLength].some(along => {
           const p = padPoint(pad, x, along); return p.y - this.terrain.sample(p.x, p.z) > 5;
-        }))) || access.some(({ a, b }) => [a, b].some(p => p.y - this.terrain.sample(p.x, p.z) > 5));
+        }))) || [...access, ...auxiliary?.access ?? []].some(({ a, b }) => [a, b].some(p => p.y - this.terrain.sample(p.x, p.z) > 5));
         const barriers: ServiceGround['barriers'] = [];
         if (elevated) {
+          const rampIndex = new RoadIndex(access);
           for (const pad of pads) {
-            for (const side of [-1, 1]) barriers.push({ a: padPoint(pad, side * pad.halfWidth, -pad.halfLength), b: padPoint(pad, side * pad.halfWidth, pad.halfLength) });
+            for (const side of [-1, 1]) for (let along = -pad.halfLength; along < pad.halfLength; along += 4) {
+              const a = padPoint(pad, side * pad.halfWidth, along), b = padPoint(pad, side * pad.halfWidth, Math.min(pad.halfLength, along + 4));
+              if (!rampIndex.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 4.2)) barriers.push({ a, b });
+            }
             for (const along of [-pad.halfLength, pad.halfLength]) barriers.push({ a: padPoint(pad, -pad.side * (pad.halfWidth - 11), along), b: padPoint(pad, pad.side * pad.halfWidth, along) });
           }
+        }
+        if (elevated || merging) {
           for (const { a, b } of access) {
             const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
             const insidePad = pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
@@ -121,11 +133,32 @@ export class ServicePlanner {
             }
           }
         }
-        site = { id, sample, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };
+        if (merging) {
+          const merge = auxiliary!, ramps = new RoadIndex(access);
+          // Join rail ends outside the common pavement instead of fencing across the mouth.
+          const onRamp = (x: number, z: number) => !!ramps.nearest(x, z, 3.95);
+          const mergeIndex = new RoadIndex(merge.access);
+          const onMerge = (x: number, z: number) => {
+            const nearest = mergeIndex.nearest(x, z, this.profile.laneWidth + 2);
+            if (!nearest) return false;
+            const edge = merge.access[nearest.index];
+            return nearest.distanceSquared < ((edge.a.halfWidth ?? 3.5) + 0.3) ** 2;
+          };
+          const joined = barriers.filter(({ a, b }) => !onMerge(a.x, a.z) && !onMerge(b.x, b.z));
+          joined.push(...merge.barriers.filter(({ a, b }) => !onRamp(a.x, a.z) && !onRamp(b.x, b.z)));
+          barriers.splice(0, barriers.length, ...joined); access.push(...merge.access);
+        }
+        site = { id, sample, facility, mergeEnd: merging ? MERGE_END : undefined, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };
         if (this.profile.centers.length === 2) site.ground.crossover = serviceCrossover(this.seed, id, pads,
           samples.filter(p => Math.abs(p.distance - target) <= SERVICE_SEARCH_RADIUS), this.profile.outerHalfWidth, access);
         if (site.ground.crossover) {
-          const cross = site.ground.crossover, index = new RoadIndex(cross.access);
+          const cross = site.ground.crossover, index = new RoadIndex(cross.access), accessIndex = new RoadIndex(access);
+          cross.barriers = cross.barriers.filter(({ a, b }) => {
+            const nearest = accessIndex.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 8);
+            if (!nearest) return true;
+            const edge = access[nearest.index], width = (edge.a.halfWidth ?? 3.5) + 0.5;
+            return nearest.distanceSquared > width ** 2 || Math.abs(edge.a.y + (edge.b.y - edge.a.y) * nearest.t - (a.y + b.y) / 2) > 2;
+          });
           site.ground.barriers = barriers.filter(({ a, b }) => {
             const nearest = index.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 4.5);
             if (!nearest) return true;
@@ -133,6 +166,18 @@ export class ServicePlanner {
             return Math.abs(y - (a.y + b.y) / 2) > 2;
           });
         }
+        if (facility === 'garage' && !elevated) {
+          site.garages = pads.flatMap(pad => {
+            const position = padPoint(pad, pad.side * (pad.halfWidth + 75), 0);
+            const reserved = roadIndex!.nearest(position.x, position.z, GARAGE_APRON + this.profile.outerHalfWidth + 15);
+            const supported = [0, GARAGE_APRON / 2, GARAGE_APRON].every(radius => Array.from({ length: 16 }, (_, i) => {
+              const angle = i / 16 * Math.PI * 2;
+              return this.terrain.sample(position.x + Math.cos(angle) * radius, position.z + Math.sin(angle) * radius) >= position.y - 4;
+            }).every(Boolean));
+            return reserved || !supported ? [] : [new Garage(this.seed, position, 3, `service:${sample.routeId ?? 'root'}:${id}:${pad.side}`)];
+          });
+          if (!site.garages.length) site.facility = 'mall';
+        } else if (facility === 'garage') site.facility = 'mall';
         this.cache.set(id, site);
       }
       sites.push(site);

@@ -14,7 +14,7 @@ export interface VehicleProfile {
   radius: number; rest: number; travel: number; suspensionRate: number; cg: number; steer: number; steerRate: number;
   wheels: readonly WheelPoint[]; eye: { x: number; y: number; along: number }; paint: number;
   trailer?: TrailerConfig;
-  body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'citybus';
+  body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'citybus' | 'coupe' | 'rally' | 'limousine' | 'expedition' | 'schoolbus' | 'shuttle' | 'mixer' | 'garbage' | 'refrigerated' | 'towtruck';
   bus?: { rows: readonly number[]; deckHeight: number };
 }
 const axles = (track: number, positions: number[], steeringAxles = 1): WheelPoint[] => positions.flatMap((along, axle) =>
@@ -30,7 +30,7 @@ const trailer = (length: number): TrailerConfig => {
   return { body: 'box', length: length - 3.6, wheelbase, hitchAlong: -1.8, front: 1,
     wheels: axles(2.08, length === 20 ? [-wheelbase + 1.2, -wheelbase, -wheelbase - 1.2] : [-wheelbase + 0.65, -wheelbase - 0.65]).map(w => ({ ...w, steer: false })) };
 };
-export const vehicleProfiles = {
+const fleet = {
   hatchback: { ...base, name: '都市两厢车', shape: 'sedan', body: 'hatchback', length: 3.85, chassisLength: 3.85, width: 1.72, height: 1.62, mass: 1120,
     power: 85000, force: 6100, maxSpeed: 43, rest: 0.43, radius: 0.3, cg: 0.5, drag: 0.43,
     wheels: axles(1.48, [1.19, -1.19]), eye: { x: -0.39, y: 0.7, along: -0.1 }, paint: 0xdab659 },
@@ -112,6 +112,35 @@ export const vehicleProfiles = {
     radius: 0.32, rest: 0.47, travel: 0.22, suspensionRate: 1.12, cg: 0.62, steer: 0.5, steerRate: 2,
     wheels: [{ x: 0, along: 0.73, steer: true }, { x: 0, along: -0.73, steer: false }],
     eye: { x: 0, y: 0.91, along: 0.05 }, paint: 0xc6a065 },
+} as const satisfies Record<string, VehicleProfile>;
+export const vehicleProfiles = {
+  ...fleet,
+  coupe: { ...fleet.sedan, name: '双门运动轿跑', body: 'coupe', length: 4.5, chassisLength: 4.5, height: 1.5, mass: 1480,
+    power: 230000, force: 11200, maxSpeed: 69, rest: 0.4, travel: 0.23, cg: 0.48, steer: 0.5, paint: 0x587dba },
+  rally: { ...fleet.hatchback, name: '四驱拉力赛车', body: 'rally', width: 1.86, mass: 1330, height: 1.76,
+    power: 225000, force: 12400, maxSpeed: 61, radius: 0.34, rest: 0.48, travel: 0.36, cg: 0.55, suspensionRate: 1.13,
+    wheels: axles(1.62, [1.19, -1.19]), paint: 0xe3ce6a },
+  limousine: { ...fleet.sedan, name: '7.2 米加长礼宾车', body: 'limousine', length: 7.2, chassisLength: 7.2, width: 1.96,
+    mass: 3100, power: 260000, force: 17200, maxSpeed: 50, steerRate: 1.2, cg: 0.59, drag: 0.78,
+    wheels: axles(1.7, [2.55, -2.55]), eye: { x: -0.46, y: 0.7, along: 1.45 }, paint: 0x303844 },
+  expedition6: { ...fleet.suv, name: '6×6 远征越野车', body: 'expedition', length: 6.4, chassisLength: 6.4, width: 2.25,
+    height: 2.7, mass: 4200, power: 295000, force: 26500, maxSpeed: 39, radius: 0.46, rest: 0.75, travel: 0.46,
+    cg: 1, drag: 1.8, wheels: axles(1.92, [2.5, -0.65, -1.85]), eye: { x: -0.53, y: 0.87, along: 0.1 }, paint: 0x747e50 },
+  schoolbus: { ...fleet.minibus, name: '9.5 米校车', body: 'schoolbus', length: 9.5, chassisLength: 9.5, width: 2.5, height: 3.25,
+    mass: 10400, power: 195000, force: 55000, maxSpeed: 25, wheels: axles(2.08, [3, -3]),
+    eye: { x: -0.65, y: 1.5, along: 3.95 }, bus: { rows: [10], deckHeight: 0 }, paint: 0xe8b43c },
+  shuttle: { ...fleet.minibus, name: '6.8 米城市接驳巴士', body: 'shuttle', length: 6.8, chassisLength: 6.8, width: 2.25, height: 2.95,
+    mass: 5800, power: 135000, force: 29000, maxSpeed: 27, radius: 0.39, rest: 0.68, cg: 1.03,
+    wheels: axles(1.91, [1.95, -1.95]), eye: { x: -0.58, y: 1.3, along: 2.7 }, bus: { rows: [6], deckHeight: 0 }, paint: 0x83b8c5 },
+  mixer: { ...fleet.dumptruck, name: '四轴混凝土搅拌车', body: 'mixer', length: 9.2, chassisLength: 9.2, height: 3.9,
+    mass: 31000, power: 385000, force: 166000, maxSpeed: 25, cg: 1.7, wheels: axles(2.08, [3.3, 1.8, -1.95, -3.15], 2),
+    eye: { x: -0.65, y: 1.75, along: 3.6 }, paint: 0xc6d9ce },
+  garbage: { ...fleet.truck8, name: '8.2 米压缩式环卫车', body: 'garbage', length: 8.2, chassisLength: 8.2,
+    mass: 19000, power: 280000, force: 104000, maxSpeed: 25, cg: 1.45, paint: 0x63a985 },
+  refrigerated: { ...fleet.truck8, name: '8 米冷链厢式货车', body: 'refrigerated', mass: 15600, power: 280000, force: 82000,
+    maxSpeed: 29, height: 3.85, paint: 0xdce6e3 },
+  towtruck: { ...fleet.truck8, name: '8 米平台救援拖车', shape: 'flatbed', body: 'towtruck', mass: 9300, power: 245000,
+    force: 65000, maxSpeed: 31, cg: 1, paint: 0xd9a63f },
 } as const satisfies Record<string, VehicleProfile>;
 export type VehicleKind = keyof typeof vehicleProfiles;
 export function suspensionTuning(level: Suspension, profile: VehicleProfile = vehicleProfiles.roadster, damping = 1): { spring: number; damping: number } {

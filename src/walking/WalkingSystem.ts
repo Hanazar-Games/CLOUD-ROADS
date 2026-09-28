@@ -4,6 +4,7 @@ import type { InputManager } from '../input/InputManager';
 import { DrivingSurface } from '../vehicle/DrivingSurface';
 import type { World } from '../world/World';
 import { WalkingPhysics } from './WalkingPhysics';
+import { PARK_HALF_LENGTH } from '../service/ServiceParking';
 import { padPoint } from '../service/ServiceTerrain';
 import type { VehiclePhysics } from '../vehicle/VehiclePhysics';
 
@@ -31,9 +32,10 @@ export class WalkingSystem {
     const x = this.camera.position.x + world.origin.x, z = this.camera.position.z + world.origin.z;
     const pad = world.services.flatMap(site => site.ground.pads).find(p => Math.abs((x - p.x) * Math.cos(p.heading) + (z - p.z) * Math.sin(p.heading)) <= p.halfWidth + 2
       && Math.abs((x - p.x) * Math.sin(p.heading) - (z - p.z) * Math.cos(p.heading)) <= p.halfLength + 2);
-    const entrance = pad ? { ...padPoint(pad, -pad.side * (pad.halfWidth - 6), -pad.halfLength + 18), heading: pad.heading } : undefined;
-    const floor = world.garage.floor(x, this.camera.position.y, z);
-    const garage = floor === undefined ? undefined : world.garage.spawn(floor);
+    const entrance = pad ? { ...padPoint(pad, -pad.side * (pad.halfWidth - 6), -Math.min(pad.halfLength, PARK_HALF_LENGTH) + 18), heading: pad.heading } : undefined;
+    const currentGarage = world.garages.find(g => g.floor(x, this.camera.position.y, z) !== undefined);
+    const floor = currentGarage?.floor(x, this.camera.position.y, z);
+    const garage = floor === undefined ? undefined : currentGarage!.spawn(floor);
     const spawn = position ?? garage ?? entrance ?? this.surface.spawn(x, z);
     if (!spawn) return false;
     this.person.reset(spawn.x, position?.y ?? garage?.y ?? this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);

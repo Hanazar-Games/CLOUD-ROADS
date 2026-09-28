@@ -1,6 +1,6 @@
 import { BoxGeometry, BufferGeometry, Color, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, RingGeometry, type Scene } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { Garage, GARAGE_APRON, GARAGE_GATE, GARAGE_LEVELS, GARAGE_OUTER, GARAGE_RADIUS, GARAGE_SEGMENTS, GARAGE_STOREY, garageColumns, garageSlots } from './Garage';
+import { Garage, GARAGE_APRON, GARAGE_GATE, GARAGE_OUTER, GARAGE_RADIUS, GARAGE_SEGMENTS, GARAGE_STOREY, garageColumns, garageSlots } from './Garage';
 import { garageAtlas, garageColors } from './GarageAtlas';
 
 const TAU = Math.PI * 2;
@@ -16,7 +16,7 @@ export class GarageMesh {
 
   constructor(scene: Scene, readonly garage: Garage) {
     this.root.name = 'underground-garage';
-    this.atlas = garageAtlas();
+    this.atlas = garageAtlas(garage.levels);
     this.signs = new MeshBasicMaterial({ map: this.atlas, transparent: true, side: DoubleSide, depthWrite: false });
     const color = new Color();
     const tint = (geometry: BufferGeometry, hex: number) => {
@@ -45,7 +45,7 @@ export class GarageMesh {
         width, top - a.y, Math.hypot(b.x - a.x, b.z - a.z) + 0.04, 0x8e989b, Math.atan2(b.x - a.x, b.z - a.z));
     }
     batch(this.root, walls, this.concrete, 'garage-retaining-walls');
-    for (let floor = 0; floor <= GARAGE_LEVELS; floor++) {
+    for (let floor = 0; floor <= garage.levels; floor++) {
       const group = new Group(); group.name = floor ? `garage-B${floor}` : 'garage-surface';
       this.levels.push(group); this.root.add(group);
       const solid: BufferGeometry[] = [], marks: BufferGeometry[] = [], labels: BufferGeometry[] = [], y = -floor * GARAGE_STOREY;
@@ -88,7 +88,7 @@ export class GarageMesh {
         tag(labels, -44, y + 4.8, 0, 12, 1.5, [0, 768, 1024, 128], false, Math.PI / 2);
         box(marks, -39, y + 0.025, 0, 2.5, 0.03, 28, accent);
       }
-      if (floor < GARAGE_LEVELS) {
+      if (floor < garage.levels) {
         const positions: number[] = [];
         const triangle = (a: number[], b: number[], c: number[]) => positions.push(...a, ...b, ...c);
         for (let i = 0; i < GARAGE_SEGMENTS; i++) {
@@ -111,7 +111,7 @@ export class GarageMesh {
         solid.push(tint(indexed, 0x606b6f));
       }
       // Level landings fill the short flat sectors beyond the first and last turn.
-      if (floor === 0 || floor === GARAGE_LEVELS) {
+      if (floor === 0 || floor === garage.levels) {
         const start = floor === 0 ? TAU - GARAGE_GATE : 0;
         const ring = new RingGeometry(GARAGE_RADIUS, GARAGE_OUTER, 8, 1, start, GARAGE_GATE);
         ring.rotateX(-Math.PI / 2).rotateY(Math.PI).translate(0, y, 0);
