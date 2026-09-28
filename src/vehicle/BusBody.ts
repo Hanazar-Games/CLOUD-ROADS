@@ -15,6 +15,7 @@ export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit,
   };
   const bayLength = Math.min(3, p.length * 0.28), bayTop = Math.max(-0.1, floor - 0.07);
   for (const side of [-1, 1]) {
+    if (side === -1) sidePanel(side, nose, nose + 1.45, -0.3, floor + 0.1);
     sidePanel(side, nose + 1.45, -bayLength / 2, -0.3, floor + 0.1);
     sidePanel(side, bayLength / 2, end, -0.3, floor + 0.1);
     const bay = fittings.hinge('cargo', parent, side * w / 2, bayTop, 0, 'z', side * 1.5);

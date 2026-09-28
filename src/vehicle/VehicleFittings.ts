@@ -45,6 +45,11 @@ export class VehicleFittings {
       for (const x of [0, -side * width / 2 + side * 0.04]) block(0.055, height, 0.08, x, height / 2, 0, metal, gate);
       if (kind === 'stake') for (let y = 0.65; y <= height; y += 0.32) block(width / 2, 0.045, 0.06, -side * width / 4, y, 0, metal, gate);
       block(0.035, height * 0.72, 0.05, -side * width * 0.36, height / 2, 0.05, metal, gate);
+      for (const y of [height * 0.15, height * 0.5, height * 0.85]) {
+        block(0.095, 0.045, 0.09, -side * width * 0.36, y, 0.065, trim, gate);
+        block(0.13, 0.065, 0.07, -side * 0.055, y, 0.075, metal, gate);
+      }
+      block(0.22, 0.045, 0.055, -side * (width * 0.36 - 0.09), height * 0.44, 0.115, metal, gate);
       for (const y of [height * 0.2, height * 0.8]) block(0.14, 0.05, 0.09, -side * 0.06, y, 0.04, trim, gate);
     }
     if (kind === 'stake') for (const y of [floor + 0.35, floor + 0.8, top]) block(width, 0.07, 0.065, 0, y, start, paint, parent);

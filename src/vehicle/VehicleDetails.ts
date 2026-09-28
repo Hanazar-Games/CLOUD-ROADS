@@ -34,6 +34,20 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
   const { block, cylinder, paint, trim, metal, lamp, amber } = kit;
   const nose = -p.chassisLength / 2, end = p.chassisLength / 2;
   if (p.shape !== 'motorcycle') {
+    const roadster = p.shape === 'roadster';
+    for (const side of [-1, 1]) for (const front of [true, false]) {
+      const width = roadster ? front ? 0.5 : 0.56 : p.bus ? front ? 0.42 : 0.3 : p.width * (front ? 0.2 : 0.19);
+      const height = roadster ? 0.09 : p.bus ? front ? 0.13 : 0.16 : front ? 0.1 : 0.11;
+      const x = side * (roadster ? front ? 0.53 : 0.52 : p.width * (p.bus && !front ? 0.35 : front ? 0.3 : 0.31));
+      const y = roadster && !front ? 0.04 : p.bus ? front ? -0.02 : 0.05 : 0.02, z = front ? nose - 0.058 : end + 0.07;
+      for (const edge of [-1, 1]) {
+        block(width + 0.07, 0.022, 0.024, x, y + edge * (height / 2 + 0.012), z, trim, parent);
+        block(0.026, height, 0.024, x + edge * (width / 2 + 0.018), y, z, trim, parent);
+      }
+      for (const split of [-1, 1]) block(0.016, height, 0.025, x + split * width / 6, y, z, metal, parent);
+      const sensor = cylinder(0.027, 0.014, side * p.width * 0.41, -0.18, front ? nose - 0.048 : end + 0.062, trim, parent);
+      sensor.rotation.x = Math.PI / 2;
+    }
     for (const z of [nose - 0.04, end + 0.04]) {
       block(0.48, 0.14, 0.04, 0, -0.2, z, trim, parent);
       block(0.41, 0.095, 0.045, 0, -0.2, z, metal, parent);
@@ -48,6 +62,16 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
       block(0.017, 0.02, 0.13, side * (p.width / 2 + 0.028), -0.02, end - 0.65, trim, parent);
     }
   } else {
+    const bezel = cylinder(0.115, 0.075, 0, 0.35, -0.85, metal, parent); bezel.rotation.x = Math.PI / 2;
+    const lens = cylinder(0.088, 0.012, 0, 0.35, -0.894, lamp, parent); lens.rotation.x = Math.PI / 2;
+    for (const side of [-1, 1]) {
+      block(0.055, 0.07, 0.32, side * 0.13, 0.3, -0.69, trim, parent);
+      const riser = block(0.035, 0.32, 0.035, side * 0.13, 0.47, -0.52, metal, parent); riser.rotation.x = 0.25;
+      block(0.018, 0.09, 0.1, side * 0.07, 0.39, -0.09, metal, parent);
+    }
+    block(0.34, 0.065, 0.1, 0, 0.32, -0.56, trim, parent);
+    for (const z of [-0.83, end + 0.03]) block(p.width * 0.58, 0.03, 0.035, 0, 0.31, z, trim, parent);
+    block(0.06, 0.1, 0.09, 0, 0.29, end - 0.005, trim, parent);
     for (let i = 0; i < 9; i++) block(0.29, 0.025, 0.37, 0, -0.18 + i * 0.035, 0, metal, parent);
     block(0.17, 0.13, 0.025, 0, 0.04, end + 0.015, metal, parent);
     for (let z = 0.05; z < 0.68; z += 0.08) block(0.025, 0.035, 0.035, -0.13, -0.27, z, trim, parent);
@@ -55,9 +79,9 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
   if (p.mass < 4000) {
     const bike = p.shape === 'motorcycle', sport = p.shape === 'supercar';
     for (const side of [-1, 1]) {
-      for (let i = 0; i < 5; i++) block(bike ? 0.06 : 0.035, 0.018, bike ? 0.26 : 0.28, side * p.width * 0.47, 0.01 + i * 0.04, sport ? 0.85 : -0.9, trim, parent);
+      for (let i = 0; i < 5; i++) block(bike ? 0.045 : 0.035, 0.018, bike ? 0.26 : 0.28, side * (bike ? 0.156 : p.width * 0.47), (bike ? -0.15 : 0.01) + i * 0.04, bike ? 0 : sport ? 0.85 : -0.9, trim, parent);
       const exhaust = cylinder(bike ? 0.055 : sport ? 0.085 : 0.065, bike ? 0.65 : 0.22, side * p.width * 0.3, -0.22, end - 0.08, metal, parent); exhaust.rotation.x = Math.PI / 2;
-      block(bike ? 0.025 : 0.07, 0.06, p.length * 0.55, side * p.width * 0.47, -0.26, 0.08, trim, parent);
+      block(bike ? 0.035 : 0.07, 0.06, p.length * (bike ? 0.38 : 0.55), side * (bike ? 0.19 : p.width * 0.47), -0.26, 0.08, trim, parent);
       if (sport) {
         block(0.18, 0.12, 0.9, side * p.width * 0.4, 0.17, 1.45, trim, parent);
         block(0.035, 0.12, 0.55, side * 0.3, -0.3, end - 0.17, metal, parent);
@@ -78,6 +102,10 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
     for (const z of [nose + 2.82, nose + 3.38]) block(0.035, 0.39, 0.05, side * 1.055, -0.25, z, trim, parent);
     for (let z = nose + 2.8; z < end - 0.3; z += 1.45) block(0.035, 0.065, 0.13, side * (p.width / 2 + 0.01), 0.08, z, lamp, parent);
     for (let y = -0.02; y < 0.43; y += 0.1) block(0.42, 0.025, 0.02, side * p.width * 0.3, y, nose - 0.025, trim, parent);
+    if (p.bus) {
+      block(0.045, 0.85, 1.12, side * (p.width / 2 + 0.014), 0.2, end - 0.75, trim, parent);
+      for (let y = -0.12; y < 0.57; y += 0.115) block(0.06, 0.035, 1.02, side * (p.width / 2 + 0.027), y, end - 0.75, metal, parent);
+    }
   }
   for (let z = nose + 0.6; z < end; z += 1.5) block(1.45, 0.12, 0.12, 0, -0.31, z, metal, parent);
   for (const point of p.wheels.filter(point => point.x > 0)) {

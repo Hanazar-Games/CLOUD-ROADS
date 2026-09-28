@@ -1,4 +1,4 @@
-import { BufferGeometry, LatheGeometry, Mesh, Vector2, type Group } from 'three';
+import { BufferGeometry, ExtrudeGeometry, LatheGeometry, Mesh, Shape, Vector2, type Group } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export function tireGeometry(radius: number, width: number): BufferGeometry {
@@ -16,6 +16,17 @@ export function rimGeometry(radius: number, width: number): BufferGeometry {
     [0.56, -0.35], [0.55, -0.4], [0.55, -0.49],
   ].map(([r, y]) => new Vector2(r * radius, y * width)), 24);
   geometry.normalizeNormals(); return geometry;
+}
+
+export function wheelFenderGeometry(radius: number, width: number, span = 0): BufferGeometry {
+  const shape = new Shape(), outer = radius + 0.045, half = span / 2;
+  shape.absarc(half, 0, outer, 0, Math.PI / 2, false);
+  shape.lineTo(-half, outer); shape.absarc(-half, 0, outer, Math.PI / 2, Math.PI, false);
+  shape.lineTo(-half - radius, 0); shape.absarc(-half, 0, radius, Math.PI, Math.PI / 2, true);
+  shape.lineTo(half, radius); shape.absarc(half, 0, radius, Math.PI / 2, 0, true); shape.closePath();
+  const geometry = new ExtrudeGeometry(shape, { depth: width, bevelEnabled: false, steps: 1, curveSegments: 6 });
+  geometry.translate(0, 0, -width / 2); geometry.rotateY(Math.PI / 2);
+  return geometry;
 }
 
 export function mergeVehicleParts(parent: Group): BufferGeometry[] {

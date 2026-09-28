@@ -3,7 +3,7 @@ import type { VehiclePhysics, WheelState } from './VehiclePhysics';
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Windshield } from './Windshield';
 import type { VehicleSystems } from './VehicleSystems';
-import { mergeVehicleParts, rimGeometry, tireGeometry } from './VehicleGeometry';
+import { mergeVehicleParts, rimGeometry, tireGeometry, wheelFenderGeometry } from './VehicleGeometry';
 import { flatbedDetails, vehicleDetails, type VehicleBlock as Block, type VehicleDetailKit } from './VehicleDetails';
 import { busBody } from './BusBody';
 import { VehicleFittings } from './VehicleFittings';
@@ -83,6 +83,9 @@ export class VehicleMesh {
       const door = this.fittings.hinge('doors', this.chassis, side * 0.84, 0, -0.74, 'y', side * 1.1);
       block(0.15, 0.3, 1.92, 0, 0.09, 0.96, paint, door);
       block(0.05, 0.04, 0.2, side * 0.1, 0.17, 1.24, metal, door);
+      block(0.025, 0.19, 1.4, -side * 0.089, 0.09, 0.96, leather, door);
+      block(0.1, 0.055, 0.55, -side * 0.13, 0.13, 0.98, trim, door);
+      block(0.025, 0.045, 0.15, -side * 0.109, 0.18, 0.54, metal, door);
       const window = new Group(); window.name = 'driver-window'; window.position.set(-side * 0.03, 0.24, 0.98);
       block(0.015, 0.76, 1.64, 0, 0.38, 0, glass, window);
       this.windows.push(window); door.add(window);
@@ -195,7 +198,7 @@ export class VehicleMesh {
       const signal = this.material(0xa96b20, 0.3); signal.emissive.setHex(0xff9b19); signal.emissiveIntensity = 0;
       this.signals.push(signal);
       const bike = profile.shape === 'motorcycle', x = side * profile.width * (bike ? 0.29 : 0.42);
-      for (const end of [-1, 1]) block(bike ? 0.08 : 0.18, 0.08, 0.05, x, bike ? 0.31 : 0.19, end * (profile.chassisLength / 2 + 0.035), signal);
+      for (const end of [-1, 1]) block(bike ? 0.08 : 0.18, 0.08, 0.05, x, bike ? 0.31 : 0.19, bike && end < 0 ? -0.87 : end * (profile.chassisLength / 2 + 0.035), signal);
       if (!bike) block(0.04, 0.075, 0.16, side * (profile.width / 2 + 0.02), 0.15, -profile.chassisLength / 2 + 0.75, signal);
     }
     const tireWidth = profile.shape === 'motorcycle' ? 0.15 : profile.width > 2.3 ? 0.3 : 0.24;
@@ -237,6 +240,29 @@ export class VehicleMesh {
       output.push({ pivot, spin, spring, point });
     } };
     addWheels(profile.wheels, this.root, this.wheels);
+    const addFenders = (points: readonly WheelPoint[], parent: Group) => {
+      const wide = profile.mass > 4000, radius = profile.radius + 0.07;
+      for (const side of [-1, 1]) {
+        const rows: WheelPoint[][] = [];
+        for (const point of points.filter(p => Math.sign(p.x) === side).sort((a, b) => a.along - b.along)) {
+          const row = rows.at(-1);
+          if (wide && row && point.along - row.at(-1)!.along < radius * 2 + 0.1) row.push(point);
+          else rows.push([point]);
+        }
+        for (const row of rows) {
+          const first = row[0], last = row.at(-1)!;
+          const fender = new Mesh(this.geometry(wheelFenderGeometry(radius, wide ? 0.36 : 0.08, last.along - first.along)), wide ? trim : paint);
+          fender.position.set(wide ? side * (profile.width / 2 - 0.16) : side * (profile.width / 2 - 0.025), profile.radius - this.rideHeight, -(first.along + last.along) / 2);
+          fender.castShadow = fender.receiveShadow = true; parent.add(fender);
+          if (wide) {
+            const z = -first.along + radius + 0.06, y = profile.radius - this.rideHeight;
+            block(0.38, 0.32, 0.035, side * (profile.width / 2 - 0.16), y - 0.12, z, trim, parent);
+            block(0.35, 0.035, 0.048, side * (profile.width / 2 - 0.16), y + 0.04, z, metal, parent);
+          }
+        }
+      }
+    };
+    addFenders(profile.wheels, this.chassis);
     if (profile.trailer) {
       this.trailerRoot.name = 'trailer';
       this.root.add(this.trailerRoot); this.trailerRoot.add(this.trailerBody);
@@ -256,7 +282,14 @@ export class VehicleMesh {
       }
       const back = trailer.length - trailer.front + 0.025;
       block(profile.width - 0.1, 0.1, 0.1, 0, -0.48, back, metal, this.trailerBody);
+      for (const side of [-1, 1]) {
+        block(0.1, 0.42, 0.1, side * 0.76, -0.25, back - 0.12, trim, this.trailerBody);
+        for (let z = 0.8; z < trailer.length - trailer.front - 0.4; z += 1.2)
+          block(0.026, 0.055, 0.42, side * (profile.width / 2 + 0.017), 0.32, z, metal, this.trailerBody);
+      }
+      for (const x of [-0.84, -0.42, 0, 0.42, 0.84]) block(0.2, 0.065, 0.016, x, -0.48, back + 0.059, amber, this.trailerBody);
       addWheels(trailer.wheels, this.trailerRoot, this.trailerWheels);
+      addFenders(trailer.wheels, this.trailerBody);
     }
     this.headlight.position.set(0, profile.shape === 'motorcycle' ? 0.3 : 0.05, -profile.chassisLength / 2 + 0.08);
     this.headlight.target.position.set(0, -0.5, -40);
@@ -337,7 +370,6 @@ export class VehicleMesh {
       }
       block(0.65, 0.035, 0.045, 0, 0.62, -0.48, metal);
       block(0.18, 0.08, 0.16, 0, 0.63, -0.59, trim);
-      block(0.19, 0.18, 0.08, 0, 0.35, -0.82, lamp);
       block(0.2, 0.065, 0.025, 0, 0.26, 1.06, this.tail);
       return;
     }
@@ -408,6 +440,10 @@ export class VehicleMesh {
       const belt = passenger ? Math.max(sill + 0.04, p.radius - this.rideHeight + p.radius + 0.12) : sill;
       block(0.06, belt + 0.22, doorBack - doorFront, 0, (belt - 0.22) / 2, (doorBack - doorFront) / 2, paint, door);
       block(0.025, 0.05, 0.25, side * 0.05, sill - 0.1, doorBack - doorFront - 0.2, metal, door);
+      const doorLength = doorBack - doorFront;
+      block(0.02, (belt + 0.22) * 0.68, doorLength * 0.78, -side * 0.044, (belt - 0.22) / 2, doorLength / 2, passenger ? leather : metal, door);
+      block(0.11, 0.055, doorLength * 0.43, -side * 0.095, belt - 0.12, doorLength * 0.57, passenger ? trim : paint, door);
+      block(0.022, 0.045, 0.15, -side * 0.062, belt - 0.08, doorLength * 0.24, metal, door);
       const lift = new Group(); lift.name = 'driver-window'; lift.position.set(-side * 0.03, sill, -doorFront);
       const window = new Mesh(driverGlass, glass); window.rotation.y = -Math.PI / 2; lift.add(window);
       door.add(lift); this.windows.push(lift);
@@ -422,19 +458,11 @@ export class VehicleMesh {
       block(0.016, 0.018, Math.max(0.4, doorEnd - cabFront), side * (w / 2 + 0.018), -0.39, (doorEnd + cabFront) / 2, trim);
       if (!passenger) {
         for (const y of [-0.43, -0.6]) block(0.22, 0.055, 0.65, side * (w / 2 + 0.035), y, cabFront + 0.75, metal);
-        for (const point of p.wheels.filter(point => Math.sign(point.x) === side))
-          block(0.36, 0.35, 0.045, point.x, -0.48, -point.along + p.radius + 0.08, trim);
       }
       block(0.18, 0.04, 0.09, side * (w / 2 + 0.04), p.eye.y - 0.28, cabFront + 0.25, trim);
       block(0.13, passenger ? 0.12 : 0.32, 0.13, side * (w / 2 + 0.14), p.eye.y - 0.17, cabFront + 0.25, metal);
       block(w * 0.2, 0.1, 0.04, side * w * 0.3, 0.02, nose - 0.015, lamp);
       block(w * 0.19, 0.11, 0.04, side * w * 0.31, 0.02, length / 2 + 0.02, this.tail);
-    }
-    const arch = this.geometry(new TorusGeometry(p.radius + 0.07, 0.055, 6, 20, Math.PI));
-    for (const point of p.wheels) {
-      const fender = new Mesh(arch, paint); fender.rotation.y = Math.PI / 2;
-      fender.position.set(passenger ? Math.sign(point.x) * (w / 2 - 0.025) : point.x, p.radius - this.rideHeight, -point.along);
-      fender.castShadow = true; this.chassis.add(fender);
     }
     block(w * 0.62, 0.14, 0.025, 0, -0.12, nose - 0.022, trim);
     block(w - 0.08, 0.15, 0.35, 0, p.eye.y - 0.43, cabFront + 0.18, trim);

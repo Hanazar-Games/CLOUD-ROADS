@@ -1,6 +1,25 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Raycaster, Vector3 } from 'three';
 import { expect, it } from 'vitest';
-import { mergeVehicleParts, rimGeometry } from '../src/vehicle/VehicleGeometry';
+import { mergeVehicleParts, rimGeometry, wheelFenderGeometry } from '../src/vehicle/VehicleGeometry';
+
+it.each([0, 0.8, 2.4])('keeps a %s m axle-span fender open below the wheel crown with outward unit normals', span => {
+  const geometry = wheelFenderGeometry(0.58, 0.34, span), material = new MeshStandardMaterial(), mesh = new Mesh(geometry, material);
+  geometry.computeBoundingBox();
+  expect(geometry.boundingBox!.max.x).toBeCloseTo(0.17);
+  expect(geometry.boundingBox!.min.x).toBeCloseTo(-0.17);
+  expect(geometry.boundingBox!.max.z).toBeCloseTo(span / 2 + 0.625);
+  expect(geometry.boundingBox!.min.y).toBeCloseTo(0);
+  const ray = new Raycaster(new Vector3(2, 0.3, 0), new Vector3(-1, 0, 0));
+  expect(ray.intersectObject(mesh)).toHaveLength(0);
+  ray.set(new Vector3(2, 0.6, 0), new Vector3(-1, 0, 0));
+  expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);
+  ray.set(new Vector3(0, 2, 0), new Vector3(0, -1, 0));
+  expect(ray.intersectObject(mesh)[0].point.y).toBeCloseTo(0.625);
+  const normals = geometry.getAttribute('normal'), normal = new Vector3();
+  for (let i = 0; i < normals.count; i++) expect(normal.fromBufferAttribute(normals, i).length()).toBeCloseTo(1, 5);
+  expect(geometry.getAttribute('position').count / 3).toBeLessThan(250);
+  geometry.dispose(); material.dispose();
+});
 
 it('keeps wheel barrels open with recessed walls and lips inside the tire envelope', () => {
   const geometry = rimGeometry(0.5, 0.3), material = new MeshStandardMaterial(), mesh = new Mesh(geometry, material);

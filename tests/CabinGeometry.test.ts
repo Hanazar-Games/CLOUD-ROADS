@@ -23,6 +23,16 @@ it('opens physical cabin doors with their windows on every enclosed non-bus vehi
   }
 });
 
+it('closes the bus driver-side lower body beside the front step well', () => {
+  for (const kind of ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus'] as const) {
+    const p = vehicleProfiles[kind], mesh = new VehicleMesh(new Scene(), p);
+    mesh.root.updateMatrixWorld(true);
+    const ray = new Raycaster(new Vector3(-p.width / 2 - 0.2, p.eye.y - 1.32, -p.length / 2 + 0.75), new Vector3(1, 0, 0), 0, 0.4);
+    expect(ray.intersectObject(mesh.chassis, true).length, kind).toBeGreaterThan(0);
+    mesh.dispose();
+  }
+});
+
 it('keeps every bus eye below its own ceiling, including both double-decker floors', () => {
   for (const kind of ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus'] as const) {
     const p = vehicleProfiles[kind], mesh = new VehicleMesh(new Scene(), p);

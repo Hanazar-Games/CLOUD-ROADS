@@ -115,7 +115,9 @@ test('shows the current release, archives the previous baseline and isolates dia
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-release="current"]')).toContainText(version);
-  await expect(dialog.locator('[data-release="current"]')).toContainText('行程复检 · 输入响应与音频状态');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('近景细化 · 车身结构与服务驿站');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.45');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('行程复检 · 输入响应与音频状态');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.44');
   await expect(dialog.locator('[data-release="history"]')).toContainText('旅程检修 · 声音过渡与交互一致性');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.43');

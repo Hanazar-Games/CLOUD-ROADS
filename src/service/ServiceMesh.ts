@@ -7,6 +7,7 @@ import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
 import { serviceArchitecture, type ServiceArchitecture } from './ServiceArchitecture';
 import { parkingSlots } from './ServiceParking';
 import { chargingBays, chargingPosts, chargingPostColumns } from './ServiceAmenities';
+import { serviceDetails } from './ServiceDetails';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -238,6 +239,9 @@ export class ServiceMesh {
     }
     this.parking(pad, architecture);
     this.amenities(pad);
+    serviceDetails(architecture, box,
+      (x, a, y, w, h, l, color) => this.box(this.windows, pad, x * pad.side, a, y, w, h, l, color),
+      (x, a, y, w, h, l, color) => this.box(this.lights, pad, x * pad.side, a, y, w, h, l, color));
     for (const along of [54, 64]) {
       box(15, along, 0.9, 4, 0.16, 1.5, 0x886c4e);
       for (const z of [-1.3, 1.3]) box(15, along + z, 0.5, 4.5, 0.16, 0.45, 0x967950);

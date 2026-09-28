@@ -53,3 +53,20 @@ it('keeps charging equipment outside parking bays and blocks walking through sol
     expect(Math.hypot(body.x - padPoint(pad, x * pad.side, a).x, body.z - padPoint(pad, x * pad.side, a).z)).toBeGreaterThan(0.4);
   }
 });
+
+it('keeps detailed shop and toilet arcades clear on mirrored graded pads at capacity', () => {
+  const terrain = { sample: () => 400 }, generator = new RoadGenerator('arcades', terrain);
+  const segment = new RoadSegment(generator.start, 0, 0, 22000);
+  const site = new ServicePlanner('arcades', terrain).detect(Array.from({ length: 11001 }, (_, i) => segment.sample(i / 11000)))[0];
+  const sites = [1, 2, 3].map(id => ({ ...site, id, ground: { ...site.ground, pads: [-1, 1].map(side => ({ ...site.ground.pads[0],
+    x: id * 2000 + side * 250, heading: 0.7, side, grade: side * 0.08 })) } }));
+  const scene = new Scene(), mesh = new ServiceMesh(scene, DEFAULT_OPTIONS, terrain);
+  mesh.update(sites, 1, 0, 0); scene.updateMatrixWorld(true);
+  for (const area of sites) for (const pad of area.ground.pads) for (const [x, from, to] of [[35, 12, 48], [42, 65, 83]]) {
+    const a = padPoint(pad, x * pad.side, from, 1.75), b = padPoint(pad, x * pad.side, to, 1.75);
+    const start = new Vector3(a.x, a.y, a.z), delta = new Vector3(b.x, b.y, b.z).sub(start);
+    expect(new Raycaster(start, delta.clone().normalize(), 0, delta.length()).intersectObject(mesh.buildings)).toHaveLength(0);
+  }
+  for (const batch of [mesh.buildings, mesh.windows, mesh.lights]) expect(batch.count).toBeLessThan(batch.instanceMatrix.count);
+  mesh.dispose(); expect(scene.children).toHaveLength(0);
+});
