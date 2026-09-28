@@ -1,9 +1,10 @@
 import type { RoadSample } from '../road/RoadSegment';
-import { RoadIndex } from '../road/RoadIndex';
+import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 import { hashSeed } from '../world/WorldSeed';
 import { padPoint, type ServiceAccessPoint, type ServiceCrossover, type ServicePad } from './ServiceTerrain';
 
-export function serviceCrossover(seed: string, id: number, pads: ServicePad[], samples: readonly RoadSample[], outerWidth: number): ServiceCrossover | undefined {
+export function serviceCrossover(seed: string, id: number, pads: ServicePad[], samples: readonly RoadSample[], outerWidth: number,
+  connections: readonly RoadEdge<ServiceAccessPoint>[]): ServiceCrossover | undefined {
   const right = pads.find(p => p.side === 1), left = pads.find(p => p.side === -1);
   if (!right || !left) return;
   const kind = hashSeed(`${seed}:return:${id}`) % 2 ? 'over' : 'under';
@@ -35,6 +36,15 @@ export function serviceCrossover(seed: string, id: number, pads: ServicePad[], s
   });
   const access = points.slice(1).map((b, i) => ({ a: points[i], b }));
   if (access.some(({ a, b }) => Math.abs(b.y - a.y) > Math.hypot(b.x - a.x, b.z - a.z) * 0.12)) return;
+  const connectionIndex = new RoadIndex(connections);
+  for (const p of points) {
+    const nearest = connectionIndex.nearest(p.x, p.z, 12);
+    if (!nearest) continue;
+    const { a, b } = connections[nearest.index], t = nearest.t;
+    const y = a.y + (b.y - a.y) * t + (a.slopeX + (b.slopeX - a.slopeX) * t) * (p.x - a.x - (b.x - a.x) * t)
+      + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (p.z - a.z - (b.z - a.z) * t);
+    if (Math.abs(p.y - y) > 0.6) return;
+  }
   const barriers: ServiceCrossover['barriers'] = [];
   for (const { a, b } of access) {
     const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);

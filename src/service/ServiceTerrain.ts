@@ -53,9 +53,12 @@ export class ServiceTerrain {
   }
 
   height(x: number, z: number, ground: number, roadDistance: number, roadHalfWidth: number): number {
+    const foundation = ground;
+    let crossingFloor = Infinity;
     const crossing = this.crossIndex.nearest(x, z, 22);
     if (crossing) {
       const { a, b } = this.crossAccess[crossing.index], target = a.y + (b.y - a.y) * crossing.t - 0.7;
+      if (crossing.distanceSquared <= 64) crossingFloor = target;
       ground += Math.min(0, target - ground) * (1 - smooth((Math.sqrt(crossing.distanceSquared) - 8) / 14));
     }
     if (!this.sites.length || roadDistance <= roadHalfWidth + 0.1) return ground;
@@ -65,7 +68,7 @@ export class ServiceTerrain {
       const distance = Math.hypot(Math.max(0, Math.abs(local.x) - pad.halfWidth - 3), Math.max(0, Math.abs(local.along) - pad.halfLength - 3));
       if (distance >= 24) continue;
       const elevated = this.elevatedPads.has(pad), target = pad.y + pad.grade * local.along - (elevated ? 1.7 : 0.14);
-      ground += Math.min(elevated ? 0 : 5, target - ground) * (1 - smooth(distance / 24)) * roadBlend;
+      ground += (Math.min(elevated ? ground : foundation + 5, target) - ground) * (1 - smooth(distance / 24)) * roadBlend;
     }
     const nearest = this.index.nearest(x, z, 22);
     if (nearest) {
@@ -74,9 +77,9 @@ export class ServiceTerrain {
       const target = a.y + (b.y - a.y) * t - (elevated ? 2 : 0.38)
         + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      ground += Math.min(elevated ? 0 : 5, target - ground) * (1 - smooth((Math.sqrt(nearest.distanceSquared) - 6) / 16)) * roadBlend;
+      ground += (Math.min(elevated ? ground : foundation + 5, target) - ground) * (1 - smooth((Math.sqrt(nearest.distanceSquared) - 6) / 16)) * roadBlend;
     }
-    return ground;
+    return Math.min(ground, crossingFloor);
   }
 
   contains(x: number, z: number): boolean {

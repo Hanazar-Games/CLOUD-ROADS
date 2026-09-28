@@ -7,6 +7,7 @@ export class VehicleOperations {
   doors = 0; cargo = 0; aux = 0;
   readonly target = { doors: 0, cargo: 0, aux: 0 };
   events = 0;
+  accessing = false;
   constructor(readonly profile: VehicleProfile) {}
   label(action: VehicleOperation): string {
     const p = this.profile;
@@ -20,12 +21,12 @@ export class VehicleOperations {
     return p.shape === 'supercar' ? '主动尾翼' : p.shape === 'crane' ? '工程警示灯' : p.shape === 'motorcycle' ? '驻车支架' : '';
   }
   get driveReady(): boolean {
-    return this.doors < 0.001 && this.cargo < 0.001 && !this.target.doors && !this.target.cargo
+    return !this.accessing && this.doors < 0.001 && this.cargo < 0.001 && !this.target.doors && !this.target.cargo
       && (this.profile.shape !== 'motorcycle' || this.aux < 0.001 && !this.target.aux);
   }
   get moving(): boolean { return (['doors', 'cargo', 'aux'] as const).some(key => Math.abs(this[key] - this.target[key]) > 0.001); }
   toggle(action: VehicleOperation, speed: number, driver: boolean): boolean {
-    if (!driver || !Number.isFinite(speed) || !this.label(action)
+    if (this.accessing || !driver || !Number.isFinite(speed) || !this.label(action)
       || (action !== 'aux' || this.profile.shape === 'motorcycle') && Math.abs(speed) > 0.1) return false;
     this.target[action] = 1 - this.target[action]; this.events++; return true;
   }

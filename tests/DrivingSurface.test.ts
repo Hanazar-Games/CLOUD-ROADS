@@ -148,6 +148,7 @@ describe('DrivingSurface', () => {
       const fleet = new ParkedFleet('doors'), surface = new DrivingSurface({ ...base, parkedVehicles: { fleet } }), car = new VehiclePhysics(kind);
       car.reset(1000, 0, 0, surface.sample); fleet.park(car);
       const door = surface.exit(car); expect(door, kind).toBeDefined();
+      if (car.profile.bus) expect(door!.x, kind).toBeGreaterThan(car.x);
       expect(surface.canBoard(car, door!), kind).toBe(true);
       expect(surface.canBoard(car, { ...door!, y: door!.y - 5 }), kind).toBe(false);
     }

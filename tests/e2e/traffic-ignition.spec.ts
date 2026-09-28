@@ -3,6 +3,37 @@ import { control, closeSettings, openSettings } from './settings';
 
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 
+test('opens before exiting, freezes the transition in menus and closes after entering or leaving', async ({ page }) => {
+  await page.goto('/?seed=ACCESS-ANIMATION');
+  await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
+  await page.locator('#drive-toggle').click(); await page.keyboard.press('KeyF');
+  const door = async () => Number((await metric(page, 'Vehicle operations').textContent())!.split(' / ')[0]);
+  await expect.poll(door).toBeGreaterThan(0.1);
+  await expect(metric(page, 'Travel mode')).toHaveText('driving');
+  await openSettings(page); await page.waitForTimeout(200);
+  const angle = await door(); await page.waitForTimeout(400); expect(await door()).toBe(angle);
+  await closeSettings(page); await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await expect.poll(door).toBe(0);
+  await page.keyboard.press('KeyF'); await expect.poll(door).toBeGreaterThan(0.1);
+  await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await page.keyboard.press('KeyF');
+  await expect(metric(page, 'Travel mode')).toHaveText('driving');
+  await page.keyboard.press('F2'); await expect(metric(page, 'Ignition')).not.toHaveText('off');
+  await expect.poll(door).toBe(0);
+  await expect(page.locator('#boarding-help')).toBeHidden();
+});
+
+test('cancels an unfinished exit when switching vehicles in settings', async ({ page }) => {
+  await page.goto('/?seed=ACCESS-SWITCH');
+  await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });
+  await page.locator('#drive-toggle').click(); await page.keyboard.press('KeyF');
+  await expect.poll(async () => parseFloat((await metric(page, 'Vehicle operations').textContent())!)).toBeGreaterThan(0.1);
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('sedan'); await closeSettings(page);
+  await page.waitForTimeout(2000);
+  await expect(metric(page, 'Travel mode')).toHaveText('driving');
+  await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
+});
+
 test('starts and stops the engine, opens real doors for boarding and prevents moving exits', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });

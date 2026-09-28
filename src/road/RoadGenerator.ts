@@ -202,7 +202,9 @@ export class RoadGenerator {
     const last = [0, 0, 3, 7, 15, Infinity][level], exiting = plan.stage > last;
     const target = this.start.heading + (exiting ? 0 : angle * (Math.ceil(plan.stage / 2) % 2 ? -1 : 1));
     const hairpin = !exiting && plan.stage % 2 === 1;
-    const length = hairpin ? [0, 0, 272, 224, 192, 160][level] : plan.stage === 0 || exiting ? 96 : [0, 0, 288, 192, 96, 96][level];
+    const variation = hashSeed(`${this.seed}:bend:${start.nextMountain}:${plan.stage}`) / 4294967296;
+    const length = hairpin ? Math.round([0, 0, 272, 224, 192, 160][level] * (0.88 + variation * 0.24))
+      : plan.stage === 0 || exiting ? 96 : [0, 0, 288, 192, 96, 96][level] * (1 + variation * 0.16);
     const heading = this.limitHeading(start, hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10), length);
     const desired = this.desiredGrade(start, heading, length);
     const grade = this.nextGrade(start, desired);

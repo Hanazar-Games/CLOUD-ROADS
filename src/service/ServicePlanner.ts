@@ -123,7 +123,7 @@ export class ServicePlanner {
         }
         site = { id, sample, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };
         if (this.profile.centers.length === 2) site.ground.crossover = serviceCrossover(this.seed, id, pads,
-          samples.filter(p => Math.abs(p.distance - target) <= SERVICE_SEARCH_RADIUS), this.profile.outerHalfWidth);
+          samples.filter(p => Math.abs(p.distance - target) <= SERVICE_SEARCH_RADIUS), this.profile.outerHalfWidth, access);
         if (site.ground.crossover) {
           const cross = site.ground.crossover, index = new RoadIndex(cross.access);
           site.ground.barriers = barriers.filter(({ a, b }) => {

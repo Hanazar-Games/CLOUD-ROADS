@@ -236,7 +236,6 @@ export class DrivingSystem {
     paint.value = car.paint === car.profile.paint ? 'default' : car.paint.toString(16).padStart(6, '0');
     this.mesh.setPaint(car.paint);
     this.describeVehicle(); this.updateSeatCamera();
-    this.operations.target.doors = this.operations.label('doors') ? 1 : 0;
     return true;
   }
 
@@ -515,7 +514,7 @@ export class DrivingSystem {
     const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
     for (const action of ['doors', 'cargo', 'aux'] as const) for (const prefix of ['vehicle', 'panel']) {
       const node = element<HTMLButtonElement>(`${prefix}-${action}`), label = this.operations.label(action);
-      node.hidden = !label; node.disabled = !this.active || !this.cabin.driver
+      node.hidden = !label; node.disabled = !this.active || !this.cabin.driver || this.operations.accessing
         || (action !== 'aux' || this.car.kind === 'motorcycle') && this.car.motionSpeed > 0.1;
       node.textContent = `${label} · ${this.operations.target[action] ? '收起 / 关闭' : '展开 / 开启'} · ${this.input.bindings.label(operationKeys[action])}`;
       node.setAttribute('aria-pressed', String(!!this.operations.target[action]));

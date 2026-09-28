@@ -164,7 +164,7 @@ export class DrivingSurface {
     const points: { x: number; y: number; z: number; heading: number }[] = [];
     const clearance = car.y + offset.y - floor;
     if (clearance < -0.3 || clearance > car.profile.radius + car.profile.rest + car.profile.travel + 0.5) return points;
-    for (const side of [-1, 1]) {
+    for (const side of car.profile.bus ? [1] : [-1, 1]) {
       const lateral = side * (car.profile.width / 2 + 0.65);
       const x = cabX + cos * lateral, z = cabZ + sin * lateral;
       const y = this.sample(x, z, floor + 0.45).height, point = { x, y, z, heading: car.heading };

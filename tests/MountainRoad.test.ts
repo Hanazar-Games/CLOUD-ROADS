@@ -6,6 +6,34 @@ import { RoadSpine } from '../src/road/RoadSpine';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 
 describe('mountain roads', () => {
+  it('eases banking into adjoining straights without a sudden roll rate', () => {
+    const generator = new RoadGenerator('bank-transition');
+    const turn = new RoadSegment(generator.start, 0.7, 0.06);
+    const epsilon = 0.0001;
+    expect(Math.abs(turn.sample(epsilon).bank / (turn.length * epsilon))).toBeLessThan(0.00001);
+    expect(Math.abs(turn.sample(1 - epsilon).bank / (turn.length * epsilon))).toBeLessThan(0.00001);
+    expect(Math.abs(turn.sample(0.5).bank)).toBeGreaterThan(0.05);
+  });
+
+  it('varies switchback lengths deterministically while retaining highway radius limits', () => {
+    const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 5 as const, highwayRadius: 100, junctions: false, interchanges: false };
+    const terrain = { sample: () => 500 };
+    const generate = () => {
+      const generator = new RoadGenerator('bend-variety', terrain, options), bends: number[] = [];
+      let point = generator.start;
+      while (point.distance < 15000) {
+        const segment = generator.next(point);
+        if (segment.kind === 'hairpin') bends.push(segment.length);
+        expect(Math.abs(segment.sample(0.5).curvature)).toBeLessThanOrEqual(1 / options.highwayRadius + 1e-10);
+        point = segment.end;
+      }
+      return bends;
+    };
+    const lengths = generate();
+    expect(new Set(lengths).size).toBeGreaterThan(4);
+    expect(generate()).toEqual(lengths);
+  });
+
   it('joins turns with continuous curvature, grade and banking', () => {
     const generator = new RoadGenerator('smooth');
     const first = new RoadSegment(generator.start, 0.3, 0.06);

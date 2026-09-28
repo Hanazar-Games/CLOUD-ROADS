@@ -83,7 +83,7 @@ export class RoadSegment {
       tangent: { x: Math.sin(heading) / speed, y: grade / speed, z: -Math.cos(heading) / speed },
       heading, grade, curvature,
       distance: this.start.distance + this.arc[index] + distance,
-      bank: -Math.max(-Math.PI / 30, Math.min(Math.PI / 30, Math.atan(curvature * 6))),
+      bank: -Math.max(-Math.PI / 30, Math.min(Math.PI / 30, Math.atan(curvature * 6))) * 4 * t * (1 - t),
     };
   }
 

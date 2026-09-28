@@ -11,12 +11,22 @@ import { Scene, Raycaster, Vector3 } from 'three';
 import { roadProfile } from '../src/road/RoadProfile';
 import { RoadCorridor } from '../src/road/RoadCorridor';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
+import { serviceCrossover } from '../src/service/ServiceCrossover';
 
 const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
 const start = new RoadGenerator('crossover', { sample: () => 200 }).start;
 start.position = { x: 0, y: 200, z: 0 }; start.heading = start.grade = 0;
 const segment = new RoadSegment(start, 0, 0, 20000);
 const samples = Array.from({ length: 10001 }, (_, i) => segment.sample(i / 10000));
+
+it('restores adjacent access foundations after cutting a return ramp without burying the lower road', () => {
+  const edge = (x: number, y: number) => ({ a: { x, y, z: 0, slopeX: 0, slopeZ: 0 }, b: { x, y, z: 40, slopeX: 0, slopeZ: 0 } });
+  const terrain = new ServiceTerrain([{ pads: [], access: [edge(13, 20)], elevated: false, barriers: [],
+    crossover: { kind: 'under', deck: 0, access: [edge(0, 0)], supports: [], barriers: [] } }]);
+  expect(terrain.height(13, 20, 50, 100, 4)).toBeCloseTo(19.62);
+  expect(terrain.height(0, 20, 50, 100, 4)).toBeCloseTo(-0.7);
+  expect(terrain.height(13, 20, 0, 100, 4)).toBeLessThanOrEqual(5);
+});
 
 it('provides deterministic, gently graded return roads in both grade-separated directions', () => {
   const kinds = new Set<string>();
@@ -47,6 +57,12 @@ it('provides deterministic, gently graded return roads in both grade-separated d
 it('does not connect a one-way highway to a nonexistent opposing carriageway', () => {
   const site = new ServicePlanner('return-0', { sample: () => 200 }, { ...options, oneWay: true }).detect(samples)[0];
   expect(site.ground.crossover).toBeUndefined();
+});
+
+it('rejects return ramps that intersect a service entrance at a different height', () => {
+  const site = new ServicePlanner('return-0', { sample: () => 200 }, options).detect(samples)[0];
+  const connections = site.ground.access.map(({ a, b }) => ({ a: { ...a, y: a.y + 3 }, b: { ...b, y: b.y + 3 } }));
+  expect(serviceCrossover('return-0', site.id, site.ground.pads, samples, roadProfile(options).outerHalfWidth, connections)).toBeUndefined();
 });
 
 it.each(['return-0', 'return-1'])('keeps each deck independent and renders a continuous driveable crossing (%s)', seed => {

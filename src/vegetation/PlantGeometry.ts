@@ -88,6 +88,11 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
         .translate(Math.cos(angle) * 0.85, 3.3 + i * 1.4, -Math.sin(angle) * 0.85), '#77634b'));
       if (i < 4) pieces.push(colored(new ConeGeometry(0.85 - i * 0.1, 2, 5).scale(1, 1, 0.8).rotateZ(0.25).rotateY(angle)
         .translate(Math.cos(angle) * (2.4 - i * 0.35), 4.2 + i * 1.5, Math.sin(angle) * (2.4 - i * 0.35)), i % 2 ? '#577b45' : '#75915a'));
+      if (i < 3) for (const side of [-1, 1]) {
+        const a = angle + side * 0.4, reach = 2.7 - i * 0.4;
+        pieces.push(colored(new ConeGeometry(0.48, 1.35, 4).scale(1, 1, 0.65).rotateZ(side * 0.45).rotateY(a)
+          .translate(Math.cos(a) * reach, 3.8 + i * 1.5, Math.sin(a) * reach), side < 0 ? '#456b42' : '#769354'));
+      }
     }
   } else if (kind === 'broadleaf' || kind === 'autumn' || kind === 'blossom') {
     pieces = [colored(new CylinderGeometry(0.2, 0.5, 7, 6).rotateZ(0.045).translate(0, 3.5, 0), '#75634c')];
@@ -98,6 +103,15 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       const radius = i === 0 ? 3.3 : 2.4, tint = (kind === 'autumn' ? ['#c9903d', '#d8b354', '#ae6340', '#cba252'] : ['#728d49', '#839b56', '#607b43', '#8e9e5e'])[i];
       pieces.push((detail === 'near' ? crown(radius, tint) : colored(new IcosahedronGeometry(radius * 0.94, 0), tint))
         .scale(1, 1.12, 0.9).rotateY(angle).translate(Math.cos(angle) * (i ? 2 : 0), i ? 7.5 : 9.1, -Math.sin(angle) * (i ? 1.8 : 0)));
+      if (detail === 'near') {
+        pieces.push(colored(new CylinderGeometry(0.025, 0.075, 1.8, 4).rotateZ(-0.85).rotateY(angle)
+          .translate(Math.cos(angle) * 2.15, 6.5, -Math.sin(angle) * 2.15), '#89735a'));
+        for (const side of [-1, 1]) {
+          const a = angle + side * 0.23;
+          pieces.push(colored(new IcosahedronGeometry(0.85, 0).scale(1, 0.65, 0.85).rotateY(a)
+            .translate(Math.cos(a) * 3.15, 6.3 + i * 0.25, -Math.sin(a) * 3.15), tint));
+        }
+      }
       if (kind === 'blossom') for (let j = 0; j < (detail === 'near' ? 5 : 2); j++) {
         const a = angle + j * 2.4;
         pieces.push(colored(new IcosahedronGeometry(0.38, 0).scale(1, 0.7, 1)
@@ -116,6 +130,13 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       colored(new SphereGeometry(0.27, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2).translate(1.6, 4.75, 0), '#97a96f'),
       colored(new SphereGeometry(0.24, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2).translate(-1.35, 5.25, 0), '#83975d'),
     ];
+    if (detail === 'near') for (let i = 0; i < 7; i++) {
+      const angle = i * Math.PI * 2 / 7 + Math.PI / 2, x = Math.cos(angle), z = Math.sin(angle);
+      pieces.push(colored(new CylinderGeometry(0.018, 0.025, 5.7, 3).rotateZ(0.025).rotateY(-angle)
+        .translate(x * 0.465, 3, z * 0.465), i % 2 ? '#9eb078' : '#687e4c'));
+      for (const y of [1.7, 3, 4.3]) pieces.push(colored(new ConeGeometry(0.022, 0.15, 3).rotateZ(-Math.PI / 2).rotateY(-angle)
+        .translate(x * (0.625 - y * 0.025), y, z * (0.625 - y * 0.025)), '#c6bd91'));
+    }
   } else if (kind === 'shrub') {
     pieces = [colored(new IcosahedronGeometry(1.2, 0).scale(1, 0.7, 1).translate(0, 0.7, 0), '#ffffff'),
       colored(new IcosahedronGeometry(0.85, 0).scale(1, 0.8, 1).translate(0.8, 0.5, 0.4), '#d4dfbd'),
@@ -125,6 +146,8 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       pieces.push(colored(new CylinderGeometry(0.025, 0.07, 1.1, 4).rotateZ(0.5).rotateY(angle).translate(0, 0.45, 0), '#827654'));
       for (let j = 0; j < 3; j++) pieces.push(leaf(0.3, 0.14, 0.1, j % 2 ? '#dee6c7' : '#aebf93')
         .rotateZ(0.8 + j * 0.2).rotateY(angle + j).translate(Math.cos(angle) * 0.8, 0.65 + j * 0.17, Math.sin(angle) * 0.8));
+      pieces.push(colored(new IcosahedronGeometry(0.06, 0).scale(1, 1.2, 1)
+        .translate(Math.cos(angle) * 0.82, 1.05, Math.sin(angle) * 0.82), i % 2 ? '#d9c390' : '#b88f74'));
     }
   } else if (kind === 'rock') {
     pieces = [crown(1.75, '#c1c0ab').scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0),

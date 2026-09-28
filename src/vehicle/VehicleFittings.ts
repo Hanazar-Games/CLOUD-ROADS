@@ -12,7 +12,10 @@ export class VehicleFittings {
   }
   sync(operations: VehicleOperations | undefined, dt: number): void {
     this.time += dt;
-    for (const { root, action, axis, angle } of this.hinges) root.rotation[axis] = (operations?.[action] ?? 0) * angle;
+    for (const { root, action, axis, angle } of this.hinges) {
+      const value = operations?.[action] ?? 0;
+      root.rotation[axis] = (action === 'doors' ? value * value * (3 - 2 * value) : value) * angle;
+    }
     if (this.beacon) this.beacon.emissiveIntensity = operations?.target.aux ? (Math.sin(this.time * 13) > 0 ? 3 : 0.15) : 0;
   }
   cargo(parent: Group, width: number, start: number, end: number, floor: number, top: number, kind: 'box' | 'stake' | 'flatbed', kit: VehicleDetailKit, rideHeight: number, ribs = true): void {
