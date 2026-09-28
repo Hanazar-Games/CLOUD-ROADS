@@ -159,3 +159,43 @@ it('silences transient driving sounds on pause and does not resume a stale wiper
   expect(context.resumed.at(-1)![6]).toBe(0);
   audio.dispose(); expect(context.state).toBe('closed');
 });
+
+it.each(['engineVolume', 'cabinVolume', 'effectsVolume'] as const)('cancels active transient envelopes when %s is muted', async field => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve(); audio[field] = 1;
+  const before = context.gains.map(node => node.gain.cancelScheduledValues.mock.calls.length);
+  if (field === 'engineVolume') audio.preview('shift');
+  else audio.update(0.1, { ...idle, driving: true, operations: field === 'cabinVolume' ? 1 : 0, signal: field === 'effectsVolume' });
+  const channels = context.gains.filter((node, i) => node.gain.cancelScheduledValues.mock.calls.length > before[i]);
+  expect(channels).toHaveLength(1);
+  const parameter = channels[0].gain, calls = parameter.cancelScheduledValues.mock.calls.length;
+  audio[field] = 0; audio.update(0.1, idle);
+  expect(parameter.cancelScheduledValues.mock.calls.length).toBeGreaterThan(calls);
+  expect(parameter.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, context.currentTime + 0.008);
+  expect(parameter.value).toBe(0);
+  const mutedCalls = parameter.cancelScheduledValues.mock.calls.length;
+  audio.update(0.1, idle); expect(parameter.cancelScheduledValues).toHaveBeenCalledTimes(mutedCalls);
+  audio.dispose();
+});
+
+it('closes a graph whose resume fails after the native context starts', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  context.resume = async () => { context.state = 'running'; throw new Error('Injected resume failure'); };
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve(); await Promise.resolve();
+  expect(audio.state).toBe('unavailable'); expect(audio.enabled).toBe(false);
+  expect(context.state).toBe('closed'); expect(context.gains[0].disconnect).toHaveBeenCalledOnce();
+  expect(context.oscillators.every(node => node.stop.mock.calls.length === 1)).toBe(true);
+  audio.update(0.1, { ...idle, driving: true }); expect(audio.preview('engine')).toBe(false);
+  audio.dispose(); expect(context.oscillators.every(node => node.stop.mock.calls.length === 1)).toBe(true);
+});
+
+it('reports actual music playback across pause, muted channels and resume', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); expect(audio.musicPlaying).toBe(false);
+  audio.toggle(); await Promise.resolve(); expect(audio.musicPlaying).toBe(true);
+  audio.setActive(false); expect(audio.musicPlaying).toBe(false); await Promise.resolve();
+  audio.setActive(true); await Promise.resolve(); expect(audio.musicPlaying).toBe(true);
+  audio.musicVolume = 0; expect(audio.musicPlaying).toBe(false);
+  audio.musicVolume = 1; audio.masterVolume = 0; expect(audio.musicPlaying).toBe(false);
+  audio.dispose(); expect(audio.musicPlaying).toBe(false);
+});

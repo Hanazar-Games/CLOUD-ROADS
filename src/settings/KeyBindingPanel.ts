@@ -6,6 +6,7 @@ const storageKey = 'cloud-roads.key-bindings.v1';
 export class KeyBindingPanel {
   private readonly events = new AbortController();
   private pending?: string;
+  private shiftCandidate?: string;
   private readonly hints: { node: Text; text: string; rendered: string }[] = [];
   constructor(private readonly input: InputManager) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -21,27 +22,31 @@ export class KeyBindingPanel {
     const options = { signal: this.events.signal };
     const cancel = () => {
       if (!this.pending) return;
-      this.pending = undefined; this.render(); this.status('已取消修改。');
+      this.pending = undefined; this.shiftCandidate = undefined; this.render(); this.status('已取消修改。');
     };
     window.addEventListener('blur', cancel, options);
     document.addEventListener('pointerdown', event => {
       if (event.target instanceof Element && !event.target.closest('[data-binding]')) cancel();
     }, options);
     element('bindings-reset').addEventListener('click', () => { input.bindings.reset(); this.pending = undefined; this.save(); this.render(); }, options);
-    element('explorer').addEventListener('close', () => { this.pending = undefined; this.render(); }, options);
+    element('explorer').addEventListener('beforetoggle', event => { if ((event as ToggleEvent).newState === 'closed') cancel(); }, options);
     window.addEventListener('keydown', event => {
       if (!this.pending) return;
       event.preventDefault(); event.stopImmediatePropagation(); input.clear();
       if (event.code === 'Escape') { this.pending = undefined; this.render(); this.status('已取消修改。'); return; }
       if (event.repeat || event.isComposing) return;
-      if (event.code.startsWith('Shift')) return;
-      if (event.altKey || event.metaKey || event.ctrlKey && !event.code.startsWith('Control')) { this.status('系统组合键保留，请选择其他按键。'); return; }
+      if (event.altKey || event.metaKey || event.ctrlKey && !event.code.startsWith('Control')) {
+        this.shiftCandidate = undefined; this.status('系统组合键保留，请选择其他按键。'); return;
+      }
+      if (event.code.startsWith('Shift')) { this.shiftCandidate = event.code; return; }
+      this.shiftCandidate = undefined;
       const key = event.shiftKey && !event.code.startsWith('Shift') ? `Shift+${event.code}` : event.code;
       try { input.bindings.bind(this.pending, key); this.pending = undefined; this.save(); this.render(); }
       catch (error) { this.status((error as Error).message); }
     }, { ...options, capture: true });
     window.addEventListener('keyup', event => {
-      if (!this.pending || !event.code.startsWith('Shift')) return;
+      if (!this.pending || event.code !== this.shiftCandidate) return;
+      this.shiftCandidate = undefined;
       event.preventDefault(); event.stopImmediatePropagation();
       try { input.bindings.bind(this.pending, event.code); this.pending = undefined; this.save(); this.render(); }
       catch (error) { this.status((error as Error).message); }
@@ -57,7 +62,7 @@ export class KeyBindingPanel {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.binding = id;
       button.textContent = this.pending === id ? '请按键…' : this.input.bindings.label(id);
       button.setAttribute('aria-label', `修改 ${label} 快捷键`); button.setAttribute('aria-pressed', String(this.pending === id));
-      button.addEventListener('click', () => { this.pending = id; this.render(); this.status('按下新按键；Shift 可组合，Esc 取消。'); });
+      button.addEventListener('click', () => { this.pending = id; this.shiftCandidate = undefined; this.render(); this.status('按下新按键；Shift 可组合，Esc 取消。'); });
       row.append(text, button); list.append(row);
       if (id === focused && element<HTMLDialogElement>('explorer').open) button.focus({ preventScroll: true });
     }

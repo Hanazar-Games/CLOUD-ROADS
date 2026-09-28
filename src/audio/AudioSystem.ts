@@ -91,6 +91,9 @@ export class AudioSystem {
   private readonly targets = new WeakMap<AudioParam, number>();
 
   get state(): string { return this.error ? 'unavailable' : this.context?.state ?? 'locked'; }
+  get musicPlaying(): boolean {
+    return this.audible && !this.disposed && this.state === 'running' && this.masterVolume > 0 && this.musicVolume > 0;
+  }
   get previewing(): boolean {
     return this.previewTime > 0 && this.audible && this.state === 'running' && this.sfxVolume > 0 && this.masterVolume > 0
       && (this.previewKind === 'horn' ? this.effectsVolume : this.engineVolume) > 0;
@@ -152,7 +155,10 @@ export class AudioSystem {
     void (audible ? context.resume() : context.suspend()).then(() => {
       this.transitioning = false;
       this.sync();
-    }, () => { this.transitioning = false; if (!this.disposed) { this.error = '音频暂不可用，请刷新页面后重试。'; this.enabled = false; } });
+    }, () => {
+      this.transitioning = false;
+      if (!this.disposed) { this.error = '音频暂不可用，请刷新页面后重试。'; this.enabled = false; this.dispose(); }
+    });
   }
 
   private create(): void {
@@ -253,6 +259,13 @@ export class AudioSystem {
       this.step %= 1.6;
       this.pulse(this.stepGain!, 0.22 * this.effectsVolume, 0.025);
     }
+    for (const [channel, volume] of [[this.shiftGain!, this.engineVolume], [this.pneumaticGain!, this.cabinVolume],
+      [this.clickGain!, this.effectsVolume], [this.stepGain!, this.effectsVolume]] as const) {
+      if (volume > 0 || this.targets.get(channel.gain) === 0) continue;
+      const level = channel.gain.value;
+      channel.gain.cancelScheduledValues(now); channel.gain.setValueAtTime(level, now);
+      channel.gain.linearRampToValueAtTime(0, now + 0.008); this.targets.set(channel.gain, 0);
+    }
     this.lastSignal = state.signal; this.lastWiper = state.wiper;
     this.time += dt;
     if (this.retuneAt !== undefined && now < this.retuneAt) return;
@@ -296,12 +309,14 @@ export class AudioSystem {
 
   private pulse(channel: GainNode, level: number, decay: number): void {
     const now = this.context!.currentTime;
+    this.targets.delete(channel.gain);
     channel.gain.cancelScheduledValues(now); channel.gain.setValueAtTime(level, now); channel.gain.setTargetAtTime(0, now, decay);
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.audible = false; this.previewTime = 0;
     for (const source of this.sources) { source.stop(); source.disconnect(); }
     this.master?.disconnect();
     if (this.context && this.context.state !== 'closed') void this.context.close().catch(() => {});

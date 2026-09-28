@@ -508,7 +508,8 @@ export class Game {
     element('audio-toggle').setAttribute('aria-pressed', String(this.audio.enabled));
     element('audio-toggle').textContent = this.audio.error ? '音频不可用' : this.audio.enabled ? '静音' : '开启声音';
     element<HTMLButtonElement>('audio-toggle').disabled = !!this.audio.error;
-    element('audio-status').textContent = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.state === 'running' ? '声音已开启' : '声音已暂停');
+    element('audio-status').textContent = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.masterVolume <= 0 ? '总音量为零'
+      : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音' : this.audio.state === 'running' ? '声音已开启' : '声音已暂停');
   }
 
   private applyGraphics(): void {
@@ -550,7 +551,8 @@ export class Game {
       this.flight.update(0, false);
     }
     this.weather.update(frozen ? 0 : dt, this.camera, this.world.shelter, this.world.origin);
-    this.driving.systems.radioPlaying = this.audio.enabled && this.audio.masterVolume > 0 && this.audio.musicVolume > 0 && !this.audio.error;
+    this.audio.setActive(!silent && !document.hidden && this.windowFocused && document.hasFocus());
+    this.driving.systems.radioPlaying = this.audio.musicPlaying;
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
       Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain, frozen ? 0 : dt);
     this.walking.sync();
@@ -569,7 +571,6 @@ export class Game {
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
     this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter));
-    this.audio.setActive(!silent && !document.hidden && this.windowFocused && document.hasFocus());
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: this.driving.appliedThrottle > 0 && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
