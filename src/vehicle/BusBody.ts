@@ -75,10 +75,9 @@ export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit,
   block(w - 0.12, 0.16, 0.3, 0, p.eye.y - 0.4, nose + 0.26, trim, parent);
   if (decks > 1) {
     const upper = floor + p.bus!.deckHeight;
-    const slab = block(w - 0.12, 0.1, p.length - 3, 0, upper, 1.5, trim, parent); slab.name = 'upper-deck-floor';
-    block(w * 0.52, 0.1, 2.9, -w * 0.22, upper, nose + 1.45, trim, parent);
-    block(w - 0.12, 0.1, 1.15, 0, upper, nose + 0.575, trim, parent);
-    block(0.7, 0.08, 0.35, w * 0.3, upper, nose + 2.87, trim, parent);
+    const slab = block(w - 0.12, 0.1, p.length - 2.83, 0, upper, 1.415, trim, parent); slab.name = 'upper-deck-floor';
+    block(w * 0.52, 0.1, 2.83, -w * 0.22, upper, nose + 1.415, trim, parent);
+    block(w - 0.12, 0.1, 1.17, 0, upper, nose + 0.585, trim, parent);
     for (let i = 0; i < 11; i++) {
       const step = block(0.66, 0.055, 0.16, w * 0.3, floor + (i + 1) * p.bus!.deckHeight / 11, nose + 1.25 + i * 0.15, metal, parent);
       step.name = 'bus-stair';

@@ -24,7 +24,7 @@ export function vehicleSolids(car: VehiclePhysics): VehicleSolid[] {
   } else if (p.shape === 'bus') add(body, body.front, body.rear, p.height - ride);
   else {
     const back = body.front - (p.chassisLength > 6 ? 2.5 : 2);
-    add(body, body.front, back, Math.min(p.height - ride, p.eye.y + 0.4));
+    add(body, body.front, back, p.body === 'camper' ? p.height - ride : Math.min(p.height - ride, p.eye.y + 0.4));
     add(body, back, body.rear, p.shape === 'tractor' ? 0.2 : p.shape === 'flatbed' ? 0.38 : p.shape === 'crane' ? 0.75 : p.height - ride);
   }
   for (const [i, config] of (p.trailers ?? []).entries()) {

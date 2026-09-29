@@ -8,7 +8,8 @@ import { cabStepZ, flatbedDetails, vehicleDetails, type VehicleBlock as Block, t
 import { busBody } from './BusBody';
 import { VehicleFittings } from './VehicleFittings';
 import type { VehicleOperations } from './VehicleOperations';
-import { cabinBounds, cabinSeats } from './CabinState';
+import { busSeatWidth, cabinBounds, cabinSeats } from './CabinState';
+import { cabinLayouts, type CabinLayout } from './CabinLayout';
 import { CraneMesh } from './CraneMesh';
 import type { CraneSystems } from './CraneSystems';
 import { VehicleDisplay } from './VehicleDisplay';
@@ -39,6 +40,8 @@ export class VehicleMesh {
   private readonly roof = new Group();
   private readonly windows: Group[] = [];
   private readonly cabinLight = new PointLight(0xffd69b, 0, 2.5, 2);
+  private readonly cabinFill = new PointLight(0xffdfb5, 0, 4, 2);
+  private readonly reverseLight = new SpotLight(0xffffff, 0, 18, 0.85, 0.65, 1.6);
   private readonly readingLamp: MeshStandardMaterial;
   private readonly ambient: MeshStandardMaterial;
   private readonly display = new VehicleDisplay();
@@ -186,7 +189,7 @@ export class VehicleMesh {
     }
     for (const seat of cabinSeats(profile)) {
       if (seat.role === 'operator' || profile.shape === 'motorcycle') continue;
-      const width = profile.shape === 'bus' || seat.id.startsWith('rear') ? 0.4 : 0.52;
+      const width = profile.bus ? busSeatWidth(profile) : seat.id.startsWith('rear') ? 0.4 : 0.52;
       block(width, 0.15, 0.5, seat.x, seat.y - 0.69, -seat.along + 0.05, leather);
       block(width, 0.58, 0.13, seat.x, seat.y - 0.37, -seat.along + 0.32, leather);
       block(width * 0.65, 0.18, 0.13, seat.x, seat.y - 0.02, -seat.along + 0.32, leather);
@@ -383,6 +386,35 @@ export class VehicleMesh {
       const front = -profile.chassisLength / 2;
       for (const y of [-0.17, -0.11, -0.05]) block(profile.width * 0.53, 0.012, 0.014, 0, y, front - 0.04, metal);
     }
+    const layouts = cabinLayouts(profile), lining = layouts.some(l => l.entry === 'cabin') ? this.material(0xc5cfcd, 0.96) : undefined;
+    for (const layout of layouts) {
+      const parent = this.compartment(layout.part), b = layout.bounds;
+      if (lining) block(profile.width - 0.14, 0.016, b.max.z - b.min.z, 0, b.max.y - 0.008, (b.min.z + b.max.z) / 2, lining, parent);
+      for (let z = b.min.z + 0.6; z < b.max.z - 0.3; z += 2.2) {
+        for (let deck = 0; deck < (profile.bus?.rows.length ?? 1); deck++) {
+          const y = deck === 0 && layout.stairs ? b.min.y + layout.stairs.rise - 0.14 : b.max.y - 0.055;
+          block(0.35, 0.025, 0.13, 0, y, z, this.readingLamp, parent);
+        }
+      }
+      if (profile.body === 'camper') {
+        block(0.9, 0.08, b.max.z - b.min.z, 0, b.min.y - 0.04, (b.min.z + b.max.z) / 2, kit.wood, parent);
+        for (const { bounds: f, kind } of layout.furniture) {
+          const size = f.getSize(new Vector3()), center = f.getCenter(new Vector3());
+          block(size.x, size.y, size.z, center.x, center.y, center.z, kind === 'counter' ? kit.wood : leather, parent);
+          block(size.x + 0.015, 0.04, size.z + 0.015, center.x, f.max.y, center.z, kind === 'counter' ? metal : upholstery, parent);
+          if (kind === 'counter') {
+            block(0.36, 0.018, 0.36, center.x, f.max.y + 0.025, center.z, trim, parent);
+            block(0.035, 0.16, 0.035, center.x - 0.2, f.max.y + 0.08, center.z, metal, parent);
+          }
+          if (kind === 'bed') for (const x of [-0.5, 0.5]) block(0.5, 0.12, 0.3, x, f.max.y + 0.06, center.z + 0.25, upholstery, parent);
+        }
+      }
+    }
+    this.cabinLight.name = 'cabin-reading-light'; this.cabinFill.name = 'cabin-fill-light'; this.chassis.add(this.cabinFill);
+    const rearParent = this.trailers.at(-1)?.body ?? this.chassis;
+    const rearZ = profile.trailers?.length ? profile.trailers.at(-1)!.length - profile.trailers.at(-1)!.front : profile.chassisLength / 2;
+    this.reverseLight.name = 'reverse-beam'; this.reverseLight.position.set(0, -0.05, rearZ + 0.12);
+    this.reverseLight.target.position.set(0, -1, rearZ + 7); rearParent.add(this.reverseLight, this.reverseLight.target);
     for (const parent of [this.chassis, ...this.trailers.map(t => t.body), this.steering, ...this.fittings.hinges.map(h => h.root), ...this.wheels.map(wheel => wheel.spin), ...this.trailers.flatMap(t => t.wheels.map(wheel => wheel.spin))])
       this.geometries.push(...mergeVehicleParts(parent));
   }
@@ -394,6 +426,23 @@ export class VehicleMesh {
     const target = operator && this.crane ? this.crane.turret : this.chassis;
     target.updateWorldMatrix(true, false);
     return operator && this.operatorInterior ? this.operatorInterior : this.interior;
+  }
+
+  compartment(part: number): Group { return part ? this.trailers[part - 1].body : this.chassis; }
+
+  walkVolume(layout: CabinLayout): InteriorBounds {
+    const body = this.compartment(layout.part); body.updateWorldMatrix(true, false);
+    return { bounds: layout.bounds, matrixWorld: body.matrixWorld };
+  }
+
+  illuminateInterior(layout: CabinLayout | undefined, position: { x: number; y: number; z: number }, enabled: boolean): void {
+    if (!layout) { this.cabinFill.intensity = 0; return; }
+    const parent = this.compartment(layout.part), b = layout.bounds;
+    if (this.cabinFill.parent !== parent) parent.add(this.cabinFill);
+    const ceiling = layout.stairs && position.y < b.min.y + layout.stairs.rise - 0.4
+      ? b.min.y + layout.stairs.rise - 0.16 : b.max.y - 0.08;
+    this.cabinFill.position.set(0, ceiling, Math.max(b.min.z + 0.3, Math.min(b.max.z - 0.3, position.z)));
+    this.cabinFill.intensity = enabled ? 3 : 0;
   }
 
   sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0, crane?: CraneSystems, operations?: VehicleOperations): void {
@@ -417,6 +466,7 @@ export class VehicleMesh {
     this.fogLens.emissiveIntensity = systems.fogLights ? 2.5 : 0;
     this.rearFog.emissiveIntensity = systems.fogLights ? 3 : 0;
     this.reverseLens.emissiveIntensity = car.reversing ? 3.5 : 0;
+    this.reverseLight.intensity = car.reversing ? 65 : 0;
     const range = Math.max(80, Math.min(800, systems.lightRange)), power = Math.max(0.25, Math.min(2, systems.lightPower));
     this.headlight.intensity = on ? (high ? 650 : 380) * power * Math.sqrt(range / 180) : 0;
     this.foglight.intensity = systems.fogLights ? 210 * power : 0;
@@ -481,7 +531,7 @@ export class VehicleMesh {
     const cabBack = passenger ? p.body === 'limousine' ? 2.5 : p.body === 'pickup' ? 0.3 : p.shape === 'suv' || p.body === 'hatchback' ? length / 2 - 0.12 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (length > 6 ? 2.5 : 2);
     const cabLength = cabBack - cabFront, cabCenter = (cabFront + cabBack) / 2;
     const sill = p.shape === 'supercar' ? 0.08 : passenger ? 0.18 : 0.58;
-    const roof = p.body === 'expedition' ? top - 0.4 : passenger || p.body === 'van' ? top : Math.min(top, p.eye.y + 0.4);
+    const roof = p.body === 'expedition' ? top - 0.4 : passenger || p.body === 'van' || p.body === 'camper' ? top : Math.min(top, p.eye.y + 0.4);
     const driverBack = p.body === 'limousine' ? -0.65 : passenger ? Math.min(cabCenter + 0.1, cabBack) : cabBack;
     const doorFront = cabFront + 0.06, doorBack = driverBack - 0.06;
     if (passenger) {
@@ -530,6 +580,10 @@ export class VehicleMesh {
       block(0.12, 0.055, doorBack - doorFront + 0.1, side * (w / 2 - 0.085), -0.225, (doorFront + doorBack) / 2, metal);
     }
     for (const z of [cabFront, cabBack]) {
+      if (p.body === 'camper' && z === cabBack) {
+        for (const side of [-1, 1]) block((w - 0.9) / 2, roof - sill, 0.06, side * (w + 0.9) / 4, (roof + sill) / 2, z, trim);
+        block(0.9, 0.08, 0.06, 0, roof - 0.04, z, trim); continue;
+      }
       const front = z === cabFront, tilt = Math.atan2(rake, roof - sill) * (front ? 1 : -1);
       const center = z + (front ? rake / 2 : -rake / 2);
       for (const [y, along] of [[sill + 0.015, z], [roof - 0.035, z + (front ? rake : -rake)]])
@@ -585,7 +639,7 @@ export class VehicleMesh {
     this.steering.add(new Mesh(this.geometry(new TorusGeometry(0.18, 0.018, 6, 24)), trim));
     block(0.31, 0.035, 0.03, 0, 0, 0, metal, this.steering);
     if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'sprinkler' && p.body !== 'firetruck' && p.body !== 'mixer') {
-      this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight, !p.body);
+      this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight, !p.body, p.body === 'camper');
     } else if (p.shape === 'tractor') {
       block(1.6, 0.14, 1.25, 0, 0.08, -p.trailers![0].hitchAlong, metal);
       for (const side of [-1, 1]) block(0.36, 0.36, 1.1, side * 0.92, -0.08, -0.1, metal);
@@ -616,7 +670,7 @@ export class VehicleMesh {
     this.deviceLights.dispose(); this.deviceLights.material.dispose();
     this.windshield?.dispose();
     this.spray?.dispose();
-    this.root.removeFromParent(); this.headlight.dispose(); this.foglight.dispose(); this.cabinLight.dispose();
+    this.root.removeFromParent(); this.headlight.dispose(); this.foglight.dispose(); this.cabinLight.dispose(); this.cabinFill.dispose(); this.reverseLight.dispose();
     this.geometries.forEach(geometry => geometry.dispose()); this.materials.forEach(material => material.dispose());
   }
 }

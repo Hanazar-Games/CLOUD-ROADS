@@ -159,6 +159,14 @@ export class DrivingSurface {
     return this.exits(car)[0];
   }
 
+  cargoExit(point: { x: number; y: number; z: number }, heading: number, car: VehiclePhysics) {
+    const y = this.sample(point.x, point.z, point.y + 0.1).height;
+    if (point.y - y < -0.2 || point.y - y > 2.8 || this.ceiling(point.x, point.z, y) < y + 1.8) return;
+    const candidate = { x: point.x, y, z: point.z, heading };
+    if (constrainVehicle(candidate, candidate.x, candidate.z, 0.42, y, car)) return;
+    if (!this.constrainWalker(candidate, candidate.x, candidate.z)) return candidate;
+  }
+
   canBoard(car: VehiclePhysics, person: { x: number; y: number; z: number }): boolean {
     return this.boardingDistance(car, person) < 2.2;
   }

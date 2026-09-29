@@ -11,7 +11,8 @@ it('uses Backquote ignition and conflict-free ordinary keys for all default acti
   expect(new Set(Object.values(keys.snapshot())).size).toBe(bindingActions.length);
   expect(keys.resolve('KeyJ', true)).toBe('VehicleLock');
   expect(keys.resolve('KeyU', true)).toBe('Fridge');
-  keys.bind('Ignition', 'Shift+KeyO'); expect(keys.format('{Ignition} 点火')).toBe('Shift+O 点火');
+  expect(keys.resolve('KeyO', true)).toBe('CabinWalk');
+  keys.bind('Ignition', 'Shift+KeyR'); expect(keys.format('{Ignition} 点火')).toBe('Shift+R 点火');
 });
 
 it('rebinds actions, rejects conflicts and restores defaults', () => {

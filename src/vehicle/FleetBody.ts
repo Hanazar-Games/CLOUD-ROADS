@@ -169,8 +169,14 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     for (const side of [-1, 1]) {
       block(0.07, 0.14, length - 0.2, side * w / 2, 0.87, middle, p.body === 'ambulance' ? amber : metal, parent);
       if (p.body !== 'van') for (const z of [middle - 0.6, middle + 0.8]) {
-        block(0.075, 0.66, 0.86, side * w / 2, top - 0.65, z, trim, parent);
-        block(0.08, 0.55, 0.75, side * w / 2, top - 0.65, z, glass, parent);
+        if (p.body === 'camper') {
+          for (const y of [top - 0.955, top - 0.345]) block(0.075, 0.05, 0.86, side * (w / 2 - 0.03), y, z, trim, parent);
+          for (const end of [-1, 1]) block(0.075, 0.66, 0.055, side * (w / 2 - 0.03), top - 0.65, z + end * 0.4025, trim, parent);
+          block(0.015, 0.56, 0.75, side * (w / 2 - 0.03), top - 0.65, z, glass, parent);
+        } else {
+          block(0.075, 0.66, 0.86, side * w / 2, top - 0.65, z, trim, parent);
+          block(0.08, 0.55, 0.75, side * w / 2, top - 0.65, z, glass, parent);
+        }
       }
       if (p.body === 'ambulance') {
         block(0.09, 0.55, 0.14, side * w / 2, 1.3, start + 0.5, amber, parent);
@@ -179,7 +185,7 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
       if (p.body === 'van') for (const z of [start + 0.05, middle + 0.3]) block(0.08, top - 0.7, 0.022, side * w / 2, (top + 0.7) / 2, z, trim, parent);
     }
     if (p.body === 'camper') {
-      panel(w - 0.1, 0.35, 1.5, 0, top - 0.13, start - 0.7, paint, parent);
+      panel(w - 0.1, 0.1, 1.5, 0, top + 0.055, start - 0.7, paint, parent);
       block(0.16, 0.14, length - 0.3, w / 2 + 0.04, top - 0.18, middle, trim, parent);
       block(0.6, 0.025, 0.7, 0, top + 0.055, middle, glass, parent);
     }

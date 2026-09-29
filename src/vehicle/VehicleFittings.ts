@@ -18,7 +18,7 @@ export class VehicleFittings {
     }
     if (this.beacon) this.beacon.emissiveIntensity = working || operations?.target.aux ? (Math.sin(this.time * 13) >= 0 ? 6 : 0.15) : 0;
   }
-  cargo(parent: Group, width: number, start: number, end: number, floor: number, top: number, kind: 'box' | 'stake' | 'flatbed', kit: VehicleDetailKit, rideHeight: number, ribs = true): void {
+  cargo(parent: Group, width: number, start: number, end: number, floor: number, top: number, kind: 'box' | 'stake' | 'flatbed', kit: VehicleDetailKit, rideHeight: number, ribs = true, passage = false): void {
     const { block, paint, trim, metal } = kit, length = end - start, middle = (start + end) / 2;
     block(width - 0.05, 0.14, length, 0, floor, middle, paint, parent);
     if (kind === 'flatbed') {
@@ -33,10 +33,19 @@ export class VehicleFittings {
     const height = top - floor;
     if (kind === 'box') {
       block(width, 0.09, length, 0, top, middle, paint, parent);
-      block(width, height, 0.06, 0, (top + floor) / 2, start, paint, parent);
+      if (passage) {
+        for (const side of [-1, 1]) block((width - 0.9) / 2, height, 0.06, side * (width + 0.9) / 4, (top + floor) / 2, start, paint, parent);
+        block(0.9, 0.08, 0.06, 0, top - 0.04, start, paint, parent);
+      } else block(width, height, 0.06, 0, (top + floor) / 2, start, paint, parent);
     }
     for (const side of [-1, 1]) {
-      if (kind === 'box') block(0.06, height, length, side * (width / 2 - 0.03), (top + floor) / 2, middle, paint, parent);
+      if (kind === 'box' && passage) {
+        const x = side * (width / 2 - 0.03), bottom = top - 0.98, upper = top - 0.32;
+        block(0.06, bottom - floor, length, x, (bottom + floor) / 2, middle, paint, parent);
+        block(0.06, top - upper, length, x, (top + upper) / 2, middle, paint, parent);
+        for (const [from, to] of [[start, middle - 1.03], [middle - 0.17, middle + 0.37], [middle + 1.23, end]])
+          if (to > from) block(0.06, upper - bottom, to - from, x, (upper + bottom) / 2, (from + to) / 2, paint, parent);
+      } else if (kind === 'box') block(0.06, height, length, side * (width / 2 - 0.03), (top + floor) / 2, middle, paint, parent);
       else {
         block(0.05, 0.45, length, side * width / 2, floor + 0.27, middle, paint, parent);
         for (let y = floor + 0.65; y <= top; y += 0.32) block(0.055, 0.045, length, side * width / 2, y, middle, metal, parent);
@@ -45,6 +54,7 @@ export class VehicleFittings {
         block(0.07, height, 0.055, side * width / 2, (top + floor) / 2, z, metal, parent);
       const gate = this.hinge('cargo', parent, side * width / 2, floor, end, 'y', side * Math.PI * 0.8);
       block(width / 2 - 0.05, kind === 'box' ? height : 0.45, 0.065, -side * width / 4, kind === 'box' ? height / 2 : 0.27, 0, paint, gate);
+      if (kind === 'box') block(0.055, height, 0.03, -side * (width / 2 - 0.012), height / 2, -0.02, trim, gate);
       for (const x of [0, -side * width / 2 + side * 0.04]) block(0.055, height, 0.08, x, height / 2, 0, metal, gate);
       if (kind === 'stake') for (let y = 0.65; y <= height; y += 0.32) block(width / 2, 0.045, 0.06, -side * width / 4, y, 0, metal, gate);
       block(0.035, height * 0.72, 0.05, -side * width * 0.36, height / 2, 0.05, metal, gate);

@@ -1,4 +1,4 @@
-import type { PerspectiveCamera, Scene } from 'three';
+import { Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { DrivingCamera, drivingViews, type DrivingView } from '../camera/DrivingCamera';
 import { element } from '../debug/DebugUI';
 import type { InputManager } from '../input/InputManager';
@@ -10,6 +10,8 @@ import { VehiclePhysics } from './VehiclePhysics';
 import { vehicleProfiles, suspensionLevels, suspensionNames, suspensionTuning, type Suspension, type VehicleKind } from './VehicleConfig';
 import { VehicleSystems, lightNames, wiperNames, signalNames, type LightMode, type WiperMode, type SignalMode } from './VehicleSystems';
 import { CabinState } from './CabinState';
+import { CabinWalk } from './CabinWalk';
+import type { CabinLayout } from './CabinLayout';
 import { CraneSystems } from './CraneSystems';
 import { radioStations } from '../audio/RadioStations';
 import { VehicleOperations, operationKeys, type VehicleOperation } from './VehicleOperations';
@@ -24,6 +26,7 @@ export class DrivingSystem {
   readonly autopilot = new Autopilot();
   appliedThrottle = 0;
   cabin = new CabinState(this.car.profile);
+  cabinWalk = new CabinWalk(this.car.profile);
   crane = new CraneSystems();
   operations = new VehicleOperations(this.car.profile, this.car.equipment);
   readonly cameraRig;
@@ -139,7 +142,8 @@ export class DrivingSystem {
     }, options);
     element('driving-view').addEventListener('change', () => {
       const view = element<HTMLSelectElement>('driving-view').value as DrivingView;
-      if (drivingViews.includes(view)) { this.cameraRig.view = view; this.cameraRig.reset(); }
+      if (this.cabin.standing) element<HTMLSelectElement>('driving-view').value = 'cockpit';
+      else if (drivingViews.includes(view)) { this.cameraRig.view = view; this.cameraRig.reset(); }
     }, options);
     element('driving-fov').addEventListener('input', () => {
       this.cameraRig.fov = Number(element<HTMLInputElement>('driving-fov').value);
@@ -183,6 +187,7 @@ export class DrivingSystem {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
     if (resume && (!this.parked || this.car.equipment.locked)) return false;
+    this.cabinWalk.stop(); this.cabin.standing = false; this.walkStatus('');
     this.car.gravity = surfaceGravity(world.options.terrain);
     this.surface = new DrivingSurface(world);
     if (!resume) {
@@ -212,6 +217,8 @@ export class DrivingSystem {
     if (park) this.car.park();
     element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
     this.active = false; this.input.clear();
+    this.cabinWalk.stop(); this.cabin.standing = false; this.walkStatus('');
+    document.body.classList.remove('cabin-walking');
     if (!park) this.surface = undefined;
     this.camera.fov = 65; this.camera.near = 0.5; this.camera.updateProjectionMatrix();
     this.mesh.root.visible = park; this.setUI();
@@ -220,10 +227,64 @@ export class DrivingSystem {
   exitLocation() {
     if (!this.active || !this.getWorld().roadReady || this.getWorld().searching) return undefined;
     if (this.car.motionSpeed > 0.1) { this.exitBlockedTime = 3; return undefined; }
+    const walk = this.cabinWalk, room = walk.layout;
+    if (this.cabin.standing && room) {
+      if (!this.nearInteriorExit) { this.walkStatus('请先走到车门附近，再下到车外。'); return; }
+      if (room.entry === 'cargo') return this.cargoExit(room);
+    }
     const point = this.surface?.exit(this.car);
     if (!point) this.exitBlockedTime = 3;
     return point;
   }
+
+  get nearInteriorExit(): boolean {
+    const walk = this.cabinWalk, room = walk.layout;
+    return !this.cabin.standing || !room || (room.entry === 'cargo' ? walk.person.z > room.bounds.max.z - 1.3
+      : walk.floor === 1 && walk.person.z < room.bounds.min.z + 1.5);
+  }
+
+  cargoExit(layout: CabinLayout) {
+    const matrix = this.mesh.walkVolume(layout).matrixWorld, origin = this.getWorld().origin;
+    const point = new Vector3(0, layout.bounds.min.y, layout.bounds.max.z + 0.7).applyMatrix4(matrix);
+    point.x += origin.x; point.z += origin.z;
+    return this.surface?.cargoExit(point, layout.part ? this.car.trailers[layout.part - 1].heading : this.car.heading, this.car);
+  }
+
+  nearbyCargo(person: { x: number; y: number; z: number }, includeLocked = false): CabinLayout | undefined {
+    const world = this.getWorld();
+    if (!this.parked || !world.roadReady || world.searching || this.car.motionSpeed > 0.1 || this.car.equipment.locked && !includeLocked) return;
+    return this.cabinWalk.layouts.find(l => {
+      if (l.entry !== 'cargo') return false;
+      const point = this.cargoExit(l);
+      return point && Math.hypot(person.x - point.x, person.z - point.z) < 1.6 && Math.abs(person.y - point.y) < 0.65;
+    });
+  }
+
+  enterCargo(layout: CabinLayout): void {
+    this.cabinWalk.enter(layout, this.cabin); this.prepareWalk();
+  }
+
+  toggleCabinWalk(): boolean {
+    if (!this.active || this.operations.accessing || this.car.motionSpeed > 0.1) { this.walkStatus('请先停稳，并等待车门动作完成。'); return false; }
+    if (this.cabin.standing) {
+      const seat = this.cabinWalk.nearestSeat(this.cabin);
+      if (seat) return this.selectSeat(seat);
+      this.walkStatus('附近没有座位；货厢请走到尾门按 F 下车。'); return false;
+    }
+    if (!this.cabinWalk.leaveSeat(this.cabin, this.car.motionSpeed)) {
+      this.walkStatus(this.cabinWalk.layouts.length ? '驾驶室与货厢不贯通，请先按 F 下车，到尾门按 {CabinWalk} 进入货厢。' : '此车型没有可站立通道，可按 P 换座或 F 下到车外。'); return false;
+    }
+    this.prepareWalk(); return true;
+  }
+
+  private prepareWalk(): void {
+    this.car.park(); this.autopilot.cancel('车内离座'); this.appliedThrottle = 0; this.input.clear();
+    this.cameraRig.view = 'cockpit'; element<HTMLSelectElement>('driving-view').value = 'cockpit';
+    this.walkStatus(this.cabinWalk.layout?.entry === 'cargo' ? 'WASD 货厢走动 · 到尾门后 F 下到车外；驾驶室需从外部进入'
+      : 'WASD 车内走动 · {CabinWalk} 就近坐下 · P 座位图 · 到车门后 F 下车');
+  }
+
+  private walkStatus(text: string): void { element('cabin-walk-status').textContent = this.input.bindings.format(text); }
 
   canBoard(person: { x: number; y: number; z: number }, includeLocked = false): boolean {
     return this.parked && (includeLocked || !this.car.equipment.locked) && this.getWorld().roadReady && !this.getWorld().searching
@@ -259,7 +320,7 @@ export class DrivingSystem {
     if (this.parked) world.parkedVehicles.fleet.park(this.car, this.fleetId);
     this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
     car.gravity = surfaceGravity(world.options.terrain);
-    this.surface = new DrivingSurface(world); this.cabin = new CabinState(car.profile); this.crane = new CraneSystems();
+    this.surface = new DrivingSurface(world); this.cabin = new CabinState(car.profile); this.cabinWalk = new CabinWalk(car.profile); this.crane = new CraneSystems();
     this.operations = new VehicleOperations(car.profile, car.equipment); this.systems.configure(car.profile.shape);
     if (car.profile.shape === 'roadster') this.systems.roofOpen = this.systems.roofTarget = car.roofOpen;
     this.parked = true; element<HTMLSelectElement>('vehicle-kind').value = car.kind;
@@ -277,8 +338,17 @@ export class DrivingSystem {
 
   get glassWater(): number { return this.mesh.glassWater; }
   get sweptWater(): number { return this.mesh.sweptWater; }
+  get cabinExposure(): number {
+    if (this.cabin.standing && this.cabinWalk.layout?.entry === 'cargo') return this.operations.cargo;
+    return Math.max(this.systems.cabinExposure, this.car.profile.body === 'camper' ? this.operations.cargo : 0);
+  }
   get interior() {
-    if (!this.active || this.systems.cabinExposure > 0.001) return;
+    if (this.active && this.cabin.standing && this.cabinWalk.layout) {
+      const layout = this.cabinWalk.layout;
+      if (this.cabinExposure > 0.001) return;
+      return this.mesh.walkVolume(layout);
+    }
+    if (!this.active || this.cabinExposure > 0.001) return;
     return this.mesh.cabinVolume(this.cabin.selected.role === 'operator');
   }
 
@@ -291,7 +361,7 @@ export class DrivingSystem {
     if (this.active) return this.cabin.driver ? this.car : undefined;
     const person = this.getWalker(); if (!person) return;
     const entry = this.nearbyVehicle(person);
-    return entry ? this.entryVehicle(entry) : this.canBoard(person, true) ? this.car : undefined;
+    return entry ? this.entryVehicle(entry) : this.canBoard(person, true) || this.nearbyCargo(person, true) ? this.car : undefined;
   }
 
   toggleLock(): void {
@@ -358,6 +428,7 @@ export class DrivingSystem {
   action(code: string): void {
     if (code === 'VehicleLock') this.toggleLock();
     if (!this.active) return;
+    if (code === 'CabinWalk') this.toggleCabinWalk();
     if (code === 'Fridge') this.toggleFridge();
     if (this.autopilot.active && (['KeyS', 'Space', 'BracketLeft', 'BracketRight', 'Transmission'].includes(code)
       || code === 'KeyW' && this.autopilot.settings.mode !== 'steering'
@@ -394,7 +465,7 @@ export class DrivingSystem {
     if (code === 'KeyK' && this.systems.hasWindows) this.systems.ambientLight = !this.systems.ambientLight;
     if (code === 'KeyU' && this.systems.hasWindows) this.systems.cabinLight = !this.systems.cabinLight;
     if (code === 'KeyO' && this.car.kind === 'crane') this.crane.toggle(this.cabin.selected.role === 'operator', this.car.motionSpeed);
-    if (code === 'Backspace') { this.cabin.resetAdjustment(); this.cameraRig.reset(); }
+    if (code === 'Backspace' && !this.cabin.standing) { this.cabin.resetAdjustment(); this.cameraRig.reset(); }
     if (this.cabin.driver && this.car.powertrain !== 'ev' && (code === 'BracketLeft' || code === 'BracketRight')) {
       this.car.transmission.mode = 'manual'; element<HTMLSelectElement>('transmission-mode').value = 'manual';
       this.car.transmission.shift(code === 'BracketRight' ? 1 : -1, this.car.speed);
@@ -418,7 +489,7 @@ export class DrivingSystem {
       this.systems.wipers = modes[(modes.indexOf(this.systems.wipers) + 1) % modes.length];
       element<HTMLSelectElement>('vehicle-wipers').value = this.systems.wipers;
     }
-    if (code === 'KeyC') {
+    if (code === 'KeyC' && !this.cabin.standing) {
       this.cameraRig.view = drivingViews[(drivingViews.indexOf(this.cameraRig.view) + 1) % drivingViews.length];
       element<HTMLSelectElement>('driving-view').value = this.cameraRig.view; this.cameraRig.reset();
     }
@@ -435,7 +506,7 @@ export class DrivingSystem {
     const operator = this.cabin.selected.role === 'operator';
     if (!held) {
       this.systems.moveWindow(axis('Period', 'Comma'), dt);
-      this.cabin.adjust(axis('ArrowRight', 'ArrowLeft') * dt * 0.1, axis('ArrowUp', 'ArrowDown') * dt * 0.12,
+      if (!this.cabin.standing) this.cabin.adjust(axis('ArrowRight', 'ArrowLeft') * dt * 0.1, axis('ArrowUp', 'ArrowDown') * dt * 0.12,
         axis('PageUp', 'PageDown') * dt * 0.08, axis('End', 'Home') * dt * 0.2);
       if (this.car.kind === 'crane') this.crane.update(dt, { slew: axis('KeyD', 'KeyA'), lift: axis('KeyW', 'KeyS'),
         extend: axis('KeyE', 'KeyQ'), hoist: axis('KeyX', 'KeyZ') }, operator, this.car.motionSpeed);
@@ -459,7 +530,11 @@ export class DrivingSystem {
     }
     this.cameraRig.enclosed = this.car.kind === 'roadster' && this.systems.roofOpen < 0.95;
     this.updateSeatCamera();
-    this.cameraRig.update(held ? 0 : dt, this.car, this.surface, world.origin, held ? [0, 0] : look);
+    if (this.cabin.standing) {
+      this.cabinWalk.update(held || this.operations.accessing ? 0 : dt,
+        { forward: axis('KeyW', 'KeyS'), lateral: axis('KeyD', 'KeyA'), run: false, sprint: false, jump: this.input.down('Space') }, look);
+    } else this.cameraRig.update(held ? 0 : dt, this.car, this.surface, world.origin, held ? [0, 0] : look);
+    document.body.classList.toggle('cabin-walking', this.cabin.standing);
     document.body.classList.toggle('in-cabin', this.cameraRig.view === 'cockpit');
     this.hudTime += dt;
     if (this.hudTime >= 0.1) {
@@ -477,6 +552,7 @@ export class DrivingSystem {
           : !this.car.parked && box.engineBrake > 0.05 ? '松油门 · 带挡滑行' : '怠速 / 自由滑行';
       this.describeEquipment();
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
+        : this.cabin.standing ? `${this.cabinWalk.layout?.label} · ${this.cabinWalk.floor}F · ${this.cabinWalk.eyeHeight < 1.4 ? '低顶弯腰' : '离座步行'} · 不能驾驶`
         : !this.cabin.driver ? `${this.cabin.selected.label} · P 换座${operator ? ' · O 操作吊车' : ' · 不能驾驶'}`
         : !this.crane.stowed ? '吊车未收妥 · 请回操作席按 O 收车'
         : !this.operations.driveReady ? '车门 / 舱门 / 支架未收妥 · J / Y / I 关闭'
@@ -494,7 +570,7 @@ export class DrivingSystem {
       element('speed-line').style.transform = `scaleX(${speedRatio})`;
       element('dial-progress').style.strokeDasharray = `${speedRatio * 100} 100`;
       element('dial-needle').setAttribute('transform', `rotate(${speedRatio * 240} 100 83)`);
-      element('hud-mode').textContent = operator ? 'CRANE' : this.cabin.driver ? 'DRIVE' : 'PASSENGER';
+      element('hud-mode').textContent = this.cabin.standing ? 'WALK' : operator ? 'CRANE' : this.cabin.driver ? 'DRIVE' : 'PASSENGER';
       element('drive-hud').classList.toggle('braking', this.car.braking);
       element('suspension-compression').textContent = `轮端压缩 ${this.car.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`
         + this.car.trailers.map((t, i) => ` · 挂车 ${i + 1} ${t.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`).join('');
@@ -506,6 +582,7 @@ export class DrivingSystem {
     this.car.equipment.update(this.active ? this.systemsDt : this.parked ? dt : 0, this.car.ignition === 'running');
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
     if (this.parked) {
+      this.mesh.illuminateInterior(undefined, this.car, false);
       const world = this.getWorld();
       this.mesh.root.visible = Math.hypot(this.car.x - world.origin.x - this.camera.position.x, this.car.z - world.origin.z - this.camera.position.z) < 250;
       if (this.mesh.root.visible) {
@@ -527,6 +604,10 @@ export class DrivingSystem {
       element('turn-left').setAttribute('aria-label', this.systems.leftSignal ? '左转灯亮' : '左转灯灭');
       element('turn-right').setAttribute('aria-label', this.systems.rightSignal ? '右转灯亮' : '右转灯灭');
       this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt, this.crane, this.operations);
+      const layout = this.cabin.standing ? this.cabinWalk.layout : this.cabinWalk.layouts.find(l => l.entry === 'cabin');
+      this.mesh.illuminateInterior(layout, this.cabin.standing ? this.cabinWalk.person
+        : { x: this.cabin.selected.x, y: this.cabin.selected.y - 1.1, z: -this.cabin.selected.along }, this.systems.cabinLight);
+      if (this.cabin.standing && layout) this.cabinWalk.camera(this.camera, this.mesh.walkVolume(layout).matrixWorld);
       element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯${this.systems.fogLights ? ' · 雾灯' : ''}`;
       element('vehicle-lights-status').classList.toggle('high-beam', this.systems.beam === 'high');
       element('vehicle-wipers-status').textContent = this.systems.hasWindshield ? `雨刮 · ${wiperNames[this.systems.wipers]}` : '无雨刮';
@@ -556,11 +637,11 @@ export class DrivingSystem {
     this.autopilot.cancel(); this.parked = false;
     this.fleetId = undefined;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
-    this.cabin = new CabinState(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
+    this.cabin = new CabinState(next.profile); this.cabinWalk = new CabinWalk(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
     this.operations = new VehicleOperations(next.profile, next.equipment);
     this.systems.configure(next.profile.shape);
     this.applyPaint();
-    this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();
+    this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.walkStatus(''); this.describeVehicle();
   }
 
   private describeVehicle(): void {
@@ -682,7 +763,9 @@ export class DrivingSystem {
   }
 
   selectSeat(id: string): boolean {
-    if (!this.active || !this.cabin.select(id, this.car.motionSpeed)) return false;
+    if (this.cabinWalk.layout?.entry === 'cargo') { this.walkStatus('货厢与驾驶室不贯通，请从尾门下车后进入驾驶室。'); return false; }
+    if (!this.active || this.operations.accessing || !this.cabin.select(id, this.car.motionSpeed)) return false;
+    this.cabinWalk.stop(); document.body.classList.remove('cabin-walking'); this.walkStatus('');
     this.autopilot.cancel(); this.car.park(); this.cameraRig.view = 'cockpit'; this.cameraRig.reset(); this.input.clear();
     element<HTMLSelectElement>('driving-view').value = 'cockpit'; this.updateSeatCamera(); return true;
   }
@@ -717,5 +800,5 @@ export class DrivingSystem {
     element('world').setAttribute('aria-label', this.active ? '山路驾驶；W 加速，S 刹车倒车，A D 转向，Space 手刹，C 切换视角，F 下车，L 车灯，B 雨刮，R 回到道路' : '无限山地 3D 视图；拖动鼠标观察，WASD 飞行');
   }
 
-  dispose(): void { this.events.abort(); this.mesh.dispose(); document.body.classList.remove('driving', 'in-cabin'); }
+  dispose(): void { this.events.abort(); this.mesh.dispose(); document.body.classList.remove('driving', 'in-cabin', 'cabin-walking'); }
 }

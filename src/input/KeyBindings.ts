@@ -5,6 +5,7 @@ export const bindingActions = [
   ['ShiftRight', 'ShiftRight', '驾驶 / 移动', '跑步 / 飞行下降（右键）'], ['ControlLeft', 'ControlLeft', '驾驶 / 移动', '飞行加速（左键）'],
   ['ControlRight', 'ControlRight', '驾驶 / 移动', '飞行加速（右键）'], ['Ignition', 'Backquote', '驾驶 / 移动', '点火 / 熄火'],
   ['KeyF', 'KeyF', '驾驶 / 移动', '安全上下车'], ['KeyR', 'KeyR', '驾驶 / 移动', '回到道路'],
+  ['CabinWalk', 'Shift+KeyO', '驾驶 / 移动', '车内离座 / 就近坐下 / 尾门进入货厢'],
   ['BracketLeft', 'BracketLeft', '驾驶 / 移动', '手动降挡'], ['BracketRight', 'BracketRight', '驾驶 / 移动', '手动升挡'],
   ['Powertrain', 'Shift+KeyI', '驾驶 / 移动', '切换燃油 / 电动动力'], ['Regeneration', 'Shift+KeyN', '驾驶 / 移动', '电动能量回收 0–3 档'],
   ['TrailerBrake', 'Shift+KeyH', '车型操作', '挂车独立制动开关'],
@@ -56,7 +57,7 @@ export class KeyBindings {
     this.values = { ...values };
   }
   format(text: string): string {
-    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug|FogLights|VehicleLock|Fridge)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
+    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug|FogLights|VehicleLock|Fridge|CabinWalk|Powertrain)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
       (key: string, index: number) => key === 'L' && /\d\s?$/.test(text.slice(0, index)) ? key : this.label(key.startsWith('{') ? key.slice(1, -1) : key.length === 1 ? `Key${key}` : key));
   }
 }

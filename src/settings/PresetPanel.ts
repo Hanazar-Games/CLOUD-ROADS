@@ -3,7 +3,7 @@ import { audioChannels } from '../audio/AudioSystem';
 import { roadNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
 import { parsePreset, PresetStore, PRESET_MAX_BYTES, type SettingRules, type SettingsPreset } from './SettingsPreset';
 
-const controls = ['vehicle-kind', 'hud-style', 'vehicle-energy', 'ev-regeneration', 'transmission-mode', 'vehicle-max-speed', 'vehicle-power', 'vehicle-brake', 'vehicle-steering',
+const controls = ['vehicle-kind', 'hud-style', 'beginner-mode', 'vehicle-energy', 'ev-regeneration', 'transmission-mode', 'vehicle-max-speed', 'vehicle-power', 'vehicle-brake', 'vehicle-steering',
   'engine-response', 'music-ducking', 'steering-assist', 'steering-assist-strength', 'road-grip', 'handbrake-strength', 'countersteer-assist',
   'vehicle-paint', 'driving-view', 'driving-fov', 'camera-distance', 'camera-height', 'suspension', 'suspension-damping',
   'vehicle-lights', 'vehicle-fog-lights', 'light-power', 'light-range', 'vehicle-wipers', 'vehicle-windows', 'cabin-fan', 'fog-visibility', 'fridge-temperature',
@@ -97,7 +97,7 @@ export class PresetPanel {
         : node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
-    const preset = { format: 'cloud-roads-preset', version: 11, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
+    const preset = { format: 'cloud-roads-preset', version: 12, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
     return parsePreset(JSON.stringify(preset), this.rules);
   }
   private async importFile(): Promise<void> {

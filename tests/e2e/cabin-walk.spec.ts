@@ -1,0 +1,116 @@
+import { expect, test, type Page } from '@playwright/test';
+import { closeSettings, control, ignite } from './settings';
+
+const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
+const position = async (page: Page) => (await metric(page, 'Interior position').textContent())!.split(' / ').map(Number);
+const choose = async (page: Page, kind: string) => {
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption(kind); await closeSettings(page);
+  if (!await page.locator('#drive-hud').isVisible()) await page.locator('#drive-toggle').click();
+};
+
+test('leaves seats, walks real aisles, freezes in menus and sits back down before driving', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'coach'); await ignite(page);
+  await expect(page.locator('#shortcut-dock')).toBeVisible();
+  await expect(page.locator('#shortcut-items [data-action="Powertrain"] kbd')).toHaveText('Shift+I');
+  await page.keyboard.press('Shift+KeyI'); await expect(metric(page, 'Powertrain')).toHaveText('ev');
+  await page.keyboard.press('Shift+KeyO'); await expect(metric(page, 'Cabin walking')).toHaveText('saloon');
+  await expect(page.locator('#hud-mode')).toHaveText('WALK');
+  await expect(page.locator('#shortcut-items [data-action="Ignition"]')).toHaveCount(0);
+  const car = await metric(page, 'Vehicle position').textContent(), initial = await position(page);
+  await page.keyboard.down('KeyS'); await page.waitForTimeout(1800); await page.keyboard.up('KeyS');
+  await expect.poll(async () => (await position(page))[2]).toBeGreaterThan(initial[2] + 0.8);
+  await expect(metric(page, 'Vehicle position')).toHaveText(car!);
+  await page.keyboard.press('KeyF'); await expect(metric(page, 'Cabin walking')).toHaveText('saloon');
+  await expect(page.locator('#cabin-walk-status')).toContainText('车门附近');
+  await page.keyboard.press('KeyU'); await page.keyboard.press('KeyM');
+  await page.waitForTimeout(300);
+  const paused = await metric(page, 'Interior position').textContent();
+  await page.keyboard.down('KeyS'); await page.waitForTimeout(400); await page.keyboard.up('KeyS');
+  await expect(metric(page, 'Interior position')).toHaveText(paused!); await page.keyboard.press('Escape');
+  await expect(page.locator('#shortcut-items [data-action="KeyW"]')).toBeVisible();
+  await page.screenshot({ path: info.outputPath('coach-interior.png') });
+  await page.keyboard.press('KeyP'); await page.locator('[data-seat="driver"]').click();
+  await expect(metric(page, 'Cabin walking')).toHaveText('off');
+  await expect(page.locator('#shortcut-items [data-action="Ignition"]')).toHaveCount(1);
+  await page.keyboard.down('KeyW'); await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(3);
+  await page.keyboard.press('Shift+KeyO'); await page.keyboard.up('KeyW'); await expect(metric(page, 'Cabin walking')).toHaveText('off');
+  expect(errors).toEqual([]);
+});
+
+test('enters the parked truck through its rear gate, respects locks and exits at the same gate', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?seed=FLEET-FLAT');
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('meadow');
+  await (await control(page, page.locator('#route-style'))).selectOption('0');
+  await (await control(page, page.locator('#max-grade'))).fill('0');
+  await (await control(page, page.locator('#road-width'))).fill('12');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
+  await choose(page, 'truck8');
+  await page.keyboard.press('Shift+KeyO'); await expect(metric(page, 'Cabin walking')).toHaveText('off');
+  await expect(page.locator('#cabin-walk-status')).toContainText('不贯通');
+  await page.keyboard.press('KeyF'); await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
+  const worldPosition = async (name: string) => (await metric(page, name).textContent())!.split(', ').map(Number);
+  const car = await worldPosition('Vehicle position'), initial = await worldPosition('Walking position');
+  await page.keyboard.down('KeyS'); await page.waitForTimeout(600);
+  const moved = await worldPosition('Walking position'), dx = moved[0] - initial[0], dz = moved[2] - initial[2], len = Math.hypot(dx, dz);
+  expect(len).toBeGreaterThan(0.3);
+  const back = [dx / len, dz / len];
+  const along = async () => { const p = await worldPosition('Walking position'); return (p[0] - car[0]) * back[0] + (p[2] - car[2]) * back[1]; };
+  await expect.poll(along, { timeout: 15000, intervals: [100] }).toBeGreaterThan(4.8); await page.keyboard.up('KeyS');
+  const lateral = async () => { const p = await worldPosition('Walking position'); return (p[0] - car[0]) * back[1] - (p[2] - car[2]) * back[0]; };
+  const side = await lateral(), key = side < 0 ? 'KeyD' : 'KeyA';
+  await page.keyboard.down(key); await expect.poll(async () => Math.abs(await lateral()), { intervals: [80] }).toBeLessThan(0.45); await page.keyboard.up(key);
+  await expect(page.locator('#boarding-help')).toContainText('尾门进入');
+  await page.keyboard.press('Shift+KeyJ'); await expect(metric(page, 'Vehicle locked')).toHaveText('yes');
+  await page.keyboard.press('Shift+KeyO'); await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await page.keyboard.press('Shift+KeyJ'); await page.keyboard.press('Shift+KeyO');
+  await expect(metric(page, 'Cabin walking')).toHaveText('cargo');
+  await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
+  await page.keyboard.press('KeyU'); await page.screenshot({ path: info.outputPath('cargo-interior.png') });
+  await page.keyboard.press('KeyP'); await expect(page.locator('[data-seat="driver"]')).toBeDisabled(); await page.keyboard.press('Escape');
+  await page.keyboard.press('KeyF'); await expect(metric(page, 'Travel mode')).toHaveText('walking');
+  await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
+  await expect(page.locator('#boarding-help')).toContainText('尾门进入');
+  expect(errors).toEqual([]);
+});
+
+test('walks a camper, keeps all hints reachable on a small screen and saves beginner preferences', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'camper');
+  await page.keyboard.press('Shift+KeyO'); await expect(metric(page, 'Cabin walking')).toHaveText('living');
+  await page.keyboard.press('KeyU');
+  await page.keyboard.down('KeyS'); await page.waitForTimeout(1600); await page.keyboard.up('KeyS');
+  await page.mouse.move(120, 300); await page.mouse.down(); await page.mouse.move(1375, 370, { steps: 20 }); await page.mouse.up();
+  await page.screenshot({ path: info.outputPath('camper-interior.png') });
+  await page.setViewportSize({ width: 390, height: 450 });
+  const dock = page.locator('#shortcut-dock'), bounds = await dock.boundingBox();
+  expect(bounds!.y).toBeGreaterThan(0); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(450);
+  await page.locator('#shortcut-items [data-action="Digit9"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('beginner-small.png') });
+  await (await control(page, page.locator('#beginner-mode'))).uncheck(); await closeSettings(page);
+  await expect(dock).toBeHidden();
+  await (await control(page, page.locator('#preset-name'))).fill('Cabin walk');
+  await page.locator('#preset-save').click();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cloud-roads.presets.v12')!)[0]);
+  expect(saved.settings['beginner-mode']).toBe(false);
+});
+
+test('keeps both double-decker floors walkable and updates custom leave-seat shortcuts', async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'doubleDecker');
+  await page.keyboard.press('KeyP'); await page.locator('[data-deck="2"]').click(); await page.locator('[data-seat="upper-row-3-1"]').click();
+  await page.keyboard.press('Shift+KeyO'); await expect(metric(page, 'Interior floor')).toHaveText('2');
+  await page.keyboard.press('KeyU');
+  const initial = await position(page);
+  await page.keyboard.down('KeyS'); await page.waitForTimeout(1300); await page.keyboard.up('KeyS');
+  await expect.poll(async () => (await position(page))[2]).toBeGreaterThan(initial[2] + 0.7);
+  await page.screenshot({ path: info.outputPath('upper-deck.png') });
+  await (await control(page, page.locator('[data-binding="CabinWalk"]'))).click(); await page.keyboard.press('Shift+KeyR'); await closeSettings(page);
+  await page.keyboard.press('KeyP'); await page.locator('[data-deck="1"]').click(); await page.locator('[data-seat="driver"]').click();
+  await expect(page.locator('#shortcut-items [data-action="CabinWalk"] kbd')).toHaveText('Shift+R');
+  await page.keyboard.press('Shift+KeyR'); await expect(metric(page, 'Cabin walking')).toHaveText('saloon');
+});

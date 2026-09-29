@@ -4,8 +4,7 @@ export interface WalkingSurface {
   constrainWalker(body: { x: number; y: number; z: number }, previousX: number, previousZ: number): boolean;
   ceiling?(x: number, z: number, feet: number): number;
 }
-const STEP = 1 / 120, RADIUS = 0.32;
-const FOOTPRINT = [[0, 0], [-RADIUS, 0], [RADIUS, 0], [0, -RADIUS], [0, RADIUS]];
+const STEP = 1 / 120;
 
 export class WalkingPhysics {
   x = 0; y = 0; z = 0; heading = 0;
@@ -15,6 +14,10 @@ export class WalkingPhysics {
   private accumulator = 0;
   private jumpHeld = false; private jumpQueued = false;
   private floorX = NaN; private floorZ = NaN; private floorCeiling = NaN; private floorHeight = 0;
+  private readonly footprint: number[][];
+  constructor(readonly radius = 0.32, readonly height = 1.75, private readonly pace = 1, supportRadius = radius) {
+    this.footprint = supportRadius ? [[0, 0], [-supportRadius, 0], [supportRadius, 0], [0, -supportRadius], [0, supportRadius]] : [[0, 0]];
+  }
   get speed(): number { return Math.hypot(this.vx, this.vz); }
 
   reset(x: number, y: number, z: number, heading: number): void {
@@ -42,7 +45,7 @@ export class WalkingPhysics {
     const ceiling = this.y + 0.45;
     if (x === this.floorX && z === this.floorZ && ceiling === this.floorCeiling) return this.floorHeight;
     let height = -Infinity;
-    for (const [dx, dz] of FOOTPRINT) {
+    for (const [dx, dz] of this.footprint) {
       height = Math.max(height, surface.sample(x + dx, z + dz, ceiling).height);
     }
     this.floorX = x; this.floorZ = z; this.floorCeiling = ceiling; this.floorHeight = height;
@@ -51,7 +54,7 @@ export class WalkingPhysics {
 
   private step(input: WalkingInput, surface: WalkingSurface): void {
     const scale = Math.max(1, Math.hypot(input.lateral, input.forward));
-    const speed = input.sprint ? 8 : input.run ? 4.8 : 2.2;
+    const speed = (input.sprint ? 8 : input.run ? 4.8 : 2.2) * this.pace;
     const cos = Math.cos(this.heading), sin = Math.sin(this.heading);
     const targetX = (cos * input.lateral + sin * input.forward) / scale * speed;
     const targetZ = (sin * input.lateral - cos * input.forward) / scale * speed;
@@ -67,7 +70,7 @@ export class WalkingPhysics {
       const beforeX = this.x, beforeZ = this.z;
       this[axis] += (axis === 'x' ? this.vx : this.vz) * STEP;
       if (this.floor(surface, this.x, this.z) > this.y + (this.grounded ? 0.42 : 0.05)
-        || (surface.ceiling?.(this.x, this.z, this.y) ?? Infinity) < this.y + 1.75 - 1e-6) {
+        || (surface.ceiling?.(this.x, this.z, this.y) ?? Infinity) < this.y + this.height - 1e-6) {
         this.x = beforeX; this.z = beforeZ;
         if (axis === 'x') this.vx = 0; else this.vz = 0;
       }
@@ -87,7 +90,7 @@ export class WalkingPhysics {
       this.vy -= this.gravity * STEP;
       const ceiling = surface.ceiling?.(this.x, this.z, this.y) ?? Infinity;
       this.y += this.vy * STEP;
-      if (this.vy > 0 && this.y + 1.75 > ceiling) { this.y = ceiling - 1.75; this.vy = 0; }
+      if (this.vy > 0 && this.y + this.height > ceiling) { this.y = ceiling - this.height; this.vy = 0; }
       if (this.vy <= 0 && this.y <= floor) { this.y = floor; this.vy = 0; this.grounded = true; }
     }
   }

@@ -21,6 +21,8 @@
         <div class="settings-search"><label for="settings-search">搜索设置</label><div class="settings-search-row"><input id="settings-search" type="search" placeholder="例如：转速、雨刮、音量、月球" autocomplete="off" aria-controls="settings-search-results" /><button id="settings-search-clear" type="button" disabled>清除</button></div><span id="settings-search-status" role="status"></span><div id="settings-search-results" hidden></div></div>
         <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="autopilot" aria-controls="settings-autopilot">自动驾驶</button><button type="button" data-settings-target="bindings" aria-controls="settings-bindings">快捷键</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="traffic" aria-controls="settings-traffic">NPC 交通</button><button type="button" data-settings-target="garage" aria-controls="settings-garage">地下停车场</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
+        <label class="check-label"><input id="beginner-mode" type="checkbox" checked /> 新手模式 · 底部显示当前可用快捷键</label>
+        <p class="panel-help">F 下到车外；{CabinWalk} 在客车 / 房车中离座、就近坐下，或从货厢尾门进入。{Powertrain} 切换燃油 / 电动。均可在快捷键分类修改。</p>
         <details class="world-options" open>
           <summary>驾驶与视角</summary>
           <label for="vehicle-kind">载具</label>
@@ -391,7 +393,7 @@
       </dialog>
       <dialog id="seat-dialog" class="cabin-dialog" aria-labelledby="seat-title">
         <header><h2 id="seat-title">选择座位</h2><button type="button" data-close>返回旅程 · Esc</button></header>
-        <p id="seat-status" role="status"></p><div id="seat-decks" class="actions" role="group" aria-label="选择客车楼层" hidden></div><div class="seat-scroll"><p class="seat-front">↑ 车头 · 点击座位就坐</p><div id="seat-map" role="group" aria-label="车辆座位地图"></div></div>
+        <p id="seat-status" role="status"></p><button id="seat-walk" type="button">车内离座 · {CabinWalk}</button><div id="seat-decks" class="actions" role="group" aria-label="选择客车楼层" hidden></div><div class="seat-scroll"><p class="seat-front">↑ 车头 · 点击座位就坐</p><div id="seat-map" role="group" aria-label="车辆座位地图"></div></div>
       </dialog>
       <dialog id="controls-menu" class="cabin-dialog" aria-labelledby="menu-title">
         <header><h2 id="menu-title">旅程操作</h2><button type="button" data-close>返回旅程 · Esc</button></header>
@@ -403,6 +405,7 @@
         <div class="vehicle-panel-scroll"><p id="vehicle-panel-state"></p><dl id="vehicle-panel-specs" class="vehicle-specs"></dl><p id="vehicle-panel-equipment" class="equipment-status"></p>
         <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表</button><button id="panel-equipment" type="button">车载设备</button><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div>
         <div class="actions"><button id="panel-ignition" type="button">点火 · {Ignition}</button><button id="panel-lock" type="button" aria-pressed="false">锁车 · {VehicleLock}</button><button id="panel-fridge" type="button" aria-pressed="false">冷藏箱 · {Fridge}</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button><button id="panel-powertrain" type="button"></button><button id="panel-regen" type="button"></button><button id="panel-trailer-brake" type="button" hidden></button></div>
+        <div class="actions"><button id="panel-walk" type="button">车内离座 · {CabinWalk}</button><button id="panel-exit" type="button">下到车外 · F</button></div>
         <p id="vehicle-panel-help" class="panel-help"></p></div>
       </dialog>
       <div class="crosshair" aria-hidden="true">+</div>
@@ -413,6 +416,7 @@
         <div class="speed-track" aria-hidden="true"><i id="speed-line"></i></div>
         <div class="drive-reading"><span id="vehicle-gear" aria-label="行驶档位">P</span><strong id="vehicle-speed" aria-label="时速">0</strong><span class="speed-unit">km/h</span><span class="trip-reading"><small>TRIP</small><b id="vehicle-trip">0.00</b> km</span></div>
         <p id="vehicle-status">{Ignition} 点火 · W 起步</p>
+        <p id="cabin-walk-status" role="status"></p>
         <button id="hud-autopilot" type="button" aria-pressed="false">自动驾驶 · 待机</button>
         <p class="rpm-reading"><span id="ignition-status">发动机关闭</span> · <span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">0</span> RPM</p>
         <div class="engine-feedback"><meter id="rpm-meter" min="0" max="7000" value="0" aria-label="发动机转速"></meter><span id="engine-load-status">动力关闭</span></div>
@@ -426,6 +430,7 @@
       <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small><small id="boarding-help" hidden>F 上车</small></section>
       <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · {Debug}</button></h2><dl id="debug-values"></dl></section>
       <footer>
+        <section id="shortcut-dock" aria-label="当前可用快捷键" hidden><p id="shortcut-context"></p><div id="shortcut-items" tabindex="0" aria-label="滚动查看全部可用快捷键"></div></section>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
         <div class="controls" id="flight-controls"><span><kbd>W A S D</kbd> 飞行</span><span><kbd>Space / Shift</kbd> 升降</span><span><kbd>Ctrl</kbd> 加速</span><span><kbd>{Debug}</kbd> 调试</span><span><kbd>{PauseToggle}</kbd> 暂停</span><span><kbd>M</kbd> 菜单</span></div>
         <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>F</kbd> 下车</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 座位</span><span><kbd>M</kbd> 菜单</span></div>

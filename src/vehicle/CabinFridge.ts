@@ -6,6 +6,7 @@ export function cabinFridge(p: VehicleProfile, parent: Group, kit: VehicleDetail
   const root = new Group(), bike = p.shape === 'motorcycle';
   root.name = 'vehicle-fridge'; parent.add(root);
   root.position.set(0, bike ? 0.63 : p.eye.y - 0.81, bike ? 0.84 : -p.eye.along + (p.bus ? -0.24 : 0.06));
+  if (p.bus || p.body === 'camper') root.position.x = p.eye.x;
   const { panel, block, trim, metal } = kit, w = bike ? 0.42 : p.bus ? 0.38 : 0.28, h = bike ? 0.3 : 0.36, l = bike ? 0.44 : 0.48;
   panel(w, h, l, 0, 0, 0, metal, root);
   block(w + 0.01, 0.016, l + 0.01, 0, h / 2 - 0.012, 0, trim, root);

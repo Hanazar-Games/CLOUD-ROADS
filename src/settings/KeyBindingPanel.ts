@@ -2,7 +2,7 @@ import { element } from '../debug/DebugUI';
 import type { InputManager } from '../input/InputManager';
 import { bindingActions, keyLabel } from '../input/KeyBindings';
 
-const storageKey = 'cloud-roads.key-bindings.v4';
+const storageKey = 'cloud-roads.key-bindings.v5';
 export class KeyBindingPanel {
   private readonly events = new AbortController();
   private pending?: string;

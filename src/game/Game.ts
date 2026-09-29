@@ -28,6 +28,8 @@ import { KeyBindingPanel } from '../settings/KeyBindingPanel';
 import { GaragePanel } from '../garage/GaragePanel';
 import { trafficScenarios } from '../traffic/TrafficSystem';
 import { InteriorVolume } from '../render/InteriorVolume';
+import type { CabinLayout } from '../vehicle/CabinLayout';
+import { ShortcutDock } from '../ui/ShortcutDock';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -35,6 +37,7 @@ const cloudNames = { below: '云下', inside: '云中', above: '云上' };
 export class Game {
   private readonly initialSeed = startingSeed(location.search);
   private readonly canvas = element<HTMLCanvasElement>('world');
+  private readonly shortcutDock: ShortcutDock;
   private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
   private readonly sky = new SkySystem(this.scene);
@@ -80,6 +83,7 @@ export class Game {
       if (category) document.querySelector<HTMLButtonElement>(`[data-settings-target="${category}"]`)!.click();
     }, this.input.bindings);
     this.keyBindingPanel = new KeyBindingPanel(this.input);
+    this.shortcutDock = new ShortcutDock(this.input.bindings);
     this.garagePanel = new GaragePanel(() => this.world, point => {
       this.settings.close(); this.stopTravel(); this.walking.start(point); this.setPaused(false); this.canvas.focus();
     });
@@ -134,9 +138,16 @@ export class Game {
         if (/^Digit\d$/.test(code) && this.driving.active) this.tuneRadio(Number(code.slice(5)) || 10);
         if (code === 'Audio') element<HTMLButtonElement>('audio-toggle').click();
         if (code === 'KeyF') this.interactVehicle();
+        else if (code === 'CabinWalk' && this.walking.active) this.enterCargo();
         else if (!this.access || this.access.sequence.closing) { this.driving.action(code); this.walking.action(code); }
       }
     };
+    for (const id of ['seat-walk', 'panel-walk']) element(id).addEventListener('click', () => {
+      this.cabinDialogs.close(); this.driving.toggleCabinWalk(); this.canvas.focus();
+    }, { signal: this.events.signal });
+    element('panel-exit').addEventListener('click', () => {
+      this.cabinDialogs.close(); this.interactVehicle(); this.canvas.focus();
+    }, { signal: this.events.signal });
     element('traffic-density').addEventListener('input', () => {
       const density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.density = density; element('traffic-density-value').textContent = `${density}%`;
@@ -486,7 +497,7 @@ export class Game {
 
   private stopTravel(): void { this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
 
-  private access?: { car: DrivingSystem['car']; sequence: VehicleAccess };
+  private access?: { car: DrivingSystem['car']; sequence: VehicleAccess; compartment?: CabinLayout };
 
   private cancelAccess(): void { this.access?.sequence.cancel(); this.access = undefined; }
 
@@ -497,13 +508,22 @@ export class Game {
       if (!this.driving.exitLocation()) return;
       this.driving.car.equipment.locked = false;
       this.driving.car.park(); this.driving.autopilot.cancel();
-      this.access = { car: this.driving.car, sequence: new VehicleAccess(this.driving.operations, false) };
+      this.access = { car: this.driving.car, sequence: new VehicleAccess(this.driving.operations, false,
+        this.driving.cabinWalk.layout?.entry === 'cargo' ? 'cargo' : 'doors') };
     } else if (this.walking.active) {
       const entry = this.driving.nearbyVehicle(this.walking.person);
       if (entry ? this.driving.prepareBoarding(entry) : this.driving.canBoard(this.walking.person))
         this.access = { car: this.driving.car, sequence: new VehicleAccess(this.driving.operations, true) };
     }
     if (this.access) this.input.clear();
+  }
+
+  private enterCargo(): void {
+    if (this.access || !this.walking.active) return;
+    const compartment = this.driving.nearbyCargo(this.walking.person);
+    if (!compartment) return;
+    this.access = { car: this.driving.car, sequence: new VehicleAccess(this.driving.operations, true, 'cargo'), compartment };
+    this.input.clear();
   }
 
   private setError(message: string | null): void {
@@ -614,7 +634,10 @@ export class Game {
         if (sequence.entering) {
           const { x, y, z, heading } = this.walking.person;
           this.walking.stop();
-          if (this.driving.start(true)) sequence.close();
+          if (this.driving.start(true)) {
+            if (this.access.compartment) this.driving.enterCargo(this.access.compartment);
+            sequence.close();
+          }
           else { this.walking.start({ x, y, z, heading }); this.cancelAccess(); }
         } else {
           const point = this.driving.exitLocation();
@@ -643,14 +666,15 @@ export class Game {
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
       rpm: this.driving.car.engineRpm, shifts: this.driving.car.transmission.shifts, ignition: this.driving.car.ignition,
       traffic: moving ? this.world.traffic.entries.reduce((level, e) => Math.min(1, level + Math.max(0, 1 - Math.hypot(e.car.x - anchor.x, e.car.y - anchor.y, e.car.z - anchor.z) / 70) ** 2 * (0.15 + e.car.speed / 30)), 0) : 0,
-      exposure: this.driving.systems.cabinExposure, wet: this.weather.wetness, night: this.sky.sun.night,
+      exposure: this.driving.cabinExposure, wet: this.weather.wetness, night: this.sky.sun.night,
       nature: !['moon', 'mars', 'desert', 'dunes', 'badlands', 'volcanic'].includes(this.world.options.terrain) && this.world.season.kind !== 'winter',
       horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
       washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor || this.driving.operations.moving,
       supercar: this.driving.car.kind === 'supercar', braking: this.driving.car.braking, operations: this.driving.operations.events,
       tireSlip: this.driving.car.tireSlip,
       service: this.world.services.reduce((level, site) => Math.max(level, ...site.ground.pads.map(pad => Math.max(0, 1 - Math.hypot(pad.x - this.camera.position.x - this.world.origin.x, pad.y - this.camera.position.y, pad.z - this.camera.position.z - this.world.origin.z) / 160))), 0),
-      walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
+      walkingSpeed: !moving ? 0 : this.driving.active && this.driving.cabin.standing && this.driving.cabinWalk.person.grounded
+        ? this.driving.cabinWalk.person.speed : this.walking.active && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
     this.interior.update(this.driving.interior, this.camera.position);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
@@ -671,11 +695,23 @@ export class Game {
       if (!this.driving.active) this.driving.describeEquipment();
       const nearby = this.walking.active ? this.driving.nearbyVehicle(this.walking.person) : undefined;
       const boardable = this.walking.active && (this.driving.canBoard(this.walking.person, true) || !!nearby);
+      const cargo = this.walking.active ? this.driving.nearbyCargo(this.walking.person, true) : undefined;
       const locked = (nearby ? this.driving.entryVehicle(nearby) : this.driving.car).equipment.locked;
-      element('boarding-help').hidden = !boardable && !this.access;
+      const d = this.driving, c = d.car, ops = d.operations;
+      this.shortcutDock.update({ mode: d.active ? d.cabin.standing ? 'interior' : d.cabin.selected.role : this.walking.active ? 'walking' : 'flight',
+        paused: this.paused, modal: this.releaseNotes.open || this.settings.open || this.cabinDialogs.open,
+        ready: this.world.roadReady && this.input.enabled && !this.world.searching, accessing: !!this.access || ops.accessing,
+        stopped: c.motionSpeed <= 0.1, board: boardable && !locked, cargo: !!cargo && !c.equipment.locked,
+        lock: d.active ? d.cabin.driver && !ops.moving && ops.doors < 0.001 && ops.cargo < 0.001 : boardable || !!cargo,
+        leaveSeat: d.cabinWalk.layouts.some(l => l.entry === 'cabin'), sit: !!d.cabinWalk.nearestSeat(d.cabin), exit: d.nearInteriorExit,
+        glass: d.systems.hasWindows, convertible: d.systems.convertible, ev: c.powertrain === 'ev', trailer: !!c.trailers.length,
+        driveReady: ops.driveReady && d.crane.stowed, doors: !c.equipment.locked ? ops.label('doors') : '',
+        tailgate: !c.equipment.locked ? ops.label('cargo') : '', auxiliary: ops.label('aux'), crane: c.kind === 'crane' });
+      element('boarding-help').hidden = !boardable && !cargo && !this.access;
       element('boarding-help').textContent = this.access ? this.access.sequence.closing ? '车门关闭中 · 请稍候'
         : `车门打开中 · 准备${this.access.sequence.entering ? '上' : '下'}车`
-        : locked ? `车辆已锁 · ${this.input.bindings.label('VehicleLock')} 解锁`
+        : (cargo ? c.equipment.locked : locked) ? `车辆已锁 · ${this.input.bindings.label('VehicleLock')} 解锁`
+          : cargo ? `${this.input.bindings.label('CabinWalk')} · 从尾门进入${cargo.label}`
           : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
       element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? trafficScenarios[this.world.traffic.scenario] : '交通已关闭'}`;
       this.garagePanel.update();
@@ -773,6 +809,9 @@ export class Game {
         'Fridge temperature': this.driving.car.equipment.fridgeTemperature.toFixed(1),
         'Fridge cooling': this.driving.car.equipment.fridgeCooling ? 'on' : 'off',
         'Cabin seat': this.driving.cabin.selected.id,
+        'Cabin walking': this.driving.cabin.standing ? this.driving.cabinWalk.layout?.id ?? 'off' : 'off',
+        'Interior position': [this.driving.cabinWalk.person.x, this.driving.cabinWalk.person.y, this.driving.cabinWalk.person.z].map(v => v.toFixed(2)).join(' / '),
+        'Interior floor': this.driving.cabinWalk.floor,
         'Cabin floor': this.driving.cabin.selected.floor,
         'Vehicle operations': `${this.driving.operations.doors.toFixed(2)} / ${this.driving.operations.cargo.toFixed(2)} / ${this.driving.operations.aux.toFixed(2)}`,
         'Vehicle speed limit': `${(this.driving.car.maxSpeed * 3.6).toFixed(1)} km/h`,

@@ -26,9 +26,13 @@ export class CabinDialogs {
       dialog.addEventListener('beforetoggle', this.clear, options);
     }
   }
-  showSeats(floor = this.driving.cabin.selected.floor): void {
+  showSeats(floor = this.driving.cabin.standing ? this.driving.cabinWalk.floor : this.driving.cabin.selected.floor): void {
     if (!this.driving.active) { this.showMenu(); element('menu-status').textContent = this.bindings.format('先进入车辆，再按 P 选择座位。'); return; }
-    const cabin = this.driving.cabin, moving = this.driving.car.motionSpeed > 0.1;
+    const cabin = this.driving.cabin, cargo = this.driving.cabinWalk.layout?.entry === 'cargo';
+    const moving = this.driving.car.motionSpeed > 0.1 || this.driving.operations.accessing || cargo;
+    const walk = element<HTMLButtonElement>('seat-walk');
+    walk.disabled = moving || (cabin.standing ? !this.driving.cabinWalk.nearestSeat(cabin) : !this.driving.cabinWalk.layouts.some(l => l.entry === 'cabin'));
+    walk.textContent = `${cabin.standing ? '就近坐下' : '车内离座'} · ${this.bindings.label('CabinWalk')}`;
     const decks = [...new Set(cabin.seats.map(s => s.floor))], nav = element('seat-decks'); nav.replaceChildren(); nav.hidden = decks.length < 2;
     for (const deck of decks) {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.deck = String(deck);
@@ -40,12 +44,12 @@ export class CabinDialogs {
     for (const seat of cabin.seats.filter(s => s.floor === floor)) {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.seat = seat.id;
       button.textContent = seat.label; button.style.gridColumn = String(seat.column + 1); button.style.gridRow = String(seat.row + 1);
-      button.className = `seat ${seat.role}`; button.setAttribute('aria-pressed', String(cabin.selected.id === seat.id));
+      button.className = `seat ${seat.role}`; button.setAttribute('aria-pressed', String(!cabin.standing && cabin.selected.id === seat.id));
       button.disabled = moving;
       button.addEventListener('click', () => { if (this.driving.selectSeat(seat.id)) this.close(); });
       map.append(button);
     }
-    element('seat-status').textContent = moving ? '请先停车再换座；打开座位图会冻结行驶，但不会改变车速。' : `${this.driving.car.profile.name} · 当前：${cabin.selected.label} · ${cabin.seats.length} 席 · 只有驾驶员可以开车`;
+    element('seat-status').textContent = cargo ? '货厢与驾驶室独立，请先走到尾门下车，再进入驾驶室。' : moving ? '请先停车并等待上下车完成；打开座位图会冻结行驶，但不会改变车速。' : `${this.driving.car.profile.name} · 当前：${cabin.standing ? '车内步行' : cabin.selected.label} · ${cabin.seats.length} 席 · 只有驾驶员可以开车`;
     this.show(this.seats);
   }
   showMenu(): void {
@@ -60,7 +64,7 @@ export class CabinDialogs {
     this.driving.describeEquipment();
     const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';
     element('vehicle-panel-title').textContent = p.name;
-    element('vehicle-panel-state').textContent = active ? `${cabin.selected.label} · ${cabin.driver ? '驾驶权限' : '乘坐 / 设备操作'} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h · ${car.transmission.gear} 挡 / ${Math.round(car.engineRpm)} RPM · 行程 ${(car.trip / 1000).toFixed(2)} km` : '车型预览 · 开始驾驶后可选择座位';
+    element('vehicle-panel-state').textContent = active ? `${cabin.standing ? `${this.driving.cabinWalk.layout?.label} · 车内步行` : cabin.selected.label} · ${cabin.driver ? '驾驶权限' : '设备操作 · 不能驾驶'} · ${Math.round(Math.abs(car.speed) * 3.6)} km/h · ${car.transmission.gear} 挡 / ${Math.round(car.engineRpm)} RPM · 行程 ${(car.trip / 1000).toFixed(2)} km` : '车型预览 · 开始驾驶后可选择座位';
     const specs = [['动力类型', car.powertrain === 'ev' ? `EV · 单速 · 回收 ${car.regeneration} 档` : '燃油 · 多挡传动'], ['车身尺寸', `${p.length} × ${p.width} × ${p.height} m`], ['整备质量', `${(p.mass / 1000).toLocaleString('zh-CN')} t`],
       ['当前输出', `${Math.round(p.power * car.powerScale / 1000)} kW`], ['速度上限', `${Math.round(car.maxSpeed * 3.6)} km/h`],
       ['底盘轴距', `${car.wheelbase.toFixed(2)} m`], ['可选座位', `${cabin.seats.length} 席`],
@@ -71,6 +75,10 @@ export class CabinDialogs {
     element('vehicle-panel-equipment').textContent = `车灯 ${lightNames[s.lights]}${glass ? ` · 雨刮 ${wiperNames[s.wipers]} · 车窗 ${Math.round(s.windowTarget * 100)}% · 风机 ${s.fan} / 6 · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ' · 开放骑行，无车窗与雨刮'}`;
     element('vehicle-panel-help').textContent = element('vehicle-summary').textContent;
     element<HTMLButtonElement>('panel-seats').disabled = !active;
+    element<HTMLButtonElement>('panel-exit').disabled = !active || car.motionSpeed > 0.1 || !this.driving.nearInteriorExit;
+    element<HTMLButtonElement>('panel-walk').disabled = !active || car.motionSpeed > 0.1 || this.driving.operations.accessing
+      || (cabin.standing ? !this.driving.cabinWalk.nearestSeat(cabin) : !this.driving.cabinWalk.layouts.some(l => l.entry === 'cabin'));
+    element('panel-walk').textContent = `${cabin.standing ? '就近坐下' : '车内离座'} · ${this.bindings.label('CabinWalk')}`;
     this.show(this.vehicle);
   }
   private show(dialog: HTMLDialogElement): void {

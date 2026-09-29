@@ -65,7 +65,7 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(11); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(12); expect(saved.settings['road-grip']).toBe(45);
   expect(saved.settings['engine-response']).toBe(125); expect(saved.settings['music-ducking']).toBe(65); expect(saved.settings['collision-volume']).toBe(40);
   expect(saved.settings['vegetation-lod']).toBe('0.5'); expect(saved.settings['distant-trees']).toBe('0.25');
   expect(saved.settings['vehicle-detail-distance']).toBe('120'); expect(saved.settings['traffic-scenario']).toBe('stopgo');
@@ -128,7 +128,7 @@ test('applies factory speed and parked equipment preferences after leaving a mov
   await page.locator('#vehicle-kind').selectOption('crane'); await expect(page.locator('#vehicle-max-speed')).toHaveValue('79');
 });
 
-test('provides all vehicle panels, HUD styles and a reachable menu in a narrow window', async ({ page }) => {
+test('provides all vehicle panels, HUD styles and a reachable menu in a narrow window', async ({ page }, info) => {
   await page.goto('/?seed=FLEET-FLAT'); await category(page, 'driving');
   const vehicles = await page.locator('#vehicle-kind option').evaluateAll(options => options.map(o => ({ value: (o as HTMLOptionElement).value, name: o.textContent! })));
   for (const vehicle of vehicles) {
@@ -148,7 +148,9 @@ test('provides all vehicle panels, HUD styles and a reachable menu in a narrow w
     await expect(page.locator('#drive-hud')).toHaveAttribute('data-style', style);
     await expect(page.locator('#vehicle-speed')).toBeInViewport(); await expect(page.locator('#hud-vehicle-panel')).toBeInViewport();
     const hud = await page.locator('#drive-hud').boundingBox(), header = await page.locator('.masthead').boundingBox();
-    expect(hud!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
+    expect(hud!.y, style).toBeGreaterThanOrEqual(header!.y + header!.height);
+    await expect(page.locator('#shortcut-items [data-action="KeyW"]')).toHaveCount(1);
+    await page.screenshot({ path: info.outputPath(`compact-${style}.png`) });
     await page.locator('#hud-vehicle-panel').click(); await expect(page.locator('#vehicle-panel')).toBeVisible();
     const position = await metric(page, 'Vehicle position').textContent(); await page.keyboard.press('KeyW'); await page.waitForTimeout(150);
     await expect(metric(page, 'Vehicle position')).toHaveText(position!);

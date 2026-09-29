@@ -32,3 +32,13 @@ it('transfers motorcycles without inventing a door animation or sound', () => {
   expect(access.step()).toBe('transfer'); access.close(); expect(access.step()).toBe('complete');
   expect(operations.events).toBe(0); expect(operations.driveReady).toBe(true);
 });
+
+it('uses cargo gates for cargo entry and leaves the separate cab doors shut', () => {
+  const operations = new VehicleOperations(vehicleProfiles.roadTrain), access = new VehicleAccess(operations, true, 'cargo');
+  expect(operations.target.cargo).toBe(1); expect(operations.target.doors).toBe(0);
+  expect(access.step()).toBeUndefined();
+  for (let i = 0; i < 100; i++) operations.update(1 / 60);
+  expect(access.step()).toBe('transfer'); access.close();
+  for (let i = 0; i < 100; i++) operations.update(1 / 60);
+  expect(access.step()).toBe('complete'); expect(operations.doors).toBe(0); expect(operations.driveReady).toBe(true);
+});
