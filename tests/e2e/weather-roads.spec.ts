@@ -10,7 +10,7 @@ test('renders moving rain against the sky, freezes it when paused, and keeps sel
   await (await control(page, page.locator('#cloud-toggle'))).click();
   await (await control(page, page.locator('#time-preset'))).selectOption('0');
   await (await control(page, page.locator('#sun-view'))).click();
-  await (await control(page, page.locator('#weather-kind'))).selectOption('rain');
+  await (await control(page, page.locator('#weather-rain'))).check();
   const clip = { x: 700, y: 200, width: 500, height: 300 };
   const rain = await sceneShot(page, { clip });
   await page.waitForTimeout(300);
@@ -20,7 +20,7 @@ test('renders moving rain against the sky, freezes it when paused, and keeps sel
   await page.waitForTimeout(300);
   expect((await sceneShot(page, { clip })).equals(frozen)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
-  await (await control(page, page.locator('#weather-kind'))).selectOption('overcast');
+  await (await control(page, page.locator('#weather-overcast'))).check();
   await (await control(page, page.locator('#time-preset'))).scrollIntoViewIfNeeded();
   await (await control(page, page.locator('#time-preset'))).selectOption('-100');
   await expect(page.locator('#time-preset')).toBeInViewport();
@@ -39,16 +39,16 @@ test('changes weather and time in place, lights road sections and preserves choi
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30_000 });
   const coordinates = await metric('Coordinates').textContent();
-  await (await control(page, page.locator('#weather-kind'))).selectOption('rain');
+  await (await control(page, page.locator('#weather-rain'))).check();
   await (await control(page, page.locator('#time-preset'))).selectOption('150');
   await expect(metric('Weather')).toHaveText('雨天');
   await expect(metric('Light phase')).toHaveText('夜晚');
   await expect(page.locator('#daylight')).toHaveValue('150');
   await expect(metric('Coordinates')).toHaveText(coordinates!);
   await (await control(page, page.locator('#cloud-toggle'))).click();
-  await (await control(page, page.locator('#weather-kind'))).selectOption('fog');
+  await (await control(page, page.locator('#weather-fog'))).check();
   await expect(metric('Fog near / far')).toHaveText('35 / 420 m', { timeout: 10_000 });
-  await (await control(page, page.locator('#weather-kind'))).selectOption('clear');
+  await (await control(page, page.locator('#weather-clear'))).check();
   await (await control(page, page.locator('#lights-view'))).click();
   await expect.poll(async () => Number(await metric('Local lights').textContent())).toBeGreaterThan(0);
   const lit = Number(await metric('Local lights').textContent());
@@ -59,7 +59,7 @@ test('changes weather and time in place, lights road sections and preserves choi
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '加载种子' }))).click();
   await expect(metric('Seed')).toHaveText('WEATHER-REPLAY');
   await expect(page.locator('#time-preset')).toHaveValue('150');
-  await expect(page.locator('#weather-kind')).toHaveValue('clear');
+  await expect(page.locator('#weather-clear')).toBeChecked();
   await expect(page.locator('#lights-toggle')).toHaveAttribute('aria-pressed', 'false');
   await (await control(page, page.locator('#daylight'))).fill('-100');
   await expect(metric('Light phase')).toHaveText('清晨');
@@ -77,7 +77,7 @@ test('enters a lit tunnel, shelters from rain, and restores the scene after cont
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#tunnel-view')).toBeEnabled({ timeout: 30_000 });
-  await (await control(page, page.locator('#weather-kind'))).selectOption('rain');
+  await (await control(page, page.locator('#weather-rain'))).check();
   await (await control(page, page.locator('#tunnel-view'))).click();
   await (await control(page, page.locator('#speed'))).fill('20');
   await (await control(page, page.locator('#world'))).focus();

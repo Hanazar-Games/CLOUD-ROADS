@@ -128,7 +128,7 @@ test('drives into a lit tunnel and keeps all camera modes inside the bore', asyn
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#tunnel-view')).toBeEnabled({ timeout: 25_000 });
   await (await control(page, page.locator('#tunnel-view'))).click();
-  await (await control(page, page.locator('#weather-kind'))).selectOption('rain');
+  await (await control(page, page.locator('#weather-rain'))).check();
   await start(page);
   await page.keyboard.down('KeyW');
   await expect(metric(page, 'Tunnel shelter')).toHaveText('100%', { timeout: 15_000 });

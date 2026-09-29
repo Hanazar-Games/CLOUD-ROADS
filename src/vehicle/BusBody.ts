@@ -4,14 +4,17 @@ import type { VehicleDetailKit } from './VehicleDetails';
 import type { VehicleFittings } from './VehicleFittings';
 
 export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit, fittings: VehicleFittings, rideHeight: number): { windshield: Mesh; windows: Group[]; width: number; height: number } {
-  const { block, paint, trim, metal, glass, lamp } = kit, w = p.width, nose = -p.length / 2, end = p.length / 2;
+  const { block, panel, paint, trim, metal, glass, lamp } = kit, w = p.width, nose = -p.length / 2, end = p.length / 2;
   const top = p.height - rideHeight, decks = p.bus!.rows.length, floor = p.eye.y - 1.2, lowerRoof = decks > 1 ? floor + p.bus!.deckHeight : top;
-  block(w - 0.08, 0.18, p.length - 0.1, 0, -0.36, 0, trim, parent);
+  block(w - 0.7, 0.18, p.length - 0.1, 0, -0.36, 0, trim, parent);
   block(w - 0.08, 0.1, p.length - 0.12, 0, floor, 0, trim, parent);
-  block(w - 0.08, 0.1, p.length - 0.12, 0, top - 0.05, 0, paint, parent);
-  block(w * 0.7, 0.1, 2, 0, top + 0.01, 1.2, metal, parent);
+  panel(w - 0.08, 0.1, p.length - 0.12, 0, top - 0.05, 0, paint, parent);
+  panel(w * 0.7, 0.1, 2, 0, top + 0.01, 1.2, metal, parent);
   const sidePanel = (side: number, from: number, to: number, bottom: number, ceiling: number, material = paint) => {
-    if (to > from && ceiling > bottom) block(0.065, ceiling - bottom, to - from, side * (w / 2 - 0.03), (ceiling + bottom) / 2, (from + to) / 2, material, parent);
+    if (to > from && ceiling > bottom) {
+      if (bottom < p.radius * 2 - rideHeight + 0.06) kit.wheelPanel(from, to, bottom, ceiling, side * (w / 2 - 0.03), material, parent);
+      else block(0.065, ceiling - bottom, to - from, side * (w / 2 - 0.03), (ceiling + bottom) / 2, (from + to) / 2, material, parent);
+    }
   };
   const bayLength = Math.min(3, p.length * 0.28), bayTop = Math.max(-0.1, floor - 0.07);
   for (const side of [-1, 1]) {
@@ -19,7 +22,8 @@ export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit,
     sidePanel(side, nose + 1.45, -bayLength / 2, -0.3, floor + 0.1);
     sidePanel(side, bayLength / 2, end, -0.3, floor + 0.1);
     const bay = fittings.hinge('cargo', parent, side * w / 2, bayTop, 0, 'z', side * 1.5);
-    block(0.055, bayTop + 0.3, bayLength, 0, -(bayTop + 0.3) / 2, 0, paint, bay);
+    const bayPanel = kit.wheelPanel(-bayLength / 2, bayLength / 2, -0.3, bayTop, 0, paint, bay); bayPanel.position.y = -bayTop;
+    for (const z of [-bayLength / 2 + 0.08, bayLength / 2 - 0.08]) block(0.02, bayTop + 0.22, 0.016, side * 0.037, -(bayTop + 0.3) / 2, z, trim, bay);
     block(0.02, 0.045, 0.18, side * 0.04, -(bayTop + 0.3) * 0.75, 0, metal, bay);
     for (let z = nose + 1.8; z < end - 0.3; z += 1.5) block(0.025, 0.055, 0.12, side * (w / 2 + 0.01), -0.23, z, lamp, parent);
   }

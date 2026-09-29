@@ -39,28 +39,28 @@ test('limits speed, configures steering assistance and restores per-vehicle defa
   await expect(page.locator('#steering-assist')).toBeChecked();
 });
 
-test('keeps the weather menu stable and survives repeated weather changes', async ({ page }) => {
+test('keeps weather cards stable and survives repeated weather changes', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   page.on('crash', () => errors.push('Page crashed'));
   await page.goto('/?seed=FLEET-FLAT'); await openSettings(page);
-  await page.locator('[data-settings-target="weather"]').click(); await page.locator('#weather-kind').click();
-  const mutations = await page.locator('#weather-kind').evaluate(select => new Promise<number>(resolve => {
+  await page.locator('[data-settings-target="weather"]').click(); await page.locator('#weather-clear').focus();
+  const mutations = await page.locator('#weather-kind').evaluate(group => new Promise<number>(resolve => {
     let count = 0; const observer = new MutationObserver(records => { count += records.length; });
-    observer.observe(select, { subtree: true, childList: true, characterData: true });
+    observer.observe(group, { subtree: true, childList: true, characterData: true });
     setTimeout(() => { observer.disconnect(); resolve(count); }, 1100);
   }));
   expect(mutations).toBe(0);
-  await page.locator('#weather-kind').selectOption('overcast');
-  await expect(page.locator('#weather-kind')).toHaveValue('overcast');
+  await page.locator('#weather-overcast').check();
+  await expect(page.locator('#weather-overcast')).toBeChecked();
   for (const season of ['summer', 'winter', 'spring']) {
     await page.locator('#season-kind').selectOption(season);
     for (const kind of ['clear', 'overcast', 'drizzle', 'rain', 'storm', 'fog']) {
-      await page.locator('#weather-kind').selectOption(kind);
-      await expect(page.locator('#weather-kind')).toHaveValue(kind);
+      await page.locator(`#weather-${kind}`).check();
+      await expect(page.locator(`#weather-${kind}`)).toBeChecked();
       await expect(page.locator('#error')).toBeHidden();
     }
   }
-  await page.locator('#weather-kind').selectOption('clear'); await closeSettings(page);
+  await page.locator('#weather-clear').check(); await closeSettings(page);
   await page.locator('#drive-toggle').click(); await ignite(page); await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(2);
   await page.keyboard.up('KeyW'); expect(errors).toEqual([]);

@@ -41,7 +41,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   }
   await toggleSettings(page);
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('semi20');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#weather-storm'))).check();
   await (await control(page, page.locator('#fog-density'))).fill('150');
   await expect(metric('Tunnel shelter')).toHaveText('0%');
   await expect(metric('Rain visible')).toHaveText('yes');
@@ -57,7 +57,7 @@ test('switches every vehicle in place, drives long rigs, and preserves choices t
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
   await expect(page.locator('#vehicle-kind')).toHaveValue('semi20');
   await expect(page.locator('#suspension')).toHaveValue('5');
-  await expect(page.locator('#weather-kind')).toHaveValue('storm');
+  await expect(page.locator('#weather-storm')).toBeChecked();
   await expect(page.locator('#fog-density-value')).toHaveText('150%');
   expect(errors).toEqual([]);
 });
@@ -71,12 +71,12 @@ test('previews weather and fog while paused and keeps the vehicle stationary', a
   await page.keyboard.press('Slash'); await toggleSettings(page);
   const position = await metric('Vehicle position').textContent();
   await (await control(page, page.locator('#cloud-toggle'))).click();
-  await (await control(page, page.locator('#weather-kind'))).selectOption('fog');
+  await (await control(page, page.locator('#weather-fog'))).check();
   await (await control(page, page.locator('#fog-density'))).fill('200');
   await expect(metric('Fog near / far')).toHaveText('18 / 210 m');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('drizzle');
+  await (await control(page, page.locator('#weather-drizzle'))).check();
   await expect(metric('Rain visible')).toHaveText('yes');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('clear');
+  await (await control(page, page.locator('#weather-clear'))).check();
   await expect(metric('Rain visible')).toHaveText('no');
   await expect(metric('Vehicle position')).toHaveText(position!);
 });

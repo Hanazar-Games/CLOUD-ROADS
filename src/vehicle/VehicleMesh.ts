@@ -3,8 +3,8 @@ import type { VehiclePhysics, WheelState } from './VehiclePhysics';
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Windshield } from './Windshield';
 import type { VehicleSystems } from './VehicleSystems';
-import { mergeVehicleParts, rimGeometry, tireGeometry, wheelFenderGeometry } from './VehicleGeometry';
-import { flatbedDetails, vehicleDetails, type VehicleBlock as Block, type VehicleDetailKit } from './VehicleDetails';
+import { bodyPanelGeometry, mergeVehicleParts, rimGeometry, tireGeometry, wheelArchPanelGeometry, wheelFenderGeometry } from './VehicleGeometry';
+import { cabStepZ, flatbedDetails, vehicleDetails, type VehicleBlock as Block, type VehicleDetailKit } from './VehicleDetails';
 import { busBody } from './BusBody';
 import { VehicleFittings } from './VehicleFittings';
 import type { VehicleOperations } from './VehicleOperations';
@@ -13,6 +13,7 @@ import { CraneMesh } from './CraneMesh';
 import type { CraneSystems } from './CraneSystems';
 import { VehicleDisplay } from './VehicleDisplay';
 import { fleetBody } from './FleetBody';
+import { vehicleFinish } from './VehicleFinish';
 
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
 
@@ -55,13 +56,19 @@ export class VehicleMesh {
     this.tail = this.material(0xca3932); this.tail.emissive.setHex(0xff3020);
     const lamp = this.lamp = this.material(0xffefcf); lamp.emissive.setHex(0xffeed0); lamp.emissiveIntensity = 0;
     this.root.add(this.chassis); this.root.visible = false; scene.add(this.root);
-    const box = this.geometry(new BoxGeometry());
-    const block = (w: number, h: number, l: number, x: number, y: number, z: number, material = paint, parent = this.chassis) => {
-      const mesh = new Mesh(box, material); mesh.scale.set(w, h, l); mesh.position.set(x, y, z);
+    const makeBlock = (geometry: BufferGeometry): Block => (w, h, l, x, y, z, material = paint, parent = this.chassis) => {
+      const mesh = new Mesh(geometry, material); mesh.scale.set(w, h, l); mesh.position.set(x, y, z);
       mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh;
     };
+    const box = this.geometry(new BoxGeometry());
+    const block = makeBlock(box), panel = makeBlock(this.geometry(bodyPanelGeometry()));
     const amber = this.material(0xe6a02d, 0.3); amber.emissive.setHex(0xd57516); amber.emissiveIntensity = 0.25;
-    const kit = { block, paint, trim, metal, glass, lamp, amber, wood: this.material(0x8b7859, 0.95),
+    const kit = { block, panel, paint, trim, metal, glass, lamp, amber, wood: this.material(0x8b7859, 0.95),
+      wheelPanel: (from: number, to: number, bottom: number, top: number, x: number, material: MeshStandardMaterial, parent: Group, originZ = 0) => {
+        const mesh = new Mesh(this.geometry(wheelArchPanelGeometry(from, to, bottom, top,
+          profile.wheels.filter(wheel => wheel.x > 0).map(wheel => -wheel.along - originZ), profile.radius - this.rideHeight, profile.radius + 0.06)), material);
+        mesh.position.x = x; mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh;
+      },
       cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group, bottomRadius = radius) => {
         const mesh = new Mesh(this.geometry(new CylinderGeometry(radius, bottomRadius, length, 16)), material);
         mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh;
@@ -73,13 +80,13 @@ export class VehicleMesh {
     shape.lineTo(-0.92, 1.6); shape.lineTo(-0.92, -1.65); shape.closePath();
     const shell = new Mesh(this.geometry(new ExtrudeGeometry(shape, { depth: 0.34, bevelEnabled: true, bevelSize: 0.07, bevelThickness: 0.07, bevelSegments: 1, steps: 1 })), paint);
     shell.rotation.x = -Math.PI / 2; shell.position.y = -0.34; shell.castShadow = shell.receiveShadow = true; this.chassis.add(shell);
-    block(1.69, 0.12, 1.25, 0, 0.1, -1.35);
-    block(1.68, 0.16, 0.63, 0, 0.12, 1.6);
+    panel(1.69, 0.12, 1.25, 0, 0.1, -1.35);
+    panel(1.68, 0.16, 0.63, 0, 0.12, 1.6);
     block(1.75, 0.1, 0.1, 0, -0.17, -2.1, trim);
     block(1.55, 0.1, 0.1, 0, -0.2, 2.1, trim);
     for (const side of [-1, 1]) {
       const door = this.fittings.hinge('doors', this.chassis, side * 0.84, 0, -0.74, 'y', side * 1.1);
-      block(0.15, 0.3, 1.92, 0, 0.09, 0.96, paint, door);
+      panel(0.15, 0.3, 1.92, 0, 0.09, 0.96, paint, door);
       block(0.05, 0.04, 0.2, side * 0.1, 0.17, 1.24, metal, door);
       block(0.025, 0.19, 1.4, -side * 0.089, 0.09, 0.96, leather, door);
       block(0.1, 0.055, 0.55, -side * 0.13, 0.13, 0.98, trim, door);
@@ -121,6 +128,7 @@ export class VehicleMesh {
     } else this.buildBody(block, paint, trim, metal, glass, leather, lamp, kit);
     vehicleDetails(profile, this.chassis, kit);
     fleetBody(profile, this.chassis, kit, this.fittings, this.rideHeight);
+    vehicleFinish(profile, this.chassis, kit, this.rideHeight);
     if (profile.body === 'ambulance' || profile.body === 'firetruck') {
       const beacon = this.fittings.beacon = this.material(0x347bbf, 0.2); beacon.emissive.setHex(0x268aff);
       for (const side of [-1, 1]) block(0.4, 0.16, 0.28, side * 0.65, Math.min(profile.height - this.rideHeight - 0.1, profile.eye.y + 0.48), -profile.eye.along, beacon);
@@ -275,6 +283,10 @@ export class VehicleMesh {
       if (trailer.body === 'flatbed') flatbedDetails(profile.width, -trailer.front, trailer.length - trailer.front, body, kit);
       this.fittings.cargo(body, profile.width, -trailer.front, trailer.length - trailer.front, 0.3, top, trailer.body, kit, this.rideHeight);
       for (const side of [-1, 1]) {
+        panel(0.16, 0.26, trailer.length - 0.2, side * 0.72, -0.15, center, trim, body);
+        for (const z of trailer.body === 'flatbed' ? [] : [-trailer.front + 0.1, trailer.length - trailer.front - 0.1]) {
+          panel(0.13, top - 0.3, 0.12, side * (profile.width / 2 - 0.035), (top + 0.3) / 2, z, metal, body);
+        }
         block(0.04, 0.13, trailer.length - 0.2, side * profile.width / 2, 0.35, center, paint, body);
         block(0.12, 0.6, 0.12, side * 0.82, -0.25, 1.7, metal, body);
         block(0.22, 0.08, 0.3, side * 0.82, -0.55, 1.7, trim, body);
@@ -357,10 +369,11 @@ export class VehicleMesh {
   private buildBody(block: Block, paint: MeshStandardMaterial, trim: MeshStandardMaterial, metal: MeshStandardMaterial,
     glass: MeshStandardMaterial, leather: MeshStandardMaterial, lamp: MeshStandardMaterial, kit: VehicleDetailKit): void {
     const p = this.profile, w = p.width, length = p.chassisLength, nose = -length / 2, top = p.height - this.rideHeight;
+    const { panel } = kit;
     if (p.shape === 'motorcycle') {
       block(0.27, 0.3, 0.55, 0, -0.12, 0, metal);
-      const tank = block(0.43, 0.32, 0.62, 0, 0.25, -0.16); tank.rotation.x = -0.12;
-      block(0.35, 0.13, 0.65, 0, 0.33, 0.39, leather);
+      const tank = panel(0.43, 0.32, 0.62, 0, 0.25, -0.16); tank.rotation.x = -0.12;
+      panel(0.35, 0.13, 0.65, 0, 0.33, 0.39, leather);
       block(0.35, 0.12, 0.34, 0, 0.21, 0.9);
       block(0.3, 0.12, 0.35, 0, -0.22, -0.85);
       for (const side of [-1, 1]) {
@@ -377,8 +390,8 @@ export class VehicleMesh {
       block(0.2, 0.065, 0.025, 0, 0.26, 1.06, this.tail);
       return;
     }
-    block(w - 0.18, 0.24, length - 0.12, 0, -0.2, 0, trim);
     const passenger = p.shape === 'sedan' || p.shape === 'suv' || p.shape === 'supercar';
+    block(w - (passenger ? 0.18 : 0.7), 0.24, length - 0.12, 0, -0.2, 0, trim);
     const cabFront = passenger ? p.body === 'limousine' ? -2.45 : p.body === 'pickup' ? -1.35 : -0.8 : nose + 0.08;
     const cabBack = passenger ? p.body === 'limousine' ? 2.5 : p.body === 'pickup' ? 0.3 : p.shape === 'suv' || p.body === 'hatchback' ? length / 2 - 0.12 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (length > 6 ? 2.5 : 2);
     const cabLength = cabBack - cabFront, cabCenter = (cabFront + cabBack) / 2;
@@ -408,20 +421,21 @@ export class VehicleMesh {
       }
       for (const z of p.body === 'pickup' ? [nose + 0.025] : [nose + 0.025, end - 0.025]) block(w - 0.08, sill - bottom, 0.05, 0, (sill + bottom) / 2, z, paint);
     } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane' || p.body === 'dumptruck' || p.body === 'tanker' || p.body === 'firetruck' || p.body === 'mixer') {
-      block(w, 0.24, cabLength, 0, -0.43, cabCenter);
+      block(w - 0.7, 0.24, cabLength, 0, -0.43, cabCenter);
       for (const z of [cabFront + 0.025, cabBack - 0.025]) block(w, sill + 0.31, 0.05, 0, (sill - 0.31) / 2, z);
       block(1.35, 0.22, length - cabLength, 0, -0.3, (cabBack + length / 2) / 2, trim);
     } else {
-      block(w, 0.24, length, 0, -0.43, 0);
-      block(w, sill + 0.31, length / 2 - cabBack, 0, (sill - 0.31) / 2, (cabBack + length / 2) / 2);
+      block(w - 0.7, 0.24, length, 0, -0.43, 0);
+      block(w - 0.7, sill + 0.31, length / 2 - cabBack, 0, (sill - 0.31) / 2, (cabBack + length / 2) / 2);
+      for (const side of [-1, 1]) kit.wheelPanel(cabBack, length / 2, -0.31, sill, side * (w / 2 - 0.03), paint, this.chassis);
       for (const z of [cabFront + 0.025, cabBack - 0.025]) block(w, sill + 0.31, 0.05, 0, (sill - 0.31) / 2, z);
     }
     if (passenger) {
-      block(w - 0.05, 0.13, cabFront - nose, 0, sill + 0.035, (nose + cabFront) / 2);
-      if (p.body !== 'pickup') block(w - 0.05, 0.12, length / 2 - cabBack, 0, sill, (length / 2 + cabBack) / 2);
+      panel(w - 0.05, 0.13, cabFront - nose, 0, sill + 0.035, (nose + cabFront) / 2);
+      if (p.body !== 'pickup') panel(w - 0.05, 0.12, length / 2 - cabBack, 0, sill, (length / 2 + cabBack) / 2);
     }
     const rake = passenger ? p.shape === 'suv' ? 0.24 : 0.48 : 0.06;
-    block(w - 0.16, 0.09, cabLength - rake * 2, 0, roof - 0.045, cabCenter);
+    panel(w - 0.16, 0.09, cabLength - rake * 2, 0, roof - 0.045, cabCenter);
     for (const z of [cabFront, cabBack]) {
       const front = z === cabFront, tilt = Math.atan2(rake, roof - sill) * (front ? 1 : -1);
       const center = z + (front ? rake / 2 : -rake / 2);
@@ -442,10 +456,10 @@ export class VehicleMesh {
     for (const side of [-1, 1]) {
       const door = this.fittings.hinge('doors', this.chassis, side * (w / 2 - 0.03), 0, doorFront, 'y', side * 1.1);
       const belt = passenger ? Math.max(sill + 0.04, p.radius - this.rideHeight + p.radius + 0.12) : sill;
-      block(0.06, belt + 0.22, doorBack - doorFront, 0, (belt - 0.22) / 2, (doorBack - doorFront) / 2, paint, door);
+      kit.wheelPanel(0, doorBack - doorFront, -0.22, belt, 0, paint, door, doorFront);
       block(0.025, 0.05, 0.25, side * 0.05, sill - 0.1, doorBack - doorFront - 0.2, metal, door);
-      const doorLength = doorBack - doorFront;
-      block(0.02, (belt + 0.22) * 0.68, doorLength * 0.78, -side * 0.044, (belt - 0.22) / 2, doorLength / 2, passenger ? leather : metal, door);
+      const doorLength = doorBack - doorFront, liningY = (belt - 0.22) / 2, liningHalf = (belt + 0.22) * 0.34;
+      kit.wheelPanel(doorLength * 0.11, doorLength * 0.89, liningY - liningHalf, liningY + liningHalf, -side * 0.044, passenger ? leather : metal, door, doorFront);
       block(0.11, 0.055, doorLength * 0.43, -side * 0.095, belt - 0.12, doorLength * 0.57, passenger ? trim : paint, door);
       block(0.022, 0.045, 0.15, -side * 0.062, belt - 0.08, doorLength * 0.24, metal, door);
       const lift = new Group(); lift.name = 'driver-window'; lift.position.set(-side * 0.03, sill, -doorFront);
@@ -459,9 +473,9 @@ export class VehicleMesh {
         block(0.07, roof - sill, 0.075, side * (w / 2 - 0.07), (roof + sill) / 2, z, trim);
       const doorEnd = passenger ? cabCenter : cabBack - 0.08;
       block(0.012, sill + 0.46, 0.014, side * (w / 2 + 0.015), (sill - 0.46) / 2, doorEnd, trim);
-      block(0.016, 0.018, Math.max(0.4, doorEnd - cabFront), side * (w / 2 + 0.018), -0.39, (doorEnd + cabFront) / 2, trim);
+      if (passenger) block(0.016, 0.018, Math.max(0.4, doorEnd - cabFront), side * (w / 2 + 0.018), -0.39, (doorEnd + cabFront) / 2, trim);
       if (!passenger) {
-        for (const y of [-0.43, -0.6]) block(0.22, 0.055, 0.65, side * (w / 2 + 0.035), y, cabFront + 0.75, metal);
+        for (const y of [-0.43, -0.6]) block(0.22, 0.055, 0.3, side * (w / 2 + 0.035), y, cabStepZ(p), metal);
       }
       block(0.18, 0.04, 0.09, side * (w / 2 + 0.04), p.eye.y - 0.28, cabFront + 0.25, trim);
       block(0.13, passenger ? 0.12 : 0.32, 0.13, side * (w / 2 + 0.14), p.eye.y - 0.17, cabFront + 0.25, metal);

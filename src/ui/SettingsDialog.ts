@@ -18,7 +18,7 @@ export class SettingsDialog {
       if (!terms.length) return;
       const matches = [...content.querySelectorAll<HTMLLabelElement>('label[for]')].filter(label => {
         const control = document.getElementById(label.htmlFor);
-        return control && terms.every(term => `${label.textContent} ${control.id} ${control instanceof HTMLSelectElement ? control.textContent : ''}`.toLocaleLowerCase().includes(term));
+        return control && terms.every(term => `${label.textContent} ${control.id} ${control.closest('fieldset')?.querySelector('legend')?.textContent ?? ''} ${control instanceof HTMLSelectElement ? control.textContent : ''}`.toLocaleLowerCase().includes(term));
       });
       results.hidden = !matches.length;
       status.textContent = matches.length ? `找到 ${matches.length} 项${matches.length > 8 ? '，显示前 8 项' : ''} · 选择后直达` : '没有匹配项，请尝试“转速”“声音”或“道路”。';
@@ -29,7 +29,7 @@ export class SettingsDialog {
         result.onclick = () => {
           search.value = ''; find();
           section.querySelectorAll('details').forEach(detail => { detail.open = true; });
-          target.scrollIntoView({ block: 'center' }); target.focus({ preventScroll: true }); syncCategory();
+          target.scrollIntoView({ block: 'center' }); target.focus({ preventScroll: true }); syncCategory(); reveal(label);
           if (document.activeElement !== target) { label.tabIndex = -1; label.focus({ preventScroll: true }); }
         };
         results.append(result);
@@ -42,6 +42,11 @@ export class SettingsDialog {
       event.preventDefault(); if (event.key === 'Enter') first.click(); else first.focus();
     }, options);
     clear.addEventListener('click', () => { search.value = ''; find(); search.focus(); }, options);
+    const reveal = (target: HTMLElement) => {
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) target.animate([
+        { backgroundColor: '#79e5ed30' }, { backgroundColor: 'transparent' },
+      ], { duration: 500, easing: 'ease-out' });
+    };
     const syncCategory = () => {
       let current = tabs[0];
       if (this.open) for (const tab of tabs) {
@@ -73,7 +78,7 @@ export class SettingsDialog {
         const section = element(`settings-${tab.dataset.settingsTarget}`);
         section.querySelectorAll('details').forEach(detail => { detail.open = true; });
         content.scrollTo({ top: section.offsetTop - parseFloat(getComputedStyle(content).paddingTop) });
-        syncCategory();
+        syncCategory(); reveal(section.querySelector('h3')!);
       }, options);
     }
   }

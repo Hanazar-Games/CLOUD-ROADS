@@ -9,7 +9,7 @@ test('wipes accumulated windshield water and freezes it while paused', async ({ 
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('truck5');
   await (await control(page, page.locator('#driving-view'))).selectOption('cockpit');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#weather-storm'))).check();
   await (await control(page, page.locator('#vehicle-wipers'))).selectOption('off');
   await expect(page.locator('#drive-toggle')).toBeEnabled(); await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect.poll(async () => parseFloat((await metric('Wiped water').textContent())!), { timeout: 15000 }).toBeGreaterThan(90);

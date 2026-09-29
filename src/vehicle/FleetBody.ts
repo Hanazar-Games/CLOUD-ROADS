@@ -5,7 +5,7 @@ import type { VehicleFittings } from './VehicleFittings';
 
 export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit, fittings: VehicleFittings, rideHeight: number): void {
   if (!p.body) return;
-  const { block, cylinder, paint, trim, metal, glass, amber, lamp } = kit;
+  const { block, panel, cylinder, paint, trim, metal, glass, amber, lamp } = kit;
   const end = p.length / 2, top = p.height - rideHeight - (p.body === 'expedition' ? 0.4 : 0), start = -end + (p.length > 6 ? 2.65 : 2.15);
   const length = end - start, middle = (start + end) / 2, w = p.width;
   if (p.body === 'coupe' || p.body === 'rally') {
@@ -36,7 +36,8 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     block(w - 0.25, 0.08, p.length - 2.2, 0, top + 0.04, 0.5, trim, parent);
     for (const side of [-1, 1]) block(0.06, 0.18, p.length - 2.3, side * (w / 2 - 0.17), top + 0.13, 0.5, metal, parent);
     for (const z of [-1.1, 1.1]) block(w - 0.32, 0.18, 0.06, 0, top + 0.13, z, metal, parent);
-    block(0.9, 0.32, 0.75, -0.35, top + 0.24, 0.5, paint, parent);
+    panel(0.9, 0.32, 0.75, -0.35, top + 0.24, 0.5, paint, parent);
+    for (const x of [-0.64, -0.06]) block(0.035, 0.33, 0.76, x, top + 0.24, 0.5, trim, parent);
     const spare = cylinder(p.radius, 0.23, 0, 0.45, end + 0.03, trim, parent); spare.rotation.x = Math.PI / 2;
     block(w + 0.08, 0.14, 0.18, 0, -0.2, -end - 0.03, metal, parent);
   } else if (p.body === 'schoolbus' || p.body === 'shuttle') {
@@ -64,6 +65,10 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     for (const z of [start + 0.6, end - 1.05]) {
       block(w * 0.82, 0.18, 0.3, 0, 0.15, z, metal, parent);
       block(0.32, 0.35, 0.32, 0, 0.36, z, trim, parent);
+      for (const side of [-1, 1]) {
+        const roller = cylinder(0.17, 0.25, side * 0.5, 0.37, z, trim, parent); roller.rotation.x = Math.PI / 2;
+        panel(0.2, 0.22, 0.34, side * 0.65, 0.25, z, metal, parent);
+      }
     }
     block(0.85, 0.65, 0.7, 0, top - 0.35, end - 0.45, metal, parent);
     const chute = fittings.hinge('aux', parent, 0, 0.55, end - 0.65, 'y', 0.8);
@@ -71,7 +76,7 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     for (const x of [-0.22, 0.22]) block(0.045, 0.18, 0.85, x, -0.03, 0.4, paint, chute);
     for (let y = 0.2; y < top; y += 0.28) block(0.48, 0.055, 0.08, w * 0.34, y, end - 0.05, metal, parent);
   } else if (p.body === 'refrigerated') {
-    block(w * 0.7, 0.6, 0.22, 0, top - 0.36, start - 0.1, metal, parent);
+    panel(w * 0.7, 0.6, 0.22, 0, top - 0.36, start - 0.1, metal, parent);
     for (let x = -0.6; x <= 0.6; x += 0.15) block(0.05, 0.4, 0.24, x, top - 0.36, start - 0.11, trim, parent);
     for (const side of [-1, 1]) {
       block(0.05, 0.2, length - 0.4, side * w / 2, 0.95, middle, metal, parent);
@@ -109,6 +114,12 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     for (const z of [start + 0.25, middle, end - 0.25]) {
       block(w - 0.15, 0.17, 0.18, 0, 0.12, z, trim, parent);
       cylinder(0.22, 0.1, 0, 0.38 + radius * 2, z, paint, parent);
+      const band = cylinder(radius + 0.018, 0.09, 0, 0.3 + radius, z, trim, parent); band.rotation.x = Math.PI / 2;
+      for (const side of [-1, 1]) panel(0.08, 0.12, 0.09, side * 0.18, 0.43 + radius * 2, z, metal, parent);
+    }
+    for (const side of [-1, 1]) {
+      const pipe = cylinder(0.07, length - 0.5, side * w * 0.4, 0.15, middle, metal, parent); pipe.rotation.x = Math.PI / 2;
+      const valve = cylinder(0.12, 0.035, side * w * 0.4, 0.15, end - 0.3, paint, parent); valve.rotation.x = Math.PI / 2;
     }
     for (const x of [-0.65, 0.65]) block(0.07, 0.1, length - 0.3, x, 0.3 + radius * 2, middle, metal, parent);
     for (let y = 0.1; y < top - 0.2; y += 0.28) block(0.55, 0.05, 0.05, 0, y, end - 0.03, metal, parent);
@@ -121,13 +132,16 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
       for (let z = -l + 0.2; z < 0; z += 0.65) block(0.13, h, 0.07, x * (w / 2 - 0.03), h / 2, z, metal, bed);
     }
     for (const z of [-l, 0]) block(w - 0.12, h, 0.1, 0, h / 2, z, paint, bed);
+    for (const side of [-1, 1]) panel(0.16, 0.1, l, side * (w / 2 - 0.04), h, -l / 2, metal, bed);
+    for (const y of [0.22, h - 0.2]) block(w - 0.22, 0.045, 0.04, 0, y, 0.065, trim, bed);
     block(w - 0.05, 0.08, 0.55, 0, h, -l + 0.12, paint, bed);
   } else if (p.body === 'firetruck') {
-    block(w - 0.1, top - 0.42, length, 0, (top + 0.12) / 2, middle, paint, parent);
+    panel(w - 0.1, top - 0.42, length, 0, (top + 0.12) / 2, middle, paint, parent);
     for (const side of [-1, 1]) for (let z = start + 0.55; z < end - 0.25; z += 1.2) {
       block(0.055, 1.05, 1.04, side * w / 2, 1, z, metal, parent);
       for (let y = 0.5; y < 1.5; y += 0.12) block(0.065, 0.025, 1, side * (w / 2 + 0.005), y, z, trim, parent);
       block(0.08, 0.04, 0.35, side * (w / 2 + 0.025), 0.58, z, trim, parent);
+      const coupling = cylinder(0.08, 0.07, side * (w / 2 + 0.04), 0.27, z, metal, parent); coupling.rotation.z = Math.PI / 2;
     }
     for (const x of [-0.43, 0.43]) block(0.09, 0.12, length - 0.25, x, top - 0.04, middle, metal, parent);
     for (let z = start + 0.25; z < end - 0.1; z += 0.32) block(0.86, 0.065, 0.06, 0, top - 0.02, z, metal, parent);
@@ -154,7 +168,7 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
       if (p.body === 'van') for (const z of [start + 0.05, middle + 0.3]) block(0.08, top - 0.7, 0.022, side * w / 2, (top + 0.7) / 2, z, trim, parent);
     }
     if (p.body === 'camper') {
-      block(w - 0.1, 0.35, 1.5, 0, top - 0.13, start - 0.7, paint, parent);
+      panel(w - 0.1, 0.35, 1.5, 0, top - 0.13, start - 0.7, paint, parent);
       block(0.16, 0.14, length - 0.3, w / 2 + 0.04, top - 0.18, middle, trim, parent);
       block(0.6, 0.025, 0.7, 0, top + 0.055, middle, glass, parent);
     }

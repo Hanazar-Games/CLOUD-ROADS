@@ -12,7 +12,7 @@ test('drives planetary worlds with a three-link train, EV controls and ordinary 
   await (await control(page, page.locator('#route-style'))).selectOption('0');
   await (await control(page, page.locator('#max-grade'))).fill('0');
   await (await control(page, page.locator('#daylight'))).fill('0');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#weather-storm'))).check();
   await (await control(page, page.locator('#season-kind'))).selectOption('winter');
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('roadTrain');
   await (await control(page, page.locator('#vehicle-energy'))).selectOption('ev');
@@ -48,7 +48,7 @@ test('drives planetary worlds with a three-link train, EV controls and ordinary 
   await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
-  await expect(page.locator('#weather-kind')).toHaveValue('storm'); await expect(page.locator('#season-kind')).toHaveValue('winter');
+  await expect(page.locator('#weather-storm')).toBeChecked(); await expect(page.locator('#season-kind')).toHaveValue('winter');
   await closeSettings(page); await expect(page.locator('#season-status')).toContainText('冬季');
   expect(errors).toEqual([]);
 });

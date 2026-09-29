@@ -141,6 +141,39 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 .settings-category label { font-size: 12px; }
 .settings-category .panel-help, #settings-status, #road-width-help { font-size: 11px; }
 .settings-category select { font-size: 12px; min-height: 38px; }
+.settings-dialog :is(button, select, input, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.settings-dialog :is(button, select, summary) { transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease; }
+.settings-dialog button:active:not(:disabled) { background-color: #326177; }
+.settings-dialog button:disabled { opacity: .5; cursor: not-allowed; }
+.settings-category summary { padding: 12px; border: 1px solid #79e5ed22; border-radius: 6px; background: #102534; cursor: pointer; }
+.settings-category summary:hover { border-color: #79e5ed66; background: #173448; }
+.settings-category h3 { border-left: 3px solid var(--accent); padding-left: 12px; }
+.settings-dialog[open] { animation: settings-enter 180ms ease-out; }
+.settings-dialog[open]::backdrop { animation: settings-backdrop 180ms ease-out; }
+.settings-category details[open] > :not(summary) { animation: settings-fade 180ms ease-out; }
+@keyframes settings-enter { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+@keyframes settings-backdrop { from { background-color: #03101b00; } to { background-color: #03101bad; } }
+@keyframes settings-fade { from { opacity: .4; } to { opacity: 1; } }
+.weather-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; margin: 20px 0 8px; padding: 0; border: 0; color-scheme: dark; }
+.weather-choices legend { padding: 0 0 10px; font-size: 13px; color: #d6e9f0; }
+.settings-category .weather-choices label { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin: 0; padding: 14px 12px; border: 1px solid #79e5ed30; border-radius: 9px; background: #102534; cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
+.weather-choices label:hover { background: #18394a; border-color: #79e5ed80; }
+.weather-choices label:has(:checked) { background: #173f4d; border-color: #79e5ed; box-shadow: inset 0 0 0 1px #79e5ed33; }
+.weather-choices label:has(:focus-visible) { outline: 2px solid #c1faff; outline-offset: 3px; }
+.weather-choices input[type=radio] { position: absolute; right: 12px; top: 14px; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: inherit; }
+.weather-choices input:focus-visible { outline: none; }
+.weather-choices label > span { float: none; font: inherit; letter-spacing: normal; opacity: 1; }
+.weather-choices svg { width: 28px; height: 28px; fill: none; stroke: #9fbdcb; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.weather-choices :checked + svg { stroke: var(--accent); }
+.weather-choices strong, .weather-choices small { display: block; line-height: 1.5; }
+.weather-choices strong { font-size: 13px; font-weight: 500; color: #e7f4f8; }
+.weather-choices small { margin-top: 4px; font-size: 11px; color: #a6bfcb; }
+.weather-choices:disabled label { opacity: .5; cursor: not-allowed; background: #102534; }
+@media (max-width: 640px) { .weather-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) {
+  .settings-dialog[open], .settings-dialog[open]::backdrop, .settings-category details[open] > :not(summary) { animation: none; }
+  .settings-dialog :is(button, select, summary), .settings-category .weather-choices label { transition: none; }
+}
 .settings-category .speed-label { margin-top: 16px; }
 .settings-category .actions { flex-wrap: wrap; }
 .settings-category .seed-entry input { font-size: 14px; }

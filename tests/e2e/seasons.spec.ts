@@ -39,7 +39,7 @@ test('renders snow, freezes its motion, and shelters precipitation inside tunnel
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#tunnel-view')).toBeEnabled({ timeout: 30000 });
   await (await control(page, page.locator('#season-kind'))).selectOption('winter');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('rain');
+  await (await control(page, page.locator('#weather-rain'))).check();
   await (await control(page, page.locator('#cloud-toggle'))).click(); await (await control(page, page.locator('#sun-view'))).click();
   await expect(metric('Snow visible')).toHaveText('yes'); await expect(metric('Rain visible')).toHaveText('no');
   await expect(metric('Liquid rain')).toHaveText('0.00');

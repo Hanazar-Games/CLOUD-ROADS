@@ -45,7 +45,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
   await openSettings(page);
   await page.locator('[data-settings-target="weather"]').click();
   await page.locator('#season-kind').selectOption('winter');
-  await page.locator('#weather-kind').selectOption('rain');
+  await page.locator('#weather-rain').check();
   await expect(page.locator('[data-metric="Season"]')).toHaveText('冬季');
   await expect(page.locator('[data-metric="Snow visible"]')).toHaveText('yes');
   await expect(page.locator('[data-metric="Rain visible"]')).toHaveText('no');

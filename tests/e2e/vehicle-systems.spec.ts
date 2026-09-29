@@ -9,7 +9,7 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   await page.goto('/?seed=CLOUD-ROAD-001');
   await (await control(page, page.locator('#vehicle-kind'))).selectOption('sedan');
   await (await control(page, page.locator('#driving-view'))).selectOption('cockpit');
-  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#weather-storm'))).check();
   await (await control(page, page.locator('#vehicle-lights'))).selectOption('off');
   await (await control(page, page.locator('#suspension-damping'))).fill('130');
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30000 });

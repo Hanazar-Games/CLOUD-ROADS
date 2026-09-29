@@ -23,8 +23,9 @@ export class PresetPanel {
   constructor(private readonly snapshot: () => { seed: string; world: WorldOptions; factorySpeed: boolean },
     private readonly loadWorld: (preset: SettingsPreset) => void, private readonly finish: (preset: SettingsPreset) => void) {
     for (const id of [...controls, ...graphics]) {
-      const node = element<HTMLInputElement | HTMLSelectElement>(id);
-      this.rules[id] = node instanceof HTMLSelectElement ? { choices: [...node.options].filter(o => !o.disabled).map(o => o.value) }
+      const node = element<HTMLInputElement | HTMLSelectElement | HTMLFieldSetElement>(id);
+      this.rules[id] = node instanceof HTMLFieldSetElement ? { choices: [...node.querySelectorAll<HTMLInputElement>('input[type=radio]')].map(o => o.value) }
+        : node instanceof HTMLSelectElement ? { choices: [...node.options].filter(o => !o.disabled).map(o => o.value) }
         : node.type === 'checkbox' ? { boolean: true } : { min: Number(node.min), max: Number(node.max), step: Number(node.step || 1) };
     }
     for (const id of toggles) this.rules[id] = { boolean: true };
@@ -74,10 +75,12 @@ export class PresetPanel {
   private apply(preset: SettingsPreset): void {
     this.loadWorld(preset);
     for (const id of [...controls, ...graphics]) {
-      const node = element<HTMLInputElement | HTMLSelectElement>(id), value = preset.settings[id];
-      if (node instanceof HTMLInputElement && node.type === 'checkbox') node.checked = value as boolean;
+      const node = element<HTMLInputElement | HTMLSelectElement | HTMLFieldSetElement>(id), value = preset.settings[id];
+      if (node instanceof HTMLFieldSetElement) {
+        for (const radio of node.querySelectorAll<HTMLInputElement>('input[type=radio]')) radio.checked = radio.value === value;
+      } else if (node instanceof HTMLInputElement && node.type === 'checkbox') node.checked = value as boolean;
       else node.value = String(value);
-      if (controls.includes(id)) node.dispatchEvent(new Event(node instanceof HTMLSelectElement || node.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
+      if (controls.includes(id)) node.dispatchEvent(new Event(node instanceof HTMLFieldSetElement || node instanceof HTMLSelectElement || node.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
     }
     for (const id of toggles) {
       const node = element<HTMLButtonElement>(id);
@@ -89,8 +92,9 @@ export class PresetPanel {
   private capture(): SettingsPreset {
     const settings: SettingsPreset['settings'] = {};
     for (const id of [...controls, ...graphics]) {
-      const node = element<HTMLInputElement | HTMLSelectElement>(id);
-      settings[id] = node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
+      const node = element<HTMLInputElement | HTMLSelectElement | HTMLFieldSetElement>(id);
+      settings[id] = node instanceof HTMLFieldSetElement ? node.querySelector<HTMLInputElement>('input:checked')!.value
+        : node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
     const preset = { format: 'cloud-roads-preset', version: 9, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };

@@ -13,12 +13,17 @@ export class CraneMesh {
   private readonly cable;
   private readonly weight;
   constructor(parent: Group, kit: VehicleDetailKit, private readonly rideHeight: number) {
-    const { block, cylinder, paint, trim, metal, glass } = kit;
+    const { block, panel, cylinder, paint, trim, metal, glass } = kit;
     this.turret.name = 'crane-turret'; this.turret.position.z = 2.25; parent.add(this.turret);
     block(2.65, 0.28, 10.6, 0, 0.28, 1.25, paint, parent);
     cylinder(1.03, 0.22, 0, 0.54, 2.25, metal, parent);
-    block(1.55, 0.64, 3.4, 0.15, 1.04, 0.85, paint, this.turret);
-    for (let i = 0; i < 4; i++) block(2.35, 0.24, 1.25, 0, 0.94 + i * 0.25, 2.6, trim, this.turret);
+    panel(1.55, 0.64, 3.4, 0.15, 1.04, 0.85, paint, this.turret);
+    for (let i = 0; i < 4; i++) panel(2.35, 0.24, 1.25, 0, 0.94 + i * 0.25, 2.6, trim, this.turret);
+    for (let z = 0.2; z < 2.1; z += 0.18) block(0.026, 0.25, 0.06, 0.939, 1.04, z, trim, this.turret);
+    for (const side of [-1, 1]) {
+      const pivot = cylinder(0.17, 0.08, 0.17 + side * 0.5, 2.4, 0.2, metal, this.turret); pivot.rotation.z = Math.PI / 2;
+      for (let z = 0.3; z < 2; z += 0.3) block(0.22, 0.016, 0.05, side * 1.16, 0.432, z + 2.25, trim, parent);
+    }
     block(0.88, 0.4, 1.7, -0.88, 1.1, -0.7, paint, this.turret);
     block(0.86, 0.76, 1.7, -0.88, 1.74, -0.7, glass, this.turret);
     for (const x of [-1.31, -0.45]) {
@@ -34,7 +39,7 @@ export class CraneMesh {
     this.boom.name = 'crane-boom'; this.boom.position.set(0.17, 2.45, 0.2); this.turret.add(this.boom);
     for (let i = 0; i < 4; i++) {
       const stage = new Group(); stage.name = `crane-stage-${i}`; this.stages.push(stage); this.boom.add(stage);
-      block(0.92 - i * 0.15, 0.65 - i * 0.12, 3.5, 0, 0, -1.75, paint, stage);
+      panel(0.92 - i * 0.15, 0.65 - i * 0.12, 3.5, 0, 0, -1.75, paint, stage);
       for (const side of [-1, 1]) block(0.03, 0.025, 3.45, side * (0.46 - i * 0.075), 0, -1.75, metal, stage);
     }
     this.hook.name = 'crane-hook'; this.turret.add(this.hook);

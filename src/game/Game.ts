@@ -181,8 +181,8 @@ export class Game {
       const kind = element<HTMLSelectElement>('season-kind').value as Season;
       if (Object.hasOwn(seasonNames, kind)) this.world.setSeason(kind);
     }, { signal: this.events.signal });
-    element('weather-kind').addEventListener('change', (event) => {
-      const kind = (event.target as HTMLSelectElement).value as WeatherKind;
+    element('weather-kind').addEventListener('change', () => {
+      const kind = element('weather-kind').querySelector<HTMLInputElement>('input:checked')!.value as WeatherKind;
       if (Object.hasOwn(weatherNames, kind)) this.weather.setKind(kind, this.paused || this.settings.open || this.releaseNotes.open || !this.input.enabled);
     }, { signal: this.events.signal });
     element('fog-density').addEventListener('input', (event) => {
@@ -385,7 +385,7 @@ export class Game {
       this.world = world;
       this.weather.setSeason(world.season);
       this.sky.sun.setTerrain(world.options.terrain);
-      for (const id of ['weather-kind', 'season-kind']) element<HTMLSelectElement>(id).disabled = world.season.extraterrestrial;
+      for (const id of ['weather-kind', 'season-kind']) element<HTMLSelectElement | HTMLFieldSetElement>(id).disabled = world.season.extraterrestrial;
       element<HTMLInputElement>('fog-density').disabled = world.options.terrain === 'moon';
       this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);

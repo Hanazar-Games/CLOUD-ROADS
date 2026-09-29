@@ -52,7 +52,7 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await page.locator('#engine-response').fill('125');
   await page.locator('#vehicle-max-speed').fill('75'); await page.locator('#steering-assist').uncheck();
   await page.locator('#road-grip').fill('45'); await page.locator('#handbrake-strength').fill('75'); await page.locator('#countersteer-assist').fill('35');
-  await category(page, 'weather'); await page.locator('#weather-kind').selectOption('rain');
+  await category(page, 'weather'); await page.locator('#weather-rain').check();
   await category(page, 'audio'); await page.locator('#music-ducking').fill('65'); await page.locator('#collision-volume').fill('40');
   await category(page, 'world'); await page.locator('#mountain-density').fill('125');
   await category(page, 'graphics'); await page.locator('#vegetation-lod').selectOption('0.5');

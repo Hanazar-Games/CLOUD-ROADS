@@ -4,9 +4,17 @@ import type { VehicleProfile } from './VehicleConfig';
 export type VehicleBlock = (w: number, h: number, l: number, x: number, y: number, z: number, material?: MeshStandardMaterial, parent?: Group) => Mesh;
 export interface VehicleDetailKit {
   block: VehicleBlock;
+  panel: VehicleBlock;
+  wheelPanel: (from: number, to: number, bottom: number, top: number, x: number, material: MeshStandardMaterial, parent: Group, originZ?: number) => Mesh;
   cylinder: (radius: number, length: number, x: number, y: number, z: number, material: MeshStandardMaterial, parent: Group, bottomRadius?: number) => Mesh;
   paint: MeshStandardMaterial; trim: MeshStandardMaterial; metal: MeshStandardMaterial;
   glass: MeshStandardMaterial; lamp: MeshStandardMaterial; wood: MeshStandardMaterial; amber: MeshStandardMaterial;
+}
+
+export function cabStepZ(p: VehicleProfile): number {
+  const axle = -Math.max(...p.wheels.map(wheel => wheel.along)), rear = axle + p.radius + 0.25;
+  const cabEnd = -p.chassisLength / 2 + (p.chassisLength > 6 ? 2.5 : 2);
+  return rear + 0.15 < cabEnd ? rear : axle - p.radius - 0.25;
 }
 
 export function flatbedDetails(width: number, start: number, end: number, parent: Group, kit: VehicleDetailKit): void {
