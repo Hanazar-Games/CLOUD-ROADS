@@ -19,7 +19,12 @@ export class ParkedFleet {
   sync(sites: readonly ServiceArea[], extras: readonly ParkedEntry[] = this.extras): void {
     const signature = sites.map(s => `${s.sample.routeId}:${s.id}:${s.ground.pads[0]?.x}:${s.ground.pads[0]?.z}`).join('|');
     if (signature === this.signature && extras === this.extras) return;
+    const previous = new Map(this.generated.map(entry => [entry.id, entry]));
     this.signature = signature; this.extras = extras; this.generated = [...sites.flatMap(site => parkedAt(this.seed, site)), ...extras];
+    for (const entry of this.generated) {
+      const old = previous.get(entry.id);
+      if (old && (['x', 'y', 'z', 'heading', 'grade', 'padHeading', 'paint', 'kind'] as const).some(key => old[key] !== entry[key])) this.cars.delete(entry.id);
+    }
     const visible = new Set(this.generated.map(e => e.id));
     for (const id of this.cars.keys()) if (!visible.has(id)) this.cars.delete(id);
     this.refresh();

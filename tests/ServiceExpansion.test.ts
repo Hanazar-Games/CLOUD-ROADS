@@ -25,8 +25,11 @@ it('connects grounded service garages to their apron and declines excavation abo
   expect(site).toBeDefined(); expect(site.garages).toHaveLength(2);
   for (const garage of site.garages!) {
     const pad = site.ground.pads.find(p => garage.id.endsWith(`:${p.side}`))!;
-    const p = padPoint(pad, pad.side * (pad.halfWidth - 1), 0);
-    expect(garage.surface(p.x, p.z, p.y + 0.5)).toBeCloseTo(p.y);
+    const p = padPoint(pad, pad.side * (pad.halfWidth - 4), -100);
+    expect(garage.ground.access[0].a.x).toBeCloseTo(p.x);
+    expect(garage.ground.access[0].a.z).toBeCloseTo(p.z);
+    const end = garage.ground.access.at(-1)!.b;
+    expect(garage.surface(end.x, end.z, end.y + 0.5)).toBeCloseTo(end.y);
     expect(garage.constrain({ ...p }, p.x, p.z, 1.4, p.y, 4.5)).toBe(false);
     const scene = new Scene(), mesh = new GarageMesh(scene, garage);
     expect(mesh.root.getObjectByName('garage-B3')).toBeDefined();

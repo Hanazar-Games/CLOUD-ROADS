@@ -73,11 +73,24 @@ export class ParkedVehicles {
     }
     this.fleet.sync(sites, this.extraEntries);
     const current = garages.find(g => g.floor(camera.x + origin.x, camera.y, camera.z + origin.z) !== undefined);
-    const floor = current ? `${current.id}:${current.floor(camera.x + origin.x, camera.y, camera.z + origin.z)}` : undefined;
+    const floor = `${current?.id}:${current?.floor(camera.x + origin.x, camera.y, camera.z + origin.z)}:${garages.map(g => g.loading).join(',')}`;
     if (floor !== this.garageFloor) { this.garageFloor = floor; this.version = -1; }
     const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600
-      && (e.slot < 0 || !e.id.startsWith('garage:') || floor !== undefined && Math.abs(e.y - camera.y) < 9));
+      && (e.slot < 0 || !e.id.startsWith('garage:') || garages.some(g => e.id.startsWith(`garage:${g.id}:`)
+        && g.visibleFloor(Math.round((g.position.y - e.y) / 6), g.floor(camera.x + origin.x, camera.y, camera.z + origin.z)))));
     const key = (entry: typeof near[number]) => `${entry.kind}${Math.hypot(entry.x - camera.x - origin.x, entry.z - camera.z - origin.z) > this.detailDistance ? ':far' : entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
+    const counts = new Map<string, number>();
+    for (const entry of near) counts.set(key(entry), (counts.get(key(entry)) ?? 0) + 1);
+    for (const [key, count] of counts) {
+      const meshes = this.batches.get(key);
+      if (!meshes || meshes[0].instanceMatrix.count >= count) continue;
+      this.batches.set(key, meshes.map(previous => {
+        const mesh = new InstancedMesh(previous.geometry, this.material, 2 ** Math.ceil(Math.log2(count)));
+        mesh.name = previous.name; mesh.receiveShadow = true; mesh.count = 0;
+        previous.removeFromParent(); previous.dispose(); this.scene.add(mesh); return mesh;
+      }));
+      this.version = -1;
+    }
     const missing = near.find(e => !this.batches.has(key(e)));
     if (missing) {
       const meshes = (key(missing).endsWith(':far') ? vehicleProxy(missing.kind) : vehicleTemplate(missing.kind, key(missing).endsWith(':closed'))).map((geometry, part) => {
@@ -94,7 +107,7 @@ export class ParkedVehicles {
       for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
       for (const entry of near) {
         const meshes = this.batches.get(key(entry)) ?? this.batches.get(entry.kind) ?? this.batches.get(`${entry.kind}:closed`) ?? this.batches.get(`${entry.kind}:far`);
-        if (!meshes || meshes[0].count >= 256) continue;
+        if (!meshes || meshes[0].count >= meshes[0].instanceMatrix.count) continue;
         const car = this.fleet.vehicle(entry);
         for (let i = 0; i < meshes.length; i++) {
           const body = i ? car.trailers[i - 1] : car, mesh = meshes[i];

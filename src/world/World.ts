@@ -35,8 +35,9 @@ import { JunctionMesh } from '../road/JunctionMesh';
 import { InterchangeMesh } from '../road/InterchangeMesh';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { TrafficVehicles } from '../traffic/TrafficVehicles';
-import { Garage, garageLocation } from '../garage/Garage';
+import { Garage } from '../garage/Garage';
 import { GarageMesh } from '../garage/GarageMesh';
+import { placeRoadGarage } from '../garage/GarageAccess';
 
 export interface GroundSample {
   height: number;
@@ -92,11 +93,12 @@ export class World {
   private readonly forward = new Vector3();
   private corridor = new RoadCorridor([]);
   private corridorVersion = -1;
-  private garagePlaced = false;
+  private garageEntrance?: ServiceArea;
+  private garagePlacementVersion = -1;
 
   constructor(private readonly scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.height = new HeightFunction(seed, options.terrain, options.roadType, options);
-    this.garage = new Garage(seed, garageLocation(this.height));
+    this.garage = new Garage(seed, { x: 640, y: this.height.sample(640, 128), z: 128 });
     this.garages = [this.garage];
     this.garageMesh = new GarageMesh(scene, this.garage);
     this.crossingPlanner = new CrossingPlanner(seed, this.height);
@@ -150,13 +152,11 @@ export class World {
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
     const position = travelPosition ?? { x, y: camera.position.y, z };
     this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
-    if (this.roadReady && !this.garagePlaced) {
-      this.garage.relocate(garageLocation(this.height, (gx, gz) => this.network.routes.some(route => {
-        const sample = route.road.nearest(gx, gz);
-        return sample && Math.hypot(gx - sample.position.x, gz - sample.position.z) < 120
-          || route.services.some(site => site.ground.pads.some(pad => Math.hypot(gx - pad.x, gz - pad.z) < 260));
-      })));
-      this.garagePlaced = true;
+    if (this.roadReady && !this.garageEntrance && this.garagePlacementVersion !== this.network.version) {
+      this.garagePlacementVersion = this.network.version;
+      const crossings = this.crossingPlanner.plan([this.road.samples], RoadCorridor.fromSamples(this.road.samples, this.network.active.bridges, this.options, this.network.active.tunnels));
+      this.garageEntrance = placeRoadGarage(this.garage, this.road.samples, this.height, roadProfile(this.options).outerHalfWidth, this.network.active.services, crossings.flatMap(site => site.samples.map(p => p.position)));
+      if (this.garageEntrance) this.corridorVersion = -1;
     }
     if (this.roadReady && this.corridorVersion !== this.network.version) {
       this.services = this.network.active.services;
@@ -258,7 +258,8 @@ export class World {
         return points.length < 2 ? [] : [{ ...span, start: points[0], end: points.at(-1)!, samples: points,
           openStart: span.openStart || span.start.distance < min, openEnd: span.openEnd || span.end.distance > max }];
       });
-      const services = route.services.filter(site => Math.min(site.start, site.sample.distance - (site.mergeEnd ?? 0)) >= min && Math.max(site.end, site.sample.distance + (site.mergeEnd ?? 0)) <= max);
+      const entrance = this.garageEntrance && (this.garageEntrance.sample.routeId ?? 'root') === route.id ? [this.garageEntrance] : [];
+      const services = [...route.services, ...entrance].filter(site => Math.min(site.start, site.sample.distance - (site.mergeEnd ?? 0)) >= min && Math.max(site.end, site.sample.distance + (site.mergeEnd ?? 0)) <= max);
       this.renderRoutes.push({ id: route.id, source: { version: this.corridorVersion, samples, segments }, services, tunnels });
       this.renderSamples.push(...samples); this.renderBridges.push(...bridges); this.renderTunnels.push(...tunnels); this.renderServices.push(...services);
       corridors.push(RoadCorridor.fromSamples(samples, bridges, this.options, tunnels, services.map(site => site.ground)));
@@ -268,8 +269,12 @@ export class World {
     for (const [garage, mesh] of this.serviceGarages) if (!garages.includes(garage)) { mesh.dispose(); this.serviceGarages.delete(garage); }
     for (const garage of garages) if (!this.serviceGarages.has(garage)) this.serviceGarages.set(garage, new GarageMesh(this.scene, garage));
     this.garages = [this.garage, ...garages];
-    this.connections = this.network.junctions.filter(j => j.interchange).map(j => ({ id: -1, sample: j.sample, start: j.distance - 600, end: j.distance + 600, ground: j.interchange!.ground }));
-    const grounds = [...this.renderServices.map(site => site.ground), ...this.garages.map(garage => garage.ground), ...this.connections.map(site => site.ground)];
+    const interchanges = this.network.junctions.filter(j => j.interchange).map(j => ({ id: -1, sample: j.sample, start: j.distance - 600, end: j.distance + 600, ground: j.interchange!.ground }));
+    const garageAccess = this.garages.map(garage => garage === this.garage && this.garageEntrance ? this.garageEntrance
+      : { id: -3, sample: this.road.samples[0], start: -Infinity, end: -Infinity, ground: garage.ground });
+    this.connections = [...interchanges, ...garageAccess];
+    const grounds = [...this.renderServices.filter(site => site !== this.garageEntrance).map(site => site.ground), ...this.connections.map(site => site.ground)];
+    this.renderServices.push(...garageAccess.filter(site => !this.renderServices.includes(site)));
     this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, grounds);
     this.crossings = this.crossingPlanner.plan(this.renderRoutes.map(route => route.source.samples), this.corridor)
       .sort((a, b) => Math.hypot(a.anchor.position.x - x, a.anchor.position.z - z) - Math.hypot(b.anchor.position.x - x, b.anchor.position.z - z))

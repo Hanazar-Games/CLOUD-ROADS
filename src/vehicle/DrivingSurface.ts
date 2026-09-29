@@ -249,7 +249,8 @@ export class DrivingSurface {
     for (const center of this.profile.centers) for (const side of [-1, 1]) {
       const inner = center !== 0 && side * center < 0;
       if (sample.opening !== undefined && this.connectedSurface(body.x, body.z, feet, radius)) continue;
-      if (!inner && !hasRoadBarrier({ ...route, options: this.world.options }, sample, side)) continue;
+      if (!inner && !hasRoadBarrier({ ...route, options: this.world.options,
+        services: [...route.services, ...(this.world.connections ?? []).filter(site => site.accessSide !== undefined && site.sample.routeId === sample.routeId)] }, sample, side)) continue;
       const offset = center + side * (this.profile.halfWidth + (inner ? 0.2 : tunnel ? 0.65 : bridge ? 0.25 : 0.3));
       const railHeight = y + right.y * offset;
       const screen = bridge && hasBridgeScreen(this.world.seed, sample, this.world.options)

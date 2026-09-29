@@ -11,7 +11,7 @@ export class GaragePanel {
     const kinds = element<HTMLSelectElement>('garage-kind');
     kinds.replaceChildren(new Option('随机混合 · 按车位大小匹配', 'random'), ...Object.entries(vehicleProfiles).map(([key, p]) => new Option(p.name, key)));
     const options = { signal: this.events.signal };
-    for (const id of ['garage-density', 'garage-kind', 'garage-paint']) element(id).addEventListener(id === 'garage-density' ? 'input' : 'change', () => this.apply(), options);
+    for (const id of ['garage-density', 'garage-kind', 'garage-paint', 'garage-loading', 'garage-light']) element(id).addEventListener(id === 'garage-density' || id === 'garage-light' ? 'input' : 'change', () => this.apply(), options);
     element('garage-floor').addEventListener('change', () => this.update(), options);
     element('garage-site').addEventListener('change', () => { this.signature = ''; this.update(); }, options);
     element('garage-view').addEventListener('click', () => {
@@ -28,8 +28,14 @@ export class GaragePanel {
     this.apply();
   }
   apply(): void {
+    element<HTMLButtonElement>('garage-car-view').disabled = true;
     const density = Number(element<HTMLInputElement>('garage-density').value);
-    for (const garage of this.world().garages) garage.configure(density, element<HTMLSelectElement>('garage-kind').value as VehicleKind | 'random', element<HTMLSelectElement>('garage-paint').value === 'random');
+    for (const garage of this.world().garages) {
+      garage.loading = element<HTMLSelectElement>('garage-loading').value === 'all' ? 'all' : 'floor';
+      garage.light = Number(element<HTMLInputElement>('garage-light').value) / 100;
+      garage.configure(density, element<HTMLSelectElement>('garage-kind').value as VehicleKind | 'random', element<HTMLSelectElement>('garage-paint').value === 'random');
+    }
+    element('garage-light-value').textContent = `${element<HTMLInputElement>('garage-light').value}%`;
     element('garage-density-value').textContent = `${density}%`;
     this.signature = '';
   }

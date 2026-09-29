@@ -146,7 +146,11 @@
           <p id="traffic-status" class="panel-help" aria-live="polite">正在等待道路</p>
         </section>
 <section class="settings-category" id="settings-garage" aria-labelledby="heading-garage"><h3 id="heading-garage">地下停车场</h3>
-          <p class="panel-help">每个世界保留独立 B1–B5 车库；部分服务区另有接通地面停车区的 B1–B3 车库。附近服务区加载后可在下方选择，宽螺旋双向坡道连接各层。按车位尺寸分配小车、客车与半挂；所有停放车辆均可按 F 开门上车、{Ignition} 点火驾驶。</p>
+          <p class="panel-help">每个世界保留独立 B1–B5 车库；部分服务区另有接通地面停车区的 B1–B3 车库。附近服务区加载后可在下方选择，长方形楼层由直线折返双向坡道连接，坡度最高约 11%。独立车库有主路匝道入口。按车位尺寸分配小车、客车与半挂；所有停放车辆均可按 F 开门上车、{Ignition} 点火驾驶。</p>
+          <label for="garage-loading">楼层加载方式</label><select id="garage-loading"><option value="floor">逐层加载 · 预加载相邻层</option><option value="all">全部楼层加载</option></select>
+          <p class="panel-help">逐层模式减少远处楼层细节和车辆的渲染；基础楼板与外墙持续保留。全部模式加载附近车库的所有楼层细节及停放车辆，占用更多内存。</p>
+          <label class="slider-label" for="garage-light">车库照明亮度 <output id="garage-light-value">100%</output></label>
+          <input id="garage-light" type="range" min="50" max="180" step="10" value="100" />
           <label for="garage-site">停车场位置</label><select id="garage-site"><option value="main">独立五层地下车库</option></select>
           <label class="slider-label" for="garage-density">车位占用率 <output id="garage-density-value">50%</output></label>
           <input id="garage-density" type="range" min="0" max="100" step="5" value="50" />

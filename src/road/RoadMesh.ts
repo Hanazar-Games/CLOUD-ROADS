@@ -68,6 +68,7 @@ export class RoadMesh {
       this.access.forEach((range, i) => {
         const distance = services[i]?.sample.distance;
         if (distance === undefined) range.set(-1, -1, -1, -1);
+        else if (services[i].accessSide !== undefined) range.set(services[i].start - cycleStart, services[i].end - cycleStart, -1, -1);
         else range.set(distance - cycleStart - (services[i].mergeEnd ?? 230), distance - cycleStart - 155, distance - cycleStart + 155, distance - cycleStart + (services[i].mergeEnd ?? 230));
       });
       const { centers, halfWidth } = this.profile, stride = centers.length * 2;

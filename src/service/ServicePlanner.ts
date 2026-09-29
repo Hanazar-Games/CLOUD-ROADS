@@ -11,8 +11,9 @@ import { serviceCrossover } from './ServiceCrossover';
 import { serviceFacility, type ServiceFacility } from './ServiceArchitecture';
 import { MERGE_END, serviceMerge } from './ServiceMerge';
 import { Garage, GARAGE_APRON } from '../garage/Garage';
+import { connectGarage } from '../garage/GarageAccess';
 
-export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number }
+export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number; accessSide?: number }
 
 export class ServicePlanner {
   private readonly profile;
@@ -173,13 +174,19 @@ export class ServicePlanner {
         }
         if (facility === 'garage' && !elevated) {
           site.garages = pads.flatMap(pad => {
-            const position = padPoint(pad, pad.side * (pad.halfWidth + 75), 0);
+            const heading = pad.heading - pad.side * Math.PI / 2;
+            const entry = padPoint(pad, pad.side * (pad.halfWidth + 95), -100);
+            const position = { x: entry.x - Math.cos(heading) * 64 - Math.sin(heading) * 80, y: pad.y,
+              z: entry.z - Math.sin(heading) * 64 + Math.cos(heading) * 80 };
             const reserved = roadIndex!.nearest(position.x, position.z, GARAGE_APRON + this.profile.outerHalfWidth + 15);
             const supported = [0, GARAGE_APRON / 2, GARAGE_APRON].every(radius => Array.from({ length: 16 }, (_, i) => {
               const angle = i / 16 * Math.PI * 2;
               return this.terrain.sample(position.x + Math.cos(angle) * radius, position.z + Math.sin(angle) * radius) >= position.y - 4;
             }).every(Boolean));
-            return reserved || !supported ? [] : [new Garage(this.seed, position, 3, `service:${sample.routeId ?? 'root'}:${id}:${pad.side}`)];
+            if (reserved || !supported) return [];
+            const garage = new Garage(this.seed, position, 3, `service:${sample.routeId ?? 'root'}:${id}:${pad.side}`, heading);
+            connectGarage(garage, { ...padPoint(pad, pad.side * (pad.halfWidth - 4), -100), slopeX: 0, slopeZ: 0 }, heading + Math.PI);
+            return [garage];
           });
           if (!site.garages.length) site.facility = 'mall';
         } else if (facility === 'garage') site.facility = 'mall';

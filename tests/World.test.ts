@@ -21,6 +21,16 @@ const load = (world: World, camera: PerspectiveCamera) => {
   throw new Error('World did not finish its terrain and preloading corridor');
 };
 
+it.each(['alpine', 'forest', 'desert', 'mars'] as const)('gives the standalone garage a road entrance in %s terrain', terrain => {
+  const scene = new Scene(), world = new World(scene, `GARAGE-${terrain}`, { ...DEFAULT_OPTIONS, terrain });
+  const camera = new PerspectiveCamera(); world.resetCamera(camera); load(world, camera);
+  expect(world.garage.ground.access).toHaveLength(80);
+  expect(world.connections.some(site => site.ground === world.garage.ground && site.accessSide === 1)).toBe(true);
+  const last = world.garage.ground.access.at(-1)!.b;
+  expect(world.garage.surface(last.x, last.z, last.y)).toBeCloseTo(last.y);
+  world.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it('streams a reproducible valley crossing and keeps its viewing control safe during loading', () => {
   const scene = new Scene(), world = new World(scene, 'VALLEY-1', { ...DEFAULT_OPTIONS, terrain: 'forest', terrainFollow: 0.5, bridgeHeight: 1000 });
   const camera = new PerspectiveCamera(); world.resetCamera(camera);
