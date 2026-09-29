@@ -1,6 +1,21 @@
 import { expect, test } from '@playwright/test';
 import { closeSettings, control, ignite, openSettings } from './settings';
 
+test('makes all setting search results reachable by keyboard and clears search before closing', async ({ page }) => {
+  await page.goto('/?seed=SEARCH-061'); await openSettings(page);
+  const search = page.locator('#settings-search'), results = page.locator('#settings-search-results button');
+  await search.fill('vehicle');
+  const count = Number((await page.locator('#settings-search-status').textContent())!.match(/\d+/)![0]);
+  expect(count).toBeGreaterThan(8); await expect(results).toHaveCount(count);
+  await search.press('ArrowDown'); await expect(results.first()).toBeFocused();
+  await page.keyboard.press('End'); await expect(results.last()).toBeFocused();
+  await expect(results.last()).toBeInViewport();
+  await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await expect(results.nth(1)).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(search).toBeFocused(); await expect(search).toHaveValue('');
+  await expect(page.locator('#explorer')).toBeVisible();
+  await page.keyboard.press('Escape'); await expect(page.locator('#world')).toBeFocused();
+});
+
 test('finds controls directly, keeps tuning across models and fits a small settings window', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/?seed=POWERTRAIN-053'); await openSettings(page);

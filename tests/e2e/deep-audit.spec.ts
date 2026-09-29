@@ -78,8 +78,8 @@ test('silences a native shift envelope promptly when its group is muted', async 
     const Native = window.AudioContext;
     window.AudioContext = class extends Native {
       createGain() {
-        const node = super.createGain(), set = node.gain.setValueAtTime.bind(node.gain);
-        node.gain.setValueAtTime = (value, when) => { if (value === 0.13) Reflect.set(window, 'shiftEnvelope', node.gain); return set(value, when); };
+        const node = super.createGain(), ramp = node.gain.linearRampToValueAtTime.bind(node.gain);
+        node.gain.linearRampToValueAtTime = (value, when) => { if (value === 0.13) Reflect.set(window, 'shiftEnvelope', node.gain); return ramp(value, when); };
         return node;
       }
     };

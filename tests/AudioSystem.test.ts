@@ -26,6 +26,28 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it('does not play a gear change when switching to a vehicle with a reset shift counter', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.update(0.1, { ...idle, driving: true, shifts: 12 });
+  const shift = (audio as unknown as { shiftGain: ReturnType<typeof gain> }).shiftGain.gain;
+  const scheduled = shift.cancelScheduledValues.mock.calls.length;
+  audio.update(0.1, { ...idle, driving: true, shifts: 0 });
+  expect(shift.cancelScheduledValues).toHaveBeenCalledTimes(scheduled);
+  audio.update(0.1, { ...idle, driving: true, shifts: 1 });
+  expect(shift.cancelScheduledValues).toHaveBeenCalledTimes(scheduled + 1);
+  audio.dispose();
+});
+
+it('gives short effects a brief attack instead of stepping instantly to peak amplitude', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.preview('shift');
+  const shift = (audio as unknown as { shiftGain: ReturnType<typeof gain> }).shiftGain.gain;
+  expect(shift.linearRampToValueAtTime).toHaveBeenCalledWith(expect.any(Number), 0.004);
+  audio.dispose();
+});
+
 it('unloads engine sound smoothly on lift-off and cuts it during a shift', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();

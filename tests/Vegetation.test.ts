@@ -20,6 +20,22 @@ function flatPlants(cells: 8 | 16 | 64, terrain: 'forest' | 'autumn' = 'forest')
 }
 
 describe('streamed vegetation', () => {
+  it('simplifies middle-distance ground cover without thinning plants or changing their roots', () => {
+    const scene = new Scene(), mesh = new VegetationMesh(scene), roots: number[][] = [];
+    const triangles = () => scene.children.reduce((sum, child) => {
+      const batch = child as InstancedMesh; return sum + batch.geometry.index!.count / 3 * batch.count;
+    }, 0);
+    mesh.setChunk('0,0', 0, 0, new Float32Array([20, 100, 20, 1, 0, 3, 1, 40, 100, 20, 1, 0, 5, 1, 60, 100, 20, 1, 0, 6, 1]));
+    mesh.update(0, 0); const close = triangles();
+    for (const child of scene.children as InstancedMesh[]) roots.push([...child.instanceMatrix.array.slice(0, 16)]);
+    mesh.setViewCenter(2, 0); mesh.update(0, 0);
+    expect(mesh.groundCount).toBe(3); expect(mesh.canopyCount).toBe(0);
+    expect(triangles()).toBeLessThan(close * 0.25);
+    expect(scene.children.map(child => [...(child as InstancedMesh).instanceMatrix.array.slice(0, 16)])).toEqual(roots);
+    expect(scene.children.every(child => child.name.endsWith('-middle'))).toBe(true);
+    mesh.setViewCenter(0, 0); mesh.update(0, 0); expect(triangles()).toBe(close);
+    mesh.dispose(); expect(scene.children).toHaveLength(0);
+  });
   it('keeps autumn crowns when switching to distant detail and removes their instances cleanly', () => {
     const scene = new Scene(), mesh = new VegetationMesh(scene), plants = flatPlants(64, 'autumn');
     const far = flatPlants(8, 'autumn');

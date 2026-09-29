@@ -1,4 +1,4 @@
-import { BoxGeometry, Color, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, type Scene } from 'three';
+import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, type Scene } from 'three';
 import { vehicleTemplate } from '../service/ParkedVehicles';
 import { MAX_TRAFFIC, type TrafficSystem } from './TrafficSystem';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
@@ -31,7 +31,9 @@ export class TrafficVehicles {
     };
     addRetroreflection(this.material, true);
     this.lamps.name = 'traffic-lamps'; this.drivers.name = 'traffic-drivers';
-    this.lamps.count = this.drivers.count = 0; scene.add(this.lamps, this.drivers);
+    this.lamps.count = this.drivers.count = 0;
+    for (const mesh of [this.lamps, this.drivers]) mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    scene.add(this.lamps, this.drivers);
   }
   update(origin: { x: number; z: number }, darkness: number, anchor = origin): void {
     const detail = (car: { x: number; z: number }) => Math.hypot(car.x - anchor.x, car.z - anchor.z) <= this.detailDistance;
@@ -39,6 +41,7 @@ export class TrafficVehicles {
     const missing = this.traffic.entries.find(e => !this.batches.has(key(e.car)));
     if (missing) this.batches.set(key(missing.car), (detail(missing.car) ? vehicleTemplate(missing.car.kind) : vehicleProxy(missing.car.kind)).map((geometry, i) => {
       const mesh = new InstancedMesh(geometry, this.material, MAX_TRAFFIC); mesh.name = `traffic-${key(missing.car)}-${i}`;
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
       mesh.count = 0; mesh.receiveShadow = true; this.scene.add(mesh); return mesh;
     }));
     for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
@@ -97,10 +100,17 @@ export class TrafficVehicles {
         }
       }
     }
-    for (const mesh of [...this.batches.values()].flat().concat([this.lamps, this.drivers] as InstancedMesh[])) {
+    const upload = (mesh: InstancedMesh) => {
       mesh.visible = mesh.count > 0;
-      if (mesh.count) { mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor!.needsUpdate = true; mesh.computeBoundingSphere(); }
-    }
+      if (!mesh.count) return;
+      for (const attribute of [mesh.instanceMatrix, mesh.instanceColor!]) {
+        attribute.setUsage(DynamicDrawUsage); attribute.clearUpdateRanges();
+        attribute.addUpdateRange(0, mesh.count * attribute.itemSize); attribute.needsUpdate = true;
+      }
+      mesh.computeBoundingSphere();
+    };
+    for (const meshes of this.batches.values()) for (const mesh of meshes) upload(mesh);
+    upload(this.lamps); upload(this.drivers);
   }
   dispose(): void {
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }

@@ -42,8 +42,9 @@ export function wheelArchPanelGeometry(from: number, to: number, bottom: number,
 
 export function tireGeometry(radius: number, width: number): BufferGeometry {
   const geometry = new LatheGeometry([
-    [0.56, -0.51], [0.8, -0.53], [0.94, -0.45], [0.99, -0.3], [1, -0.12],
-    [1, 0.12], [0.99, 0.3], [0.94, 0.45], [0.8, 0.53], [0.56, 0.51],
+    [0.56, -0.51], [0.8, -0.53], [0.94, -0.45], [0.99, -0.3], [1, -0.2],
+    [0.975, -0.18], [0.975, -0.12], [1, -0.1], [1, 0.1],
+    [0.975, 0.12], [0.975, 0.18], [1, 0.2], [0.99, 0.3], [0.94, 0.45], [0.8, 0.53], [0.56, 0.51],
   ].map(([r, y]) => new Vector2(r * radius, y * width)), 24);
   geometry.normalizeNormals(); return geometry;
 }

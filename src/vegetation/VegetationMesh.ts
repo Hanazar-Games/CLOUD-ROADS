@@ -10,7 +10,7 @@ interface PlantInstance { chunk: PlantChunk; offset: number; batch: PlantBatch; 
 interface PlantBatch {
   key: string; layer: number; x: number; z: number; mesh: InstancedMesh; entries: PlantInstance[]; min: number; max: number;
 }
-const KINDS = ['pine', 'cactus', 'broadleaf', 'shrub', 'rock', 'grass', 'pine', 'cactus', 'broadleaf', 'meadow', 'flowers', 'flowerSpikes', 'autumn', 'autumn', 'pine', 'cactus', 'broadleaf', 'autumn'] as const;
+const KINDS = ['pine', 'cactus', 'broadleaf', 'shrub', 'rock', 'grass', 'pine', 'cactus', 'broadleaf', 'meadow', 'flowers', 'flowerSpikes', 'autumn', 'autumn', 'pine', 'cactus', 'broadleaf', 'autumn', 'shrub', 'rock', 'grass'] as const;
 const distantLayer = (layer: number) => layer >= 6 && layer <= 8 || layer === 13;
 const detailLevel = (layer: number) => distantLayer(layer) ? 'distant' : layer >= 14 ? 'middle' : 'near';
 const deciduous = (layer: number) => KINDS[layer] === 'broadleaf' || KINDS[layer] === 'autumn';
@@ -72,7 +72,7 @@ export class VegetationMesh {
 
   get count(): number { return this.countLayers(() => true); }
   get distantCount(): number { return this.countLayers(distantLayer); }
-  get canopyCount(): number { return this.countLayers(layer => layer < 3 || distantLayer(layer) || layer >= 12); }
+  get canopyCount(): number { return this.countLayers(layer => layer < 3 || distantLayer(layer) || layer >= 12 && layer <= 17); }
   get groundCount(): number { return this.count - this.canopyCount; }
   get meadowCount(): number { return this.countLayers(layer => layer === 9); }
   get flowerCount(): number { return this.season?.kind === 'winter' || this.season?.kind === 'autumn' ? 0 : this.countLayers(layer => layer === 10 || layer === 11); }
@@ -163,7 +163,8 @@ export class VegetationMesh {
         const kind = chunk.plants[i + 5], far = chunk.ring === 2;
         if (far && ((Math.imul(chunk.x * 4096 + Math.floor(chunk.plants[i]), 374761393) ^ Math.imul(chunk.z * 4096 + Math.floor(chunk.plants[i + 2]), 668265263)) >>> 0) / 4294967296 >= this.settings.density) continue;
         if ((kind >= 7 && kind <= 9 && !chunk.near) || (chunk.ring > 0 && kind >= 3 && kind !== 10) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
-        const layer = kind === 10 ? far ? 13 : chunk.fine ? 12 : 17 : kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? chunk.fine ? kind : 14 + kind : kind <= 4 ? 3 : kind - 1;
+        const ground = kind <= 4 ? 3 : kind - 1;
+        const layer = kind === 10 ? far ? 13 : chunk.fine ? 12 : 17 : kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? chunk.fine ? kind : 14 + kind : chunk.fine ? ground : ground + 15;
         const batch = this.batch(layer, chunk);
         if (batch.entries.length >= batch.mesh.instanceMatrix.count) throw new Error('Vegetation instance capacity exceeded');
         const entry = { chunk, offset: i, batch, index: batch.entries.length };
@@ -186,7 +187,7 @@ export class VegetationMesh {
     }
     this.changed.clear();
     for (const batch of this.batches.values()) {
-      batch.mesh.castShadow = this.settings.shadows > 0 && (batch.layer < 5 || batch.layer === 12 || this.settings.shadows === 2 && batch.layer >= 14);
+      batch.mesh.castShadow = this.settings.shadows > 0 && (batch.layer < 5 || batch.layer === 12 || this.settings.shadows === 2 && batch.layer >= 14 && batch.layer < 20);
       batch.mesh.position.set(batch.x - originX, 0, batch.z - originZ); batch.mesh.visible = this.visible(batch.layer);
     }
   }

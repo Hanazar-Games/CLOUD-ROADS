@@ -281,7 +281,7 @@ export class AudioSystem {
     const chirp = this.time % (state.night > 0.5 ? 1.4 : 8.7);
     set(this.bird!.frequency, state.night > 0.5 ? 3200 : 1700 + Math.sin(chirp * 19) * 650);
     set(this.natureGain!.gain, state.nature && state.rain < 0.3 && chirp < 0.55 ? 0.035 * Math.sin(chirp / 0.55 * Math.PI) ** 2 * cabin * (1 - state.shelter) * this.natureVolume : 0, 0.015);
-    if (state.driving && state.ignition === 'running' && !ev && state.shifts !== this.lastShift) this.pulse(this.shiftGain!, 0.13 * this.engineVolume, 0.045);
+    if (state.driving && state.ignition === 'running' && !ev && state.shifts > this.lastShift) this.pulse(this.shiftGain!, 0.13 * this.engineVolume, 0.045);
     this.lastShift = state.shifts;
     if (state.driving && state.signal !== this.lastSignal) {
       this.pulse(this.clickGain!, 0.075 * this.effectsVolume, 0.018);
@@ -342,7 +342,9 @@ export class AudioSystem {
   private pulse(channel: GainNode, level: number, decay: number): void {
     const now = this.context!.currentTime;
     this.targets.delete(channel.gain);
-    channel.gain.cancelScheduledValues(now); channel.gain.setValueAtTime(level, now); channel.gain.setTargetAtTime(0, now, decay);
+    const current = channel.gain.value;
+    channel.gain.cancelScheduledValues(now); channel.gain.setValueAtTime(current, now);
+    channel.gain.linearRampToValueAtTime(level, now + 0.004); channel.gain.setTargetAtTime(0, now + 0.004, decay);
   }
 
   dispose(): void {

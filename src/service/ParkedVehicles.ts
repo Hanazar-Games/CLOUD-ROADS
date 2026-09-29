@@ -1,5 +1,5 @@
 import { BufferGeometry, Color, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Scene, type Vector3 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { VehicleMesh } from '../vehicle/VehicleMesh';
 import { VehiclePhysics } from '../vehicle/VehiclePhysics';
 import { VehicleSystems } from '../vehicle/VehicleSystems';
@@ -28,7 +28,7 @@ export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGe
     }
     const material = object.material as MeshStandardMaterial;
     if (!material.color || !object.geometry.getAttribute('normal') || object.name === 'windshield-water') return;
-    const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
+    const geometry = object.geometry.index ? object.geometry.clone() : mergeVertices(object.geometry);
     geometry.applyMatrix4(transform.multiplyMatrices(inverse[part], object.matrixWorld));
     const vertexColors = material.vertexColors ? geometry.getAttribute('color') : undefined;
     for (const name of Object.keys(geometry.attributes)) if (name !== 'position' && name !== 'normal') geometry.deleteAttribute(name);
@@ -108,7 +108,7 @@ export class ParkedVehicles {
       this.batches.set(key(missing), meshes); this.version = -1;
     }
     const anchorChanged = Math.hypot(camera.x + origin.x - this.anchorX, camera.z + origin.z - this.anchorZ) > 300;
-    const signature = near.map(key).join('|');
+    const signature = near.map(entry => `${entry.id}:${key(entry)}`).join('|');
     if (this.version !== this.fleet.version || anchorChanged || signature !== this.detailSignature) {
       this.detailSignature = signature;
       this.version = this.fleet.version; this.anchorX = camera.x + origin.x; this.anchorZ = camera.z + origin.z;
@@ -126,7 +126,10 @@ export class ParkedVehicles {
         }
       }
       for (const meshes of this.batches.values()) for (const mesh of meshes) if (mesh.count) {
-        mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor!.needsUpdate = true; mesh.computeBoundingSphere();
+        for (const attribute of [mesh.instanceMatrix, mesh.instanceColor!]) {
+          attribute.clearUpdateRanges(); attribute.addUpdateRange(0, mesh.count * attribute.itemSize); attribute.needsUpdate = true;
+        }
+        mesh.computeBoundingSphere();
       }
     }
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.position.set(this.anchorX - origin.x, 0, this.anchorZ - origin.z); mesh.visible = mesh.count > 0; }

@@ -6,6 +6,20 @@ import type { ServiceArea } from '../src/service/ServicePlanner';
 import { constrainObstacle } from '../src/service/ServiceCollision';
 import { Color, InstancedMesh, Matrix4, Scene, Vector3 } from 'three';
 import { ParkedVehicles } from '../src/service/ParkedVehicles';
+import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
+
+it('refreshes visible instances when different cars of the same kind swap across the draw boundary', () => {
+  const scene = new Scene(), renderer = new ParkedVehicles(scene, 'boundary'), camera = new Vector3();
+  for (const x of [-1590, 1610]) {
+    const car = new VehiclePhysics('sedan'); car.reset(x, 0, 0, () => ({ height: 0, grip: 1 })); renderer.fleet.park(car);
+  }
+  renderer.update([], { x: 0, z: 0 }, camera);
+  const mesh = scene.children[0] as InstancedMesh, matrix = new Matrix4();
+  mesh.getMatrixAt(0, matrix); expect(matrix.elements[12] + mesh.position.x).toBe(-1590);
+  camera.x = 20; renderer.update([], { x: 0, z: 0 }, camera);
+  mesh.getMatrixAt(0, matrix); expect(mesh.count).toBe(1); expect(matrix.elements[12] + mesh.position.x).toBe(1610);
+  renderer.dispose();
+});
 
 const site = { id: 1, sample: { routeId: 'root' }, ground: { pads: [{ x: 1000, y: 200, z: -15000, heading: 0.4, grade: 0.02, side: 1, halfWidth: 80, halfLength: 110 }] } } as ServiceArea;
 it('provides large separated parking zones and reproducible occupied bays matching each vehicle class', () => {

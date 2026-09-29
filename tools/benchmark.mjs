@@ -5,14 +5,28 @@ const browser = await chromium.launch({
 });
 try {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+  const control = async id => {
+    const locator = page.locator(`#${id}`);
+    if (!await page.locator('#explorer').evaluate(node => node.open)) await page.locator('#controls-toggle').click();
+    const category = await locator.evaluate(node => node.closest('.settings-category')?.id.replace('settings-', ''));
+    if (category) await page.locator(`[data-settings-target="${category}"]`).click();
+    return locator;
+  };
+  const closeSettings = async () => {
+    if (await page.locator('#explorer').evaluate(node => node.open)) await page.locator('#settings-close').click();
+  };
   const driving = process.argv.includes('--drive');
   const stationary = process.argv.includes('--stationary');
   await page.goto(process.argv.slice(2).find(arg => /^https?:/.test(arg)) || 'http://127.0.0.1:5173/?seed=CLOUD-ROAD-001');
   for (const [flag, id] of [['quality', 'graphics-preset'], ['scale', 'render-scale'], ['fps', 'frame-limit'], ['season', 'season-kind']]) {
     const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
-    if (value) await page.locator(`#${id}`).selectOption(value);
+    if (value) await (await control(id)).selectOption(value);
   }
-  if (process.argv.includes('--far')) await page.locator('#view-distance').selectOption('16');
+  for (const [flag, id] of [['traffic', 'traffic-density'], ['npc-limit', 'traffic-limit']]) {
+    const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
+    if (value) await (await control(id)).fill(value);
+  }
+  if (process.argv.includes('--far')) await (await control('view-distance')).selectOption('16');
   await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
   await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
   const route = process.argv.find(arg => arg.startsWith('--route='))?.slice(8);
@@ -20,9 +34,9 @@ try {
   const terrain = process.argv.find(arg => arg.startsWith('--terrain='))?.slice(10);
   const vehicle = process.argv.find(arg => arg.startsWith('--vehicle='))?.slice(10);
   if (route || highway || terrain) {
-    if (route) await page.locator('#route-style').selectOption(route);
-    if (highway) await page.locator('#road-type').selectOption('highway');
-    if (terrain) await page.locator('#terrain-kind').selectOption(terrain);
+    if (route) await (await control('route-style')).selectOption(route);
+    if (highway) await (await control('road-type')).selectOption('highway');
+    if (terrain) await (await control('terrain-kind')).selectOption(terrain);
     await page.getByRole('button', { name: '应用并返回起点' }).click();
     if (route) await page.waitForFunction(style => document.querySelector('[data-metric="Route style"]')?.textContent === style,
       { 0: '全直道 · 零弯道', 1: '1 档 · 舒缓山路', 2: '2 档 · 蜿蜒山路', 3: '3 档 · 盘山折返', 4: '4 档 · 密集发卡弯', 5: '5 档 · 连续发卡弯' }[route]);
@@ -31,13 +45,19 @@ try {
     await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
     await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
   }
-  if (vehicle) await page.locator('#vehicle-kind').selectOption(vehicle);
+  if (vehicle) await (await control('vehicle-kind')).selectOption(vehicle);
+  await closeSettings();
   if (driving) {
     await page.locator('#drive-toggle').click();
     await page.waitForTimeout(500);
     await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
+    if (!stationary) {
+      await page.keyboard.press('Backquote');
+      await page.waitForFunction(() => document.querySelector('[data-metric="Ignition"]')?.textContent === 'running');
+    }
   }
   if (stationary) await page.waitForTimeout(2000);
+  await page.waitForFunction(() => document.querySelector('[data-metric="Vegetation pending"]')?.textContent === '0');
   await page.locator('#world').focus();
   if (!stationary) await page.keyboard.down('KeyW');
   const result = await page.evaluate(async () => {

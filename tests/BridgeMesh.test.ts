@@ -110,7 +110,9 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(12);
+    expect(scene.children).toHaveLength(13);
+    expect(mesh.drains.count).toBeGreaterThan(0);
+    expect(mesh.drains.material).toBe(mesh.details.material);
     expect(mesh.railings.count).toBeGreaterThan(mesh.parapets.count);
     expect(mesh.parapets.count).toBe((bridges[0].samples.length - 1) * 2);
     expect(mesh.pierCount).toBeGreaterThan(5);
@@ -139,18 +141,24 @@ describe('BridgeMesh', () => {
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
     const buffer = mesh.deck.geometry.getAttribute('position'), data = buffer.array.slice();
     const x = mesh.deck.position.x, z = mesh.piers.position.z;
+    const drainZ = mesh.drains.position.z, drainMatrices = mesh.drains.instanceMatrix.array.slice();
     mesh.update(bridges, corridor, terrain, 1, 5120, -5120, true);
     expect(mesh.deck.geometry.getAttribute('position')).toBe(buffer);
     expect(mesh.deck.geometry.getAttribute('position').array).toEqual(data);
     expect(mesh.deck.position.x).toBe(x - 5120);
     expect(mesh.piers.position.z).toBe(z + 5120);
+    expect(mesh.drains.position.z).toBe(drainZ + 5120);
+    expect(mesh.drains.instanceMatrix.array).toEqual(drainMatrices);
     mesh.update([], new RoadCorridor([]), terrain, 2, 5120, -5120, true);
     expect(mesh.deck.geometry.drawRange.count).toBe(0);
     expect(mesh.piers.count).toBe(0);
     expect(mesh.deck.visible).toBe(false);
+    expect(mesh.drains.count).toBe(0); expect(mesh.drains.visible).toBe(false);
     const geometryDispose = vi.spyOn(mesh.deck.geometry, 'dispose');
+    const drainDispose = vi.spyOn(mesh.drains.geometry, 'dispose');
     mesh.dispose();
     expect(geometryDispose).toHaveBeenCalledOnce();
+    expect(drainDispose).toHaveBeenCalledOnce();
     expect(scene.children).toHaveLength(0);
   });
 

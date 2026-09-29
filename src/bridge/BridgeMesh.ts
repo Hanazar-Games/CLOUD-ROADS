@@ -33,6 +33,7 @@ export class BridgeMesh {
   readonly columns: InstancedMesh<BufferGeometry, MeshStandardMaterial>;
   readonly roundPiers = new InstancedMesh(new CylinderGeometry(0.5, 0.5, 1, 16), this.material, CAPACITY);
   readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  readonly drains: InstancedMesh<CylinderGeometry, MeshStandardMaterial>;
   readonly railings: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   private readonly heights = new Map<string, number>();
   private readonly profile;
@@ -65,11 +66,13 @@ export class BridgeMesh {
     column.computeVertexNormals();
     this.columns = new InstancedMesh(column, this.material, CAPACITY * this.profile.centers.length);
     this.details = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0x586a71, metalness: 0.45, roughness: 0.6 }), CAPACITY * 8);
+    this.drains = new InstancedMesh(new CylinderGeometry(0.5, 0.5, 1, 10, 1, true), this.details.material, CAPACITY);
+    this.drains.name = 'bridge-drains';
     this.railings = new InstancedMesh(this.geometry, new MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.44 }), CAPACITY * 24);
     this.deck.visible = false;
     this.deck.castShadow = this.deck.receiveShadow = true;
     scene.add(this.deck);
-    for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) {
+    for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.drains, this.railings]) {
       mesh.count = 0;
       mesh.visible = false;
       mesh.castShadow = mesh.receiveShadow = true;
@@ -88,7 +91,7 @@ export class BridgeMesh {
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
       this.archBridges.reset(this.anchorX, this.anchorZ);
-      this.parapets.count = this.piers.count = this.columns.count = this.roundPiers.count = this.details.count = this.railings.count = this.supports = 0;
+      this.parapets.count = this.piers.count = this.columns.count = this.roundPiers.count = this.details.count = this.drains.count = this.railings.count = this.supports = 0;
       this.deck.rebuild(spans, this.anchorX, this.anchorZ);
       this.abutments.rebuild(spans, terrain, corridor, this.anchorX, this.anchorZ);
       const cables = cableSpans(spans, terrain, corridor, this.options);
@@ -127,6 +130,14 @@ export class BridgeMesh {
               if (Math.floor(a.distance / 4) !== Math.floor(b.distance / 4)) this.railing(sample, side, tier ? 0.8 : 1.1, 0.18, tier ? 1.5 : 0.6, 0.18, color);
               if (tier) for (const direction of [-1, 1]) this.railing(sample, side, 0.92, 0.09, 0.09,
                 Math.hypot(length, 0.9), color, direction * Math.atan2(0.9, length));
+              if (Math.floor(a.distance / 24) !== Math.floor(b.distance / 24)) {
+                const outlet = side + Math.sign(side) * 0.3;
+                this.box(this.drains, x + right.x * outlet - normal.x * 0.95, y + right.y * outlet - normal.y * 0.95,
+                  z + right.z * outlet - normal.z * 0.95, 0.16, 1.1, 0.16, sample);
+                this.box(this.details, x + right.x * (outlet - Math.sign(side) * 0.2) - normal.x * 0.45,
+                  y + right.y * (outlet - Math.sign(side) * 0.2) - normal.y * 0.45,
+                  z + right.z * (outlet - Math.sign(side) * 0.2) - normal.z * 0.45, 0.45, 0.12, 0.2, sample);
+              }
             }
             if (Math.abs(sample.curvature) > 0.0015 && Math.floor(a.distance / 24) !== Math.floor(b.distance / 24)) {
               this.box(this.parapets, x + right.x * center - normal.x * (depth - 0.54), y + right.y * center - normal.y * (depth - 0.54),
@@ -164,7 +175,7 @@ export class BridgeMesh {
         this.support(tower, false, corridor, terrain, 1.6, cablePylonWidth(cable.depths[i], (cable.end - cable.start) / 4));
       for (const distance of this.heights.keys()) if (!active.has(distance)) this.heights.delete(distance);
       if (this.railings.instanceColor) { this.railings.instanceColor.setUsage(DynamicDrawUsage); this.railings.instanceColor.needsUpdate = true; }
-      for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) {
+      for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.drains, this.railings]) {
         mesh.instanceMatrix.clearUpdateRanges();
         mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
@@ -177,7 +188,7 @@ export class BridgeMesh {
     this.abutments.update(originX, originZ, nearRoute);
     this.deck.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
     this.deck.visible = nearRoute && this.deck.geometry.drawRange.count > 0;
-    for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) {
+    for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.drains, this.railings]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = nearRoute && mesh.count > 0;
     }
@@ -234,9 +245,19 @@ export class BridgeMesh {
     }
     this.box(pylonWidth ? this.parapets : this.piers, x - normal.x * (depth + 1.11), y - normal.y * (depth + 1.11), z - normal.z * (depth + 1.11),
       Math.max(deckWidth + (pylonWidth ? pylonWidth * 2 + 0.6 : 0), separation * 2 + width * 0.7 + 1), 1.2, Math.max(tier === 2 ? 6 : 4, pylonWidth * 1.15 + 0.2), sample);
-    for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) this.box(this.details,
-      x + right.x * offset - normal.x * (depth + 0.26), y + right.y * offset - normal.y * (depth + 0.26), z + right.z * offset - normal.z * (depth + 0.26),
-      1.2, 0.5, 1.4, sample);
+    for (const offset of [-deckWidth * 0.28, deckWidth * 0.28]) {
+      this.box(this.details, x + right.x * offset - normal.x * (depth + 0.26), y + right.y * offset - normal.y * (depth + 0.26),
+        z + right.z * offset - normal.z * (depth + 0.26), 1.2, 0.5, 1.4, sample);
+      for (const level of [0.05, 0.47]) {
+        this.box(this.details, x + right.x * offset - normal.x * (depth + level), y + right.y * offset - normal.y * (depth + level),
+          z + right.z * offset - normal.z * (depth + level), 1.55, 0.08, 1.75, sample);
+      }
+      const forward = sample.tangent;
+      for (const dx of [-0.66, 0.66]) for (const dz of [-0.76, 0.76]) this.box(this.details,
+        x + right.x * (offset + dx) + forward.x * dz - normal.x * (depth + 0.4),
+        y + right.y * (offset + dx) + forward.y * dz - normal.y * (depth + 0.4),
+        z + right.z * (offset + dx) + forward.z * dz - normal.z * (depth + 0.4), 0.085, 0.06, 0.085, sample);
+    }
     for (const side of [-1, 1]) {
       const offset = side * deckWidth * 0.36;
       this.box(this.piers, x + right.x * offset - normal.x * (depth + 1.66), y + right.y * offset - normal.y * (depth + 1.66),
@@ -291,7 +312,8 @@ export class BridgeMesh {
     this.archBridges.dispose();
     this.cableBridges.dispose(); this.abutments.dispose();
     this.deck.removeFromParent(); this.deck.geometry.dispose();
-    for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.railings]) { mesh.removeFromParent(); mesh.dispose(); }
+    for (const mesh of [this.parapets, this.piers, this.columns, this.roundPiers, this.details, this.drains, this.railings]) { mesh.removeFromParent(); mesh.dispose(); }
+    this.drains.geometry.dispose();
     this.heights.clear(); this.railings.material.dispose();
     this.columns.geometry.dispose();
     this.piers.geometry.dispose();

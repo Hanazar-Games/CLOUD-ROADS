@@ -250,11 +250,12 @@ export class VehicleMesh {
     const rimShape = this.geometry(rimGeometry(profile.radius, tireWidth));
     const brakeShape = this.geometry(new CylinderGeometry(profile.radius * 0.51, profile.radius * 0.51, tireWidth * 0.18, 24));
     const hubGeometry = this.geometry(new CylinderGeometry(profile.radius * 0.2, profile.radius * 0.2, tireWidth + 0.05, 12));
+    const boltGeometry = this.geometry(new CylinderGeometry(0.016, 0.016, 0.018, 6));
     const coil = this.geometry(new TubeGeometry(new CatmullRomCurve3(Array.from({ length: 65 }, (_, i) => new Vector3(Math.cos(i * Math.PI / 4) * 0.065, i / 64, Math.sin(i * Math.PI / 4) * 0.065))), 64, 0.012, 4, false));
     const addWheels = (points: readonly WheelPoint[], parent: Group, output: WheelMesh[]) => { for (const point of points) {
       const pivot = new Group(), spin = new Group(); pivot.add(spin); parent.add(pivot);
       pivot.position.set(point.x, 0, -point.along);
-      const tire = new Mesh(tireShape, rubber), rim = new Mesh(rimShape, metal), brake = new Mesh(brakeShape, trim);
+      const tire = new Mesh(tireShape, rubber), rim = new Mesh(rimShape, metal), brake = new Mesh(brakeShape, metal);
       tire.rotation.z = rim.rotation.z = Math.PI / 2; tire.castShadow = true; spin.add(tire, rim);
       rim.castShadow = rim.receiveShadow = true;
       brake.rotation.z = Math.PI / 2; brake.castShadow = brake.receiveShadow = true; spin.add(brake);
@@ -272,9 +273,17 @@ export class VehicleMesh {
       if (point.steer) block(tireWidth * 0.3, profile.radius * 0.4, 0.09, Math.sign(point.x) * tireWidth * 0.18, 0.03, profile.radius * 0.42, paint, pivot);
       for (const side of [-1, 1]) for (let i = 0; i < 6; i++) {
         const angle = i * Math.PI / 3;
-        block(0.018, 0.026, 0.026, side * (tireWidth / 2 + 0.026), Math.cos(angle) * profile.radius * 0.29,
-          Math.sin(angle) * profile.radius * 0.29, metal, spin);
+        const bolt = new Mesh(boltGeometry, metal); bolt.rotation.z = Math.PI / 2;
+        bolt.position.set(side * (tireWidth * 0.45 + 0.021), Math.cos(angle) * profile.radius * 0.29, Math.sin(angle) * profile.radius * 0.29);
+        bolt.castShadow = bolt.receiveShadow = true; spin.add(bolt);
+        for (const offset of [0, Math.PI / 6]) {
+          const turn = angle + offset;
+          const slot = block(0.009, profile.radius * 0.12, 0.015, side * (tireWidth * 0.09 + 0.002),
+            Math.cos(turn) * profile.radius * 0.42, Math.sin(turn) * profile.radius * 0.42, trim, spin);
+          slot.rotation.x = turn + 0.3;
+        }
       }
+      for (const side of [-1, 1]) block(0.032, 0.027, 0.027, side * tireWidth * 0.51, profile.radius * 0.59, 0, trim, spin);
       for (let i = 0; i < 24; i++) {
         const angle = i * Math.PI / 12;
         const tread = block(tireWidth * 0.72, 0.004, 0.011, 0, Math.cos(angle) * profile.radius,

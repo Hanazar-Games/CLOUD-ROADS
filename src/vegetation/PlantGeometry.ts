@@ -142,11 +142,21 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
       for (const y of [1.7, 3, 4.3]) pieces.push(colored(new ConeGeometry(0.022, 0.15, 3).rotateZ(-Math.PI / 2).rotateY(-angle)
         .translate(x * (0.625 - y * 0.025), y, z * (0.625 - y * 0.025)), '#c6bd91'));
     }
+  } else if (detail === 'middle' && kind === 'grass') {
+    pieces = [];
+    for (let i = 0; i < 4; i++) {
+      const geometry = new BufferGeometry(), angle = i * 2.4;
+      geometry.setAttribute('position', new BufferAttribute(new Float32Array([-0.18, 0, 0, 0.18, 0, 0, 0.1, 0.55 + i % 3 * 0.18, 0.22]), 3));
+      geometry.setAttribute('uv', new BufferAttribute(new Float32Array(6), 2));
+      geometry.setIndex([0, 1, 2, 2, 1, 0]);
+      const faces = geometry.toNonIndexed(); geometry.dispose(); faces.computeVertexNormals();
+      pieces.push(colored(faces.rotateY(angle).translate(Math.sin(angle) * 0.4, 0, Math.cos(angle) * 0.4), '#ffffff'));
+    }
   } else if (kind === 'shrub') {
     pieces = [colored(new IcosahedronGeometry(1.2, 0).scale(1, 0.7, 1).translate(0, 0.7, 0), '#ffffff'),
       colored(new IcosahedronGeometry(0.85, 0).scale(1, 0.8, 1).translate(0.8, 0.5, 0.4), '#d4dfbd'),
       colored(new IcosahedronGeometry(0.8, 0).scale(1, 0.75, 1).translate(-0.6, 0.5, -0.6), '#c0cda9')];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; detail === 'near' && i < 5; i++) {
       const angle = i * 2.4;
       pieces.push(colored(new CylinderGeometry(0.025, 0.07, 1.1, 4).rotateZ(0.5).rotateY(angle).translate(0, 0.45, 0), '#827654'));
       for (let j = 0; j < 3; j++) pieces.push(leaf(0.3, 0.14, 0.1, j % 2 ? '#dee6c7' : '#aebf93')
@@ -155,9 +165,9 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
         .translate(Math.cos(angle) * 0.82, 1.05, Math.sin(angle) * 0.82), i % 2 ? '#d9c390' : '#b88f74'));
     }
   } else if (kind === 'rock') {
-    pieces = [crown(1.75, '#c1c0ab').scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0),
+    pieces = [(detail === 'near' ? crown(1.75, '#c1c0ab') : colored(new IcosahedronGeometry(1.7, 0), '#c1c0ab')).scale(1.05, 0.62, 0.8).rotateY(0.3).translate(0, 0.65, 0),
       colored(new IcosahedronGeometry(0.65, 0).scale(1, 0.7, 1).translate(1.3, 0.25, 0.7), '#989e8e')];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; detail === 'near' && i < 5; i++) {
       const angle = i * 2.4, radius = 1.5 + i % 2 * 0.3;
       pieces.push(colored(new IcosahedronGeometry(0.18 + i % 3 * 0.08, 0).scale(1.2, 0.55, 0.8).rotateY(angle)
         .translate(Math.cos(angle) * radius, 0.06, Math.sin(angle) * radius * 0.72), i % 2 ? '#b3ad96' : '#969b88'));

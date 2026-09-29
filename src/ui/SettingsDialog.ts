@@ -21,8 +21,8 @@ export class SettingsDialog {
         return control && terms.every(term => `${label.textContent} ${control.id} ${control.closest('fieldset')?.querySelector('legend')?.textContent ?? ''} ${control instanceof HTMLSelectElement ? control.textContent : ''}`.toLocaleLowerCase().includes(term));
       });
       results.hidden = !matches.length;
-      status.textContent = matches.length ? `找到 ${matches.length} 项${matches.length > 8 ? '，显示前 8 项' : ''} · 选择后直达` : '没有匹配项，请尝试“转速”“声音”或“道路”。';
-      for (const label of matches.slice(0, 8)) {
+      status.textContent = matches.length ? `找到 ${matches.length} 项 · ↑↓ 选择，Enter 直达` : '没有匹配项，请尝试“转速”“声音”或“道路”。';
+      for (const label of matches) {
         const target = element<HTMLElement>(label.htmlFor), section = label.closest<HTMLElement>('.settings-category')!;
         const result = document.createElement('button'); result.type = 'button';
         result.textContent = `${section.querySelector('h3')!.textContent} · ${label.textContent!.trim()}`;
@@ -40,6 +40,15 @@ export class SettingsDialog {
       if (event.isComposing || !['Enter', 'ArrowDown'].includes(event.key)) return;
       const first = results.querySelector('button'); if (!first) return;
       event.preventDefault(); if (event.key === 'Enter') first.click(); else first.focus();
+    }, options);
+    results.addEventListener('keydown', event => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      const buttons = [...results.querySelectorAll('button')], index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      if (index < 0) return;
+      event.preventDefault();
+      if (event.key === 'ArrowUp' && index === 0) { search.focus(); return; }
+      buttons[event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : Math.max(0, Math.min(buttons.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))].focus();
     }, options);
     clear.addEventListener('click', () => { search.value = ''; find(); search.focus(); }, options);
     const reveal = (target: HTMLElement) => {
@@ -67,7 +76,11 @@ export class SettingsDialog {
       button.setAttribute('aria-expanded', 'false');
       this.focusWorld();
     }, options);
-    this.dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); }, options);
+    this.dialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      if (search.value) { search.value = ''; find(); search.focus(); }
+      else this.close();
+    }, options);
     this.dialog.addEventListener('beforetoggle', clearInput, options);
     this.dialog.addEventListener('toggle', () => {
       button.setAttribute('aria-expanded', String(this.open));

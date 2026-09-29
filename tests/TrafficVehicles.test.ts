@@ -5,6 +5,24 @@ import { MAX_TRAFFIC, TrafficSystem } from '../src/traffic/TrafficSystem';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 
+it('uploads only occupied instance ranges even when a traffic batch grows or shrinks', () => {
+  const scene = new Scene(), traffic = new TrafficSystem('uploads', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
+  const car = new VehiclePhysics('sedan'); car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
+  const entry = { id: 'one', car, routeId: 'root', distance: 0, direction: 1 as const, cruise: 15, lane: 0, offset: 0, signal: 0 as const, cooldown: 0 };
+  traffic.entries.push(entry);
+  for (const count of [1, 8, 2]) {
+    traffic.entries.length = 0;
+    for (let i = 0; i < count; i++) traffic.entries.push({ ...entry, id: String(i) });
+    renderer.update({ x: 0, z: 0 }, 1);
+    for (const mesh of scene.children as InstancedMesh[]) if (mesh.count) {
+      expect(mesh.instanceMatrix.updateRanges).toEqual([{ start: 0, count: mesh.count * 16 }]);
+      expect(mesh.instanceColor!.updateRanges).toEqual([{ start: 0, count: mesh.count * 3 }]);
+      expect(mesh.boundingSphere!.radius).toBeGreaterThan(0);
+    }
+  }
+  renderer.dispose();
+});
+
 it('keeps every articulated side signal within the shared lamp budget at maximum traffic', () => {
   const scene = new Scene(), traffic = new TrafficSystem('lamps', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
   const car = new VehiclePhysics('roadTrain'); car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
