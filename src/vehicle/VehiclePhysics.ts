@@ -21,6 +21,7 @@ export class VehiclePhysics {
   regeneration = 2;
   regenerating = false;
   trailerBrake = false;
+  impact = 0; scrape = 0;
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   lateralSpeed = 0; yawRate = 0; tireSlip = 0; handbrake = 0; rearWheelAngle = 0;
   paint: number;
@@ -96,6 +97,7 @@ export class VehiclePhysics {
     this.transmission.maxSpeed = this.maxSpeed;
   }
   park(): void {
+    this.impact = this.scrape = 0;
     this.speed = this.lateralSpeed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
     this.transmission.reset(); this.trailerBrake = this.regenerating = false;
@@ -114,6 +116,7 @@ export class VehiclePhysics {
   }
 
   reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeadings: readonly number[] = []): void {
+    this.impact = this.scrape = 0;
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
     this.speed = this.lateralSpeed = this.steering = this.pitch = this.roll = this.wheelAngle = this.rearWheelAngle = 0;
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
@@ -165,6 +168,8 @@ export class VehiclePhysics {
     let vx = sin * this.speed + cos * this.lateralSpeed, vz = -cos * this.speed + sin * this.lateralSpeed;
     const inward = Math.min(0, vx * nx + vz * nz);
     vx -= nx * inward; vz -= nz * inward;
+    this.impact = Math.max(this.impact, -inward);
+    if (inward < -0.02) this.scrape = Math.max(this.scrape, Math.hypot(vx, vz) * Math.min(1, -inward * 2));
     const length = Math.hypot(vx, vz), friction = Math.max(0, 1 - Math.abs(inward) * 0.04 / Math.max(0.01, length));
     vx *= friction; vz *= friction;
     if (inward < 0 && length > 0.1) {
@@ -221,6 +226,7 @@ export class VehiclePhysics {
   }
 
   private step(input: VehicleInput, surface: SurfaceSampler): void {
+    this.impact *= Math.exp(-STEP * 14); this.scrape *= Math.exp(-STEP * 10);
     if (this.ignition === 'starting') {
       this.ignitionTime -= STEP;
       if (this.ignitionTime <= 0) this.ignition = 'running';
@@ -259,7 +265,9 @@ export class VehiclePhysics {
       const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) * clamp(this.powerScale, 0.5, 1.5) / config.mass;
       const drive = (this.ignition === 'running' ? throttle : 0) * Math.min(engine, this.gravity * 0.94) * grip * (throttle < 0 ? 0.55 : this.transmission.driveScale);
       this.speed += (drive - slopeForce) * STEP;
-      this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + Math.max(0, 1 - grip) * 0.5) * STEP);
+      const engineBrake = this.ignition === 'running' && Math.abs(throttle) < 0.01
+        ? Math.min(this.transmission.engineBrake, this.gravity * 0.15) * grip : 0;
+      this.speed = approach(this.speed, 0, (engineBrake + 0.14 + config.drag * this.speed ** 2 / config.mass + Math.max(0, 1 - grip) * 0.5) * STEP);
     }
     this.speed = clamp(this.speed, -config.reverseSpeed, this.maxSpeed);
     const steeringLock = this.steeringLock;

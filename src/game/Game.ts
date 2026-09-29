@@ -102,7 +102,11 @@ export class Game {
       this.audio[field] = value / 100; element(`${id}-value`).textContent = `${value}%`;
       }, { signal: this.events.signal });
     }
-    element('music-style').addEventListener('change', () => { this.audio.musicStyle = element<HTMLSelectElement>('music-style').value as MusicStyle; }, { signal: this.events.signal });
+    element('music-style').addEventListener('change', () => { this.audio.setStyle(element<HTMLSelectElement>('music-style').value as MusicStyle); }, { signal: this.events.signal });
+    element('music-ducking').addEventListener('input', () => {
+      this.audio.musicDucking = Number(element<HTMLInputElement>('music-ducking').value) / 100;
+      element('music-ducking-value').textContent = `${Math.round(this.audio.musicDucking * 100)}%`;
+    }, { signal: this.events.signal });
     const radio = element<HTMLSelectElement>('radio-station');
     radio.replaceChildren(...radioStations.map((station, i) => new Option(`${i + 1} · ${station.name}`, String(i + 1))));
     radio.addEventListener('change', () => this.tuneRadio(Number(radio.value)), { signal: this.events.signal });
@@ -619,7 +623,8 @@ export class Game {
     this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter), anchor);
     this.audio.update(dt, { powertrain: this.driving.car.powertrain, regeneration: this.driving.car.regenerating,
       atmosphere: this.world.options.terrain === 'moon' ? 0 : this.world.options.terrain === 'mars' ? 0.15 : 1, driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
-      throttle: this.driving.appliedThrottle > 0 && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
+      throttle: moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady ? this.driving.car.transmission.load : 0,
+      shifting: this.driving.car.transmission.shifting, impact: this.driving.car.impact, scrape: this.driving.car.scrape,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
@@ -719,6 +724,8 @@ export class Game {
         'Valley crossings': this.world.crossings.map(site => site.kind).join(', ') || 'none',
         'Audio state': this.audio.state,
         'Engine RPM': String(Math.round(this.driving.car.engineRpm)),
+        'Engine load': this.driving.car.transmission.load.toFixed(2), 'Gear shifting': String(this.driving.car.transmission.shifting),
+        'Engine response': this.driving.car.transmission.response.toFixed(2), 'Impact speed': this.driving.car.impact.toFixed(2),
         'Ignition': this.driving.car.ignition,
         'NPC vehicles': this.world.traffic.entries.length,
         'NPC density': `${this.world.traffic.density}%`,

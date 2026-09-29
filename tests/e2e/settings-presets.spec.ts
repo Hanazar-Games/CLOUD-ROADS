@@ -49,9 +49,11 @@ test('applies absolute altitude, mountain and vegetation controls and retains th
 test('saves and reloads local presets, exports and imports JSON without applying before confirmation', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT'); await category(page, 'driving');
   await page.locator('#vehicle-kind').selectOption('suv'); await page.locator('#hud-style').selectOption('dial');
+  await page.locator('#engine-response').fill('125');
   await page.locator('#vehicle-max-speed').fill('75'); await page.locator('#steering-assist').uncheck();
   await page.locator('#road-grip').fill('45'); await page.locator('#handbrake-strength').fill('75'); await page.locator('#countersteer-assist').fill('35');
   await category(page, 'weather'); await page.locator('#weather-kind').selectOption('rain');
+  await category(page, 'audio'); await page.locator('#music-ducking').fill('65'); await page.locator('#collision-volume').fill('40');
   await category(page, 'world'); await page.locator('#mountain-density').fill('125');
   await category(page, 'graphics'); await page.locator('#vegetation-lod').selectOption('0.5');
   await page.locator('#distant-trees').selectOption('0.25'); await page.locator('#vehicle-detail-distance').selectOption('120');
@@ -63,7 +65,8 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(6); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(7); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.settings['engine-response']).toBe(125); expect(saved.settings['music-ducking']).toBe(65); expect(saved.settings['collision-volume']).toBe(40);
   expect(saved.settings['vegetation-lod']).toBe('0.5'); expect(saved.settings['distant-trees']).toBe('0.25');
   expect(saved.settings['vehicle-detail-distance']).toBe('120'); expect(saved.settings['traffic-scenario']).toBe('stopgo');
   expect(saved.settings['handbrake-strength']).toBe(75); expect(saved.settings['countersteer-assist']).toBe(35);

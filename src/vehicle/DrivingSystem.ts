@@ -86,6 +86,9 @@ export class DrivingSystem {
       this.autopilot.cancel('变速箱模式改变，请重新开启');
       this.car.transmission.mode = element<HTMLSelectElement>('transmission-mode').value === 'manual' ? 'manual' : 'auto';
     }, options);
+    element('engine-response').addEventListener('input', () => {
+      this.car.transmission.response = Number(element<HTMLInputElement>('engine-response').value) / 100; this.describeTuning();
+    }, options);
     element('vehicle-windows').addEventListener('input', () => { this.systems.windowTarget = Number(element<HTMLInputElement>('vehicle-windows').value) / 100; this.describeEquipment(); }, options);
     element('vehicle-roof').addEventListener('click', () => { this.systems.toggleRoof(this.car.motionSpeed); this.describeEquipment(); }, options);
     element('washer').addEventListener('click', () => { this.systems.wash(); this.describeEquipment(); }, options);
@@ -113,6 +116,7 @@ export class DrivingSystem {
       this.describeVehicle();
     }, options);
     element('vehicle-tuning-reset').addEventListener('click', () => {
+      this.car.transmission.response = 1;
       this.car.setSpeedLimit(); this.car.steeringAssist = true; this.car.steeringAssistStrength = 1;
       for (const [id, field] of tuning) {
         this.car[field] = 1; element<HTMLInputElement>(id).value = '100'; element(`${id}-value`).textContent = '100%';
@@ -242,6 +246,7 @@ export class DrivingSystem {
     const world = this.getWorld();
     if (this.active || !world.roadReady || world.searching || !this.input.enabled) return false;
     const car = world.traffic.take(entry.id) ?? world.parkedVehicles.fleet.take(entry.id); if (!car) return false;
+    car.transmission.response = this.car.transmission.response;
     for (const [, field] of driftTuning) car[field] = this.car[field];
     if (this.parked) world.parkedVehicles.fleet.park(this.car, this.fleetId);
     this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
@@ -407,7 +412,7 @@ export class DrivingSystem {
       const hit = this.car.update(dt, controls, this.surface.sample, this.surface.constrain);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
       this.exitBlockedTime = Math.max(0, this.exitBlockedTime - dt);
-      if (hit) { this.collisionTime = 1.2; if (this.autopilot.active) { this.autopilot.cancel('发生接触，请接管'); this.car.park(); } }
+      if (hit) { this.collisionTime = 1.2; if (this.autopilot.active) this.autopilot.cancel('发生接触，请接管并制动'); }
     }
     this.cameraRig.enclosed = this.car.kind === 'roadster' && this.systems.roofOpen < 0.95;
     this.updateSeatCamera();
@@ -421,6 +426,12 @@ export class DrivingSystem {
       element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
       element('transmission-status').textContent = this.car.powertrain === 'ev' ? `EV · 单速 · 回收 ${this.car.regeneration}` : `${this.car.transmission.mode === 'auto' ? 'AT' : 'MT'} · ${this.car.transmission.gear} 挡`;
       element('engine-rpm').textContent = String(Math.round(this.car.engineRpm / 10) * 10);
+      const box = this.car.transmission, meter = element<HTMLMeterElement>('rpm-meter');
+      meter.max = this.car.powertrain === 'ev' ? 14000 : box.redline; meter.high = meter.max * 0.85; meter.optimum = meter.max * 0.5;
+      meter.value = Math.min(meter.max, this.car.engineRpm);
+      element('engine-load-status').textContent = this.car.ignition !== 'running' ? '动力关闭' : box.shifting ? '换挡中 · 扭矩衔接'
+        : this.car.regenerating ? '动能回收' : box.load > 0.03 ? `油门负载 ${Math.round(box.load * 100)}%`
+          : !this.car.parked && box.engineBrake > 0.05 ? '松油门 · 带挡滑行' : '怠速 / 自由滑行';
       this.describeEquipment();
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
         : !this.cabin.driver ? `${this.cabin.selected.label} · P 换座${operator ? ' · O 操作吊车' : ' · 不能驾驶'}`
@@ -487,6 +498,7 @@ export class DrivingSystem {
     next.setSpeedLimit(this.car.speedLimit === undefined ? undefined : this.car.maxSpeed * 3.6);
     next.steeringAssist = this.car.steeringAssist; next.steeringAssistStrength = this.car.steeringAssistStrength;
     next.transmission.mode = this.car.transmission.mode;
+    next.transmission.response = this.car.transmission.response;
     if (this.active && this.surface) {
       const spawn = this.getWorld().roadReady ? this.surface.spawn(this.car.x, this.car.z, next.profile) : undefined;
       if (!spawn) {
@@ -529,6 +541,8 @@ export class DrivingSystem {
   }
 
   describeTuning(): void {
+    const response = String(Math.round(this.car.transmission.response * 100));
+    element<HTMLInputElement>('engine-response').value = response; element('engine-response-value').textContent = `${response}%`;
     const kmh = Math.round(this.car.maxSpeed * 3.6);
     element('dial-max').textContent = String(kmh);
     element<HTMLInputElement>('vehicle-max-speed').value = String(kmh);
@@ -549,6 +563,7 @@ export class DrivingSystem {
     element<HTMLSelectElement>('ev-regeneration').value = String(this.car.regeneration);
     element<HTMLSelectElement>('ev-regeneration').disabled = !ev;
     element<HTMLSelectElement>('transmission-mode').disabled = ev;
+    element<HTMLInputElement>('engine-response').disabled = ev;
     element('powertrain-status').textContent = `${ev ? 'EV 单速驱动 · 松电门回收受轮胎抓地力限制' : '燃油动力 · 自动或手动换挡'}。${this.input.bindings.label('Powertrain')} 切换动力，${this.input.bindings.label('Regeneration')} 调回收；切换保留车速，无续航限制。`;
     element('panel-powertrain').textContent = `${ev ? 'EV → 燃油' : '燃油 → EV'} · ${this.input.bindings.label('Powertrain')}`;
     element<HTMLButtonElement>('panel-powertrain').disabled = !driver;

@@ -93,7 +93,7 @@ test('previews layered audio and suspends when the master is muted', async ({ pa
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=FLEET-FLAT'); await openSettings(page);
   await page.locator('[data-settings-target="audio"]').click();
-  await expect(page.locator('#audio-channels input')).toHaveCount(9);
+  await expect(page.locator('#audio-channels input')).toHaveCount(10);
   await page.locator('#audio-toggle').click();
   const state = page.locator('[data-metric="Audio state"]'); await expect(state).toHaveText('running');
   for (const style of ['night', 'motion', 'ambient']) await page.locator('#music-style').selectOption(style);

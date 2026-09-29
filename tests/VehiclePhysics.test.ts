@@ -10,6 +10,17 @@ function run(car: VehiclePhysics, seconds: number, input = idle, surface = flat,
 function create(surface = flat) { const car = new VehiclePhysics(); car.reset(0, 0, 0, surface); car.ignition = 'running'; return car; }
 
 describe('VehiclePhysics', () => {
+  it('adds grounded combustion engine braking after lift-off without braking airborne wheels', () => {
+    const on = create(), off = create(); off.ignition = 'off';
+    for (const car of [on, off]) { car.parked = false; car.speed = 15; car.transmission.mode = 'manual'; car.transmission.gear = 3; }
+    run(on, 2); run(off, 2);
+    expect(on.speed).toBeLessThan(off.speed - 0.3);
+    for (const car of [on, off]) {
+      car.y = 100; car.speed = 15; car.parked = false; car.wheels.forEach(w => w.grounded = false);
+    }
+    run(on, 0.1); run(off, 0.1);
+    expect(on.speed).toBeCloseTo(off.speed, 8);
+  });
   it('supports proportional service braking while preserving full keyboard and handbrake force', () => {
     const gentle = create(), hard = create();
     for (const car of [gentle, hard]) { car.speed = 20; car.parked = false; }
@@ -26,10 +37,11 @@ describe('VehiclePhysics', () => {
       expect(car.motionSpeed).toBeLessThan(speed);
       expect(Math.sin(car.heading) * car.speed + Math.cos(car.heading) * car.lateralSpeed).toBeCloseTo(0, 9);
       expect(car.lateralSpeed).toBeLessThan(-1);
+      expect(car.impact).toBeGreaterThan(1); expect(car.scrape).toBeGreaterThan(1);
     }
     run(dry, 0.2); run(wet, 0.2, idle, () => ({ height: 0, grip: 0.3 }));
     expect(Math.abs(wet.lateralSpeed)).toBeGreaterThan(Math.abs(dry.lateralSpeed));
-    wet.park(); expect(wet.motionSpeed).toBe(0);
+    wet.park(); expect(wet.motionSpeed).toBe(0); expect(wet.impact + wet.scrape).toBe(0);
   });
 
   it('resolves collisions at every fixed step independently of rendering rate', () => {

@@ -2,9 +2,39 @@ import { expect, it } from 'vitest';
 import { Transmission } from '../src/vehicle/Transmission';
 import { vehicleProfiles } from '../src/vehicle/VehicleConfig';
 
+it('releases engine load and RPM progressively while retaining wheel coupling', () => {
+  const box = new Transmission(vehicleProfiles.sedan); box.mode = 'manual';
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 4, 1);
+  const loaded = box.rpm;
+  box.update(1 / 120, 4, 0);
+  expect(box.rpm).toBeGreaterThan(loaded - 150);
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 4, 0);
+  expect(box.rpm).toBeLessThan(loaded - 150);
+  expect(box.rpm).toBeGreaterThan(box.idle * 2);
+});
+
+it('does not treat forward braking as accelerator load and responds to reverse throttle', () => {
+  const coast = new Transmission(vehicleProfiles.truck8), brake = new Transmission(vehicleProfiles.truck8);
+  coast.mode = brake.mode = 'manual';
+  for (let i = 0; i < 120; i++) { coast.update(1 / 120, 0.5, 0); brake.update(1 / 120, 0.5, -1); }
+  expect(brake.rpm).toBeCloseTo(coast.rpm, 8);
+  for (let i = 0; i < 120; i++) brake.update(1 / 120, -0.5, -1);
+  expect(brake.rpm).toBeGreaterThan(coast.rpm + 100);
+});
+
+it('smooths an upshift instead of snapping RPM to the new gear in a single step', () => {
+  const box = new Transmission(vehicleProfiles.sedan); box.mode = 'manual';
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 6, 1);
+  const before = box.rpm; expect(box.shift(1, 6)).toBe(true);
+  box.update(1 / 120, 6, 1);
+  expect(box.rpm).toBeGreaterThan(before - 500);
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 6, 1);
+  expect(box.rpm).toBeLessThan(before - 700);
+});
+
 it('automatically upshifts with hysteresis and reduces RPM after a shift', () => {
   const box = new Transmission(vehicleProfiles.sedan);
-  box.update(0.1, 7, 1);
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 6, 1);
   const rpm = box.rpm;
   for (let i = 0; i < 10; i++) box.update(0.1, 8, 1);
   expect(box.gear).toBe(2);

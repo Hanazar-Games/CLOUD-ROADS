@@ -3,7 +3,7 @@ import { radioStations } from './RadioStations';
 
 export interface SoundState {
   powertrain: Powertrain; regeneration: boolean; atmosphere: number;
-  driving: boolean; speed: number; throttle: boolean; mass: number; motorcycle: boolean;
+  driving: boolean; speed: number; throttle: number; shifting: boolean; impact: number; scrape: number; mass: number; motorcycle: boolean;
   rain: number; shelter: number; cockpit: boolean; signal: boolean; wiper: number; walkingSpeed: number;
   rpm: number; shifts: number; exposure: number; wet: number; nature: boolean; night: number;
   horn: boolean; fan: number; washer: number; motor: boolean;
@@ -17,6 +17,7 @@ export const audioChannels = [
   ['master', 'masterVolume', '总音量'], ['sfx', 'sfxVolume', '全部音效'], ['music', 'musicVolume', '背景音乐'],
   ['engine', 'engineVolume', '发动机 / 电机与换挡'], ['tire', 'tireVolume', '轮胎与路面'], ['nature', 'natureVolume', '山野环境'],
   ['weather', 'weatherVolume', '风声与雨声'], ['cabin', 'cabinVolume', '车内设备'], ['effects', 'effectsVolume', '喇叭、提示与脚步'],
+  ['collision', 'collisionVolume', '碰撞与护栏擦碰'],
 ] as const;
 export type MusicStyle = 'ambient' | 'night' | 'motion';
 
@@ -31,6 +32,8 @@ export class AudioSystem {
   weatherVolume = 0.9;
   cabinVolume = 0.75;
   effectsVolume = 0.7;
+  collisionVolume = 0.65;
+  musicDucking = 0.35;
   musicStyle: MusicStyle = 'ambient';
   musicPace = 1;
   station = 1;
@@ -71,6 +74,8 @@ export class AudioSystem {
   private trafficGain?: GainNode;
   private subEngine?: OscillatorNode;
   private subEngineGain?: GainNode;
+  private impactGain?: GainNode;
+  private scrapeGain?: GainNode;
   private load = 0;
   private musicDuck = 1;
   private readonly pads: GainNode[] = [];
@@ -107,6 +112,15 @@ export class AudioSystem {
     if (!Number.isInteger(channel) || channel < 1 || channel > radioStations.length) return;
     const station = radioStations[channel - 1];
     this.station = channel; this.musicStyle = station.style; this.musicPace = station.pace;
+    this.fadeProgram();
+  }
+
+  setStyle(style: MusicStyle): void {
+    if (style === this.musicStyle) return;
+    this.musicStyle = style; this.fadeProgram();
+  }
+
+  private fadeProgram(): void {
     const now = this.context?.currentTime ?? 0, fading = this.audible && this.state === 'running';
     this.retuneAt = now + (fading ? 0.12 : 0);
     if (this.program) {
@@ -143,7 +157,7 @@ export class AudioSystem {
           this.retuneAt = now;
           this.program!.gain.cancelScheduledValues(now); this.program!.gain.setValueAtTime(0, now);
         }
-        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.trafficGain, this.tireGain, this.skidGain]) {
+        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.trafficGain, this.tireGain, this.skidGain, this.impactGain, this.scrapeGain]) {
           channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.delete(channel!.gain);
         }
       }
@@ -210,6 +224,7 @@ export class AudioSystem {
     this.subEngineGain = gain(filter); this.subEngine = oscillator('sine', this.subEngineGain);
     this.skidGain = noiseChannel(1250, 'bandpass'); this.skidTone = oscillator('triangle', this.skidGain);
     this.trafficGain = noiseChannel(400, 'lowpass');
+    this.impactGain = noiseChannel(160, 'lowpass'); this.scrapeGain = noiseChannel(1150, 'bandpass');
   }
 
   update(dt: number, state: SoundState): void {
@@ -224,23 +239,28 @@ export class AudioSystem {
       if (this.targets.get(parameter) === value) return;
       this.targets.set(parameter, value); parameter.setTargetAtTime(value, now, smooth);
     };
-    const speed = Math.min(110, Math.abs(state.speed)), cabin = state.cockpit ? 0.22 + state.exposure * 0.78 : 1;
     const preview = this.previewing; this.previewTime = preview ? Math.max(0, this.previewTime - dt) : 0;
+    const speed = Math.min(110, Math.abs(state.speed));
+    const motorSpeed = preview && this.previewKind === 'engine' ? 6 + Math.sin(this.time * 3) * 5 : speed;
+    const cabin = state.cockpit ? 0.22 + state.exposure * 0.78 : 1;
     const rpm = preview && this.previewKind === 'engine' ? 2200 + Math.sin(this.time * 4) * 700 : state.rpm;
-    this.load += ((state.throttle ? 1 : 0) - this.load) * Math.min(1, dt * 5);
-    this.musicDuck += ((state.horn ? 0.4 : 1) - this.musicDuck) * Math.min(1, dt * 4);
+    const demand = preview && this.previewKind === 'engine' ? 0.5 + Math.sin(this.time * 2) * 0.5 : state.driving ? Math.max(0, Math.min(1, state.throttle)) : 0;
+    this.load += (demand - this.load) * (1 - Math.exp(-Math.max(0, dt) * 8));
+    const duck = state.horn ? 0.4 : 1 - Math.max(0, Math.min(0.8, this.musicDucking)) * (state.driving ? Math.max(this.load, Math.min(1, state.impact / 8)) : 0);
+    this.musicDuck += (duck - this.musicDuck) * (1 - Math.exp(-Math.max(0, dt) * (duck < this.musicDuck ? 8 : 1.8)));
     const ev = state.powertrain === 'ev';
     this.engine!.type = ev ? 'sine' : 'triangle';
-    const frequency = ev ? 140 + speed * 22 + (state.regeneration ? 90 : 0) : Math.max(20, rpm / 60 * (state.supercar ? 3.2 : state.motorcycle ? 1.4 : state.mass > 4000 ? 2 : 2.5));
+    const frequency = ev ? 140 + motorSpeed * 22 + (state.regeneration ? 90 : 0) : Math.max(20, rpm / 60 * (state.supercar ? 3.2 : state.motorcycle ? 1.4 : state.mass > 4000 ? 2 : 2.5));
     set(this.engine!.frequency, frequency, 0.025); set(this.harmonic!.frequency, frequency * 2.01, 0.025);
     set(this.subEngine!.frequency, frequency * 0.5 * (1 + Math.sin(this.time * 17) * 0.003), 0.03);
     set(this.subEngineGain!.gain, (ev ? 0 : state.mass > 4000 ? 0.17 : state.supercar ? 0.09 : 0.055) * (0.7 + this.load * 0.3));
     set(this.turboGain!.gain, state.driving && state.ignition === 'running' && !ev && state.mass > 4000 ? this.load * Math.max(0, rpm - 1000) / 2800 * 0.05 * this.engineVolume : 0, 0.15);
     set(this.trafficGain!.gain, Math.max(0, Math.min(1, state.traffic)) * 0.16 * cabin * this.engineVolume, 0.15);
     set(this.serviceGain!.gain, Math.max(0, Math.min(1, state.service)) * 0.025 * cabin * this.natureVolume, 0.4);
-    set(this.harmonicGain!.gain, ev ? 0.025 : (state.supercar ? 0.22 : state.mass > 4000 ? 0.19 : 0.12) + (state.throttle ? 0.07 : 0));
-    set(this.engineFilter!.frequency, (ev ? 3200 : state.supercar ? 700 : state.mass > 4000 ? 260 : 350) + (state.throttle ? 900 : 180) + state.exposure * 450);
-    const cranking = ev ? state.ignition === 'starting' ? 0.016 : speed < 0.1 ? 0 : 0.02 + Math.min(speed, 35) * 0.0008 + (state.throttle || state.regeneration ? 0.025 : 0) : state.ignition === 'starting' ? 0.025 + Math.max(0, Math.sin(this.time * 34)) * 0.055 : 0.085 + speed * 0.0012 + (state.throttle ? 0.045 : 0);
+    set(this.harmonicGain!.gain, ev ? 0.025 : (state.supercar ? 0.2 : state.mass > 4000 ? 0.17 : 0.1) * (0.45 + this.load * 0.8));
+    set(this.engineFilter!.frequency, (ev ? 3200 : state.supercar ? 700 : state.mass > 4000 ? 260 : 350) + 180 + this.load * 900 + state.exposure * 450);
+    const running = (0.045 + Math.min(rpm, 10000) * 0.000003 + this.load * 0.085) * (state.shifting ? 0.42 : 1);
+    const cranking = ev ? state.ignition === 'starting' ? 0.016 : motorSpeed < 0.1 ? 0 : 0.02 + Math.min(motorSpeed, 35) * 0.0008 + Math.max(this.load, Number(state.regeneration)) * 0.025 : state.ignition === 'starting' ? 0.025 + Math.max(0, Math.sin(this.time * 34)) * 0.055 : running;
     set(this.engineGain!.gain, (state.driving && state.ignition !== 'off' || preview && this.previewKind === 'engine' ? cranking : 0) * this.engineVolume, 0.025);
     set(this.windGain!.gain, (0.045 + speed * 0.004) * state.atmosphere * cabin * (1 - state.shelter) * this.weatherVolume);
     set(this.rainGain!.gain, state.rain * 0.17 * (0.35 + cabin * 0.65) * (1 - state.shelter) * this.weatherVolume);
@@ -248,6 +268,8 @@ export class AudioSystem {
     const slide = state.driving ? Math.max(0, Math.min(1, state.tireSlip) - 0.08) : 0;
     set(this.skidTone!.frequency, (state.mass > 4000 ? 480 : state.motorcycle ? 850 : 650) + slide * 240);
     set(this.skidGain!.gain, slide * 0.07 * (1 - state.wet * 0.55) * (0.4 + cabin * 0.6) * this.tireVolume, 0.06);
+    set(this.impactGain!.gain, state.driving ? Math.min(1, Math.max(0, state.impact) / 18) * 0.25 * this.collisionVolume * (0.5 + cabin * 0.5) : 0, 0.012);
+    set(this.scrapeGain!.gain, state.driving ? Math.min(1, Math.max(0, state.scrape) / 25) * 0.07 * this.collisionVolume * (0.35 + cabin * 0.65) : 0, 0.06);
     set(this.wiperGain!.gain, state.driving && dt > 0 ? Math.min(0.07, Math.abs(state.wiper - this.lastWiper) / dt * 0.045) * this.cabinVolume : 0, 0.025);
     set(this.cabinGain!.gain, state.driving ? (state.fan * 0.009 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);
     set(this.horn!.frequency, state.mass > 4000 ? 155 : state.motorcycle ? 490 : 350);

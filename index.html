@@ -18,6 +18,7 @@
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
         <p id="settings-help">调整你的旅程。设置期间暂停行驶；音量可以即时试听。</p>
+        <div class="settings-search"><label for="settings-search">搜索设置</label><div class="settings-search-row"><input id="settings-search" type="search" placeholder="例如：转速、雨刮、音量、月球" autocomplete="off" aria-controls="settings-search-results" /><button id="settings-search-clear" type="button" disabled>清除</button></div><span id="settings-search-status" role="status"></span><div id="settings-search-results" hidden></div></div>
         <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="autopilot" aria-controls="settings-autopilot">自动驾驶</button><button type="button" data-settings-target="bindings" aria-controls="settings-bindings">快捷键</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="traffic" aria-controls="settings-traffic">NPC 交通</button><button type="button" data-settings-target="garage" aria-controls="settings-garage">地下停车场</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
         <details class="world-options" open>
@@ -36,6 +37,9 @@
           <p id="powertrain-status" class="panel-help" role="status"></p>
           <label for="transmission-mode">变速箱</label>
           <select id="transmission-mode"><option value="auto">自动换挡</option><option value="manual">手动换挡 · [ 降挡 / ] 升挡</option></select>
+          <label class="speed-label" for="engine-response">燃油转速响应 <output id="engine-response-value">100%</output></label>
+          <input id="engine-response" type="range" min="50" max="150" step="5" value="100" aria-describedby="engine-response-help" />
+          <p id="engine-response-help" class="panel-help">越高，转速跟随油门越快；松油门卸载回落，换挡平滑衔接。带挡滑行仍由车轮拖动发动机，低速才回到怠速。EV 不使用此设置。</p>
           <p class="panel-help">普通乘用车与摩托车 6 挡，超跑与重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
           <details class="world-options">
             <summary>动力与外观</summary>
@@ -285,6 +289,9 @@
           <select id="music-style"><option value="ambient">山间漫游 · 舒缓</option><option value="night">夜行电台 · 低音</option><option value="motion">逐光公路 · 轻快</option></select>
           <label class="speed-label" for="music-pace">音乐节奏 <output id="music-pace-value">100%</output></label>
           <input id="music-pace" type="range" min="60" max="140" step="5" value="100" />
+          <label class="speed-label" for="music-ducking">驾驶时音乐压低 <output id="music-ducking-value">35%</output></label>
+          <input id="music-ducking" type="range" min="0" max="80" step="5" value="35" />
+          <p class="panel-help">加速或发生接触时，为发动机与路面声音留出空间；松油门后音乐渐渐恢复。0% 关闭，喇叭提示仍会短暂压低音乐。</p>
           <div class="actions road-actions"><button id="preview-engine" type="button">试听发动机</button><button id="preview-shift" type="button">试听换挡</button><button id="preview-horn" type="button">试听喇叭</button></div>
           <p id="audio-preview-status" class="panel-help" role="status">先开启声音，再选择试听。</p>
           <p id="audio-status" class="panel-help" role="status">声音未开启</p>
@@ -357,6 +364,7 @@
         <p id="vehicle-status">{Ignition} 点火 · W 起步</p>
         <button id="hud-autopilot" type="button" aria-pressed="false">自动驾驶 · 待机</button>
         <p class="rpm-reading"><span id="ignition-status">发动机关闭</span> · <span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">0</span> RPM</p>
+        <div class="engine-feedback"><meter id="rpm-meter" min="0" max="7000" value="0" aria-label="发动机转速"></meter><span id="engine-load-status">动力关闭</span></div>
         <p id="seat-reading" class="rpm-reading"></p><p id="radio-reading" class="rpm-reading"></p>
         <p id="cabin-status" class="rpm-reading">敞篷开启 · 玻璃水 3.0 L</p>
         <p id="drive-condition">夏季 · 路面正常</p>

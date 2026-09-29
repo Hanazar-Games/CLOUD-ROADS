@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 
-const idle: SoundState = { powertrain: 'combustion', regeneration: false, atmosphere: 1, driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
+const idle: SoundState = { powertrain: 'combustion', regeneration: false, atmosphere: 1, driving: false, speed: 0, throttle: 0, shifting: false, impact: 0, scrape: 0, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
   supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0, tireSlip: 0 };
@@ -26,6 +26,34 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it('unloads engine sound smoothly on lift-off and cuts it during a shift', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const driving = { ...idle, driving: true, rpm: 3500, speed: 15, throttle: 1 };
+  for (let i = 0; i < 60; i++) audio.update(1 / 60, driving);
+  const engine = context.gains[3].gain, loaded = engine.value;
+  audio.update(1 / 60, { ...driving, throttle: 0 });
+  expect(engine.value).toBeGreaterThan(loaded * 0.8);
+  for (let i = 0; i < 60; i++) audio.update(1 / 60, { ...driving, throttle: 0 });
+  expect(engine.value).toBeLessThan(loaded * 0.75);
+  const coast = engine.value; audio.update(1 / 60, { ...driving, shifting: true });
+  expect(engine.value).toBeLessThan(coast);
+  audio.dispose();
+});
+
+it('mixes contact sounds only while driving and respects their independent volume', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.update(0.1, { ...idle, driving: true, impact: 12, scrape: 15 });
+  const contacts = context.gains.slice(-2);
+  expect(contacts.every(g => g.gain.value > 0)).toBe(true);
+  audio.collisionVolume = 0; audio.update(0.1, { ...idle, driving: true, impact: 12, scrape: 15 });
+  expect(contacts.every(g => g.gain.value === 0)).toBe(true);
+  audio.collisionVolume = 1; audio.update(0.1, { ...idle, impact: 12, scrape: 15 });
+  expect(contacts.every(g => g.gain.value === 0)).toBe(true);
+  audio.dispose();
+});
+
 it('voices EV drive and regeneration without combustion idle or automatic shift effects', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
@@ -41,6 +69,38 @@ it('voices EV drive and regeneration without combustion idle or automatic shift 
   expect(context.oscillators[0].type).toBe('triangle'); expect(context.gains[3].gain.value).toBeGreaterThan(0);
   audio.setActive(false); await Promise.resolve(); expect(context.gains[3].gain.value).toBe(0);
   audio.dispose();
+});
+
+it('previews an EV motor while the parked vehicle is powered off', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  audio.update(0.1, idle);
+  const ambience = audio as unknown as { tireGain: { gain: { value: number } }; windGain: { gain: { value: number } } };
+  const before = [ambience.tireGain.gain.value, ambience.windGain.gain.value];
+  expect(audio.preview('engine')).toBe(true);
+  audio.update(0.1, { ...idle, powertrain: 'ev', ignition: 'off', rpm: 0 });
+  expect(context.gains[3].gain.value).toBeGreaterThan(0);
+  expect(context.oscillators[0].frequency.value).toBeGreaterThan(140);
+  expect([ambience.tireGain.gain.value, ambience.windGain.gain.value]).toEqual(before);
+  audio.dispose();
+});
+
+it('ducks music under load and restores it smoothly after lifting off', async () => {
+  const contexts = [new AudioContextStub(), new AudioContextStub()], levels: number[] = [], restored: number[] = [];
+  for (const [index, context] of contexts.entries()) {
+    vi.stubGlobal('AudioContext', function () { return context; });
+    const audio = new AudioSystem(); audio.musicDucking = index ? 0.8 : 0; audio.toggle(); await Promise.resolve();
+    for (let i = 0; i < 120; i++) audio.update(1 / 60, { ...idle, driving: true, throttle: 1 });
+    const level = (audio as unknown as { melodyGain: { gain: { value: number } } }).melodyGain.gain;
+    levels.push(level.value);
+    const ducked = level.value;
+    audio.update(0, { ...idle, driving: true, throttle: 0 }); expect(level.value).toBe(ducked);
+    for (let i = 0; i < 120; i++) audio.update(1 / 60, { ...idle, driving: true, throttle: 0 });
+    restored.push(level.value);
+    audio.dispose();
+  }
+  expect(levels[1]).toBeLessThan(levels[0] * 0.3);
+  expect(restored[1]).toBeGreaterThan(restored[0] * 0.9);
 });
 
 it('follows tire slip, wetness and tire volume without stale squeal on pause or leaving the vehicle', async () => {
@@ -71,10 +131,10 @@ it('mutes propulsion when off, keeps cabin equipment powered and fades bounded t
   audio.update(0.1, { ...idle, driving: true, ignition: 'starting', rpm: 240 });
   expect(context.gains[3].gain.value).toBeGreaterThan(0);
   const count = context.gains.length;
-  audio.update(0.1, { ...idle, traffic: 1 }); const near = context.gains.at(-1)!.gain.value;
+  audio.update(0.1, { ...idle, traffic: 1 }); const near = context.gains.at(-3)!.gain.value;
   expect(near).toBeGreaterThan(0);
-  audio.update(0.1, { ...idle, traffic: 0.5 }); expect(context.gains.at(-1)!.gain.value).toBeCloseTo(near / 2);
-  audio.setActive(false); await Promise.resolve(); expect(context.gains.at(-1)!.gain.value).toBe(0);
+  audio.update(0.1, { ...idle, traffic: 0.5 }); expect(context.gains.at(-3)!.gain.value).toBeCloseTo(near / 2);
+  audio.setActive(false); await Promise.resolve(); expect(context.gains.at(-3)!.gain.value).toBe(0);
   expect(context.gains).toHaveLength(count); audio.dispose();
 });
 
