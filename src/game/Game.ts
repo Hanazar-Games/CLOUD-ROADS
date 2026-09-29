@@ -26,6 +26,7 @@ import { WorldSettings } from '../settings/WorldSettings';
 import { PresetPanel } from '../settings/PresetPanel';
 import { KeyBindingPanel } from '../settings/KeyBindingPanel';
 import { GaragePanel } from '../garage/GaragePanel';
+import { trafficScenarios } from '../traffic/TrafficSystem';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -137,6 +138,9 @@ export class Game {
       this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
       element('traffic-limit-value').textContent = `${this.world.traffic.limit} 辆`;
     }, { signal: this.events.signal });
+    element('traffic-scenario').addEventListener('change', () => {
+      this.world.traffic.scenario = element<HTMLSelectElement>('traffic-scenario').value as keyof typeof trafficScenarios;
+    }, { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
       else if (this.walking.active && (this.driving.canBoard(this.walking.person) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
@@ -234,11 +238,11 @@ export class Game {
     element('graphics-preset').addEventListener('change', () => {
       const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
       if (!preset) return;
-      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail], ['cloud-quality', preset.cloudSteps]] as const)
+      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail], ['cloud-quality', preset.cloudSteps], ['vegetation-lod', preset.lod], ['distant-trees', preset.trees], ['vegetation-shadows', preset.plantShadows], ['vegetation-budget', preset.budget], ['vehicle-detail-distance', preset.vehicles]] as const)
         element<HTMLSelectElement>(id).value = String(value);
       this.setClouds(preset.clouds); this.applyGraphics();
     }, { signal: this.events.signal });
-    for (const id of ['render-scale', 'shadow-quality', 'antialiasing', 'map-detail', 'cloud-quality']) element(id).addEventListener('change', () => {
+    for (const id of ['render-scale', 'shadow-quality', 'antialiasing', 'map-detail', 'cloud-quality', 'vegetation-lod', 'distant-trees', 'vegetation-shadows', 'vegetation-budget', 'vehicle-detail-distance']) element(id).addEventListener('change', () => {
       this.applyGraphics(); this.customGraphics();
     }, { signal: this.events.signal });
     element('frame-limit').addEventListener('change', () => this.loop.setFrameLimit(Number(element<HTMLSelectElement>('frame-limit').value)), { signal: this.events.signal });
@@ -373,6 +377,8 @@ export class Game {
       this.weather.setSeason(world.season);
       this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
+      this.world.traffic.scenario = element<HTMLSelectElement>('traffic-scenario').value as keyof typeof trafficScenarios;
+      this.applyPerformance();
       this.garagePanel.apply();
       this.world.chunks.setViewRadius(this.viewRadius);
       this.clouds.setSeed(seed);
@@ -524,7 +530,14 @@ export class Game {
       : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音' : this.audio.state === 'running' ? '声音已开启' : '声音已暂停');
   }
 
+  private applyPerformance(): void {
+    const value = (id: string) => Number(element<HTMLSelectElement>(id).value);
+    this.world.chunks.vegetation.configure({ distance: value('vegetation-lod'), density: value('distant-trees'), shadows: value('vegetation-shadows'), budget: value('vegetation-budget') });
+    this.world.trafficVehicles.detailDistance = this.world.parkedVehicles.detailDistance = value('vehicle-detail-distance');
+  }
+
   private applyGraphics(): void {
+    this.applyPerformance();
     this.renderScale = Number(element<HTMLSelectElement>('render-scale').value);
     this.world.chunks.vegetation.setDetailLevel(Number(element<HTMLSelectElement>('map-detail').value));
     const size = Number(element<HTMLSelectElement>('shadow-quality').value);
@@ -599,7 +612,7 @@ export class Game {
       .map(e => this.world.parkedVehicles.fleet.vehicle(e)) : [];
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
-    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter));
+    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter), anchor);
     this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: this.driving.appliedThrottle > 0 && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
@@ -638,7 +651,7 @@ export class Game {
       element('boarding-help').textContent = this.access ? this.access.sequence.closing ? '车门关闭中 · 请稍候'
         : `车门打开中 · 准备${this.access.sequence.entering ? '上' : '下'}车`
         : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
-      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? '交通运行中' : '交通已关闭'}`;
+      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? trafficScenarios[this.world.traffic.scenario] : '交通已关闭'}`;
       this.garagePanel.update();
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
@@ -672,7 +685,7 @@ export class Game {
       const junctionSearch = this.world.junctionSearchProgress;
       element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || this.world.searching || !junctions;
       element('junction-view').textContent = junctionSearch === null ? '下一匝道' : `定位中 · ${Math.round(junctionSearch * 100)}%`;
-      element('junction-status').textContent = junction ? `${junction.kind === 'stack' ? '多向立交 · 左转 / 右转 / 回转' : '平面分流'} · ${Math.max(0, Math.round(((junction.ramps.find(r => r.sample.distance > (this.world.roadSample?.distance ?? 0) - 30)?.sample.distance ?? junction.distance) - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
+      element('junction-status').textContent = junction ? `${junction.interchange ? '双层高速 · 四向互通 · 8 条匝道' : junction.kind === 'stack' ? '多向立交 · 左转 / 右转 / 回转' : '平面分流'} · ${Math.max(0, Math.round(((junction.ramps.find(r => r.sample.distance > (this.world.roadSample?.distance ?? 0) - 30)?.sample.distance ?? junction.distance) - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
         : junctions ? '每 20 km 一组 · 按方向标牌分流' : '出口关闭 · 主线双向延伸';
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
@@ -704,6 +717,9 @@ export class Game {
         'Ignition': this.driving.car.ignition,
         'NPC vehicles': this.world.traffic.entries.length,
         'NPC density': `${this.world.traffic.density}%`,
+        'Traffic scenario': this.world.traffic.scenario,
+        'Interchange ramps': this.world.network.junctions.reduce((count, j) => count + (j.interchange?.ramps.length ?? 0), 0),
+        'Vegetation pending': this.world.chunks.vegetation.pending,
         'NPC limit': this.world.traffic.limit,
         'NPC target': this.world.traffic.targetCount,
         'Garage floor': this.world.garages.map(g => g.floor(x, y, z)).find(floor => floor !== undefined) ?? 'outside',

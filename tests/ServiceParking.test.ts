@@ -56,6 +56,22 @@ it('batches a populated parking lot by vehicle kind, removes claimed instances a
   const before = count(); renderer.fleet.take(renderer.fleet.entries[0].id); renderer.update([site], { x: 0, z: 0 }, camera);
   expect(count()).toBe(before - 1); renderer.dispose(); expect(scene.children).toHaveLength(0);
 });
+it('keeps the fleet visible during LOD construction and substantially reduces distant triangles', () => {
+  const scene = new Scene(), renderer = new ParkedVehicles(scene, 'rest'), camera = new Vector3(1000, 200, -15000);
+  const update = () => renderer.update([site], { x: 0, z: 0 }, camera);
+  const count = () => scene.children.reduce((sum, object) => sum + (object as InstancedMesh).count, 0);
+  const vertices = () => scene.children.reduce((sum, object) => {
+    const mesh = object as InstancedMesh; return sum + mesh.count * mesh.geometry.getAttribute('position').count;
+  }, 0);
+  for (let i = 0; i < 40; i++) update();
+  const expected = count(), detailed = vertices();
+  camera.x += 800;
+  for (let i = 0; i < 40; i++) { update(); expect(count()).toBe(expected); }
+  expect(vertices()).toBeLessThan(detailed * 0.05);
+  camera.x -= 800; update(); expect(count()).toBe(expected); expect(vertices()).toBe(detailed);
+  renderer.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it('retains an articulated trailer pose when a borrowed semi is returned to the static fleet', () => {
   const scene = new Scene(), renderer = new ParkedVehicles(scene, 'rest');
   renderer.fleet.sync([site]);

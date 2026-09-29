@@ -10,7 +10,7 @@ import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision
 import { serviceObstacles } from '../service/ServiceAmenities';
 import { vehicleSupport } from './VehicleSolids';
 
-type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage' | 'garages'>>
+type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage' | 'garages' | 'connections'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
 
 export class DrivingSurface {
@@ -24,10 +24,13 @@ export class DrivingSurface {
   private accessIndex;
   private barriers;
   private barrierIndex;
+  private serviceSource;
+  private connectionSource;
 
   constructor(private readonly world: DrivingWorld) {
     this.profile = roadProfile(world.options);
-    this.sites = world.services;
+    this.serviceSource = world.services; this.connectionSource = world.connections;
+    this.sites = [...world.services, ...world.connections ?? []];
     this.access = this.sites.flatMap(site => [...site.ground.access, ...site.ground.crossover?.access ?? []]);
     this.accessIndex = new RoadIndex(this.access);
     this.barriers = this.sites.flatMap(site => [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]);
@@ -312,8 +315,9 @@ export class DrivingSurface {
   private get garages() { return this.world.garages ?? (this.world.garage ? [this.world.garage] : []); }
 
   private refreshServices(): void {
-    if (this.sites === this.world.services) return;
-    this.sites = this.world.services;
+    if (this.serviceSource === this.world.services && this.connectionSource === this.world.connections) return;
+    this.serviceSource = this.world.services; this.connectionSource = this.world.connections;
+    this.sites = [...this.world.services, ...this.world.connections ?? []];
     this.access = this.sites.flatMap(site => [...site.ground.access, ...site.ground.crossover?.access ?? []]);
     this.accessIndex = new RoadIndex(this.access);
     this.barriers = this.sites.flatMap(site => [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]);

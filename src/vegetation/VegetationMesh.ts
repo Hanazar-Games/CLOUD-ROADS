@@ -31,6 +31,15 @@ export class VegetationMesh {
   private centerX = 0; private centerZ = 0;
   enabled = true;
   private detailSetting = 1;
+  private settings = { distance: 1, density: 1, shadows: 2, budget: Infinity };
+  get pending(): number { return this.dirty.size; }
+
+  configure(settings: { distance: number; density: number; shadows: number; budget: number }): void {
+    if (Object.entries(settings).some(([key, value]) => !Number.isFinite(value) || value < 0 || key === 'distance' && value < 0.5 || key === 'budget' && value < 1)) return;
+    if (Object.entries(settings).every(([key, value]) => this.settings[key as keyof typeof settings] === value)) return;
+    this.settings = { distance: Math.min(1.5, settings.distance), density: Math.min(1, settings.density), shadows: Math.min(2, settings.shadows), budget: Math.min(32, Math.floor(settings.budget)) };
+    for (const chunk of this.chunks.values()) this.dirty.add(chunk);
+  }
 
   setDetailLevel(level: number): void {
     if (![0, 1, 2].includes(level) || level === this.detailSetting) return;
@@ -38,8 +47,8 @@ export class VegetationMesh {
     for (const chunk of this.chunks.values()) this.dirty.add(chunk);
   }
 
-  private get meadowRadius(): number { return MEADOW_DETAIL_RADIUS + this.detailSetting - 1; }
-  private get fineRadius(): number { return TREE_FINE_RADIUS + this.detailSetting - 1; }
+  private get meadowRadius(): number { return (MEADOW_DETAIL_RADIUS + this.detailSetting - 1) * this.settings.distance; }
+  private get fineRadius(): number { return (TREE_FINE_RADIUS + this.detailSetting - 1) * this.settings.distance; }
 
   constructor(private readonly scene: Scene) {}
 
@@ -98,7 +107,7 @@ export class VegetationMesh {
 
   private detail(chunk: PlantChunk): number {
     const distance = Math.max(Math.abs(chunk.x - this.centerX), Math.abs(chunk.z - this.centerZ));
-    return distance <= GROUND_DETAIL_RADIUS ? 0 : distance <= TREE_DETAIL_RADIUS ? 1 : distance <= VIEW_RADII.at(-1)! ? 2 : 3;
+    return distance <= GROUND_DETAIL_RADIUS * this.settings.distance ? 0 : distance <= TREE_DETAIL_RADIUS * this.settings.distance ? 1 : distance <= VIEW_RADII.at(-1)! ? 2 : 3;
   }
 
   private batch(layer: number, chunk: PlantChunk): PlantBatch {
@@ -143,12 +152,15 @@ export class VegetationMesh {
   }
 
   update(originX: number, originZ: number): void {
-    for (const chunk of this.dirty) this.removeInstances(chunk);
-    for (const chunk of this.dirty) {
+    const work = [...this.dirty].sort((a, b) => Math.hypot(a.x - this.centerX, a.z - this.centerZ) - Math.hypot(b.x - this.centerX, b.z - this.centerZ)).slice(0, this.settings.budget);
+    for (const chunk of work) this.removeInstances(chunk);
+    for (const chunk of work) {
+      this.dirty.delete(chunk);
       chunk.ring = this.detail(chunk); chunk.near = this.within(chunk, this.meadowRadius); chunk.fine = this.within(chunk, this.fineRadius);
       if (chunk.ring === 3) continue;
       for (let i = 0; i < chunk.plants.length; i += 7) {
         const kind = chunk.plants[i + 5], far = chunk.ring === 2;
+        if (far && ((Math.imul(chunk.x * 4096 + Math.floor(chunk.plants[i]), 374761393) ^ Math.imul(chunk.z * 4096 + Math.floor(chunk.plants[i + 2]), 668265263)) >>> 0) / 4294967296 >= this.settings.density) continue;
         if ((kind >= 7 && kind <= 9 && !chunk.near) || (chunk.ring > 0 && kind >= 3 && kind !== 10) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
         const layer = kind === 10 ? far ? 13 : chunk.fine ? 12 : 17 : kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? chunk.fine ? kind : 14 + kind : kind <= 4 ? 3 : kind - 1;
         const batch = this.batch(layer, chunk);
@@ -157,7 +169,6 @@ export class VegetationMesh {
         batch.entries.push(entry); chunk.entries.push(entry); batch.mesh.count = batch.entries.length; this.write(entry);
       }
     }
-    this.dirty.clear();
     for (const batch of this.changed) {
       const { mesh } = batch;
       if (!mesh.count) {
@@ -174,6 +185,7 @@ export class VegetationMesh {
     }
     this.changed.clear();
     for (const batch of this.batches.values()) {
+      batch.mesh.castShadow = this.settings.shadows > 0 && (batch.layer < 5 || batch.layer === 12 || this.settings.shadows === 2 && batch.layer >= 14);
       batch.mesh.position.set(batch.x - originX, 0, batch.z - originZ); batch.mesh.visible = this.visible(batch.layer);
     }
   }

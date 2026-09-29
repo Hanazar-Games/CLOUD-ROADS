@@ -32,6 +32,7 @@ import { SeasonState, type Season } from '../season/SeasonState';
 import { seasonMaterial } from '../season/SeasonMaterial';
 import { JUNCTION_INTERVAL, junctionsEnabled } from '../road/JunctionSchedule';
 import { JunctionMesh } from '../road/JunctionMesh';
+import { InterchangeMesh } from '../road/InterchangeMesh';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { TrafficVehicles } from '../traffic/TrafficVehicles';
 import { Garage, garageLocation } from '../garage/Garage';
@@ -67,9 +68,11 @@ export class World {
   readonly signs: RoadSigns;
   readonly crossingMesh: CrossingMesh;
   readonly junctionMesh: JunctionMesh;
+  readonly interchangeMesh: InterchangeMesh;
   crossings: Crossing[] = [];
   private readonly crossingPlanner: CrossingPlanner;
   services: readonly ServiceArea[] = [];
+  connections: readonly ServiceArea[] = [];
   serviceView: { heading: number; pitch: number } | undefined;
   passes: readonly RoadSample[] = [];
   tunnels: readonly TunnelSpan[] = [];
@@ -112,6 +115,7 @@ export class World {
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
     this.junctionMesh = new JunctionMesh(scene, options);
+    this.interchangeMesh = new InterchangeMesh(scene);
     this.season = new SeasonState(options.terrain);
     this.chunks.setSeason(this.season);
     this.roadMesh.setSeason(this.season);
@@ -193,7 +197,8 @@ export class World {
     this.garageMesh.update(this.origin, camera.position);
     for (const mesh of this.serviceGarages.values()) mesh.update(this.origin, camera.position);
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
-    this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.route === this.network.active.id));
+    this.interchangeMesh.update(this.network.junctions.flatMap(j => j.interchange ? [j.interchange] : []), this.origin, this.corridor, this.height);
+    this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.interchange || j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
     if (explore && this.scout) this.advanceServiceView(camera);
   }
@@ -201,7 +206,7 @@ export class World {
   get searching(): boolean { return !!this.scout; }
 
   get nextJunction() {
-    return this.network.junctions.filter(j => j.route === this.network.active.id && j.ramps.at(-1)!.sample.distance > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
+    return this.network.junctions.filter(j => j.route === this.network.active.id && (j.interchange ? j.distance + 820 : j.ramps.at(-1)!.sample.distance) > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
   }
 
   inspectJunction(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
@@ -211,6 +216,12 @@ export class World {
       const id = Math.max(1, Math.ceil(((this.roadSample?.distance ?? 0) + 200) / JUNCTION_INTERVAL));
       this.scout = { road: this.road.fork(), kind: 'junction', id, progress: 0 };
       return undefined;
+    }
+    if (junction.interchange) {
+      const p = junction.sample.position, heading = junction.sample.heading + Math.PI / 4;
+      const x = p.x - Math.sin(heading) * 1250, z = p.z + Math.cos(heading) * 1250, y = Math.max(p.y + 1250, this.height.sample(x, z) + 120);
+      camera.position.set(x - this.origin.x, y, z - this.origin.z);
+      return { heading, pitch: -Math.atan2(y - p.y, 1250) };
     }
     const segment = this.road.segments.find(s => s.start.distance <= junction.distance - 100 && s.end.distance >= junction.distance - 100);
     if (!segment) return undefined;
@@ -256,7 +267,8 @@ export class World {
     for (const [garage, mesh] of this.serviceGarages) if (!garages.includes(garage)) { mesh.dispose(); this.serviceGarages.delete(garage); }
     for (const garage of garages) if (!this.serviceGarages.has(garage)) this.serviceGarages.set(garage, new GarageMesh(this.scene, garage));
     this.garages = [this.garage, ...garages];
-    const grounds = [...this.renderServices.map(site => site.ground), ...this.garages.map(garage => garage.ground)];
+    this.connections = this.network.junctions.filter(j => j.interchange).map(j => ({ id: -1, sample: j.sample, start: j.distance - 600, end: j.distance + 600, ground: j.interchange!.ground }));
+    const grounds = [...this.renderServices.map(site => site.ground), ...this.garages.map(garage => garage.ground), ...this.connections.map(site => site.ground)];
     this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, grounds);
     this.crossings = this.crossingPlanner.plan(this.renderRoutes.map(route => route.source.samples), this.corridor)
       .sort((a, b) => Math.hypot(a.anchor.position.x - x, a.anchor.position.z - z) - Math.hypot(b.anchor.position.x - x, b.anchor.position.z - z))
@@ -469,5 +481,6 @@ export class World {
     this.signs.dispose();
     this.crossingMesh.dispose(); this.crossingPlanner.clear();
     this.junctionMesh.dispose();
+    this.interchangeMesh.dispose();
   }
 }

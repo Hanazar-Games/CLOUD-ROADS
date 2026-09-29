@@ -82,12 +82,12 @@ it('replays customized mountains and random altitude targets after releasing dis
   expect(spine.checkpointCount).toBeLessThanOrEqual(64);
 }, 20000);
 
-it('uses a level exit when a stacked ramp would exceed the selected altitude range', () => {
+it('preserves full highway interchange clearance above a narrow altitude range', () => {
   const options: WorldOptions = { ...DEFAULT_OPTIONS, roadType: 'highway', routeStyle: 0, elevationMode: 'fixed', altitudeMin: 600, altitudeMax: 610 };
   const terrain = { sample: () => 590 }, spine = new RoadSpine('bounded-junction', terrain, options);
   const network = new RoadNetwork('bounded-junction', terrain, options, spine);
   for (let i = 0; i < 1000 && !network.junctions.length; i++) network.update(128, -19600, undefined, 4000);
-  expect(network.junctions).toHaveLength(1); expect(network.junctions[0].kind).toBe('fork');
+  expect(network.junctions).toHaveLength(1); expect(network.junctions[0].kind).toBe('stack');
   const branch = network.routes.find(r => r.id === network.junctions[0].exits[0])!;
-  for (const segment of branch.definition.prefix) expect(segment.end.position.y).toBeLessThanOrEqual(610.05);
+  for (const segment of branch.definition.prefix) expect(segment.end.position.y).toBeCloseTo(network.junctions[0].sample.position.y + 14);
 });

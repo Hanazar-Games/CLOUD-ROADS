@@ -53,6 +53,9 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await page.locator('#road-grip').fill('45'); await page.locator('#handbrake-strength').fill('75'); await page.locator('#countersteer-assist').fill('35');
   await category(page, 'weather'); await page.locator('#weather-kind').selectOption('rain');
   await category(page, 'world'); await page.locator('#mountain-density').fill('125');
+  await category(page, 'graphics'); await page.locator('#vegetation-lod').selectOption('0.5');
+  await page.locator('#distant-trees').selectOption('0.25'); await page.locator('#vehicle-detail-distance').selectOption('120');
+  await category(page, 'traffic'); await page.locator('#traffic-scenario').selectOption('stopgo');
   await category(page, 'presets'); await page.locator('#preset-name').fill('雨中山路'); await page.locator('#preset-save').click();
   await expect(page.locator('#preset-status')).toContainText('已保存');
   const downloadPromise = page.waitForEvent('download'); await page.locator('#preset-export').click();
@@ -60,7 +63,9 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(4); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(5); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.settings['vegetation-lod']).toBe('0.5'); expect(saved.settings['distant-trees']).toBe('0.25');
+  expect(saved.settings['vehicle-detail-distance']).toBe('120'); expect(saved.settings['traffic-scenario']).toBe('stopgo');
   expect(saved.settings['handbrake-strength']).toBe(75); expect(saved.settings['countersteer-assist']).toBe(35);
   await page.reload(); await category(page, 'presets');
   await expect(page.locator('#preset-list option')).toHaveText(['雨中山路']);

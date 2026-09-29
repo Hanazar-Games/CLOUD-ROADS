@@ -27,7 +27,7 @@ export class JunctionMesh {
       this.x = junctions[0]?.sample.position.x ?? 0; this.z = junctions[0]?.sample.position.z ?? 0;
       this.parts.count = this.markings.count = 0;
       const width = this.profile.outerHalfWidth;
-      for (const junction of junctions) for (const ramp of junction.ramps) {
+      for (const junction of junctions.filter(j => !j.interchange)) for (const ramp of junction.ramps) {
         const road = routes.find(route => route.id === junction.route)?.road;
         const branch = routes.find(route => route.id === ramp.id)?.road;
         if (!road || !branch) continue;

@@ -7,8 +7,8 @@ import { Raycaster, Scene, Vector3 } from 'three';
 import { RoadSigns } from '../src/road/RoadSigns';
 import { JunctionMesh } from '../src/road/JunctionMesh';
 
-it.each([0.025, 0.06])('connects three directions with separated crossings at grade %s', maxGrade => {
-  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade }, terrain = { sample: () => 100 };
+it.each([0.025, 0.06])('retains mountain branching routes with separated crossings at grade %s', maxGrade => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'mountain' as const, routeStyle: 0 as const, maxGrade }, terrain = { sample: () => 100 };
   const root = new RoadSpine('multi', terrain, options), network = new RoadNetwork('multi', terrain, options, root);
   while (!root.advanceToDistance(24000)) { /* Load the complete interchange. */ }
   const point = root.segments.find(s => s.start.distance <= 20000 && s.end.distance >= 20000)!.atDistance(20000);

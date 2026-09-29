@@ -8,6 +8,7 @@ import { ParkedFleet } from './ParkedFleet';
 import type { ServiceArea } from './ServicePlanner';
 import type { ParkedEntry } from './ServiceParking';
 import type { Garage } from '../garage/Garage';
+import { vehicleProxy } from '../vehicle/VehicleProxy';
 
 export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGeometry[] {
   const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile), parts: BufferGeometry[][] = [[]];
@@ -47,6 +48,8 @@ export class ParkedVehicles {
   private readonly tilt = new Matrix4();
   private readonly color = new Color();
   private version = -1;
+  detailDistance = 240;
+  private detailSignature = '';
   private garageFloor: string | undefined;
   private garageEntries: readonly (readonly ParkedEntry[])[] = [];
   private extraEntries: ParkedEntry[] = [];
@@ -73,21 +76,24 @@ export class ParkedVehicles {
     if (floor !== this.garageFloor) { this.garageFloor = floor; this.version = -1; }
     const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600
       && (e.slot < 0 || !e.id.startsWith('garage:') || floor !== undefined && Math.abs(e.y - camera.y) < 9));
-    const key = (entry: typeof near[number]) => `${entry.kind}${entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
+    const key = (entry: typeof near[number]) => `${entry.kind}${Math.hypot(entry.x - camera.x - origin.x, entry.z - camera.z - origin.z) > this.detailDistance ? ':far' : entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
     const missing = near.find(e => !this.batches.has(key(e)));
     if (missing) {
-      const meshes = vehicleTemplate(missing.kind, key(missing).endsWith(':closed')).map((geometry, part) => {
+      const meshes = (key(missing).endsWith(':far') ? vehicleProxy(missing.kind) : vehicleTemplate(missing.kind, key(missing).endsWith(':closed'))).map((geometry, part) => {
         const mesh = new InstancedMesh(geometry, this.material, 256); mesh.count = 0; mesh.receiveShadow = true;
         mesh.name = `${missing.kind}:${part ? 'trailer' : 'vehicle'}`; this.scene.add(mesh); return mesh;
       });
       this.batches.set(key(missing), meshes); this.version = -1;
     }
     const anchorChanged = Math.hypot(camera.x + origin.x - this.anchorX, camera.z + origin.z - this.anchorZ) > 300;
-    if (this.version !== this.fleet.version || anchorChanged) {
+    const signature = near.map(key).join('|');
+    if (this.version !== this.fleet.version || anchorChanged || signature !== this.detailSignature) {
+      this.detailSignature = signature;
       this.version = this.fleet.version; this.anchorX = camera.x + origin.x; this.anchorZ = camera.z + origin.z;
       for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
       for (const entry of near) {
-        const meshes = this.batches.get(key(entry)); if (!meshes || meshes[0].count >= 256) continue;
+        const meshes = this.batches.get(key(entry)) ?? this.batches.get(entry.kind) ?? this.batches.get(`${entry.kind}:closed`) ?? this.batches.get(`${entry.kind}:far`);
+        if (!meshes || meshes[0].count >= 256) continue;
         const car = this.fleet.vehicle(entry);
         for (let i = 0; i < meshes.length; i++) {
           const body = i ? car.trailer! : car, mesh = meshes[i];

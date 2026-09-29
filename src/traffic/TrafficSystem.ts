@@ -10,6 +10,7 @@ import { constrainVehicle } from '../service/ServiceCollision';
 import { vehicleSupport } from '../vehicle/VehicleSolids';
 
 export const MAX_TRAFFIC = 120;
+export const trafficScenarios = { normal: '正常通行', busy: '缓慢车流', stopgo: '走走停停', queue: '排队拥堵' } as const;
 const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck'];
 const paints = [0xd8dedb, 0x29485e, 0x377d78, 0xa73d32, 0xdca632, 0x353d43, 0x7d658e, 0x9b7453, 0x83b3bb, 0xd4bc97];
 type Position = { x: number; y: number; z: number };
@@ -23,6 +24,13 @@ export class TrafficSystem {
   readonly entries: TrafficEntry[] = [];
   private amount = 35;
   private capacity = 24;
+  private scenarioValue: keyof typeof trafficScenarios = 'normal';
+  private readonly queues = new Map<string, number>();
+  get scenario(): keyof typeof trafficScenarios { return this.scenarioValue; }
+  set scenario(value: keyof typeof trafficScenarios) {
+    if (!Object.hasOwn(trafficScenarios, value) || value === this.scenarioValue) return;
+    this.scenarioValue = value; this.queues.clear();
+  }
   private serial = 0;
   private spawnTime = 0;
   private routes: readonly NetworkRoute[] = [];
@@ -37,7 +45,7 @@ export class TrafficSystem {
   get limit(): number { return this.capacity; }
   set limit(value: number) { if (Number.isFinite(value)) this.capacity = Math.round(Math.max(12, Math.min(MAX_TRAFFIC, value))); }
   get targetCount(): number { return Math.ceil(this.amount / 100 * this.capacity); }
-  clear(): void { this.entries.length = 0; this.spawnTime = 0; this.routes = []; }
+  clear(): void { this.entries.length = 0; this.spawnTime = 0; this.routes = []; this.queues.clear(); }
   take(id: string): VehiclePhysics | undefined {
     const index = this.entries.findIndex(e => e.id === id);
     if (index < 0 || this.entries[index].car.motionSpeed > 0.1) return;
@@ -46,6 +54,11 @@ export class TrafficSystem {
 
   update(dt: number, routes: readonly NetworkRoute[], anchor: Position, parked: readonly VehiclePhysics[] = [], walker?: Position): void {
     this.routes = routes;
+    for (const id of this.queues.keys()) if (!routes.some(route => route.id === id)) this.queues.delete(id);
+    if (this.scenario !== 'normal') for (const route of routes) {
+      const sample = route.road.nearest(anchor.x, anchor.z);
+      if (sample && (!this.queues.has(route.id) || Math.abs(this.queues.get(route.id)! - sample.distance) > 1000)) this.queues.set(route.id, sample.distance);
+    }
     const target = this.targetCount;
     for (let i = this.entries.length - 1; i >= 0; i--) {
       const e = this.entries[i], route = routes.find(r => r.id === e.routeId);
@@ -65,9 +78,10 @@ export class TrafficSystem {
     }
     // Substeps keep a fast vehicle from passing through a narrow obstacle.
     const steps = Math.ceil(dt / (1 / 60));
+    const obstacles = [...parked, ...this.entries.map(entry => entry.car)];
     for (let step = 0; step < steps; step++) for (const entry of this.entries) {
       const route = routes.find(r => r.id === entry.routeId)!;
-      this.advance(entry, route, dt / steps, parked, walker);
+      this.advance(entry, route, dt / steps, obstacles, walker);
     }
   }
 
@@ -79,6 +93,7 @@ export class TrafficSystem {
   }
 
   private reverseRoute(route: NetworkRoute): NetworkRoute | undefined {
+    if (route.definition.opposite) return this.routes.find(r => r.id === route.definition.opposite);
     return route.id === 'root' || route.id === 'back' ? this.routes.find(r => r.id === (route.id === 'root' ? 'back' : 'root')) : undefined;
   }
 
@@ -110,7 +125,7 @@ export class TrafficSystem {
     const available = routes.filter(r => r.ready && r.road.segments.length && r.road.nearest(anchor.x, anchor.z));
     if (!available.length) return;
     const route = available[Math.floor(this.random() * available.length)], nearest = route.road.nearest(anchor.x, anchor.z)!;
-    const distance = nearest.distance + (this.random() * 2 - 1) * 1050;
+    const distance = nearest.distance + (this.random() * 2 - 1) * (this.scenario === 'normal' ? 1050 : 650);
     const sample = this.sample(route, distance);
     if (!sample || sample.distance < route.road.segments[0].start.distance + 50
       || sample.distance > route.road.segments.at(-1)!.end.distance - 50) return;
@@ -138,6 +153,7 @@ export class TrafficSystem {
     const heading = sample.heading + (entry.direction < 0 ? Math.PI : 0), offset = this.laneOffset(entry, lane);
     const right = roadFrame(sample).right, x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;
     for (const other of obstacles) {
+      if (other === entry.car) continue;
       if (Math.hypot(other.x - x, other.z - z) > 180) continue;
       for (const body of other.bodies()) {
         if (Math.abs(body.y - entry.car.y) > Math.max(3, other.profile.height)) continue;
@@ -180,13 +196,22 @@ export class TrafficSystem {
     const remaining = entry.direction > 0 ? route.road.segments.at(-1)!.end.distance - entry.distance
       : reverse?.ready ? (reverse.road.segments.at(-1)?.end.distance ?? 0) + entry.distance : entry.distance - route.road.segments[0].start.distance;
     let target = Math.min(entry.cruise, Math.sqrt(Math.max(0, remaining - 30) * 5));
+    if (this.scenario !== 'normal') target = Math.min(target, this.scenario === 'busy' ? 9 : 7);
+    if (this.scenario === 'queue' || this.scenario === 'stopgo' && this.time % 36 < 20) {
+      const center = this.queues.get(route.id);
+      if (center !== undefined) {
+        const gap = (center + entry.direction * 350 - entry.distance) * entry.direction - car.profile.chassisLength / 2;
+        if (gap > -car.profile.length) target = Math.min(target, Math.max(0, gap) / 1.4, Math.sqrt(Math.max(0, gap) * 6));
+      }
+    }
     for (const ahead of [0, 15, 40, car.speed * 3]) {
       const sample = this.sample(route, entry.distance + entry.direction * ahead);
       if (sample) target = Math.min(target, Math.sqrt(2.1 / Math.max(0.001, Math.abs(sample.curvature))), 20 / (1 + Math.abs(sample.grade) * 5));
     }
     let gap = Infinity;
-    const obstacles = [...parked, ...this.entries.filter(e => e !== entry).map(e => e.car)];
+    const obstacles = parked;
     for (const other of obstacles) {
+      if (other === car) continue;
       if (Math.hypot(other.x - car.x, other.z - car.z) > 130) continue;
       for (const body of other.bodies()) {
         const center = (body.front + body.rear) / 2;
@@ -228,7 +253,7 @@ export class TrafficSystem {
     let hit = false;
     for (const [b, body] of car.bodies().entries()) for (let along = body.rear; along <= body.front + 0.01; along += Math.min(1, body.front - body.rear)) {
       const point = { x: body.x + Math.sin(body.heading) * along, z: body.z - Math.cos(body.heading) * along };
-      for (const other of obstacles) if (constrainVehicle(point, before[b].x + Math.sin(before[b].heading) * along,
+      for (const other of obstacles) if (other !== car && constrainVehicle(point, before[b].x + Math.sin(before[b].heading) * along,
         before[b].z - Math.cos(before[b].heading) * along, car.profile.width / 2 + 0.08,
         body.y - car.profile.radius - car.profile.rest, other, car.profile.height)) { hit = true; break; }
       if (hit) break;

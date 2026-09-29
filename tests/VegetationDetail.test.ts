@@ -2,6 +2,21 @@ import { Scene } from 'three';
 import { expect, it } from 'vitest';
 import { VegetationMesh } from '../src/vegetation/VegetationMesh';
 
+it('budgets vegetation changes without dropping queued chunks and reduces distant geometry', () => {
+  const scene = new Scene(), vegetation = new VegetationMesh(scene);
+  vegetation.configure({ distance: 0.5, density: 1, shadows: 0, budget: 2 });
+  for (let x = 0; x < 6; x++) vegetation.setChunk(`${x},0`, x, 0, new Float32Array([6, 19].flatMap(px => [6, 19].flatMap(pz => [px, 0, pz, 1, 0, 0, 1]))));
+  vegetation.update(0, 0); expect(vegetation.pending).toBe(4);
+  vegetation.update(0, 0); vegetation.update(0, 0); expect(vegetation.pending).toBe(0);
+  expect(scene.children.every(mesh => !mesh.castShadow)).toBe(true);
+  const near = scene.children.find(mesh => mesh.name === 'vegetation-pine');
+  const far = scene.children.find(mesh => mesh.name === 'vegetation-pine-distant');
+  expect(near).toBeDefined(); expect(far).toBeDefined();
+  vegetation.configure({ distance: 1, density: 0, shadows: 1, budget: 8 });
+  vegetation.update(0, 0); expect(vegetation.distantCount).toBe(0);
+  vegetation.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it('changes cached near vegetation detail live and returns to the same plants without accumulation', () => {
   const scene = new Scene(), vegetation = new VegetationMesh(scene);
   for (let x = -2; x <= 2; x++) vegetation.setChunk(`${x},0`, x, 0,

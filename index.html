@@ -130,6 +130,9 @@
           <input id="traffic-density" type="range" min="0" max="100" step="5" value="35" />
           <label class="slider-label" for="traffic-limit">附近 NPC 数量上限 <output id="traffic-limit-value">24 辆</output></label>
           <input id="traffic-limit" type="range" min="12" max="120" step="12" value="24" />
+          <p class="panel-help">拥堵车队逐步形成；走走停停交替放行，排队拥堵持续等待。切回正常通行可解除排队，密度为 0 时清空交通。</p>
+          <label for="traffic-scenario">车流场景</label><select id="traffic-scenario"><option value="normal">正常通行</option><option value="busy">缓慢车流</option><option value="stopgo">走走停停</option><option value="queue">排队拥堵</option></select>
+          <p class="panel-help">拥堵在附近主路逐步形成，密度和数量上限仍由上方控制。选择正常通行可解除排队；暂停时车流冻结。</p>
           <p class="panel-help">目标数量 = 上限 × 密度；0% 关闭交通，默认上限 24 辆，最多 120 辆。按安全车距逐步生成，窄路上实际数量可能低于目标。高数量增加 CPU 负载。NPC 停稳后靠近车门按 F 可接管。</p>
           <p id="traffic-status" class="panel-help" aria-live="polite">正在等待道路</p>
         </section>
@@ -183,8 +186,9 @@
             <select id="route-style" aria-describedby="route-style-help"><option value="0">全直道 · 零弯道</option><option value="1" selected>1 档 · 舒缓山路</option><option value="2">2 档 · 蜿蜒山路</option><option value="3">3 档 · 盘山折返</option><option value="4">4 档 · 密集发卡弯</option><option value="5">5 档 · 连续发卡弯</option></select>
             <p id="route-style-help" class="panel-help">山路与高速均适用。档位越高，折返越密、弯道越紧；大桥、隧道和服务区附近保留缓路。超过 150 米的高桥在平缓桥段使用连续拱结构；急弯、陡坡保留实心墩。全直道方向固定，仍可上下起伏。</p>
             <label for="junctions"><input id="junctions" type="checkbox" checked /> 山路岔路 · 可转入支路</label>
-            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 多向立交 · 高速出口 / 山路升级</label>
-            <p class="panel-help">每 20 km 一处，每处仅一条右侧出口。山路开启岔路后可升级立交；高速由立交开关控制。坡度低于 2.5% 或净空不足时采用平面出口。应用后重新生成。</p>
+            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 双层高速互通 / 山路匝道</label>
+            <p class="panel-help">双向高速每 20 公里生成上下交叉主线，四个方向均可直行、左转、右转。连接匝道独立采用不超过 6% 的坡度，主线仍使用坡度设置。上层主线抬高 14 米以保留净空，立交局部高度可超出海拔区间。</p>
+            <p class="panel-help">山路与单向高速沿用分支匝道；山路坡度低于 2.5% 或净空不足时使用平面出口。双向高速采用四向全互通；应用后重新生成。</p>
             <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
@@ -246,6 +250,12 @@
           <label for="map-detail">近景植被细节</label>
           <select id="map-detail" aria-describedby="map-detail-help"><option value="0">轻量 · 身边花草</option><option value="1" selected>标准 · 近景树冠与花草</option><option value="2">丰富 · 扩大精细植被范围</option></select>
           <p id="map-detail-help" class="panel-help">即时调整精细树冠、草叶和野花的显示范围。植被随地貌与季节变化；远景树木继续保留。</p>
+          <label for="vegetation-lod">植被精度距离</label><select id="vegetation-lod"><option value="0.5">50% · 更早使用简模</option><option value="0.75">75%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select>
+          <label for="distant-trees">远景树木保留量</label><select id="distant-trees"><option value="0">关闭远景树木</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="1" selected>100%</option></select>
+          <label for="vegetation-shadows">植被投影范围</label><select id="vegetation-shadows"><option value="0">关闭</option><option value="1" selected>仅精细近景</option><option value="2">近景与中景</option></select>
+          <label for="vegetation-budget">每帧植被更新地块</label><select id="vegetation-budget"><option value="1">1 · 优先平稳</option><option value="2">2</option><option value="4" selected>4 · 均衡</option><option value="8">8 · 更快补齐</option></select>
+          <label for="vehicle-detail-distance">其他车辆精细距离</label><select id="vehicle-detail-distance"><option value="120">120 米</option><option value="240" selected>240 米</option><option value="480">480 米</option><option value="960">960 米</option></select>
+          <p class="panel-help">远处 NPC 和停放车辆使用简模；靠近恢复细节，实体碰撞保持一致。更新地块越少，切换细节时越平稳，但补齐需要更久。</p>
           <label for="shadow-quality">山体投影精度</label>
           <select id="shadow-quality"><option value="0">关闭</option><option value="1024">标准 · 1024</option><option value="2048" selected>精细 · 2048</option></select>
           <label for="antialiasing">边缘抗锯齿</label>
@@ -303,7 +313,7 @@
         <div class="actions road-actions"><button id="junction-view" type="button" disabled>下一匝道</button></div>
         <div class="actions road-actions"><button id="crossing-view" type="button" disabled>桥下交通景观</button></div>
         <p class="panel-help">深谷大桥下可遇到山谷公路或铁路高架，两端连接山体隧道。它们是沿途景观，驾驶路线请沿主路和岔路探索。</p>
-        <p class="panel-help">起点前后都有道路；主线每 20 km 一组立交。依次从右侧驶入左转环道、右转匝道或回转支路，也可沿主线直行；每条支路都继续无限生成。坡度或海拔空间不足时降级为平面分流。「下一匝道」可定位入口，入弯请减速。</p>
+        <p class="panel-help">起点前后都有道路；主线每 20 km 一组互通。双向高速为上下两条交叉高速，四条右转匝道与四条左转环道连接全部方向，驶出后继续无限生成。山路和单向高速使用分支匝道。「下一匝道」定位附近，双向高速再次点击可俯瞰互通；入弯请减速。</p>
         <div class="actions road-actions"><button id="service-view" type="button" disabled>下一服务区</button></div>
         <div class="actions road-actions"><button id="pass-view" type="button" disabled>下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>

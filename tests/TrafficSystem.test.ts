@@ -15,6 +15,20 @@ function setup(patch: Partial<WorldOptions> = {}) {
   return { traffic, network, anchor, options };
 }
 
+it('forms a selectable queue, preserves safe spacing and releases it when normal traffic resumes', () => {
+  const { traffic, network, anchor } = setup({ oneWay: true });
+  traffic.density = 100; traffic.scenario = 'queue';
+  for (let i = 0; i < 900; i++) traffic.update(0.1, network.routes, anchor);
+  const stopped = traffic.entries.filter(e => e.car.speed < 0.1);
+  expect(stopped.length).toBeGreaterThan(2);
+  for (const a of stopped) for (const b of stopped) if (a !== b && a.routeId === b.routeId && a.lane === b.lane)
+    expect(Math.abs(a.distance - b.distance)).toBeGreaterThan((a.car.profile.length + b.car.profile.length) / 2);
+  traffic.scenario = 'normal';
+  for (let i = 0; i < 120; i++) traffic.update(0.1, network.routes, anchor);
+  expect(stopped.some(e => e.car.speed > 2)).toBe(true);
+  traffic.density = 0; traffic.update(0, network.routes, anchor); expect(traffic.entries).toHaveLength(0);
+}, 20000);
+
 it('keeps the default budget and exposes a larger configurable cap that trims immediately', () => {
   const { traffic, network, anchor } = setup({ roadLanes: 3, roadWidth: 12 });
   expect(traffic.limit).toBe(24);
@@ -28,6 +42,20 @@ it('keeps the default budget and exposes a larger configurable cap that trims im
   traffic.limit = NaN; expect(traffic.limit).toBe(12);
   traffic.limit = 1000; expect(traffic.limit).toBe(120);
 }, 15000);
+
+it('pauses a stop-go queue and releases cars during its moving phase', () => {
+  const { traffic, network, anchor, options } = setup(); traffic.density = 1; traffic.scenario = 'stopgo';
+  const lane = roadProfile(options).lanes.at(-1)!, car = new VehiclePhysics('sedan');
+  car.reset(128 + lane.offset, 128 - 330, 0, () => ({ height: 1, grip: 1 })); car.speed = 4;
+  traffic.entries.push({ id: 'queue', car, routeId: 'root', distance: 330, direction: 1, cruise: 15, lane: lane.index, offset: lane.offset, signal: 0, cooldown: 0 });
+  for (let i = 0; i < 120; i++) traffic.update(0.1, network.routes, anchor);
+  expect(car.speed).toBeLessThan(0.1);
+  const before = [traffic.time, car.x, car.z];
+  for (let i = 0; i < 30; i++) traffic.update(0, network.routes, anchor);
+  expect([traffic.time, car.x, car.z]).toEqual(before);
+  for (let i = 0; i < 140; i++) traffic.update(0.1, network.routes, anchor);
+  expect(car.speed).toBeGreaterThan(2); expect(car.speed).toBeLessThanOrEqual(7);
+});
 
 it('seeds bounded traffic with diverse vehicles, paints and opposite directions', () => {
   const { traffic, network, anchor } = setup(); traffic.density = 100;

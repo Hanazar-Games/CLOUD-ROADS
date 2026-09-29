@@ -2,9 +2,11 @@ import { BoxGeometry, Color, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStan
 import { vehicleTemplate } from '../service/ParkedVehicles';
 import { MAX_TRAFFIC, type TrafficSystem } from './TrafficSystem';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
+import { vehicleProxy } from '../vehicle/VehicleProxy';
 
 export class TrafficVehicles {
-  private readonly batches = new Map<VehicleKind, InstancedMesh[]>();
+  private readonly batches = new Map<string, InstancedMesh[]>();
+  detailDistance = 240;
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65, alphaHash: true });
   private readonly box = new BoxGeometry();
   private readonly lamps = new InstancedMesh(this.box, new MeshBasicMaterial({ toneMapped: false }), MAX_TRAFFIC * 8);
@@ -27,16 +29,18 @@ export class TrafficVehicles {
     this.lamps.name = 'traffic-lamps'; this.drivers.name = 'traffic-drivers';
     this.lamps.count = this.drivers.count = 0; scene.add(this.lamps, this.drivers);
   }
-  update(origin: { x: number; z: number }, darkness: number): void {
-    const missing = this.traffic.entries.find(e => !this.batches.has(e.car.kind));
-    if (missing) this.batches.set(missing.car.kind, vehicleTemplate(missing.car.kind).map((geometry, i) => {
-      const mesh = new InstancedMesh(geometry, this.material, MAX_TRAFFIC); mesh.name = `traffic-${missing.car.kind}-${i}`;
+  update(origin: { x: number; z: number }, darkness: number, anchor = origin): void {
+    const detail = (car: { x: number; z: number }) => Math.hypot(car.x - anchor.x, car.z - anchor.z) <= this.detailDistance;
+    const key = (car: { kind: VehicleKind; x: number; z: number }) => `${car.kind}:${detail(car) ? 'near' : 'far'}`;
+    const missing = this.traffic.entries.find(e => !this.batches.has(key(e.car)));
+    if (missing) this.batches.set(key(missing.car), (detail(missing.car) ? vehicleTemplate(missing.car.kind) : vehicleProxy(missing.car.kind)).map((geometry, i) => {
+      const mesh = new InstancedMesh(geometry, this.material, MAX_TRAFFIC); mesh.name = `traffic-${key(missing.car)}-${i}`;
       mesh.count = 0; mesh.receiveShadow = true; this.scene.add(mesh); return mesh;
     }));
     for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
     this.lamps.count = this.drivers.count = 0;
     for (const { car, signal } of this.traffic.entries) {
-      const meshes = this.batches.get(car.kind); if (!meshes) continue;
+      const meshes = this.batches.get(key(car)) ?? this.batches.get(`${car.kind}:${detail(car) ? 'far' : 'near'}`); if (!meshes) continue;
       for (const [i, mesh] of meshes.entries()) {
         const body = i ? car.trailer! : car;
         this.matrix.makeRotationY(-body.heading).setPosition(body.x - origin.x, body.y, body.z - origin.z);
@@ -46,7 +50,7 @@ export class TrafficVehicles {
       this.matrix.makeRotationY(-car.heading).setPosition(car.x - origin.x, car.y, car.z - origin.z);
       this.matrix.multiply(this.local.makeRotationX(car.pitch)).multiply(this.local.makeRotationZ(car.roll));
       const p = car.profile;
-      for (const [height, width, y, color] of [[0.46, 0.38, p.eye.y - 0.34, 0x314d60], [0.23, 0.2, p.eye.y, 0xbe9273]]) {
+      for (const [height, width, y, color] of detail(car) ? [[0.46, 0.38, p.eye.y - 0.34, 0x314d60], [0.23, 0.2, p.eye.y, 0xbe9273]] : []) {
         this.local.makeScale(width, height, 0.23).setPosition(p.eye.x, y, -p.eye.along);
         this.drivers.setMatrixAt(this.drivers.count, this.local.premultiply(this.matrix));
         this.drivers.setColorAt(this.drivers.count++, this.color.setHex(color));

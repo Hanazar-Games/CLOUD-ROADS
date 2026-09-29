@@ -14,7 +14,9 @@ function crown(radius: number, color: string): BufferGeometry {
   const colors = new Float32Array(position.count * 3), base = new Color(color), tint = new Color();
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i) / radius, y = position.getY(i) / radius, z = position.getZ(i) / radius;
-    const variation = Math.sin(x * 7 + z * 4) * Math.cos(y * 5 - z * 3), scale = 0.94 + variation * 0.06;
+    const variation = Math.sin(x * 7 + z * 4) * Math.cos(y * 5 - z * 3);
+    const lobes = Math.sin(Math.atan2(z, x) * 3 + y * 2) * Math.max(0, 1 - y * y);
+    const scale = 0.93 + variation * 0.05 + lobes * 0.09;
     position.setXYZ(i, x * radius * scale, y * radius * scale, z * radius * scale);
     tint.copy(base).multiplyScalar(0.96 + variation * 0.1 + y * 0.04).toArray(colors, i * 3);
   }
@@ -74,6 +76,9 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
     pieces = kind === 'pine' ? [colored(new ConeGeometry(3.3, 11, 5).translate(0, 7.5, 0), '#51704a')]
       : kind === 'broadleaf' || kind === 'autumn' || kind === 'blossom' ? [colored(new IcosahedronGeometry(3.9, 0).scale(1, 1.15, 1).translate(0, 8.5, 0), kind === 'autumn' ? '#c39743' : '#71894e')]
         : [colored(new CylinderGeometry(0.4, 0.55, 6, 4).translate(0, 3, 0), '#82945e')];
+    if (kind === 'cactus') for (const side of [-1, 1]) pieces.push(colored(new CylinderGeometry(0.22, 0.3, 2.6, 3, 1, true).rotateZ(side * 0.65)
+      .translate(side * 0.85, 3.2 + side * 0.6, 0), '#8a9c63'));
+    if (kind !== 'cactus') pieces.push(colored(new CylinderGeometry(0.16, 0.42, 7, 3, 1, true).translate(0, 3.5, 0), '#75634c'));
   } else if (kind === 'pine' && detail === 'middle') {
     pieces = [colored(new CylinderGeometry(0.17, 0.46, 10.5, 5).translate(0, 5.25, 0), '#716048')];
     for (const [radius, height, y, tint] of [[3.4, 5.8, 5.3, '#486741'], [2.45, 5.4, 8.1, '#638451'], [1.4, 4.8, 11.1, '#76935e']] as const)
