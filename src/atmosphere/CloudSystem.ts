@@ -57,6 +57,7 @@ export class CloudSystem {
     const clarity = Math.max(0, 1 - weather.cover * 4);
     this.fog.near = Math.min(near + (12 - near) * density, weather.near * (1 + (distance / 2048 - 1) * clarity));
     this.fog.far = Math.min(far + (110 - far) * density, weather.far * (1 + (distance / 2048 - 1) * clarity));
+    if (weather.near < 1 && earth) { this.fog.near = weather.near; this.fog.far = weather.far; }
     this.fog.near += (near - this.fog.near) * shelter;
     this.fog.far += (far - this.fog.far) * shelter;
     camera.updateMatrixWorld();

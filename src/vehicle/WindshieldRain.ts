@@ -1,3 +1,5 @@
+import { wiperLayout } from './WiperLayout';
+
 export const GLASS_COLUMNS = 64, GLASS_ROWS = 32;
 
 export class WindshieldRain {
@@ -9,13 +11,13 @@ export class WindshieldRain {
   time = 0;
 
   constructor(width: number, height: number) {
-    const radius = Math.min(height * 0.93, width * 0.44);
+    const layout = wiperLayout(width, height), { radius } = layout;
     for (let i = 0; i < this.data.length; i++) {
       const x = ((i % GLASS_COLUMNS + 0.5) / GLASS_COLUMNS - 0.5) * width;
-      const y = (Math.floor(i / GLASS_COLUMNS) + 0.5) / GLASS_ROWS * height - height * 0.06;
-      for (const [side, pivot] of [-0.46, 0.04].entries()) {
-        const dx = x - pivot * width, r = Math.hypot(dx, y), sweep = (Math.atan2(y, dx) - 0.08) / 1.56;
-        if (r > radius * 0.42 && r < radius && sweep >= 0 && sweep <= 1) this.angles[i * 2 + side] = sweep;
+      const y = ((Math.floor(i / GLASS_COLUMNS) + 0.5) / GLASS_ROWS - 0.5) * height - layout.y;
+      for (const [side, pivot] of layout.pivots.entries()) {
+        const dx = x - pivot, r = Math.hypot(dx, y), sweep = (Math.atan2(y, dx) - layout.start) / layout.arc;
+        if (r > radius * layout.bladeStart && r < radius * layout.bladeEnd && sweep >= 0 && sweep <= 1) this.angles[i * 2 + side] = sweep;
       }
     }
   }

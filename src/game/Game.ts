@@ -190,6 +190,11 @@ export class Game {
       this.weather.setFogDensity(value / 100, this.paused || this.settings.open || this.releaseNotes.open || !this.input.enabled);
       element('fog-density-value').textContent = `${value}%`;
     }, { signal: this.events.signal });
+    element('fog-visibility').addEventListener('input', (event) => {
+      const value = Number((event.target as HTMLInputElement).value);
+      this.weather.setVisibility(value, this.paused || this.settings.open || this.releaseNotes.open || !this.input.enabled);
+      element('fog-visibility-value').textContent = `${value} m`;
+    }, { signal: this.events.signal });
     element('sun-view').addEventListener('click', () => {
       const direction = this.sky.sun.direction;
       this.flight.reset(this.sky.sun.night > 0.5 ? Math.atan2(0.45, 0.7) : Math.atan2(direction.x, -direction.z),
@@ -387,6 +392,7 @@ export class Game {
       this.sky.sun.setTerrain(world.options.terrain);
       for (const id of ['weather-kind', 'season-kind']) element<HTMLSelectElement | HTMLFieldSetElement>(id).disabled = world.season.extraterrestrial;
       element<HTMLInputElement>('fog-density').disabled = world.options.terrain === 'moon';
+      element<HTMLInputElement>('fog-visibility').disabled = world.season.extraterrestrial;
       this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
       this.world.traffic.scenario = element<HTMLSelectElement>('traffic-scenario').value as keyof typeof trafficScenarios;
@@ -624,7 +630,7 @@ export class Game {
       .map(e => this.world.parkedVehicles.fleet.vehicle(e)) : [];
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
-    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter), anchor);
+    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter, this.weather.profile.far < 500 ? 1 : 0), anchor);
     this.audio.update(dt, { powertrain: this.driving.car.powertrain, regeneration: this.driving.car.regenerating,
       atmosphere: this.world.options.terrain === 'moon' ? 0 : this.world.options.terrain === 'mars' ? 0.15 : 1, driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady ? this.driving.car.transmission.load : 0,
@@ -819,6 +825,9 @@ export class Game {
         'Vehicle suspension': `${this.driving.car.suspension} · ${this.driving.car.wheels.map(wheel => (wheel.compression * 100).toFixed(1)).join(' / ')} cm`,
         'Suspension damping': `${Math.round(this.driving.car.damping * 100)}%`,
         'Vehicle lights': this.driving.systems.beam,
+        'Fog lights': this.driving.systems.fogLights ? 'on' : 'off',
+        'Sprinkler pump': this.driving.car.profile.body === 'sprinkler' && this.driving.operations.target.aux && this.driving.car.ignition === 'running' ? 'on' : 'off',
+        'Road reflectors': this.world.furniture.reflectors.count,
         'Vehicle signal': this.driving.systems.signal,
         'Light power': `${Math.round(this.driving.systems.lightPower * 100)}%`, 'Light range': `${this.driving.systems.lightRange} m`,
         'Wiper sweep': this.driving.systems.sweep.toFixed(3),

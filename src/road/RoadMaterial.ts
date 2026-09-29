@@ -62,6 +62,10 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.83, 0.82, 0.72), max(shaft, head));
       float rumble = step(roadHalfWidth + 0.25, lateral) * step(lateral, roadHalfWidth + 0.8) * step(mod(vRoadUv.y, 1.3), 0.15);
       diffuseColor.rgb *= 1.0 - rumble * 0.3 * (1.0 - smoothstep(0.2, 1.0, fwidth(vRoadUv.y)));
+    `).replace('#include <lights_fragment_end>', `
+      #include <lights_fragment_end>
+      float markingReflectance = max(stud, max(max(edge, center), max(divider * dash, max(shaft, head))));
+      totalEmissiveRadiance += diffuseColor.rgb * markingReflectance * min(1.8, length(reflectedLight.directDiffuse) * 2.0);
     `);
   };
   material.customProgramCacheKey = () => 'cloud-roads-asphalt';

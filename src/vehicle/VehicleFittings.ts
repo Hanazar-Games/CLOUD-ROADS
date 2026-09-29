@@ -10,13 +10,13 @@ export class VehicleFittings {
     const root = new Group(); root.name = `operation-${action}`; root.position.set(x, y, z); parent.add(root);
     this.hinges.push({ root, action, axis, angle }); return root;
   }
-  sync(operations: VehicleOperations | undefined, dt: number): void {
-    this.time += dt;
+  sync(operations: VehicleOperations | undefined, dt: number, working = false): void {
+    this.time += Number.isFinite(dt) ? Math.max(0, Math.min(0.1, dt)) : 0;
     for (const { root, action, axis, angle } of this.hinges) {
       const value = operations?.[action] ?? 0;
       root.rotation[axis] = (action === 'doors' ? value * value * (3 - 2 * value) : value) * angle;
     }
-    if (this.beacon) this.beacon.emissiveIntensity = operations?.target.aux ? (Math.sin(this.time * 13) > 0 ? 3 : 0.15) : 0;
+    if (this.beacon) this.beacon.emissiveIntensity = working || operations?.target.aux ? (Math.sin(this.time * 13) >= 0 ? 6 : 0.15) : 0;
   }
   cargo(parent: Group, width: number, start: number, end: number, floor: number, top: number, kind: 'box' | 'stake' | 'flatbed', kit: VehicleDetailKit, rideHeight: number, ribs = true): void {
     const { block, paint, trim, metal } = kit, length = end - start, middle = (start + end) / 2;

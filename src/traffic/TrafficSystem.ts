@@ -11,7 +11,7 @@ import { vehicleSupport } from '../vehicle/VehicleSolids';
 
 export const MAX_TRAFFIC = 120;
 export const trafficScenarios = { normal: '正常通行', busy: '缓慢车流', stopgo: '走走停停', queue: '排队拥堵' } as const;
-const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck'];
+const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck', 'sprinkler'];
 const paints = [0xd8dedb, 0x29485e, 0x377d78, 0xa73d32, 0xdca632, 0x353d43, 0x7d658e, 0x9b7453, 0x83b3bb, 0xd4bc97];
 type Position = { x: number; y: number; z: number };
 export interface TrafficEntry {
@@ -247,6 +247,7 @@ export class TrafficSystem {
       }
     }
     target = Math.min(target, Math.max(0, gap) / 1.8, Math.sqrt(Math.max(0, gap) * deceleration * 2));
+    if (gap < 0.2 && car.speed < 0.2) target = 0;
     const speed = car.speed + Math.max(-Math.min(5, car.gravity * 0.9) * dt, Math.min(Math.min(1.5, car.gravity * 0.8) * dt, target - car.speed));
     const move = Math.min(speed * dt, Math.max(0, gap));
     const before = car.bodies(), distance = entry.distance + entry.direction * move;

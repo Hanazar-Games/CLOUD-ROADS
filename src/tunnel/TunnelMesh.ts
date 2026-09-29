@@ -10,6 +10,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { TunnelSpan } from './TunnelDetector';
 import { tunnelSignalSamples } from './TunnelLayout';
 import { createTerrainMaterial } from '../terrain/TerrainMaterial';
+import { reflectiveMaterial } from '../render/ReflectiveMaterial';
 
 type Point = [number, number, number];
 export interface TunnelLamp { x: number; y: number; z: number }
@@ -43,7 +44,7 @@ export class TunnelMesh {
   readonly lights = new InstancedMesh(new BoxGeometry(),
     new MeshStandardMaterial({ color: 0xffdeb4, emissive: 0xffc982, emissiveIntensity: 2 }), 16384);
   readonly reflectors = new InstancedMesh(new BoxGeometry(),
-    new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffdc91, emissiveIntensity: 0.65, roughness: 0.35 }), 16384);
+    reflectiveMaterial(), 16384);
   readonly equipment = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.72 }), 100000);
   readonly fans = new InstancedMesh(fanGeometry(), new MeshStandardMaterial({ vertexColors: true, metalness: 0.6, roughness: 0.5, side: DoubleSide }), 2048);
   readonly lampPositions: TunnelLamp[] = [];
@@ -204,6 +205,13 @@ export class TunnelMesh {
             for (const center of this.profile.centers) for (const side of [-1, 1]) {
               this.box(sample, center + side * (half - 0.13), 0.8, 0.16, 0.16, 1.2, side < 0 ? 0xe0f9ea : 0xffd875, this.reflectors);
               this.box(sample, center + side * (half - 0.12), 2.8, 0.14, 0.08, 0.65, 0xd5f0e7, this.reflectors);
+              this.box(sample, center + side * (half - 0.16), 0.45, 0.08, 0.055, 0.25, 0x66ffab, this.lights);
+              this.box(sample, center + side * (half - 0.03), 0.8, 0.12, 0.22, 1.3, 0x263339);
+              for (const offset of [-0.22, 0, 0.22]) {
+                const grate = { ...sample, position: { x: sample.position.x + sample.tangent.x * offset,
+                  y: sample.position.y + sample.tangent.y * offset, z: sample.position.z + sample.tangent.z * offset } };
+                this.box(grate, center + side * (half - 0.53), 0.252, 0.16, 0.012, 0.065, 0x344246);
+              }
             }
           if (i > 0 && Math.floor(sample.distance / 96) !== Math.floor(rows[i - 1].distance / 96)) {
             for (const center of this.profile.centers) {
@@ -254,6 +262,12 @@ export class TunnelMesh {
           }
           for (const center of this.profile.centers) {
             this.box(sample, center, 9.5, Math.max(6.4, half * 1.4), 1.5, 2.4, 0x465b5c);
+            const face = { ...sample, position: { x: sample.position.x + sample.tangent.x * end * 2.65,
+              y: sample.position.y + sample.tangent.y * end * 2.65, z: sample.position.z + sample.tangent.z * end * 2.65 } };
+            for (const side of [-1, 1]) for (let y = 0.45; y < 4; y += 0.45) {
+              this.box(face, center + side * (half + 0.25), y, 0.35, 0.3, 0.045, 0xffc743, this.reflectors);
+              this.box(face, center + side * (half + 0.25), y + 0.21, 0.36, 0.12, 0.05, 0x293135);
+            }
             for (const side of [-1, 1]) {
               const wing = { ...sample, position: { x: sample.position.x + sample.tangent.x * end * 4,
                 y: sample.position.y + sample.tangent.y * end * 4, z: sample.position.z + sample.tangent.z * end * 4 } };

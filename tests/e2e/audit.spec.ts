@@ -115,7 +115,9 @@ test('shows the current release, archives the previous baseline and isolates dia
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-release="current"]')).toContainText(version);
-  await expect(dialog.locator('[data-release="current"]')).toContainText('连续穿山 · 隧道照明与车道指示');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('夜行反光 · 雾灯与洒水作业');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.57');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('连续穿山 · 隧道照明与车道指示');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.56');
   await expect(dialog.locator('[data-release="history"]')).toContainText('车队精修 · 天气卡片与设置动效');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.55');

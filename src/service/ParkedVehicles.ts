@@ -9,6 +9,7 @@ import type { ServiceArea } from './ServicePlanner';
 import type { ParkedEntry } from './ServiceParking';
 import type { Garage } from '../garage/Garage';
 import { vehicleProxy } from '../vehicle/VehicleProxy';
+import { addRetroreflection } from '../render/ReflectiveMaterial';
 
 export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGeometry[] {
   const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile), parts: BufferGeometry[][] = [[]];
@@ -29,13 +30,19 @@ export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGe
     if (!material.color || !object.geometry.getAttribute('normal') || object.name === 'windshield-water') return;
     const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
     geometry.applyMatrix4(transform.multiplyMatrices(inverse[part], object.matrixWorld));
+    const vertexColors = material.vertexColors ? geometry.getAttribute('color') : undefined;
     for (const name of Object.keys(geometry.attributes)) if (name !== 'position' && name !== 'normal') geometry.deleteAttribute(name);
     const count = geometry.getAttribute('position').count, mask = material.name === 'vehicle-paint' ? 1 : 0;
     const colors = new Float32Array(count * 3), color = mask ? new Color(0xffffff) : material.color;
-    for (let i = 0; i < colors.length; i += 3) { colors[i] = color.r; colors[i + 1] = color.g; colors[i + 2] = color.b; }
+    for (let i = 0; i < count; i++) {
+      colors[i * 3] = color.r * (vertexColors?.getX(i) ?? 1);
+      colors[i * 3 + 1] = color.g * (vertexColors?.getY(i) ?? 1);
+      colors[i * 3 + 2] = color.b * (vertexColors?.getZ(i) ?? 1);
+    }
     geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
     geometry.setAttribute('glassMask', new Float32BufferAttribute(new Float32Array(count).fill(material.transparent && material.opacity < 0.9 ? 1 : 0), 1));
     geometry.setAttribute('paintMask', new Float32BufferAttribute(new Float32Array(count).fill(mask), 1)); parts[part].push(geometry);
+    geometry.setAttribute('retroMask', new Float32BufferAttribute(new Float32Array(count).fill(Number(material.name === 'retro-reflector')), 1));
   });
   const geometries = parts.map(group => mergeGeometries(group)!);
   parts.flat().forEach(p => p.dispose()); model.dispose(); return geometries;
@@ -65,6 +72,7 @@ export class ParkedVehicles {
         #endif
       `);
     };
+    addRetroreflection(this.material, true);
   }
   update(sites: readonly ServiceArea[], origin: { x: number; z: number }, camera: Vector3, garage?: Garage, serviceGarages: readonly Garage[] = []): void {
     const garages = [...garage ? [garage] : [], ...serviceGarages], entries = garages.map(g => g.entries);

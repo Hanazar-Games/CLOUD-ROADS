@@ -4,6 +4,7 @@ import type { ServicePoint } from '../service/ServiceTerrain';
 import type { RoadCorridor } from './RoadCorridor';
 import type { RoadTerrain } from './RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
+import { addRetroreflection } from '../render/ReflectiveMaterial';
 
 export class InterchangeMesh {
   readonly pavement = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x454d50, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
@@ -17,6 +18,7 @@ export class InterchangeMesh {
   private x = 0; private z = 0;
 
   constructor(scene: Scene) {
+    addRetroreflection(this.markings.material);
     this.pavement.name = 'interchange-ramp-pavement';
     for (const mesh of [this.pavement, this.decks, this.rails, this.markings]) { mesh.visible = false; mesh.receiveShadow = true; scene.add(mesh); }
     this.decks.castShadow = this.rails.castShadow = true;
@@ -53,9 +55,14 @@ export class InterchangeMesh {
             }
           }
         }
-        for (const { a, b } of plan.ground.barriers) {
+        for (const [i, { a, b }] of plan.ground.barriers.entries()) {
           for (const y of [0.55, 1.05]) this.edge(this.rails, a, b, 0.13, 0.15, y);
           this.edge(this.rails, a, { ...a, z: a.z + 0.12 }, 0.13, 1.2, 0.6);
+          const length = Math.hypot(b.x - a.x, b.z - a.z);
+          if (i % 2 === 0 && length > 0.1) {
+            const t = Math.min(0.5, 0.3 / length);
+            this.edge(this.markings, a, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }, 0.18, 0.11, 1.05);
+          }
         }
       }
       this.pavement.geometry.dispose(); this.pavement.geometry = new BufferGeometry();

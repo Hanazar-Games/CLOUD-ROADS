@@ -108,9 +108,20 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     const gate = fittings.hinge('cargo', parent, 0, -0.17, end - 0.08, 'x', Math.PI / 2);
     block(w - 0.15, 0.38, 0.08, 0, 0.19, 0, paint, gate);
     block(0.28, 0.05, 0.09, 0, 0.3, 0.02, metal, gate);
-  } else if (p.body === 'tanker') {
+  } else if (p.body === 'tanker' || p.body === 'sprinkler') {
     const radius = Math.min(w * 0.44, (top - 0.35) / 2);
     const tank = cylinder(radius, length - 0.3, 0, 0.3 + radius, middle, metal, parent); tank.rotation.x = Math.PI / 2;
+    if (p.body === 'sprinkler') {
+      block(w * 0.84, 0.13, 0.55, 0, -0.12, end - 0.25, metal, parent);
+      block(0.65, 0.5, 0.6, 0, 0.36, end - 0.35, paint, parent);
+      block(w * 0.84, 0.065, 0.065, 0, -0.3, end - 0.08, metal, parent);
+      for (const side of [-1, 1]) {
+        block(0.07, 0.55, 0.07, side * w * 0.4, 0.15, end - 0.12, metal, parent);
+        block(0.2, 0.09, 0.15, side * w * 0.4, -0.31, end - 0.04, trim, parent);
+        block(0.045, 0.8, 0.045, side * w * 0.4, 0.38, end - 0.4, metal, parent);
+        block(0.05, 0.055, 0.48, side * w * 0.4, 0.78, end - 0.4, metal, parent);
+      }
+    }
     for (const z of [start + 0.25, middle, end - 0.25]) {
       block(w - 0.15, 0.17, 0.18, 0, 0.12, z, trim, parent);
       cylinder(0.22, 0.1, 0, 0.38 + radius * 2, z, paint, parent);

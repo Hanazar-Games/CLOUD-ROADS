@@ -58,7 +58,9 @@ export class CloudMaterial extends ShaderMaterial {
 
         float fogAmount(float distance, vec3 ray) {
           if (planet == 1.0) return 0.0;
-          float base = smoothstep(fogRange.x, fogRange.y, distance);
+          float linearFog = smoothstep(fogRange.x, fogRange.y, distance);
+          float extinction = 1.0 - exp(-3.912 * max(0.0, distance - fogRange.x) / max(0.5, fogRange.y - fogRange.x));
+          float base = mix(linearFog, extinction, 1.0 - smoothstep(0.5, 2.0, fogRange.x));
           float falloff = clamp(ray.y * min(distance, fogRange.y) * 0.003, -1.2, 1.2);
           float layer = abs(falloff) < 0.01 ? 1.0 : (1.0 - exp(-falloff)) / falloff;
           return 1.0 - pow(max(0.0, 1.0 - base), mix(1.0, layer, weatherCover));
@@ -73,7 +75,7 @@ export class CloudMaterial extends ShaderMaterial {
           float distanceToScene = depth < 1.0
             ? -perspectiveDepthToViewZ(depth, nearFar.x, nearFar.y) / -direction.z : 1e8;
           vec3 haze = airColor(ray);
-          scene = depth >= 1.0 ? skyColor(ray)
+          scene = depth >= 1.0 ? mix(skyColor(ray), haze, 1.0 - smoothstep(0.5, 2.0, fogRange.x))
             : mix(scene, haze, fogAmount(distanceToScene, ray));
           vec4 clouds = vec4(0.0);
           if (cloudsEnabled && immersion < 0.995) {

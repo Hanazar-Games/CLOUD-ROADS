@@ -109,6 +109,8 @@
 <section class="settings-category" id="settings-equipment" aria-labelledby="heading-equipment"><h3 id="heading-equipment">车载设备</h3>
 <div class="world-options">          <label for="vehicle-lights">车灯 · L 切换</label>
           <select id="vehicle-lights" aria-describedby="vehicle-lights-help"></select>
+          <label><input id="vehicle-fog-lights" type="checkbox" /> 前后雾灯 · {FogLights}</label>
+          <p class="panel-help">低位宽幅暖色前雾灯、红色后雾灯。大雾建议近光配雾灯，远光不会穿透浓雾。长车侧灯随车灯亮起，侧面转向灯同步闪烁。</p>
           <label class="speed-label" for="light-power">车灯亮度 <output id="light-power-value">100%</output></label>
           <input id="light-power" type="range" min="25" max="200" step="5" value="100" />
           <label class="speed-label" for="light-range">远光照射范围 <output id="light-range-value">180 m</output></label>
@@ -263,8 +265,12 @@
             <label for="weather-rain"><input id="weather-rain" type="radio" name="weather" value="rain" /><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 18a5 5 0 0 1 0-10 8 8 0 0 1 15-1 5.5 5.5 0 0 1 1 11H8ZM10 23l-2 6m10-6-2 6m10-6-2 6"/></svg><span><strong>雨天 / 雪天</strong><small>持续降水 · 湿滑</small></span></label>
             <label for="weather-storm"><input id="weather-storm" type="radio" name="weather" value="storm" /><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 19H8a5 5 0 0 1 0-10 8 8 0 0 1 15-1 5.5 5.5 0 0 1 1 11h-2M17 16l-5 8h6l-4 7M6 24l-1 4m21-4-1 4"/></svg><span><strong>风雨 / 风雪</strong><small>强风降水 · 低能见度</small></span></label>
             <label for="weather-fog"><input id="weather-fog" type="radio" name="weather" value="fog" /><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 12a5 5 0 0 1 1-7 8 8 0 0 1 14 1 5 5 0 0 1 4 6M3 17h18m4 0h4M6 23h23M3 29h8m4 0h11"/></svg><span><strong>浓雾</strong><small>朦胧山路 · 慢行</small></span></label>
+            <label for="weather-denseFog"><input id="weather-denseFog" type="radio" name="weather" value="denseFog" /><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 6h26M6 12h20M3 18h26M6 24h20M3 30h26"/></svg><span><strong>大雾</strong><small>2–1000 m · 自定能见度</small></span></label>
           </fieldset>
           <p id="weather-kind-help" class="panel-help">降水会随温度变为雨、雨夹雪或雪；当前实际天气见季节状态。选择后即时预览，关闭设置继续旅程。</p>
+          <label class="speed-label" for="fog-visibility">大雾能见度 <output id="fog-visibility-value">100 m</output></label>
+          <input id="fog-visibility" type="range" min="2" max="1000" step="1" value="100" aria-describedby="fog-visibility-help" />
+          <p id="fog-visibility-help" class="panel-help">仅作用于“大雾”预设，不受下方浓度倍率影响。数值表示水平视线对比度降至约 2% 的距离；隧道内逐渐恢复清晰。</p>
           <label class="speed-label" for="fog-density">雾气浓度 <output id="fog-density-value">100%</output></label>
           <input id="fog-density" type="range" min="50" max="200" step="10" value="100" />
           <p class="panel-help">天气逐渐过渡，雨后路面慢慢变干；暂停时选择天气可即时预览。雾气浓度越高，远景越朦胧。</p>

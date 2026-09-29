@@ -4,6 +4,7 @@ import type { RoadSample } from './RoadSegment';
 import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
 import type { WorldOptions } from '../world/WorldOptions';
+import { addRetroreflection } from '../render/ReflectiveMaterial';
 
 export class JunctionMesh {
   readonly parts = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0.15 }), 8192);
@@ -16,6 +17,7 @@ export class JunctionMesh {
   private z = 0;
 
   constructor(scene: Scene, options: Readonly<WorldOptions>) {
+    addRetroreflection(this.markings.material);
     this.profile = roadProfile(options);
     for (const mesh of [this.parts, this.markings]) { mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true; scene.add(mesh); }
     this.parts.castShadow = true;
@@ -88,10 +90,10 @@ export class JunctionMesh {
           for (const side of [-1, 1]) {
             const offset = side * (width + 0.22);
             this.box(this.parts, sample, offset, 0.72, 0.12, 1.25, 0.14, 0x84918f);
-            this.box(this.parts, sample, offset, 1.25, 0.2, 0.16, 0.09, side > 0 ? 0xece8ce : 0xe5b34c);
+            this.box(this.markings, sample, offset, 1.25, 0.2, 0.16, 0.09, side > 0 ? 0xece8ce : 0xe5b34c);
             if (Math.abs(sample.curvature) > 0.002 && side === -Math.sign(sample.curvature)) {
               this.box(this.parts, sample, offset, 1.72, 0.7, 0.45, 0.09, 0x344b4b);
-              this.box(this.parts, sample, offset, 1.72, 0.17, 0.34, 0.11, 0xf1d577, side * 0.6);
+              this.box(this.markings, sample, offset, 1.72, 0.17, 0.34, 0.11, 0xf1d577, side * 0.6);
             }
           }
           if (junction.kind === 'stack' && sample.elevated && distance % 96 === 32) {

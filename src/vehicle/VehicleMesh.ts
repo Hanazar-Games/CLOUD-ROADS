@@ -1,4 +1,4 @@
-import { BoxGeometry, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, ExtrudeGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PointLight, Shape, SpotLight, TorusGeometry, TubeGeometry, Vector3, type BufferGeometry, type Scene } from 'three';
+import { BoxGeometry, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PointLight, Shape, SpotLight, TorusGeometry, TubeGeometry, Vector3, type BufferGeometry, type Scene } from 'three';
 import type { VehiclePhysics, WheelState } from './VehiclePhysics';
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Windshield } from './Windshield';
@@ -14,6 +14,9 @@ import type { CraneSystems } from './CraneSystems';
 import { VehicleDisplay } from './VehicleDisplay';
 import { fleetBody } from './FleetBody';
 import { vehicleFinish } from './VehicleFinish';
+import { sideLampPositions, vehicleReflectors } from './VehicleSafety';
+import { reflectiveMaterial } from '../render/ReflectiveMaterial';
+import { SprinklerSpray } from './SprinklerSpray';
 
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
 
@@ -42,6 +45,11 @@ export class VehicleMesh {
   private readonly indicatorColor = new Color();
   private readonly crane?: CraneMesh;
   private readonly headlight = new SpotLight(0xffeed0, 0, 100, 0.6, 0.65, 1.6);
+  private readonly foglight = new SpotLight(0xffdf8c, 0, 45, 0.95, 0.8, 1.5);
+  private readonly fogLens;
+  private readonly rearFog;
+  private readonly sideLamp;
+  private readonly spray?: SprinklerSpray;
 
   constructor(scene: Scene, private readonly profile: VehicleProfile = vehicleProfiles.roadster) {
     const paint = this.paint = this.material(profile.paint, 0.4, 0.25), trim = this.material(0x202b2c), rubber = this.material(0x171c1d);
@@ -55,6 +63,9 @@ export class VehicleMesh {
     this.ambient = this.material(0x265262, 0.4); this.ambient.emissive.setHex(0x57dbe7); this.ambient.emissiveIntensity = 0;
     this.tail = this.material(0xca3932); this.tail.emissive.setHex(0xff3020);
     const lamp = this.lamp = this.material(0xffefcf); lamp.emissive.setHex(0xffeed0); lamp.emissiveIntensity = 0;
+    this.fogLens = this.material(0xffdc85, 0.22); this.fogLens.emissive.setHex(0xffdf8c); this.fogLens.emissiveIntensity = 0;
+    this.rearFog = this.material(0xc92b21, 0.25); this.rearFog.emissive.setHex(0xff2414); this.rearFog.emissiveIntensity = 0;
+    this.sideLamp = this.material(0xdb8723, 0.3); this.sideLamp.emissive.setHex(0xffa128); this.sideLamp.emissiveIntensity = 0;
     this.root.add(this.chassis); this.root.visible = false; scene.add(this.root);
     const makeBlock = (geometry: BufferGeometry): Block => (w, h, l, x, y, z, material = paint, parent = this.chassis) => {
       const mesh = new Mesh(geometry, material); mesh.scale.set(w, h, l); mesh.position.set(x, y, z);
@@ -139,10 +150,11 @@ export class VehicleMesh {
       block(profile.width * 0.85, 0.06, 0.36, 0, 0.27, 0, trim, wing);
       for (const side of [-1, 1]) block(0.055, 0.25, 0.1, side * 0.55, 0.13, 0, metal, wing);
     }
-    if (profile.shape === 'crane') {
+    if (profile.shape === 'crane' || ['sprinkler', 'dumptruck', 'mixer', 'garbage', 'towtruck'].includes(profile.body ?? '')) {
       const beacon = this.fittings.beacon = this.material(0xd78b18, 0.35); beacon.emissive.setHex(0xffa310);
       for (const side of [-1, 1]) block(0.13, 0.12, 0.15, side * 0.9, profile.eye.y + 0.43, -profile.eye.along, beacon);
     }
+    if (profile.body === 'sprinkler') this.spray = new SprinklerSpray(this.chassis, profile.chassisLength / 2, this.rideHeight);
     if (profile.shape === 'motorcycle') {
       const length = (this.rideHeight - 0.22) / Math.sin(1.25);
       const stand = this.fittings.hinge('aux', this.chassis, -0.19, -0.2, 0.2, 'x', 1.25);
@@ -292,8 +304,6 @@ export class VehicleMesh {
         block(0.22, 0.08, 0.3, side * 0.82, -0.55, 1.7, trim, body);
         block(0.34, 0.14, 0.06, side * 0.84, -0.12, trailer.length - trailer.front + 0.02, this.tail, body);
         block(0.18, 0.1, 0.065, side * 1.1, -0.12, trailer.length - trailer.front + 0.035, this.signals[side < 0 ? 0 : 1], body);
-        for (let z = 0; z < trailer.length - trailer.front; z += 2)
-          block(0.035, 0.07, 0.16, side * (profile.width / 2 + 0.025), 0.18, z, lamp, body);
       }
       const back = trailer.length - trailer.front + 0.025;
       block(profile.width - 0.1, 0.1, 0.1, 0, -0.48, back, metal, body);
@@ -309,6 +319,37 @@ export class VehicleMesh {
     this.headlight.position.set(0, profile.shape === 'motorcycle' ? 0.3 : 0.05, -profile.chassisLength / 2 + 0.08);
     this.headlight.target.position.set(0, -0.5, -40);
     this.chassis.add(this.headlight, this.headlight.target);
+    this.headlight.name = 'headlight-beam'; this.foglight.name = 'foglight-beam';
+    this.foglight.position.set(0, -0.22, -profile.chassisLength / 2 - 0.07);
+    this.foglight.target.position.set(0, -this.rideHeight + 0.08, -profile.chassisLength / 2 - 22);
+    this.chassis.add(this.foglight, this.foglight.target);
+    for (const side of profile.shape === 'motorcycle' ? [0] : [-1, 1]) {
+      block(0.14, 0.08, 0.06, side * profile.width * 0.31, -0.22, -profile.chassisLength / 2 - 0.04, this.fogLens);
+    }
+    const retro = reflectiveMaterial(); retro.vertexColors = true; this.materials.push(retro);
+    const retroShapes = new Map<number, BufferGeometry>();
+    for (const [part, parent] of [this.chassis, ...this.trailers.map(t => t.body)].entries()) {
+      const trailer = part ? profile.trailers![part - 1] : undefined;
+      for (const m of vehicleReflectors(profile, part)) {
+        let geometry = retroShapes.get(m.color);
+        if (!geometry) {
+          geometry = this.geometry(new BoxGeometry());
+          const colors = new Float32Array(geometry.getAttribute('position').count * 3), color = new Color(m.color);
+          for (let i = 0; i < colors.length; i += 3) color.toArray(colors, i);
+          geometry.setAttribute('color', new Float32BufferAttribute(colors, 3)); retroShapes.set(m.color, geometry);
+        }
+        const reflector = new Mesh(geometry, retro); reflector.scale.set(m.w, m.h, m.l); reflector.position.set(m.x, m.y, m.z);
+        reflector.receiveShadow = true; parent.add(reflector);
+      }
+      if (profile.shape !== 'motorcycle') for (const side of [-1, 1]) for (const z of sideLampPositions(profile, part)) {
+        const x = side * (profile.width / 2 + 0.027);
+        block(0.035, 0.22, 0.25, side * (profile.width / 2 + 0.005), 0.1, z, trim, parent);
+        block(0.04, 0.07, 0.18, x, 0.06, z, this.sideLamp, parent);
+        block(0.045, 0.07, 0.14, x, 0.145, z, this.signals[side < 0 ? 0 : 1], parent);
+      }
+      const rear = trailer ? trailer.length - trailer.front : profile.chassisLength / 2;
+      if (part === this.trailers.length) block(0.13, 0.085, 0.04, -profile.width * 0.23, -0.2, rear + 0.055, this.rearFog, parent);
+    }
     if (profile.shape !== 'motorcycle') {
       const front = -profile.chassisLength / 2;
       for (const y of [-0.17, -0.11, -0.05]) block(profile.width * 0.53, 0.012, 0.014, 0, y, front - 0.04, metal);
@@ -337,9 +378,13 @@ export class VehicleMesh {
     this.steering.rotation.z = -car.steering * 2;
     const on = systems.beam !== 'off', high = systems.beam === 'high';
     this.tail.emissiveIntensity = car.braking ? 2 : on ? 0.75 : 0;
-    this.lamp.emissiveIntensity = on ? high ? 1.5 : 0.8 : 0;
+    this.lamp.emissiveIntensity = on ? high ? 3 : 1.8 : 0;
+    this.sideLamp.emissiveIntensity = on || systems.fogLights ? 1.6 : 0;
+    this.fogLens.emissiveIntensity = systems.fogLights ? 2.5 : 0;
+    this.rearFog.emissiveIntensity = systems.fogLights ? 3 : 0;
     const range = Math.max(80, Math.min(800, systems.lightRange)), power = Math.max(0.25, Math.min(2, systems.lightPower));
-    this.headlight.intensity = on ? (high ? 280 : 160) * power * Math.sqrt(range / 180) : 0;
+    this.headlight.intensity = on ? (high ? 650 : 380) * power * Math.sqrt(range / 180) : 0;
+    this.foglight.intensity = systems.fogLights ? 210 * power : 0;
     this.headlight.distance = high ? range : range * 0.55; this.headlight.angle = high ? 0.32 : 0.6;
     this.headlight.target.position.set(0, high ? -1 : -1.1, high ? -range * 0.6 : -32);
     this.signals[0].emissiveIntensity = systems.leftSignal ? 3 : 0;
@@ -360,7 +405,10 @@ export class VehicleMesh {
     this.display.update(car, systems, dt, undefined, operations);
     this.operatorDisplay?.update(car, systems, dt, crane);
     if (crane) this.crane?.sync(crane);
-    this.fittings.sync(operations, dt);
+    const spraying = this.profile.body === 'sprinkler' && !!operations?.target.aux && car.ignition === 'running';
+    this.spray?.update(dt, spraying);
+    this.fittings.sync(operations, dt, this.profile.shape === 'crane' && !!crane && !crane.stowed
+      || ['dumptruck', 'garbage', 'towtruck'].includes(this.profile.body ?? '') && ((operations?.cargo ?? 0) > 0.001 || !!operations?.target.cargo));
     this.windshield?.update(dt, systems, car.speed);
   }
 
@@ -420,7 +468,7 @@ export class VehicleMesh {
         panel.position.x = side < 0 ? -w / 2 + 0.06 : w / 2; panel.castShadow = panel.receiveShadow = true; this.chassis.add(panel);
       }
       for (const z of p.body === 'pickup' ? [nose + 0.025] : [nose + 0.025, end - 0.025]) block(w - 0.08, sill - bottom, 0.05, 0, (sill + bottom) / 2, z, paint);
-    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane' || p.body === 'dumptruck' || p.body === 'tanker' || p.body === 'firetruck' || p.body === 'mixer') {
+    } else if (p.shape === 'tractor' || p.shape === 'flatbed' || p.shape === 'crane' || p.body === 'dumptruck' || p.body === 'tanker' || p.body === 'sprinkler' || p.body === 'firetruck' || p.body === 'mixer') {
       block(w - 0.7, 0.24, cabLength, 0, -0.43, cabCenter);
       for (const z of [cabFront + 0.025, cabBack - 0.025]) block(w, sill + 0.31, 0.05, 0, (sill - 0.31) / 2, z);
       block(1.35, 0.22, length - cabLength, 0, -0.3, (cabBack + length / 2) / 2, trim);
@@ -488,7 +536,7 @@ export class VehicleMesh {
     this.steering.rotation.x = -0.45; this.chassis.add(this.steering);
     this.steering.add(new Mesh(this.geometry(new TorusGeometry(0.18, 0.018, 6, 24)), trim));
     block(0.31, 0.035, 0.03, 0, 0, 0, metal, this.steering);
-    if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'firetruck' && p.body !== 'mixer') {
+    if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'sprinkler' && p.body !== 'firetruck' && p.body !== 'mixer') {
       this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight, !p.body);
     } else if (p.shape === 'tractor') {
       block(1.6, 0.14, 1.25, 0, 0.08, -p.trailers![0].hitchAlong, metal);
@@ -519,7 +567,8 @@ export class VehicleMesh {
     this.operatorDisplay?.dispose();
     this.deviceLights.dispose(); this.deviceLights.material.dispose();
     this.windshield?.dispose();
-    this.root.removeFromParent(); this.headlight.dispose(); this.cabinLight.dispose();
+    this.spray?.dispose();
+    this.root.removeFromParent(); this.headlight.dispose(); this.foglight.dispose(); this.cabinLight.dispose();
     this.geometries.forEach(geometry => geometry.dispose()); this.materials.forEach(material => material.dispose());
   }
 }

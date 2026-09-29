@@ -1,5 +1,22 @@
 import { Matrix4, PerspectiveCamera, Raycaster, Scene, Vector3 } from 'three';
 import { expect, it } from 'vitest';
+
+it('keeps road reflectors visible with street lighting disabled and rebases them with the road', () => {
+  const start = new RoadGenerator('markers', { sample: () => 0 }).start;
+  const segment = new RoadSegment(start, 0, 0, 1200);
+  const samples = Array.from({ length: 601 }, (_, i) => segment.sample(i / 600));
+  const scene = new Scene(), furniture = new RoadFurniture(scene, 'markers');
+  furniture.enabled = false; furniture.update(samples, [], [], 1, 0, 0, true);
+  expect(furniture.reflectors.count).toBeGreaterThanOrEqual(200);
+  expect(furniture.reflectors.visible).toBe(true);
+  const position = furniture.reflectors.position.clone();
+  furniture.update(samples, [], [], 1, 1024, -2048, true);
+  expect(furniture.reflectors.position.x).toBe(position.x - 1024);
+  expect(furniture.reflectors.position.z).toBe(position.z + 2048);
+  expect(furniture.reflectors.material.emissiveIntensity).toBe(1);
+  expect(furniture.reflectors.material.emissive.getHex()).toBe(0);
+  furniture.dispose(); expect(scene.children).toHaveLength(0);
+});
 import { RoadFurniture } from '../src/road/RoadFurniture';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';

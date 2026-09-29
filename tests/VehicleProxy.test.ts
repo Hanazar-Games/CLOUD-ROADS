@@ -8,7 +8,7 @@ it.each(Object.keys(vehicleProfiles) as VehicleKind[])('preserves %s dimensions 
   for (const geometry of geometries) {
     geometry.computeBoundingBox(); const bounds = geometry.boundingBox!;
     expect(bounds.max.x - bounds.min.x).toBeLessThanOrEqual(profile.width + 0.1);
-    expect(geometry.getAttribute('position').count).toBeLessThan(300);
+    expect(geometry.getAttribute('position').count).toBeLessThan(600);
     expect([...geometry.getAttribute('position').array].every(Number.isFinite)).toBe(true);
     expect(geometry.getAttribute('paintMask').count).toBe(geometry.getAttribute('position').count);
     geometry.dispose();

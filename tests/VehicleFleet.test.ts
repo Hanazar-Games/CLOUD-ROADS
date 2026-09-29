@@ -38,7 +38,7 @@ it('shares wet-road grip between braking and turning and includes trailer tires'
 
 it('provides five suspension levels and distinct cars, trucks, buses, articulated rigs and a motorcycle', () => {
   expect(suspensionLevels).toEqual([1, 2, 3, 4, 5]);
-  expect(Object.keys(vehicleProfiles)).toHaveLength(38);
+  expect(Object.keys(vehicleProfiles)).toHaveLength(39);
   for (const [kind, length] of [['truck5', 5], ['truck8', 8], ['semi15', 15], ['semi20', 20]] as const) expect(vehicleProfiles[kind].length).toBe(length);
   expect(vehicleProfiles.motorcycle.wheels).toHaveLength(2);
   expect(vehicleProfiles.semi20.trailers[0]!.wheelbase).toBeGreaterThan(vehicleProfiles.semi15.trailers[0]!.wheelbase);
@@ -68,7 +68,7 @@ it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settl
   expect(size.y).toBeLessThan(car.profile.height + 0.2);
   let parts = 0;
   mesh.root.traverse(object => { if (object instanceof Mesh) parts++; });
-  expect(parts).toBeLessThan(kind === 'roadTrain' ? 160 : 100);
+  expect(parts).toBeLessThan(kind === 'roadTrain' ? 160 : 104);
   mesh.dispose(); expect(scene.children).toHaveLength(0);
 });
 

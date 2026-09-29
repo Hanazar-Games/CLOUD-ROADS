@@ -3,13 +3,16 @@ import { vehicleTemplate } from '../service/ParkedVehicles';
 import { MAX_TRAFFIC, type TrafficSystem } from './TrafficSystem';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
 import { vehicleProxy } from '../vehicle/VehicleProxy';
+import { addRetroreflection } from '../render/ReflectiveMaterial';
+import { sideLampPositions } from '../vehicle/VehicleSafety';
 
 export class TrafficVehicles {
   private readonly batches = new Map<string, InstancedMesh[]>();
+  private readonly lampLayouts = new Map<VehicleKind, number[][]>();
   detailDistance = 240;
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65, alphaHash: true });
   private readonly box = new BoxGeometry();
-  private readonly lamps = new InstancedMesh(this.box, new MeshBasicMaterial({ toneMapped: false }), MAX_TRAFFIC * 8);
+  private readonly lamps = new InstancedMesh(this.box, new MeshBasicMaterial({ toneMapped: false }), MAX_TRAFFIC * 80);
   private readonly drivers = new InstancedMesh(this.box, new MeshStandardMaterial({ roughness: 0.9 }), MAX_TRAFFIC * 2);
   private readonly matrix = new Matrix4();
   private readonly local = new Matrix4();
@@ -26,6 +29,7 @@ export class TrafficVehicles {
       shader.fragmentShader = `varying float vTrafficGlass;\n${shader.fragmentShader}`.replace('#include <alphahash_fragment>',
         'diffuseColor.a *= mix(1.0, 0.28, vTrafficGlass);\n#include <alphahash_fragment>');
     };
+    addRetroreflection(this.material, true);
     this.lamps.name = 'traffic-lamps'; this.drivers.name = 'traffic-drivers';
     this.lamps.count = this.drivers.count = 0; scene.add(this.lamps, this.drivers);
   }
@@ -50,6 +54,11 @@ export class TrafficVehicles {
       this.matrix.makeRotationY(-car.heading).setPosition(car.x - origin.x, car.y, car.z - origin.z);
       this.matrix.multiply(this.local.makeRotationX(car.pitch)).multiply(this.local.makeRotationZ(car.roll));
       const p = car.profile;
+      let lampLayout = this.lampLayouts.get(car.kind);
+      if (!lampLayout) {
+        lampLayout = Array.from({ length: car.trailers.length + 1 }, (_, part) => sideLampPositions(p, part));
+        this.lampLayouts.set(car.kind, lampLayout);
+      }
       for (const [height, width, y, color] of detail(car) ? [[0.46, 0.38, p.eye.y - 0.34, 0x314d60], [0.23, 0.2, p.eye.y, 0xbe9273]] : []) {
         this.local.makeScale(width, height, 0.23).setPosition(p.eye.x, y, -p.eye.along);
         this.drivers.setMatrixAt(this.drivers.count, this.local.premultiply(this.matrix));
@@ -63,6 +72,28 @@ export class TrafficVehicles {
           this.local.makeScale(0.14, 0.13, 0.055).setPosition(side * p.width * 0.43, 0.02, end * (p.chassisLength / 2 + 0.07));
           this.lamps.setMatrixAt(this.lamps.count, this.local.premultiply(this.matrix));
           this.lamps.setColorAt(this.lamps.count++, this.color.setHex(0xff990b));
+        }
+      }
+      for (let part = 0; part <= car.trailers.length; part++) {
+        const body = part ? car.trailers[part - 1] : car;
+        this.matrix.makeRotationY(-body.heading).setPosition(body.x - origin.x, body.y, body.z - origin.z);
+        this.matrix.multiply(this.local.makeRotationX(body.pitch)).multiply(this.local.makeRotationZ(body.roll));
+        const lamp = (x: number, y: number, z: number, w: number, h: number, l: number, color: number) => {
+          this.local.makeScale(w, h, l).setPosition(x, y, z);
+          this.lamps.setMatrixAt(this.lamps.count, this.local.premultiply(this.matrix));
+          this.lamps.setColorAt(this.lamps.count++, this.color.setHex(color));
+        };
+        for (const side of [-1, 1]) {
+          const flashing = signal === side && this.traffic.time % 0.8 < 0.4;
+          if (p.shape !== 'motorcycle') for (const z of lampLayout[part]) {
+            if (darkness > 0.2) lamp(side * (p.width / 2 + 0.055), 0.06, z, 0.035, 0.07, 0.18, 0xffab36);
+            if (flashing) lamp(side * (p.width / 2 + 0.055), 0.145, z, 0.04, 0.07, 0.14, 0xff990b);
+          }
+          if (part) {
+            const trailer = p.trailers![part - 1], rear = trailer.length - trailer.front + 0.09;
+            lamp(side * p.width * 0.32, -0.12, rear, 0.28, 0.11, 0.035, car.braking ? 0xff351c : darkness > 0.2 ? 0xbb2211 : 0x43110c);
+            if (flashing) lamp(side * p.width * 0.43, -0.12, rear, 0.16, 0.11, 0.04, 0xff990b);
+          }
         }
       }
     }

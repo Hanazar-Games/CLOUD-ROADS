@@ -9,6 +9,7 @@ import { serviceArchitecture, type ServiceArchitecture } from './ServiceArchitec
 import { parkingSlots } from './ServiceParking';
 import { chargingBays, chargingPosts, chargingPostColumns } from './ServiceAmenities';
 import { serviceDetails } from './ServiceDetails';
+import { addRetroreflection } from '../render/ReflectiveMaterial';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -43,6 +44,7 @@ export class ServiceMesh {
   private anchorZ = 0;
 
   constructor(scene: Scene, private readonly options: Readonly<WorldOptions>, private readonly terrain: RoadTerrain) {
+    addRetroreflection(this.markings.material);
     for (const mesh of [this.pavement, ...this.batches]) {
       mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping || mesh === this.treeTrunks || mesh === this.structures;
       scene.add(mesh);
@@ -113,6 +115,11 @@ export class ServiceMesh {
             this.edge(this.markings, end, { x: end.x + (other.x - end.x) * t, y: end.y + (other.y - end.y) * t, z: end.z + (other.z - end.z) * t }, 0.18, 0.24, 0.95, 0, 0xe6bb5e);
           }
           for (const height of [0.45, 0.95, 1.4]) this.edge(this.railings, a, b, 0.14, 0.14, height);
+          const reflectorLength = Math.hypot(b.x - a.x, b.z - a.z);
+          if (reflectorLength > 0.1) {
+            const t = Math.min(0.5, 0.25 / reflectorLength);
+            this.edge(this.markings, a, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }, 0.19, 0.1, 0.95, 0, 0xffd67c);
+          }
           const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 4));
           for (let i = 0; i <= count; i++) {
             const t = i / count;

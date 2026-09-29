@@ -35,6 +35,7 @@ export class VehicleSystems {
   rain = 0;
   signal: SignalMode = 'off';
   lightPower = 1;
+  fogLights = false;
   lightRange = 180;
   private blink = 0;
   private lastSignal: SignalMode = 'off';

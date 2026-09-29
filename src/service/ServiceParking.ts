@@ -13,7 +13,7 @@ for (const x of [-57, -39]) for (let along = -80; along <= 80; along += 4)
 for (const along of [-84, -61, -38, -15, 8, 31, 54, 77])
   slots.push({ x: -13, along, heading: 0, length: 19, width: 4, zone: 1, kinds: ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus', 'camper', 'limousine', 'expedition6', 'schoolbus', 'shuttle'] });
 for (const along of [-84, -61, -38])
-  slots.push({ x: 43, along, heading: 0, length: 17, width: 4.5, zone: 2, kinds: ['truck5', 'truck8', 'flatbed12', 'crane', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'mixer', 'garbage', 'refrigerated', 'towtruck'] });
+  slots.push({ x: 43, along, heading: 0, length: 17, width: 4.5, zone: 2, kinds: ['truck5', 'truck8', 'flatbed12', 'crane', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'sprinkler', 'mixer', 'garbage', 'refrigerated', 'towtruck'] });
 for (const along of [-84, -56, -28])
   slots.push({ x: 66, along, heading: 0, length: 25, width: 4.5, zone: 3, kinds: ['semi15', 'semi20', 'stake18', 'heavySemi'] });
 for (let x = -9; x < 12; x += 1.8) slots.push({ x, along: -100, heading: 0, length: 3, width: 1.4, zone: 4, kinds: ['motorcycle'] });

@@ -1,9 +1,21 @@
 import { expect, it } from 'vitest';
 import { InstancedMesh, Scene } from 'three';
 import { TrafficVehicles } from '../src/traffic/TrafficVehicles';
-import { TrafficSystem } from '../src/traffic/TrafficSystem';
+import { MAX_TRAFFIC, TrafficSystem } from '../src/traffic/TrafficSystem';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
+
+it('keeps every articulated side signal within the shared lamp budget at maximum traffic', () => {
+  const scene = new Scene(), traffic = new TrafficSystem('lamps', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
+  const car = new VehiclePhysics('roadTrain'); car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
+  for (let i = 0; i < MAX_TRAFFIC; i++) traffic.entries.push({ id: String(i), car, routeId: 'root', distance: 0, direction: 1, cruise: 15, lane: 0, offset: 0, signal: 1, cooldown: 0 });
+  renderer.update({ x: 0, z: 0 }, 1);
+  const lamps = scene.getObjectByName('traffic-lamps') as InstancedMesh;
+  expect(lamps.count).toBeGreaterThan(MAX_TRAFFIC * 24);
+  expect(lamps.count).toBeLessThanOrEqual(lamps.instanceMatrix.count);
+  expect([...lamps.instanceMatrix.array].every(Number.isFinite)).toBe(true);
+  renderer.dispose(); expect(scene.children).toHaveLength(0);
+});
 
 it('reduces distant traffic geometry without losing bodies or changing simulation state', () => {
   const scene = new Scene(), traffic = new TrafficSystem('lod', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);

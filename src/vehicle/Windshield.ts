@@ -1,26 +1,35 @@
-import { BoxGeometry, DataTexture, DoubleSide, Group, LinearFilter, Mesh, MeshStandardMaterial, PlaneGeometry, RedFormat, ShaderMaterial } from 'three';
+import { BoxGeometry, DataTexture, DoubleSide, Group, LinearFilter, Mesh, MeshStandardMaterial, PlaneGeometry, RedFormat, ShaderMaterial, type BufferGeometry } from 'three';
 import type { VehicleSystems } from './VehicleSystems';
 import { GLASS_COLUMNS, GLASS_ROWS, WindshieldRain } from './WindshieldRain';
+import { wiperLayout } from './WiperLayout';
+import { mergeVehicleParts } from './VehicleGeometry';
 
 export class Windshield {
   readonly root = new Group();
   readonly rain: WindshieldRain;
   private readonly rubber = new MeshStandardMaterial({ color: 0x172022, roughness: 0.85 });
+  private readonly armMaterial = new MeshStandardMaterial({ color: 0x3b494f, roughness: 0.42, metalness: 0.65 });
   private readonly box = new BoxGeometry();
   private readonly blades: Group[] = [];
   private readonly texture: DataTexture;
   private readonly film: Mesh<PlaneGeometry, ShaderMaterial>;
+  private readonly layout;
+  private readonly merged: BufferGeometry[] = [];
 
   constructor(window: Mesh, width: number, height: number) {
     this.root.position.copy(window.position); this.root.quaternion.copy(window.quaternion);
     window.parent!.add(this.root);
-    const radius = Math.min(height * 0.93, width * 0.44);
-    for (const x of [-0.46, 0.04]) {
-      const pivot = new Group(); pivot.position.set(x * width, -height * 0.44, -0.03); this.root.add(pivot);
-      const arm = new Mesh(this.box, this.rubber); arm.scale.set(radius * 0.6, 0.013, 0.015); arm.position.x = radius * 0.3;
+    const { radius, pivots, y } = this.layout = wiperLayout(width, height);
+    for (const x of pivots) {
+      const pivot = new Group(); pivot.name = 'wiper-pivot'; pivot.position.set(x, y, -0.033); this.root.add(pivot);
+      const arm = new Mesh(this.box, this.armMaterial); arm.scale.set(radius * 0.7, 0.014, 0.018); arm.position.x = radius * 0.35;
       const blade = new Mesh(this.box, this.rubber); blade.scale.set(radius * 0.58, 0.024, 0.018);
       blade.position.set(radius * 0.71, 0, -0.009); pivot.add(arm, blade); this.blades.push(pivot);
-      pivot.rotation.z = 0.08;
+      const joint = new Mesh(this.box, this.armMaterial); joint.scale.set(0.045, 0.035, 0.024); pivot.add(joint);
+      const spine = new Mesh(this.box, this.armMaterial); spine.scale.set(radius * 0.45, 0.012, 0.012);
+      spine.position.set(radius * 0.71, 0, -0.022); pivot.add(spine);
+      pivot.rotation.z = this.layout.start;
+      this.merged.push(...mergeVehicleParts(pivot));
     }
     this.rain = new WindshieldRain(width, height);
     this.texture = new DataTexture(this.rain.data, GLASS_COLUMNS, GLASS_ROWS, RedFormat);
@@ -53,12 +62,13 @@ export class Windshield {
         }`,
     });
     this.film = new Mesh(new PlaneGeometry(width, height), material);
+    this.film.name = 'windshield-water';
     this.film.position.z = -0.02; this.film.visible = false; this.film.renderOrder = 2;
     this.root.add(this.film);
   }
 
   update(dt: number, systems: VehicleSystems, speed: number): void {
-    for (const blade of this.blades) blade.rotation.z = 0.08 + systems.sweep * 1.56;
+    for (const blade of this.blades) blade.rotation.z = this.layout.start + systems.sweep * this.layout.arc;
     if (!this.rain.update(dt, systems.rain, systems.sweepFrom, systems.sweepTo, speed, systems.washerSpray)) return;
     this.texture.needsUpdate = true;
     this.film.material.uniforms.time.value = this.rain.time;
@@ -66,6 +76,7 @@ export class Windshield {
   }
 
   dispose(): void {
-    this.root.removeFromParent(); this.film.geometry.dispose(); this.film.material.dispose(); this.texture.dispose(); this.box.dispose(); this.rubber.dispose();
+    this.root.removeFromParent(); this.film.geometry.dispose(); this.film.material.dispose(); this.texture.dispose(); this.box.dispose(); this.rubber.dispose(); this.armMaterial.dispose();
+    this.merged.forEach(geometry => geometry.dispose());
   }
 }

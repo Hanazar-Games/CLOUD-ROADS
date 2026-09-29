@@ -14,7 +14,7 @@ export interface VehicleProfile {
   radius: number; rest: number; travel: number; suspensionRate: number; cg: number; steer: number; steerRate: number;
   wheels: readonly WheelPoint[]; eye: { x: number; y: number; along: number }; paint: number;
   trailers?: readonly TrailerConfig[];
-  body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'citybus' | 'coupe' | 'rally' | 'limousine' | 'expedition' | 'schoolbus' | 'shuttle' | 'mixer' | 'garbage' | 'refrigerated' | 'towtruck';
+  body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'sprinkler' | 'citybus' | 'coupe' | 'rally' | 'limousine' | 'expedition' | 'schoolbus' | 'shuttle' | 'mixer' | 'garbage' | 'refrigerated' | 'towtruck';
   bus?: { rows: readonly number[]; deckHeight: number };
 }
 const axles = (track: number, positions: number[], steeringAxles = 1): WheelPoint[] => positions.flatMap((along, axle) =>
@@ -115,6 +115,7 @@ const fleet = {
 } as const satisfies Record<string, VehicleProfile>;
 export const vehicleProfiles = {
   ...fleet,
+  sprinkler: { ...fleet.tanker, name: '10 米道路洒水车', body: 'sprinkler', mass: 24000, power: 310000, force: 120000, maxSpeed: 25, paint: 0x6cb6b0 },
   roadTrain: { ...fleet.semi20, name: '三节公路列车 · 3 × 10 m', length: 39.4, chassisLength: 6.4, mass: 72000,
     power: 850000, force: 380000, maxSpeed: 25, reverseSpeed: 2.2, brake: 6.5, drag: 9, steerRate: 0.7,
     wheels: axles(2.08, [2.7, -0.8, -2]), eye: { x: -0.65, y: 1.8, along: 2 }, paint: 0xc59a46,

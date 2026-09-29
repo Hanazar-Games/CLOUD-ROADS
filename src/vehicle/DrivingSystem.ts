@@ -159,6 +159,7 @@ export class DrivingSystem {
     lights.replaceChildren(...Object.entries(lightNames).map(([value, name]) => new Option(name, value)));
     wipers.replaceChildren(...Object.entries(wiperNames).map(([value, name]) => new Option(name, value)));
     lights.addEventListener('change', () => { if (Object.hasOwn(lightNames, lights.value)) this.systems.lights = lights.value as LightMode; }, options);
+    element('vehicle-fog-lights').addEventListener('change', () => { this.systems.fogLights = element<HTMLInputElement>('vehicle-fog-lights').checked; }, options);
     wipers.addEventListener('change', () => { if (Object.hasOwn(wiperNames, wipers.value)) this.systems.wipers = wipers.value as WiperMode; }, options);
     const signals = element<HTMLSelectElement>('vehicle-signals');
     signals.replaceChildren(...Object.entries(signalNames).map(([value, name]) => new Option(name, value)));
@@ -361,6 +362,10 @@ export class DrivingSystem {
       this.car.transmission.shift(code === 'BracketRight' ? 1 : -1, this.car.speed);
     }
     if (code === 'KeyG') this.systems.wash();
+    if (code === 'FogLights') {
+      this.systems.fogLights = !this.systems.fogLights;
+      element<HTMLInputElement>('vehicle-fog-lights').checked = this.systems.fogLights;
+    }
     if (code === 'KeyT') this.systems.toggleRoof(this.car.motionSpeed);
     if (code === 'KeyR') this.reset();
     const signal: SignalMode | undefined = !this.cabin.driver ? undefined : code === 'KeyQ' ? 'left' : code === 'KeyE' ? 'right' : code === 'KeyH' ? 'hazard' : undefined;
@@ -481,7 +486,7 @@ export class DrivingSystem {
       element('turn-left').setAttribute('aria-label', this.systems.leftSignal ? '左转灯亮' : '左转灯灭');
       element('turn-right').setAttribute('aria-label', this.systems.rightSignal ? '右转灯亮' : '右转灯灭');
       this.mesh.root.visible = true; this.mesh.sync(this.car, this.getWorld().origin, this.systems, this.systemsDt, this.crane, this.operations);
-      element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯`;
+      element('vehicle-lights-status').textContent = `${this.systems.lights === 'auto' ? '自动 · ' : ''}${lightNames[this.systems.beam]}灯${this.systems.fogLights ? ' · 雾灯' : ''}`;
       element('vehicle-lights-status').classList.toggle('high-beam', this.systems.beam === 'high');
       element('vehicle-wipers-status').textContent = this.systems.hasWindshield ? `雨刮 · ${wiperNames[this.systems.wipers]}` : '无雨刮';
     }
@@ -607,7 +612,8 @@ export class DrivingSystem {
     element('cabin-light').setAttribute('aria-pressed', String(s.cabinLight));
     element('washer-status').textContent = glass ? `玻璃水 ${s.washerFluid.toFixed(2)} L / 3 L${s.washerFluid < 0.2 ? ' · 请停车补液' : ''}` : '无挡风玻璃，无需玻璃水';
     const status = !glass ? '摩托车 · 开放座舱' : `${roof ? s.roofOpen > 0.99 ? '敞篷开启' : s.roofOpen < 0.01 ? '车顶关闭' : '车顶收合中' : '封闭车身'} · 车窗开启 ${Math.round(s.windowOpen * 100)}%`;
-    element('equipment-status').textContent = `${status}${s.equipmentMoving ? ' · 关闭设置后继续动画' : ''}`;
+    const pump = this.car.profile.body === 'sprinkler' ? ` · 洒水泵${this.operations.target.aux ? this.car.ignition === 'running' ? '开启' : '等待点火' : '关闭'}` : '';
+    element('equipment-status').textContent = `${status}${pump}${s.equipmentMoving ? ' · 关闭设置后继续动画' : ''}`;
     element('cabin-status').textContent = `${status}${glass ? ` · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ''}`;
     element('seat-reading').textContent = `${this.cabin.selected.label} · ${this.cabin.driver ? '驾驶权限' : '乘坐模式'} · 风速 ${glass ? s.fan : 0} / 6`;
     element('radio-reading').textContent = `CH ${s.radioChannel} · ${radioStations[s.radioChannel - 1].name}${s.radioPlaying ? '' : ' · 静音'}`;

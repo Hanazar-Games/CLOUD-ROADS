@@ -87,6 +87,11 @@ it('stops for a pedestrian and allows boarding after yielding without driving th
   for (let i = 0; i < 100; i++) traffic.update(0.1, network.routes, anchor, [], person);
   expect(Math.hypot(car.x - person.x, car.z - person.z)).toBeGreaterThan(car.profile.chassisLength / 2);
   expect(car.speed).toBe(0);
+  const stopped = entry.distance;
+  for (let i = 0; i < 30; i++) traffic.update(0.1, network.routes, anchor, [], person);
+  expect(entry.distance).toBe(stopped);
+  for (let i = 0; i < 20; i++) traffic.update(0.1, network.routes, anchor);
+  expect(car.speed).toBeGreaterThan(1);
 });
 
 it('stops before a solid parked car and resumes once the lane is clear', () => {

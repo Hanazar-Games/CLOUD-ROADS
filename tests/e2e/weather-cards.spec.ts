@@ -5,11 +5,12 @@ test('selects weather cards with keys, search and saved presets', async ({ page 
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=WEATHER-CARDS');
   const clear = await control(page, page.locator('#weather-clear'));
-  await expect(page.getByRole('group', { name: '天气', exact: true }).getByRole('radio')).toHaveCount(6);
+  await expect(page.getByRole('group', { name: '天气', exact: true }).getByRole('radio')).toHaveCount(7);
   await clear.focus(); await page.keyboard.press('ArrowRight');
   await expect(page.locator('#weather-overcast')).toBeChecked();
   await expect(page.locator('[data-metric="Weather"]')).toHaveText('多云');
   await page.keyboard.press('ArrowLeft'); await expect(clear).toBeChecked();
+  await page.keyboard.press('ArrowLeft'); await expect(page.locator('#weather-denseFog')).toBeChecked();
   await page.keyboard.press('ArrowLeft'); await expect(page.locator('#weather-fog')).toBeChecked();
   await page.screenshot({ path: info.outputPath('weather-cards-desktop.png') });
   await page.locator('#settings-search').fill('天气 浓雾'); await page.keyboard.press('Enter');

@@ -13,12 +13,14 @@ import type { ServiceArea } from '../service/ServicePlanner';
 import { guardrailGeometry } from './RoadHardwareGeometry';
 import { hasRoadBarrier } from './RoadProtection';
 import { LampGlow } from './LampGlow';
+import { reflectiveMaterial } from '../render/ReflectiveMaterial';
 
 export class RoadFurniture {
   readonly rails = new InstancedMesh(guardrailGeometry(), new MeshStandardMaterial({ color: 0xa5b2b8, metalness: 0.55, roughness: 0.46 }), MAX_ROAD_SEGMENTS * ROAD_SAMPLES * 4);
   readonly posts = new InstancedMesh(new BoxGeometry(), this.rails.material, MAX_ROAD_SEGMENTS * ROAD_SAMPLES);
   readonly poles = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x52636b, metalness: 0.6, roughness: 0.4 }), 8192);
   readonly markers = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.15 }), 16384);
+  readonly reflectors = new InstancedMesh(new BoxGeometry(), reflectiveMaterial(), 32768);
   private readonly markerColor = new Color();
   readonly heads = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffe4b8, emissive: 0xffc781 }), 2048);
   readonly localLights = Array.from({ length: 4 }, () => new PointLight(0xffd4a0, 0, 45, 2));
@@ -39,7 +41,8 @@ export class RoadFurniture {
       this.glow.halos.material.color.setHex(0xd0e9ff); this.glow.pools.material.color.setHex(0xd0e9ff);
       for (const light of this.localLights) light.color.setHex(0xd7ebff);
     }
-    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
+    this.reflectors.name = 'road-reflectors';
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers, this.reflectors]) {
       mesh.count = 0; mesh.visible = false; mesh.receiveShadow = true;
       scene.add(mesh);
     }
@@ -53,7 +56,7 @@ export class RoadFurniture {
       this.version = version;
       this.anchorX = samples[0]?.position.x ?? 0;
       this.anchorZ = samples[0]?.position.z ?? 0;
-      this.rails.count = this.posts.count = this.poles.count = this.heads.count = this.markers.count = 0;
+      this.rails.count = this.posts.count = this.poles.count = this.heads.count = this.markers.count = this.reflectors.count = 0;
       this.lampPositions.length = 0;
       this.glow.pools.count = 0;
       for (let i = 1; i < samples.length; i++) {
@@ -64,6 +67,18 @@ export class RoadFurniture {
         const routeServices = services.filter(site => site.sample.routeId === sample.routeId);
         const serviceAccess = routeServices.some(site => distance >= Math.min(site.start, site.sample.distance - (site.mergeEnd ?? 0)) && distance <= Math.max(site.end, site.sample.distance + (site.mergeEnd ?? 0)));
         const onBridge = bridges.some(span => span.start.routeId === sample.routeId && distance >= span.start.distance && distance <= span.end.distance);
+        if (Math.floor(distance / 12) !== Math.floor(previous.distance / 12)) {
+          for (const center of this.profile.centers) for (const side of [-1, 1]) {
+            this.box(this.reflectors, sample, center + side * (this.profile.halfWidth - 0.18), 0.055, 0.12, 0.025, 0.19);
+            this.reflectors.setColorAt(this.reflectors.count - 1, this.markerColor.setHex(this.profile.centers.length > 1 && Math.sign(center) !== side ? 0xffbf46 : 0xf6f5de));
+          }
+        }
+        if (!serviceAccess && sample.opening === undefined && Math.floor(distance / 16) !== Math.floor(previous.distance / 16)) {
+          for (const side of [-1, 1]) if (onBridge || hasRoadBarrier({ seed: this.seed, options: this.options, bridges, tunnels, services: routeServices }, sample, side)) {
+            this.box(this.reflectors, sample, side * (this.profile.outerHalfWidth + 0.18), 0.87, 0.06, 0.13, 0.3);
+            this.reflectors.setColorAt(this.reflectors.count - 1, this.markerColor.setHex(side > 0 ? 0xffbf46 : 0xf6f5de));
+          }
+        }
         if (!onBridge) {
           const mid = { ...sample, position: { x: (sample.position.x + previous.position.x) / 2,
             y: (sample.position.y + previous.position.y) / 2, z: (sample.position.z + previous.position.z) / 2 } };
@@ -77,8 +92,9 @@ export class RoadFurniture {
           for (const side of [-1, 1]) for (const [height, tall, width, depth, color] of [
             [0.5, 1, 0.18, 0.18, 0xe3e5dc], [0.82, 0.3, 0.2, 0.22, 0x29383b], [0.83, 0.13, 0.12, 0.24, side > 0 ? 0xe7b14d : 0xe6e7df],
           ]) {
-            this.box(this.markers, sample, side * (this.profile.outerHalfWidth + 1.1), height, width, tall, depth);
-            this.markers.setColorAt(this.markers.count - 1, this.markerColor.setHex(color));
+            const mesh = height === 0.83 ? this.reflectors : this.markers;
+            this.box(mesh, sample, side * (this.profile.outerHalfWidth + 1.1), height, width, tall, depth);
+            mesh.setColorAt(mesh.count - 1, this.markerColor.setHex(color));
           }
         }
         const avenue = this.options.roadType === 'avenue';
@@ -107,7 +123,7 @@ export class RoadFurniture {
       for (const [i, lamp] of this.lampPositions.entries()) positions.setXYZ(i, lamp.x - this.anchorX, lamp.y, lamp.z - this.anchorZ);
       positions.needsUpdate = true; this.glow.halos.geometry.setDrawRange(0, this.lampPositions.length);
       this.glow.halos.geometry.computeBoundingSphere();
-      for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers, this.glow.pools]) {
+      for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers, this.reflectors, this.glow.pools]) {
         mesh.instanceMatrix.clearUpdateRanges();
         mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
@@ -118,9 +134,9 @@ export class RoadFurniture {
     for (const mesh of [this.glow.halos, this.glow.pools]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ); mesh.visible = nearRoute && this.enabled;
     }
-    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) {
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers, this.reflectors]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
-      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || mesh === this.posts || mesh === this.markers || this.enabled);
+      mesh.visible = nearRoute && mesh.count > 0 && (mesh === this.rails || mesh === this.posts || mesh === this.markers || mesh === this.reflectors || this.enabled);
     }
   }
 
@@ -162,8 +178,8 @@ export class RoadFurniture {
 
   dispose(): void {
     this.glow.dispose();
-    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
-    for (const mesh of [this.rails, this.poles, this.heads, this.markers]) mesh.material.dispose();
+    for (const mesh of [this.rails, this.posts, this.poles, this.heads, this.markers, this.reflectors]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
+    for (const mesh of [this.rails, this.poles, this.heads, this.markers, this.reflectors]) mesh.material.dispose();
     for (const light of this.localLights) { light.removeFromParent(); light.dispose(); }
   }
 }

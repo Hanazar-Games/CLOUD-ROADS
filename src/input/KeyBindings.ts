@@ -13,13 +13,14 @@ export const bindingActions = [
   ['AutoSlower', 'Minus', '自动驾驶', '最高巡航速度 −5 km/h'], ['AutoFaster', 'Equal', '自动驾驶', '最高巡航速度 +5 km/h'],
   ['KeyL', 'KeyL', '设备', '自动 / 关 / 近光 / 远光'], ['LightPower', 'Shift+KeyL', '设备', '车灯亮度循环'],
   ['LightRange', 'Shift+KeyB', '设备', '车灯距离循环'], ['KeyQ', 'KeyQ', '设备', '左转灯 / 收吊臂'],
+  ['FogLights', 'Shift+KeyF', '设备', '前后雾灯开关'],
   ['KeyE', 'KeyE', '设备', '右转灯 / 伸吊臂 / 步行疾跑'], ['KeyH', 'KeyH', '设备', '双闪'],
   ['KeyB', 'KeyB', '设备', '雨刮模式'], ['KeyG', 'KeyG', '设备', '玻璃水喷洗'], ['Refill', 'Shift+KeyG', '设备', '停车补充玻璃水'],
   ['Comma', 'Comma', '设备', '按住升窗'], ['Period', 'Period', '设备', '按住降窗'], ['KeyN', 'KeyN', '设备', '空调风机 0–6 档'],
   ['KeyK', 'KeyK', '设备', '氛围灯'], ['KeyU', 'KeyU', '设备', '阅读灯'], ['KeyT', 'KeyT', '设备', '低速开关敞篷'],
   ['KeyV', 'KeyV', '设备', '按住鸣笛'], ['Audio', 'Shift+KeyV', '设备', '声音开启 / 静音'],
   ['KeyJ', 'KeyJ', '车型操作', '驾驶室 / 乘客门'], ['KeyY', 'KeyY', '车型操作', '尾门 / 行李舱 / 坡板'],
-  ['KeyI', 'KeyI', '车型操作', '尾翼 / 警示灯 / 驻车支架'], ['KeyO', 'KeyO', '车型操作', '操作席启动 / 收起吊车'],
+  ['KeyI', 'KeyI', '车型操作', '尾翼 / 警示灯 / 洒水泵 / 驻车支架'], ['KeyO', 'KeyO', '车型操作', '操作席启动 / 收起吊车'],
   ['KeyZ', 'KeyZ', '车型操作', '收起吊钩'], ['KeyX', 'KeyX', '车型操作', '放下吊钩'],
   ['KeyC', 'KeyC', '视角 / 座椅', '切换驾驶视角'], ['ViewReset', 'Shift+KeyC', '视角 / 座椅', '视角回正'],
   ['KeyP', 'KeyP', '视角 / 座椅', '座位地图'], ['PageUp', 'PageUp', '视角 / 座椅', '升高座椅'], ['PageDown', 'PageDown', '视角 / 座椅', '降低座椅'],
@@ -54,7 +55,7 @@ export class KeyBindings {
     this.values = { ...values };
   }
   format(text: string): string {
-    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
+    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug|FogLights)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
       (key: string, index: number) => key === 'L' && /\d\s?$/.test(text.slice(0, index)) ? key : this.label(key.startsWith('{') ? key.slice(1, -1) : key.length === 1 ? `Key${key}` : key));
   }
 }

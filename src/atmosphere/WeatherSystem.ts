@@ -2,9 +2,9 @@ import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments, Point
 import { createRng } from '../world/WorldSeed';
 import type { SeasonState } from '../season/SeasonState';
 
-export type WeatherKind = 'clear' | 'overcast' | 'drizzle' | 'rain' | 'storm' | 'fog';
+export type WeatherKind = 'clear' | 'overcast' | 'drizzle' | 'rain' | 'storm' | 'fog' | 'denseFog';
 export interface WeatherProfile { cover: number; rain: number; near: number; far: number; sunlight: number; wind: number }
-export const weatherNames: Record<WeatherKind, string> = { clear: '晴天', overcast: '多云', drizzle: '小雨', rain: '雨天', storm: '风雨', fog: '浓雾' };
+export const weatherNames: Record<WeatherKind, string> = { clear: '晴天', overcast: '多云', drizzle: '小雨', rain: '雨天', storm: '风雨', fog: '浓雾', denseFog: '大雾 · 自定义能见度' };
 export const weatherProfiles: Record<WeatherKind, Readonly<WeatherProfile>> = {
   clear: { cover: 0, rain: 0, near: 1000, far: 1950, sunlight: 1, wind: 1 },
   overcast: { cover: 0.78, rain: 0, near: 650, far: 1750, sunlight: 0.35, wind: 2 },
@@ -12,6 +12,7 @@ export const weatherProfiles: Record<WeatherKind, Readonly<WeatherProfile>> = {
   rain: { cover: 0.95, rain: 0.75, near: 180, far: 1050, sunlight: 0.18, wind: 4 },
   storm: { cover: 1, rain: 1, near: 85, far: 650, sunlight: 0.1, wind: 8 },
   fog: { cover: 0.65, rain: 0, near: 35, far: 420, sunlight: 0.3, wind: 1 },
+  denseFog: { cover: 0.9, rain: 0, near: 0.5, far: 100, sunlight: 0.2, wind: 0.3 },
 };
 
 export class WeatherSystem {
@@ -28,6 +29,7 @@ export class WeatherSystem {
   private readonly wind = { value: 1 };
   private readonly current: WeatherProfile = { ...weatherProfiles.clear };
   private density = 1;
+  private visibility = 100;
   wetness = 0;
   kind: WeatherKind = 'clear';
 
@@ -101,12 +103,17 @@ export class WeatherSystem {
     this.density = Math.max(0.5, Math.min(2, density)); if (immediate) this.transition(1);
   }
 
+  setVisibility(metres: number, immediate = false): void {
+    if (!Number.isFinite(metres)) return;
+    this.visibility = Math.max(2, Math.min(1000, metres)); if (immediate) this.transition(1);
+  }
+
   private transition(blend: number): void {
     const target = this.season?.terrain === 'moon' ? { cover: 0, rain: 0, near: 1e8, far: 2e8, sunlight: 1, wind: 0 }
       : this.season?.terrain === 'mars' ? { cover: 0, rain: 0, near: 1200, far: 3200, sunlight: 0.8, wind: 0.3 }
-        : weatherProfiles[this.kind];
+        : this.kind === 'denseFog' ? { ...weatherProfiles.denseFog, far: this.visibility } : weatherProfiles[this.kind];
     for (const key of Object.keys(target) as (keyof WeatherProfile)[]) {
-      const value = target[key] / (key === 'near' || key === 'far' ? this.density : 1);
+      const value = target[key] / ((key === 'near' || key === 'far') && (this.kind !== 'denseFog' || this.season?.extraterrestrial) ? this.density : 1);
       this.current[key] += (value - this.current[key]) * blend;
     }
   }
