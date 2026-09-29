@@ -65,7 +65,7 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(10); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(11); expect(saved.settings['road-grip']).toBe(45);
   expect(saved.settings['engine-response']).toBe(125); expect(saved.settings['music-ducking']).toBe(65); expect(saved.settings['collision-volume']).toBe(40);
   expect(saved.settings['vegetation-lod']).toBe('0.5'); expect(saved.settings['distant-trees']).toBe('0.25');
   expect(saved.settings['vehicle-detail-distance']).toBe('120'); expect(saved.settings['traffic-scenario']).toBe('stopgo');

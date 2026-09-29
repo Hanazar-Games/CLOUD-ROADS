@@ -21,6 +21,7 @@ export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit,
     if (side === -1) sidePanel(side, nose, nose + 1.45, -0.3, floor + 0.1);
     sidePanel(side, nose + 1.45, -bayLength / 2, -0.3, floor + 0.1);
     sidePanel(side, bayLength / 2, end, -0.3, floor + 0.1);
+    sidePanel(side, -bayLength / 2, bayLength / 2, bayTop, floor + 0.1);
     const bay = fittings.hinge('cargo', parent, side * w / 2, bayTop, 0, 'z', side * 1.5);
     const bayPanel = kit.wheelPanel(-bayLength / 2, bayLength / 2, -0.3, bayTop, 0, paint, bay); bayPanel.position.y = -bayTop;
     for (const z of [-bayLength / 2 + 0.08, bayLength / 2 - 0.08]) block(0.02, bayTop + 0.22, 0.016, side * 0.037, -(bayTop + 0.3) / 2, z, trim, bay);
@@ -34,6 +35,7 @@ export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit,
     const height = ceiling - sill - 0.14, centerY = sill + height / 2;
     for (const z of [nose + 0.045, end - 0.045]) {
       const pane = block(w - 0.16, height, 0.015, 0, centerY, z, glass, parent);
+      for (const y of [sill, ceiling - 0.1]) block(w - 0.08, 0.1, 0.085, 0, y, z, trim, parent);
       if (!deck && z < 0) windshield = pane;
       for (const side of [-1, 1]) block(0.085, height + 0.12, 0.085, side * (w / 2 - 0.05), centerY, z, paint, parent);
       block(w, Math.max(0.1, sill - (deck ? floor + deck * p.bus!.deckHeight : -0.3)), 0.06,
@@ -51,6 +53,13 @@ export function busBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit,
   }
   const door = fittings.hinge('doors', parent, w / 2 - 0.025, floor, nose + 0.35, 'y', -1.35);
   const doorHeight = lowerRoof - floor - 0.15;
+  block(0.065, floor + 0.34, 1.08, 0, -(floor + 0.3) / 2, 0.525, paint, door);
+  for (const [from, to] of [[nose, nose + 0.35], [nose + 1.4, nose + 1.51]])
+    sidePanel(1, from, to, floor - 0.3, lowerRoof);
+  for (const z of [nose + 0.33, nose + 1.42]) block(0.075, doorHeight + 0.08, 0.05, w / 2 - 0.02, floor + doorHeight / 2, z, trim, parent);
+  block(0.09, 0.1, 1.45, -w / 2 + 0.05, lowerRoof - 0.09, nose + 0.78, trim, parent);
+  for (const z of [nose + 0.08, nose + 1.47]) block(0.075, lowerRoof - p.eye.y + 0.5, 0.07,
+    -w / 2 + 0.05, (lowerRoof + p.eye.y - 0.5) / 2, z, trim, parent);
   for (const z of [0, 1.05]) block(0.065, doorHeight, 0.065, 0, doorHeight / 2, z, trim, door);
   block(0.015, doorHeight - 0.14, 0.99, 0, doorHeight / 2, 0.525, glass, door);
   for (const y of [0.04, doorHeight, doorHeight * 0.42]) block(0.07, 0.08, 1.08, 0, y, 0.525, paint, door);

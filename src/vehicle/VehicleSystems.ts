@@ -15,6 +15,7 @@ export class VehicleSystems {
   convertible = true;
   windowTarget = 0;
   windowOpen = 0;
+  doorOpen = 0;
   roofOpen = 1;
   roofTarget = 1;
   fan = 0;
@@ -47,10 +48,11 @@ export class VehicleSystems {
   private cycleRate = 1;
   private cycling = false;
 
-  get cabinExposure(): number { return !this.hasWindows ? 1 : Math.max(this.windowOpen, this.convertible ? this.roofOpen : 0); }
+  get cabinExposure(): number { return !this.hasWindows ? 1 : Math.max(this.doorOpen, this.windowOpen, this.convertible ? this.roofOpen : 0); }
   get equipmentMoving(): boolean { return Math.abs(this.windowTarget - this.windowOpen) > 0.001 || Math.abs(this.roofTarget - this.roofOpen) > 0.001; }
 
   configure(shape: VehicleProfile['shape']): void {
+    this.doorOpen = 0;
     this.hasWindshield = this.hasWindows = shape !== 'motorcycle'; this.convertible = shape === 'roadster';
     if (!this.hasWindows) { this.fan = 0; this.cabinLight = this.ambientLight = false; }
     this.windowOpen = this.hasWindows ? this.windowTarget : 0;

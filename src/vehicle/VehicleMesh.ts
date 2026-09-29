@@ -8,7 +8,7 @@ import { cabStepZ, flatbedDetails, vehicleDetails, type VehicleBlock as Block, t
 import { busBody } from './BusBody';
 import { VehicleFittings } from './VehicleFittings';
 import type { VehicleOperations } from './VehicleOperations';
-import { cabinSeats } from './CabinState';
+import { cabinBounds, cabinSeats } from './CabinState';
 import { CraneMesh } from './CraneMesh';
 import type { CraneSystems } from './CraneSystems';
 import { VehicleDisplay } from './VehicleDisplay';
@@ -17,6 +17,8 @@ import { vehicleFinish } from './VehicleFinish';
 import { sideLampPositions, vehicleReflectors } from './VehicleSafety';
 import { reflectiveMaterial } from '../render/ReflectiveMaterial';
 import { SprinklerSpray } from './SprinklerSpray';
+import { cabinFridge } from './CabinFridge';
+import type { InteriorBounds } from '../render/InteriorVolume';
 
 interface WheelMesh { pivot: Group; spin: Group; spring: Mesh; point: WheelPoint }
 
@@ -49,9 +51,13 @@ export class VehicleMesh {
   private readonly fogLens;
   private readonly rearFog;
   private readonly sideLamp;
+  private readonly reverseLens;
   private readonly spray?: SprinklerSpray;
+  private readonly interior: InteriorBounds;
+  private operatorInterior?: InteriorBounds;
 
   constructor(scene: Scene, private readonly profile: VehicleProfile = vehicleProfiles.roadster) {
+    this.interior = { bounds: cabinBounds(profile, this.rideHeight), matrixWorld: this.chassis.matrixWorld };
     const paint = this.paint = this.material(profile.paint, 0.4, 0.25), trim = this.material(0x202b2c), rubber = this.material(0x171c1d);
     paint.name = 'vehicle-paint';
     const metal = this.material(0xaeb9b5, 0.35, 0.7), leather = this.material(profile.bus ? 0x294454 : profile.shape === 'supercar' ? 0x283138 : 0x675447);
@@ -66,6 +72,8 @@ export class VehicleMesh {
     this.fogLens = this.material(0xffdc85, 0.22); this.fogLens.emissive.setHex(0xffdf8c); this.fogLens.emissiveIntensity = 0;
     this.rearFog = this.material(0xc92b21, 0.25); this.rearFog.emissive.setHex(0xff2414); this.rearFog.emissiveIntensity = 0;
     this.sideLamp = this.material(0xdb8723, 0.3); this.sideLamp.emissive.setHex(0xffa128); this.sideLamp.emissiveIntensity = 0;
+    this.reverseLens = this.material(0xe5eef0, 0.2); this.reverseLens.name = 'reverse-lens';
+    this.reverseLens.emissive.setHex(0xffffff); this.reverseLens.emissiveIntensity = 0;
     this.root.add(this.chassis); this.root.visible = false; scene.add(this.root);
     const makeBlock = (geometry: BufferGeometry): Block => (w, h, l, x, y, z, material = paint, parent = this.chassis) => {
       const mesh = new Mesh(geometry, material); mesh.scale.set(w, h, l); mesh.position.set(x, y, z);
@@ -102,9 +110,15 @@ export class VehicleMesh {
       block(0.025, 0.19, 1.4, -side * 0.089, 0.09, 0.96, leather, door);
       block(0.1, 0.055, 0.55, -side * 0.13, 0.13, 0.98, trim, door);
       block(0.025, 0.045, 0.15, -side * 0.109, 0.18, 0.54, metal, door);
-      const window = new Group(); window.name = 'driver-window'; window.position.set(-side * 0.03, 0.24, 0.98);
-      block(0.015, 0.76, 1.64, 0, 0.38, 0, glass, window);
+      const window = new Group(); window.name = 'driver-window'; window.position.set(-side * 0.03, 0.24, 0.74);
+      const outline = new Shape(); outline.moveTo(-0.85, 0); outline.lineTo(-0.625, 0.8175);
+      outline.lineTo(1.23, 0.8175); outline.lineTo(1.23, 0); outline.closePath();
+      const pane = new Mesh(this.geometry(new ExtrudeGeometry(outline, { depth: 0.015, bevelEnabled: false })), glass);
+      pane.rotation.y = -Math.PI / 2; window.add(pane);
       this.windows.push(window); door.add(window);
+      block(0.035, 0.025, 1.94, -side * 0.025, 0.245, 0.96, trim, door);
+      block(0.08, 0.32, 0.075, side * 0.84, 0.09, 1.2, trim);
+      block(0.09, 0.045, 1.94, side * 0.8, -0.08, 0.22, trim);
       block(0.5, 0.09, 0.055, side * 0.53, 0.02, -2.09, lamp);
       block(0.56, 0.09, 0.055, side * 0.52, 0.04, 2.09, this.tail);
       block(0.03, 0.22, 0.035, side * 0.86, 0.34, -0.66, trim);
@@ -118,9 +132,12 @@ export class VehicleMesh {
     block(1.65, 0.035, 0.045, 0, 1.07, -0.63, metal);
     this.roof.name = 'convertible-roof'; this.chassis.add(this.roof);
     block(1.63, 0.065, 1.85, 0, 0, -0.85, trim, this.roof);
-    block(1.52, 0.5, 0.018, 0, -0.29, 0.08, glass, this.roof);
+    block(1.55, 0.85, 0.018, 0, -0.46, 0.08, glass, this.roof);
+    block(1.64, 0.045, 0.08, 0, -0.88, 0.08, trim, this.roof);
+    block(1.65, 0.14, 0.1, 0, 0.15, 1.23, trim);
     for (const side of [-1, 1]) {
-      block(0.065, 0.54, 0.08, side * 0.78, -0.27, 0.08, trim, this.roof);
+      block(0.07, 0.88, 0.08, side * 0.78, -0.44, 0.08, trim, this.roof);
+      block(0.055, 0.085, 1.87, side * 0.805, -0.035, -0.85, trim, this.roof);
     }
     block(1.58, 0.15, 0.3, 0, 0.25, -0.64, trim);
     block(0.2, 0.17, 0.8, 0, 0.09, 0.2, trim);
@@ -140,6 +157,7 @@ export class VehicleMesh {
     vehicleDetails(profile, this.chassis, kit);
     fleetBody(profile, this.chassis, kit, this.fittings, this.rideHeight);
     vehicleFinish(profile, this.chassis, kit, this.rideHeight);
+    const fridge = cabinFridge(profile, this.chassis, kit);
     if (profile.body === 'ambulance' || profile.body === 'firetruck') {
       const beacon = this.fittings.beacon = this.material(0x347bbf, 0.2); beacon.emissive.setHex(0x268aff);
       for (const side of [-1, 1]) block(0.4, 0.16, 0.28, side * 0.65, Math.min(profile.height - this.rideHeight - 0.1, profile.eye.y + 0.48), -profile.eye.along, beacon);
@@ -161,7 +179,11 @@ export class VehicleMesh {
       block(0.035, 0.035, length, 0, 0, length / 2, metal, stand);
       block(0.13, 0.025, 0.08, 0, 0, length, trim, stand);
     }
-    if (profile.shape === 'crane') { this.crane = new CraneMesh(this.chassis, kit, this.rideHeight); this.geometries.push(...this.crane.mergeParts()); }
+    if (profile.shape === 'crane') {
+      this.crane = new CraneMesh(this.chassis, kit, this.rideHeight); this.geometries.push(...this.crane.mergeParts());
+      const bounds = this.interior.bounds.clone(); bounds.min.set(-1.3, 1.3, -1.53); bounds.max.set(-0.46, 2.12, 0.13);
+      this.operatorInterior = { bounds, matrixWorld: this.crane.turret.matrixWorld };
+    }
     for (const seat of cabinSeats(profile)) {
       if (seat.role === 'operator' || profile.shape === 'motorcycle') continue;
       const width = profile.shape === 'bus' || seat.id.startsWith('rear') ? 0.4 : 0.52;
@@ -189,7 +211,7 @@ export class VehicleMesh {
       this.operatorDisplay.root.rotation.x = -0.2;
       this.crane.turret.add(this.operatorDisplay.root);
     }
-    this.deviceLights = new InstancedMesh(box, new MeshBasicMaterial({ toneMapped: false }), 13);
+    this.deviceLights = new InstancedMesh(box, new MeshBasicMaterial({ toneMapped: false }), 14);
     this.deviceLights.name = 'device-indicators'; this.chassis.add(this.deviceLights);
     for (let i = 0; i < 12; i++) this.deviceLights.setMatrixAt(i,
       new Matrix4().makeScale(0.014, 0.012, 0.012).setPosition(this.display.root.position.x - 0.12 + i * 0.022, eye.y - 0.31, -eye.along - 0.57));
@@ -197,6 +219,7 @@ export class VehicleMesh {
     const ignitionX = profile.shape === 'motorcycle' ? 0.12 : eye.x + 0.23;
     block(0.08, 0.07, 0.04, ignitionX, eye.y - 0.33, -eye.along - 0.48, metal);
     this.deviceLights.setMatrixAt(12, new Matrix4().makeScale(0.044, 0.035, 0.008).setPosition(ignitionX, eye.y - 0.33, -eye.along - 0.455));
+    this.deviceLights.setMatrixAt(13, new Matrix4().makeScale(0.06, 0.026, 0.006).setPosition(fridge.position));
     if (profile.shape !== 'motorcycle') {
       const eye = profile.eye;
       for (let deck = 0; deck < (profile.bus?.rows.length ?? 1); deck++) for (const side of [-1, 1])
@@ -348,6 +371,12 @@ export class VehicleMesh {
         block(0.045, 0.07, 0.14, x, 0.145, z, this.signals[side < 0 ? 0 : 1], parent);
       }
       const rear = trailer ? trailer.length - trailer.front : profile.chassisLength / 2;
+      for (const side of profile.shape === 'motorcycle' ? [0] : [-1, 1]) {
+        const x = side * profile.width * 0.29, y = profile.shape === 'motorcycle' ? 0.16 : -0.12;
+        block(0.18, 0.12, 0.065, x, y, rear + 0.035, trim, parent);
+        block(0.14, 0.072, 0.024, x, y, rear + 0.075, this.reverseLens, parent);
+        for (const offset of [-0.04, 0, 0.04]) block(0.007, 0.063, 0.005, x + offset, y, rear + 0.09, metal, parent);
+      }
       if (part === this.trailers.length) block(0.13, 0.085, 0.04, -profile.width * 0.23, -0.2, rear + 0.055, this.rearFog, parent);
     }
     if (profile.shape !== 'motorcycle') {
@@ -361,6 +390,11 @@ export class VehicleMesh {
   setPaint(color: number): void { this.paint.color.setHex(color); }
   get glassWater(): number { return this.windshield?.rain.coverage ?? 0; }
   get sweptWater(): number { return this.windshield?.rain.sweptCoverage ?? 0; }
+  cabinVolume(operator = false): InteriorBounds {
+    const target = operator && this.crane ? this.crane.turret : this.chassis;
+    target.updateWorldMatrix(true, false);
+    return operator && this.operatorInterior ? this.operatorInterior : this.interior;
+  }
 
   sync(car: VehiclePhysics, origin: { x: number; z: number }, systems: VehicleSystems, dt = 0, crane?: CraneSystems, operations?: VehicleOperations): void {
     this.root.position.set(car.x - origin.x, car.y, car.z - origin.z);
@@ -382,6 +416,7 @@ export class VehicleMesh {
     this.sideLamp.emissiveIntensity = on || systems.fogLights ? 1.6 : 0;
     this.fogLens.emissiveIntensity = systems.fogLights ? 2.5 : 0;
     this.rearFog.emissiveIntensity = systems.fogLights ? 3 : 0;
+    this.reverseLens.emissiveIntensity = car.reversing ? 3.5 : 0;
     const range = Math.max(80, Math.min(800, systems.lightRange)), power = Math.max(0.25, Math.min(2, systems.lightPower));
     this.headlight.intensity = on ? (high ? 650 : 380) * power * Math.sqrt(range / 180) : 0;
     this.foglight.intensity = systems.fogLights ? 210 * power : 0;
@@ -401,6 +436,8 @@ export class VehicleMesh {
       (operations?.doors ?? 0) > 0.001, (operations?.cargo ?? 0) > 0.001, !!operations?.target.aux];
     devices.forEach((on, i) => this.deviceLights.setColorAt(i, this.indicatorColor.setHex(on ? i < 2 ? 0x36ed89 : 0x67deee : 0x07111a)));
     this.deviceLights.setColorAt(12, this.indicatorColor.setHex(car.ignition === 'running' ? 0x36ed89 : car.ignition === 'starting' ? 0xffb340 : 0x692a21));
+    this.deviceLights.setColorAt(13, this.indicatorColor.setHex(car.equipment.fridgeOn && car.ignition === 'running'
+      ? car.equipment.fridgeCooling ? 0x50dbef : 0x36c784 : 0x07111a));
     this.deviceLights.instanceColor!.needsUpdate = true;
     this.display.update(car, systems, dt, undefined, operations);
     this.operatorDisplay?.update(car, systems, dt, crane);
@@ -484,9 +521,19 @@ export class VehicleMesh {
     }
     const rake = passenger ? p.shape === 'suv' ? 0.24 : 0.48 : 0.06;
     panel(w - 0.16, 0.09, cabLength - rake * 2, 0, roof - 0.045, cabCenter);
+    for (const side of [-1, 1]) {
+      block(0.07, 0.1, cabLength - rake * 2 + 0.03, side * (w / 2 - 0.065), roof - 0.045, cabCenter, trim);
+      for (const [from, to] of [[cabFront, doorFront], [doorBack, cabBack]])
+        block(0.07, 0.07, to - from, side * (w / 2 - 0.055), sill + 0.015, (from + to) / 2, trim);
+      for (const z of [doorFront - 0.03, doorBack + 0.03])
+        block(0.09, sill + 0.28, 0.07, side * (w / 2 - 0.055), (sill - 0.22) / 2, z, trim);
+      block(0.12, 0.055, doorBack - doorFront + 0.1, side * (w / 2 - 0.085), -0.225, (doorFront + doorBack) / 2, metal);
+    }
     for (const z of [cabFront, cabBack]) {
       const front = z === cabFront, tilt = Math.atan2(rake, roof - sill) * (front ? 1 : -1);
       const center = z + (front ? rake / 2 : -rake / 2);
+      for (const [y, along] of [[sill + 0.015, z], [roof - 0.035, z + (front ? rake : -rake)]])
+        block(w - 0.12, 0.08, 0.08, 0, y, along, trim);
       const window = block(w - 0.18, Math.hypot(roof - sill, rake) - 0.07, 0.015, 0, (roof + sill) / 2, center, glass); window.rotation.x = tilt;
       if (front) this.windshield = new Windshield(window, w - 0.18, Math.hypot(roof - sill, rake) - 0.07);
       for (const side of [-1, 1]) {
@@ -507,6 +554,7 @@ export class VehicleMesh {
       kit.wheelPanel(0, doorBack - doorFront, -0.22, belt, 0, paint, door, doorFront);
       block(0.025, 0.05, 0.25, side * 0.05, sill - 0.1, doorBack - doorFront - 0.2, metal, door);
       const doorLength = doorBack - doorFront, liningY = (belt - 0.22) / 2, liningHalf = (belt + 0.22) * 0.34;
+      block(0.07, 0.07, doorLength, -side * 0.025, sill + 0.015, doorLength / 2, passenger ? trim : metal, door);
       kit.wheelPanel(doorLength * 0.11, doorLength * 0.89, liningY - liningHalf, liningY + liningHalf, -side * 0.044, passenger ? leather : metal, door, doorFront);
       block(0.11, 0.055, doorLength * 0.43, -side * 0.095, belt - 0.12, doorLength * 0.57, passenger ? trim : paint, door);
       block(0.022, 0.045, 0.15, -side * 0.062, belt - 0.08, doorLength * 0.24, metal, door);

@@ -3,17 +3,20 @@ import { CLOUD_BASE, CLOUD_RELIEF, CLOUD_TILE, CLOUD_TOP } from './CloudField';
 import type { SunSystem } from './SunSystem';
 import { skyShader } from './SkyShader';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { InteriorVolume, interiorShader } from '../render/InteriorVolume';
 
 const fxaa = FXAAShader.fragmentShader.slice(FXAAShader.fragmentShader.indexOf('#define EDGE_STEP_COUNT'), FXAAShader.fragmentShader.lastIndexOf('void main()'));
 
 export class CloudMaterial extends ShaderMaterial {
-  constructor(sun: SunSystem) {
+  constructor(sun: SunSystem, interior = new InteriorVolume()) {
     super({
       name: 'CloudSea', depthTest: false, depthWrite: false,
       uniforms: {
+        ...interior.uniforms,
         sceneColor: { value: null }, sceneDepth: { value: null }, cloudField: { value: null },
         inverseProjection: { value: new Matrix4() }, cameraWorld: { value: new Matrix4() },
         phase: { value: new Vector2() }, altitude: { value: 0 },
+        mistPhase: { value: new Vector2() }, mistStrength: { value: 0 },
         nearFar: { value: new Vector2(0.5, 7000) }, fogRange: { value: new Vector2(1000, 1950) },
         planet: { value: 0 }, cloudsEnabled: { value: true }, immersion: { value: 0 },
         antialias: { value: true }, pixelSize: { value: new Vector2(1, 1) }, cloudSteps: { value: 20 },
@@ -36,12 +39,15 @@ export class CloudMaterial extends ShaderMaterial {
         uniform mat4 inverseProjection, cameraWorld;
         uniform vec2 phase, nearFar, fogRange;
         uniform float altitude;
+        uniform vec2 mistPhase;
+        uniform float mistStrength;
         uniform bool cloudsEnabled;
         uniform bool antialias;
         uniform vec2 pixelSize;
         uniform float cloudSteps;
         ${fxaa}
         ${skyShader}
+        ${interiorShader}
         const float cloudBase = ${CLOUD_BASE.toFixed(1)};
         const float cloudTop = ${CLOUD_TOP.toFixed(1)};
         const float cloudTile = ${CLOUD_TILE.toFixed(1)};
@@ -56,14 +62,24 @@ export class CloudMaterial extends ShaderMaterial {
             * (1.0 - smoothstep(top - 90.0, top, height)) * (0.85 + field.r * 0.15);
         }
 
-        float fogAmount(float distance, vec3 ray) {
+        float mistLayer(float distance, vec3 ray) {
+          if (mistStrength < 0.001) return 1.0;
+          float reach = min(distance, min(fogRange.y, 1200.0));
+          vec3 a = fieldAt((mistPhase + ray.xz * reach * 0.25) * 8.0);
+          vec3 b = fieldAt((mistPhase + ray.xz * reach * 0.75) * 16.0);
+          float eddies = clamp((a.r + b.b - 1.0) * 2.0, -1.0, 1.0);
+          float band = sin((altitude + ray.y * reach * 0.5) * 0.035 + a.b * 6.283);
+          return 1.0 + mistStrength * (eddies * 0.12 + band * 0.06);
+        }
+
+        float fogAmount(float distance, vec3 ray, float mist) {
           if (planet == 1.0) return 0.0;
           float linearFog = smoothstep(fogRange.x, fogRange.y, distance);
           float extinction = 1.0 - exp(-3.912 * max(0.0, distance - fogRange.x) / max(0.5, fogRange.y - fogRange.x));
           float base = mix(linearFog, extinction, 1.0 - smoothstep(0.5, 2.0, fogRange.x));
           float falloff = clamp(ray.y * min(distance, fogRange.y) * 0.003, -1.2, 1.2);
           float layer = abs(falloff) < 0.01 ? 1.0 : (1.0 - exp(-falloff)) / falloff;
-          return 1.0 - pow(max(0.0, 1.0 - base), mix(1.0, layer, weatherCover));
+          return 1.0 - pow(max(0.0, 1.0 - base), mix(1.0, layer, weatherCover) * mist);
         }
 
         void main() {
@@ -75,8 +91,10 @@ export class CloudMaterial extends ShaderMaterial {
           float distanceToScene = depth < 1.0
             ? -perspectiveDepthToViewZ(depth, nearFar.x, nearFar.y) / -direction.z : 1e8;
           vec3 haze = airColor(ray);
+          float indoor = indoorDistance(cameraWorld[3].xyz, ray);
+          float mist = mistLayer(distanceToScene, ray);
           scene = depth >= 1.0 ? mix(skyColor(ray), haze, 1.0 - smoothstep(0.5, 2.0, fogRange.x))
-            : mix(scene, haze, fogAmount(distanceToScene, ray));
+            : mix(scene, haze, fogAmount(max(0.0, distanceToScene - indoor), ray, mist));
           vec4 clouds = vec4(0.0);
           if (cloudsEnabled && immersion < 0.995) {
             float start = 0.0, end = min(distanceToScene, mix(6500.0, min(6500.0, fogRange.y), weatherCover));
@@ -86,6 +104,7 @@ export class CloudMaterial extends ShaderMaterial {
               start = max(0.0, min(baseHit, topHit));
               end = min(end, max(baseHit, topHit));
             } else if (altitude < cloudBase || altitude > cloudTop + cloudRelief * 0.5 + 24.0) end = 0.0;
+            start = max(start, indoor);
             float stepSize = max(0.0, end - start) / cloudSteps;
             for (int i = 0; i < 28; i++) {
               if (float(i) >= cloudSteps || stepSize <= 0.0 || clouds.a > 0.995) break;
@@ -104,8 +123,8 @@ export class CloudMaterial extends ShaderMaterial {
               float silver = pow(max(dot(ray, sunDirection), 0.0), 12.0) * (1.0 - density * 0.6);
               vec3 color = ambientColor * mix(0.24, 0.46, layer)
                 + sunColor * (light * 0.8 + silver * 0.22) * solar.x * (1.0 - weatherCover * 0.75);
-              float mist = fogAmount(t, ray);
-              color = mix(color, haze, max(mist, immersion));
+              float air = fogAmount(max(0.0, t - indoor), ray, mist);
+              color = mix(color, haze, max(air, immersion));
               clouds.rgb += (1.0 - clouds.a) * opacity * color;
               clouds.a += (1.0 - clouds.a) * opacity;
             }

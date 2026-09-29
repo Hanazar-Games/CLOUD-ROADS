@@ -134,7 +134,15 @@
           <div class="actions"><button id="vehicle-ignition" type="button">点火 · {Ignition}</button><button id="vehicle-doors" type="button" hidden></button><button id="vehicle-cargo" type="button" hidden></button><button id="vehicle-aux" type="button" hidden></button><button id="vehicle-trailer-brake" type="button" hidden></button></div>
           <p id="operation-status" class="panel-help" role="status">{Ignition} 点火 / 熄火，J 驾驶室或乘客门，Y 行李舱或尾门，I 尾翼 / 警示灯 / 支架。停车后操作车门，收妥后才能行驶。</p>
           <p id="equipment-status" class="equipment-status" role="status">车载设备就绪</p>
-          <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃与座舱设备。</p>
+          <div class="actions"><button id="vehicle-lock" type="button" aria-pressed="false">锁车 · {VehicleLock}</button></div>
+          <p id="lock-status" class="panel-help" role="status">关闭车门与货舱后锁车；步行靠近车辆可解锁，车内下车会自动解锁。</p>
+          <h4>车载冷藏箱</h4>
+          <button id="vehicle-fridge" type="button" aria-pressed="false">冷藏箱 · {Fridge}</button>
+          <label for="fridge-temperature">目标温度 <output id="fridge-temperature-value">4 °C</output></label>
+          <input id="fridge-temperature" type="range" min="0" max="12" step="1" value="4" />
+          <p id="fridge-status" class="equipment-status" role="status">箱内 18.0 °C · 关闭</p>
+          <p class="panel-help">点火后供电，逐渐降温并恒温；熄火后停止制冷。每辆车保留自己的箱内温度，摩托车安装尾箱式冷藏箱。</p>
+          <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车门、车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃、雨刮、风机和室内灯。</p>
 </div></section>
 <section class="settings-category" id="settings-traffic" aria-labelledby="heading-traffic"><h3 id="heading-traffic">NPC 交通</h3>
           <label class="slider-label" for="traffic-density">交通密度 <output id="traffic-density-value">35%</output></label>
@@ -394,7 +402,7 @@
         <header><div><p class="eyebrow">VEHICLE / CONTROL PANEL</p><h2 id="vehicle-panel-title">载具面板</h2></div><button type="button" data-close>返回旅程 · Esc</button></header>
         <div class="vehicle-panel-scroll"><p id="vehicle-panel-state"></p><dl id="vehicle-panel-specs" class="vehicle-specs"></dl><p id="vehicle-panel-equipment" class="equipment-status"></p>
         <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表</button><button id="panel-equipment" type="button">车载设备</button><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div>
-        <div class="actions"><button id="panel-ignition" type="button">点火 · {Ignition}</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button><button id="panel-powertrain" type="button"></button><button id="panel-regen" type="button"></button><button id="panel-trailer-brake" type="button" hidden></button></div>
+        <div class="actions"><button id="panel-ignition" type="button">点火 · {Ignition}</button><button id="panel-lock" type="button" aria-pressed="false">锁车 · {VehicleLock}</button><button id="panel-fridge" type="button" aria-pressed="false">冷藏箱 · {Fridge}</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button><button id="panel-powertrain" type="button"></button><button id="panel-regen" type="button"></button><button id="panel-trailer-brake" type="button" hidden></button></div>
         <p id="vehicle-panel-help" class="panel-help"></p></div>
       </dialog>
       <div class="crosshair" aria-hidden="true">+</div>

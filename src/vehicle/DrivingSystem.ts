@@ -25,7 +25,7 @@ export class DrivingSystem {
   appliedThrottle = 0;
   cabin = new CabinState(this.car.profile);
   crane = new CraneSystems();
-  operations = new VehicleOperations(this.car.profile);
+  operations = new VehicleOperations(this.car.profile, this.car.equipment);
   readonly cameraRig;
   active = false;
   parked = false;
@@ -39,7 +39,8 @@ export class DrivingSystem {
   private hudTime = 0;
   private systemsDt = 0;
 
-  constructor(private readonly scene: Scene, private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World) {
+  constructor(private readonly scene: Scene, private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World,
+    private readonly getWalker: () => { x: number; y: number; z: number } | undefined = () => undefined) {
     this.mesh = new VehicleMesh(scene);
     this.cameraRig = new DrivingCamera(camera);
     const options = { signal: this.events.signal };
@@ -60,6 +61,11 @@ export class DrivingSystem {
       } catch (error) { element('autopilot-settings-status').textContent = (error as Error).message; }
     }, options);
     for (const id of ['vehicle-ignition', 'panel-ignition']) element(id).addEventListener('click', () => this.ignite(), options);
+    for (const id of ['vehicle-lock', 'panel-lock']) element(id).addEventListener('click', () => this.toggleLock(), options);
+    for (const id of ['vehicle-fridge', 'panel-fridge']) element(id).addEventListener('click', () => this.toggleFridge(), options);
+    element('fridge-temperature').addEventListener('input', () => {
+      this.car.equipment.setFridgeTarget(Number(element<HTMLInputElement>('fridge-temperature').value)); this.describeEquipment();
+    }, options);
     const selector = element<HTMLSelectElement>('vehicle-kind');
     selector.replaceChildren(...Object.entries(vehicleProfiles).map(([kind, profile]) => new Option(profile.name, kind)));
     selector.value = this.car.kind;
@@ -176,7 +182,7 @@ export class DrivingSystem {
   start(resume = false): boolean {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
-    if (resume && !this.parked) return false;
+    if (resume && (!this.parked || this.car.equipment.locked)) return false;
     this.car.gravity = surfaceGravity(world.options.terrain);
     this.surface = new DrivingSurface(world);
     if (!resume) {
@@ -184,7 +190,7 @@ export class DrivingSystem {
       if (!spawn) { this.explainSpace(); return false; }
       this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeadings);
       this.cabin = new CabinState(this.car.profile); this.crane = new CraneSystems();
-      this.operations = new VehicleOperations(this.car.profile);
+      this.operations = new VehicleOperations(this.car.profile, this.car.equipment);
       this.fleetId = undefined;
     }
     this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
@@ -219,8 +225,8 @@ export class DrivingSystem {
     return point;
   }
 
-  canBoard(person: { x: number; y: number; z: number }): boolean {
-    return this.parked && this.getWorld().roadReady && !this.getWorld().searching
+  canBoard(person: { x: number; y: number; z: number }, includeLocked = false): boolean {
+    return this.parked && (includeLocked || !this.car.equipment.locked) && this.getWorld().roadReady && !this.getWorld().searching
       && Math.hypot(person.x - this.car.x, person.z - this.car.z) < this.car.profile.chassisLength / 2 + 4
       && !!this.surface?.canBoard(this.car, person);
   }
@@ -246,6 +252,7 @@ export class DrivingSystem {
   prepareBoarding(entry: ParkedEntry): boolean {
     const world = this.getWorld();
     if (this.active || !world.roadReady || world.searching || !this.input.enabled) return false;
+    if (this.entryVehicle(entry).equipment.locked) return false;
     const car = world.traffic.take(entry.id) ?? world.parkedVehicles.fleet.take(entry.id); if (!car) return false;
     car.transmission.response = this.car.transmission.response;
     for (const [, field] of driftTuning) car[field] = this.car[field];
@@ -253,7 +260,7 @@ export class DrivingSystem {
     this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
     car.gravity = surfaceGravity(world.options.terrain);
     this.surface = new DrivingSurface(world); this.cabin = new CabinState(car.profile); this.crane = new CraneSystems();
-    this.operations = new VehicleOperations(car.profile); this.systems.configure(car.profile.shape);
+    this.operations = new VehicleOperations(car.profile, car.equipment); this.systems.configure(car.profile.shape);
     if (car.profile.shape === 'roadster') this.systems.roofOpen = this.systems.roofTarget = car.roofOpen;
     this.parked = true; element<HTMLSelectElement>('vehicle-kind').value = car.kind;
     element<HTMLSelectElement>('suspension').value = String(car.suspension);
@@ -270,6 +277,35 @@ export class DrivingSystem {
 
   get glassWater(): number { return this.mesh.glassWater; }
   get sweptWater(): number { return this.mesh.sweptWater; }
+  get interior() {
+    if (!this.active || this.systems.cabinExposure > 0.001) return;
+    return this.mesh.cabinVolume(this.cabin.selected.role === 'operator');
+  }
+
+  entryVehicle(entry: ParkedEntry): VehiclePhysics {
+    const world = this.getWorld();
+    return world.traffic.entries.find(e => e.id === entry.id)?.car ?? world.parkedVehicles.fleet.vehicle(entry);
+  }
+
+  private lockTarget(): VehiclePhysics | undefined {
+    if (this.active) return this.cabin.driver ? this.car : undefined;
+    const person = this.getWalker(); if (!person) return;
+    const entry = this.nearbyVehicle(person);
+    return entry ? this.entryVehicle(entry) : this.canBoard(person, true) ? this.car : undefined;
+  }
+
+  toggleLock(): void {
+    const car = this.lockTarget(), ops = car === this.car ? this.operations : undefined;
+    if (!car) return;
+    const changed = car.equipment.toggleLock(Math.max(ops?.doors ?? 0, ops?.target.doors ?? 0),
+      Math.max(ops?.cargo ?? 0, ops?.target.cargo ?? 0), ops?.accessing);
+    element('lock-status').textContent = changed ? `${car.profile.name} · ${car.equipment.locked ? '已锁车' : '已解锁'}` : '请先关好车门与货舱，并等待上下车完成。';
+    this.describeEquipment();
+  }
+
+  private toggleFridge(): void {
+    this.car.equipment.fridgeOn = !this.car.equipment.fridgeOn; this.describeEquipment();
+  }
 
   reset(): void {
     this.autopilot.cancel();
@@ -320,7 +356,9 @@ export class DrivingSystem {
   }
 
   action(code: string): void {
+    if (code === 'VehicleLock') this.toggleLock();
     if (!this.active) return;
+    if (code === 'Fridge') this.toggleFridge();
     if (this.autopilot.active && (['KeyS', 'Space', 'BracketLeft', 'BracketRight', 'Transmission'].includes(code)
       || code === 'KeyW' && this.autopilot.settings.mode !== 'steering'
       || ['KeyA', 'KeyD'].includes(code) && this.autopilot.settings.mode !== 'speed')) this.autopilot.cancel('驾驶员已接管');
@@ -427,7 +465,7 @@ export class DrivingSystem {
     if (this.hudTime >= 0.1) {
       this.hudTime = 0;
       element('vehicle-speed').textContent = String(Math.round(this.car.motionSpeed * 3.6));
-      element('vehicle-gear').textContent = this.car.parked ? 'P' : this.car.speed < -0.1 ? 'R' : this.car.speed > 0.1 ? 'D' : 'N';
+      element('vehicle-gear').textContent = this.car.parked ? 'P' : this.car.reversing ? 'R' : this.car.speed > 0.1 ? 'D' : 'N';
       element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
       element('transmission-status').textContent = this.car.powertrain === 'ev' ? `EV · 单速 · 回收 ${this.car.regeneration}` : `${this.car.transmission.mode === 'auto' ? 'AT' : 'MT'} · ${this.car.transmission.gear} 挡`;
       element('engine-rpm').textContent = String(Math.round(this.car.engineRpm / 10) * 10);
@@ -465,6 +503,7 @@ export class DrivingSystem {
 
   sync(night: number, rain: number, dt = 0): void {
     this.car.roofOpen = this.systems.roofOpen;
+    this.car.equipment.update(this.active ? this.systemsDt : this.parked ? dt : 0, this.car.ignition === 'running');
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
     if (this.parked) {
       const world = this.getWorld();
@@ -473,11 +512,13 @@ export class DrivingSystem {
         const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
         this.systems.update(dt, Math.max(night, sheltered), rain, sheltered, this.car.steering, this.car.motionSpeed);
         this.operations.update(dt);
+        this.systems.doorOpen = this.operations.doors;
         if (this.car.kind === 'crane') this.crane.update(dt, { slew: 0, lift: 0, extend: 0, hoist: 0 }, false, 0);
         this.mesh.sync(this.car, world.origin, this.systems, dt, this.crane, this.operations);
       }
     }
     if (this.active) {
+      this.systems.doorOpen = this.operations.doors;
       const sheltered = this.surface?.inTunnel(this.car.x, this.car.z, 0) ? 1 : 0;
       this.systems.update(this.systemsDt, Math.max(night, sheltered), rain, sheltered, this.car.steering, this.car.motionSpeed);
       element<HTMLSelectElement>('vehicle-signals').value = this.systems.signal;
@@ -516,7 +557,7 @@ export class DrivingSystem {
     this.fleetId = undefined;
     this.mesh.dispose(); this.car = next; this.mesh = new VehicleMesh(this.scene, next.profile);
     this.cabin = new CabinState(next.profile); this.crane = new CraneSystems(); this.updateSeatCamera();
-    this.operations = new VehicleOperations(next.profile);
+    this.operations = new VehicleOperations(next.profile, next.equipment);
     this.systems.configure(next.profile.shape);
     this.applyPaint();
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0; this.describeVehicle();
@@ -588,12 +629,25 @@ export class DrivingSystem {
     const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
     for (const action of ['doors', 'cargo', 'aux'] as const) for (const prefix of ['vehicle', 'panel']) {
       const node = element<HTMLButtonElement>(`${prefix}-${action}`), label = this.operations.label(action);
-      node.hidden = !label; node.disabled = !this.active || !this.cabin.driver || this.operations.accessing
+      node.hidden = !label; node.disabled = !this.active || !this.cabin.driver || this.operations.accessing || action !== 'aux' && this.car.equipment.locked
         || (action !== 'aux' || this.car.kind === 'motorcycle') && this.car.motionSpeed > 0.1;
       node.textContent = `${label} · ${this.operations.target[action] ? '收起 / 关闭' : '展开 / 开启'} · ${this.input.bindings.label(operationKeys[action])}`;
       node.setAttribute('aria-pressed', String(!!this.operations.target[action]));
     }
     element<HTMLButtonElement>('vehicle-reset').disabled = !this.active || !this.cabin.driver || !this.crane.stowed;
+    const lockCar = this.lockTarget(), equipment = this.car.equipment;
+    for (const prefix of ['vehicle', 'panel']) {
+      const lock = element<HTMLButtonElement>(`${prefix}-lock`);
+      lock.disabled = !lockCar || this.operations.accessing;
+      lock.textContent = `${lockCar?.equipment.locked ? '解锁车辆' : '锁车'} · ${this.input.bindings.label('VehicleLock')}`;
+      lock.setAttribute('aria-pressed', String(!!lockCar?.equipment.locked));
+      const fridge = element(`${prefix}-fridge`);
+      fridge.textContent = `冷藏箱 · ${equipment.fridgeOn ? '开启' : '关闭'} · ${this.input.bindings.label('Fridge')}`;
+      fridge.setAttribute('aria-pressed', String(equipment.fridgeOn));
+    }
+    element<HTMLInputElement>('fridge-temperature').value = String(equipment.fridgeTarget);
+    element('fridge-temperature-value').textContent = `${equipment.fridgeTarget} °C`;
+    element('fridge-status').textContent = `箱内 ${equipment.fridgeTemperature.toFixed(1)} °C · ${!equipment.fridgeOn ? '关闭 · 保温中' : this.car.ignition !== 'running' ? '等待点火供电' : equipment.fridgeCooling ? '制冷中' : '恒温待机'}${glass ? '' : ' · 尾箱式安装'}`;
     element<HTMLInputElement>('vehicle-windows').disabled = !glass;
     element<HTMLButtonElement>('vehicle-roof').disabled = !roof || this.car.motionSpeed > 1.4;
     element<HTMLButtonElement>('washer').disabled = !glass || s.washerFluid <= 0;
@@ -611,7 +665,7 @@ export class DrivingSystem {
     element('cabin-light').textContent = `阅读灯 · ${s.cabinLight ? '开启' : '关闭'} · U`;
     element('cabin-light').setAttribute('aria-pressed', String(s.cabinLight));
     element('washer-status').textContent = glass ? `玻璃水 ${s.washerFluid.toFixed(2)} L / 3 L${s.washerFluid < 0.2 ? ' · 请停车补液' : ''}` : '无挡风玻璃，无需玻璃水';
-    const status = !glass ? '摩托车 · 开放座舱' : `${roof ? s.roofOpen > 0.99 ? '敞篷开启' : s.roofOpen < 0.01 ? '车顶关闭' : '车顶收合中' : '封闭车身'} · 车窗开启 ${Math.round(s.windowOpen * 100)}%`;
+    const status = !glass ? '摩托车 · 开放座舱' : `${roof ? s.roofOpen > 0.99 ? '敞篷开启' : s.roofOpen < 0.01 ? '车顶关闭' : '车顶收合中' : '封闭车身'} · 车窗开启 ${Math.round(s.windowOpen * 100)}%${s.doorOpen > 0.001 ? ` · 车门开启 ${Math.round(s.doorOpen * 100)}%` : ''}`;
     const pump = this.car.profile.body === 'sprinkler' ? ` · 洒水泵${this.operations.target.aux ? this.car.ignition === 'running' ? '开启' : '等待点火' : '关闭'}` : '';
     element('equipment-status').textContent = `${status}${pump}${s.equipmentMoving ? ' · 关闭设置后继续动画' : ''}`;
     element('cabin-status').textContent = `${status}${glass ? ` · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ''}`;

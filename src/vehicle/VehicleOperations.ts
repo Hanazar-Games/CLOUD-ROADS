@@ -1,4 +1,5 @@
 import type { VehicleProfile } from './VehicleConfig';
+import type { VehicleEquipment } from './VehicleEquipment';
 
 export type VehicleOperation = 'doors' | 'cargo' | 'aux';
 export const operationKeys: Record<VehicleOperation, string> = { doors: 'KeyJ', cargo: 'KeyY', aux: 'KeyI' };
@@ -8,7 +9,7 @@ export class VehicleOperations {
   readonly target = { doors: 0, cargo: 0, aux: 0 };
   events = 0;
   accessing = false;
-  constructor(readonly profile: VehicleProfile) {}
+  constructor(readonly profile: VehicleProfile, readonly equipment?: VehicleEquipment) {}
   label(action: VehicleOperation): string {
     const p = this.profile;
     if (action === 'cargo' && (p.trailers?.length ?? 0) > 1) return '三节联动车厢尾门';
@@ -30,7 +31,7 @@ export class VehicleOperations {
   }
   get moving(): boolean { return (['doors', 'cargo', 'aux'] as const).some(key => Math.abs(this[key] - this.target[key]) > 0.001); }
   toggle(action: VehicleOperation, speed: number, driver: boolean): boolean {
-    if (this.accessing || !driver || !Number.isFinite(speed) || !this.label(action)
+    if (this.accessing || !driver || !Number.isFinite(speed) || !this.label(action) || action !== 'aux' && this.equipment?.locked
       || (action !== 'aux' || this.profile.shape === 'motorcycle') && Math.abs(speed) > 0.1) return false;
     this.target[action] = 1 - this.target[action]; this.events++; return true;
   }

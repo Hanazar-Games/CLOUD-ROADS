@@ -3,6 +3,7 @@ import { CLOUD_RESOLUTION, CloudField, wrapCloudCoordinate } from './CloudField'
 import { CloudMaterial } from './CloudMaterial';
 import type { SunSystem } from './SunSystem';
 import { weatherProfiles, type WeatherProfile } from './WeatherSystem';
+import { InteriorVolume } from '../render/InteriorVolume';
 
 export class CloudSystem {
   readonly fog = { near: 1000, far: 1950 };
@@ -15,11 +16,13 @@ export class CloudSystem {
   private field: CloudField;
   private driftX = 0;
   private driftZ = 0;
+  private mistX = 0;
+  private mistZ = 0;
   enabled = true;
   sample: ReturnType<CloudField['sample']>;
 
-  constructor(seed: string, private readonly sun: SunSystem, hdr = true) {
-    this.material = new CloudMaterial(sun);
+  constructor(seed: string, private readonly sun: SunSystem, hdr = true, interior = new InteriorVolume()) {
+    this.material = new CloudMaterial(sun, interior);
     this.quad = new Mesh(new PlaneGeometry(2, 2), this.material);
     this.field = new CloudField(seed);
     this.sample = this.field.sample(0, 0, 0);
@@ -43,11 +46,15 @@ export class CloudSystem {
     this.texture.image.data = this.field.data;
     this.texture.needsUpdate = true;
     this.driftX = this.driftZ = 0;
+    this.mistX = this.mistZ = 0;
   }
 
   update(dt: number, camera: PerspectiveCamera, origin: { x: number; z: number }, weather: Readonly<WeatherProfile> = weatherProfiles.clear, shelter = 0, distance = 2048): void {
+    dt = Number.isFinite(dt) ? Math.max(0, Math.min(dt, 1)) : 0;
     this.driftX = wrapCloudCoordinate(this.driftX + dt * 4);
     this.driftZ = wrapCloudCoordinate(this.driftZ + dt * 1.5);
+    this.mistX = wrapCloudCoordinate(this.mistX + dt * 0.65);
+    this.mistZ = wrapCloudCoordinate(this.mistZ + dt * 0.28);
     const x = wrapCloudCoordinate(camera.position.x + origin.x + this.driftX);
     const z = wrapCloudCoordinate(camera.position.z + origin.z + this.driftZ);
     this.sample = this.field.sample(x, camera.position.y, z);
@@ -63,6 +70,8 @@ export class CloudSystem {
     camera.updateMatrixWorld();
     const uniforms = this.material.uniforms;
     uniforms.phase.value.set(x, z);
+    uniforms.mistPhase.value.set(wrapCloudCoordinate(camera.position.x + origin.x + this.mistX), wrapCloudCoordinate(camera.position.z + origin.z + this.mistZ));
+    uniforms.mistStrength.value = earth ? weather.cover * (1 - shelter) : 0;
     uniforms.altitude.value = camera.position.y;
     uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse);
     uniforms.cameraWorld.value.copy(camera.matrixWorld);

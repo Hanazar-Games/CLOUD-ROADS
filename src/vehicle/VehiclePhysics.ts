@@ -1,5 +1,6 @@
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type Suspension, type VehicleKind, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Transmission, type Powertrain } from './Transmission';
+import { VehicleEquipment } from './VehicleEquipment';
 export interface VehicleInput { throttle: number; steer: number; handbrake: boolean }
 export interface SurfaceContact { height: number; grip: number }
 export type SurfaceSampler = (x: number, z: number) => SurfaceContact;
@@ -16,6 +17,8 @@ const wheel = (): WheelState => ({ height: 0, compression: 0, grounded: true });
 export class VehiclePhysics {
   readonly profile: Readonly<VehicleProfile>;
   readonly transmission: Transmission;
+  readonly equipment = new VehicleEquipment();
+  private reverseSelected = false;
   x = 0; y = 0; z = 0; heading = 0;
   gravity = 9.81;
   regeneration = 2;
@@ -68,6 +71,7 @@ export class VehiclePhysics {
   get articulations(): number[] { return this.trailers.map((t, i) => angle((i ? this.trailers[i - 1].heading : this.heading) - t.heading)); }
   get articulation(): number { return this.articulations.reduce((a, b) => Math.abs(a) > Math.abs(b) ? a : b, 0); }
   get powertrain(): Powertrain { return this.transmission.powertrain; }
+  get reversing(): boolean { return this.reverseSelected && !this.parked && this.ignition === 'running'; }
   setPowertrain(kind: Powertrain): void {
     if (kind === this.powertrain) return;
     this.transmission.selectPowertrain(kind, this.speed);
@@ -80,6 +84,7 @@ export class VehiclePhysics {
   get engineRpm(): number { return this.ignition === 'off' ? 0 : this.ignition === 'starting' ? this.powertrain === 'ev' ? 0 : 240 : this.transmission.rpm; }
   toggleIgnition(): void {
     this.ignition = this.ignition === 'off' ? 'starting' : 'off';
+    if (this.ignition === 'off') this.reverseSelected = false;
     this.ignitionTime = this.powertrain === 'ev' ? 0.15 : this.profile.mass > 4000 ? 1.25 : 0.75;
   }
   get maxSpeed(): number { return this.speedLimit ?? this.profile.maxSpeed; }
@@ -97,6 +102,7 @@ export class VehiclePhysics {
     this.transmission.maxSpeed = this.maxSpeed;
   }
   park(): void {
+    this.reverseSelected = false;
     this.impact = this.scrape = 0;
     this.speed = this.lateralSpeed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
@@ -116,6 +122,7 @@ export class VehiclePhysics {
   }
 
   reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeadings: readonly number[] = []): void {
+    this.reverseSelected = false;
     this.impact = this.scrape = 0;
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
     this.speed = this.lateralSpeed = this.steering = this.pitch = this.roll = this.wheelAngle = this.rearWheelAngle = 0;
@@ -233,6 +240,9 @@ export class VehiclePhysics {
     }
     const contacts = this.contacts(surface), { spring, damping } = suspensionTuning(this.suspension, this.profile, this.damping), config = this.profile;
     const throttle = clamp(input.throttle, -1, 1), count = this.wheels.length;
+    if (this.ignition !== 'running') this.reverseSelected = false;
+    else if (Math.abs(this.speed) < 0.2 && throttle) this.reverseSelected = throttle < 0;
+    else if (this.speed > 0.2) this.reverseSelected = false;
     if (throttle && !input.handbrake && this.ignition === 'running') this.parked = false;
     const gripScale = clamp(this.gripScale, 0.25, 1.5);
     const grip = contacts.reduce((sum, c, i) => sum + c.grip * Number(this.wheels[i].grounded), 0) / count * gripScale;

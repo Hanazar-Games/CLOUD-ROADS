@@ -1,6 +1,7 @@
 import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments, Points, PointsMaterial, Vector2, type DepthTexture, type PerspectiveCamera, type Scene, type WebGLRenderer } from 'three';
 import { createRng } from '../world/WorldSeed';
 import type { SeasonState } from '../season/SeasonState';
+import { InteriorVolume, interiorShader } from '../render/InteriorVolume';
 
 export type WeatherKind = 'clear' | 'overcast' | 'drizzle' | 'rain' | 'storm' | 'fog' | 'denseFog';
 export interface WeatherProfile { cover: number; rain: number; near: number; far: number; sunlight: number; wind: number }
@@ -33,7 +34,7 @@ export class WeatherSystem {
   wetness = 0;
   kind: WeatherKind = 'clear';
 
-  constructor(private readonly scene: Scene) {
+  constructor(private readonly scene: Scene, interior = new InteriorVolume()) {
     const rng = createRng(0x72a19), positions = new Float32Array(1400 * 6), phases = new Float32Array(2800), seeds = new Float32Array(5600);
     for (let i = 0; i < positions.length; i += 6) {
       const x = rng() * 100 - 50, y = rng() * 70 - 25, z = rng() * 100 - 50;
@@ -52,20 +53,22 @@ export class WeatherSystem {
     snowGeometry.setAttribute('rainSeed', new BufferAttribute(seeds.filter((_, i) => i % 4 < 2), 2));
     const snowMaterial = new PointsMaterial({ color: 0xe5edf5, size: 0.2, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false });
     for (const [particleMaterial, snow] of [[material, false], [snowMaterial, true]] as const) particleMaterial.onBeforeCompile = shader => {
+      Object.assign(shader.uniforms, interior.uniforms);
       shader.uniforms.rainTime = this.time;
       shader.uniforms.rainDepth = this.depth;
       shader.uniforms.rainResolution = this.resolution;
       shader.uniforms.rainAnchor = this.anchor; shader.uniforms.rainAltitude = this.altitude;
       shader.uniforms.rainDrift = this.drift; shader.uniforms.rainWind = this.wind;
-      shader.vertexShader = `uniform float rainTime, rainAltitude, rainWind;\nuniform vec2 rainAnchor, rainDrift;\nattribute float rainPhase;\nattribute vec2 rainSeed;\nvarying float rainDistance;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
+      shader.vertexShader = `uniform float rainTime, rainAltitude, rainWind;\nuniform vec2 rainAnchor, rainDrift;\nattribute float rainPhase;\nattribute vec2 rainSeed;\nvarying float rainDistance;\nvarying vec3 rainWorld;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         transformed.y += mod(rainPhase - rainTime * ${snow ? '3.0' : '23.0'} - rainAltitude, 70.0) - rainPhase;
         transformed.xz += mod(rainSeed + rainDrift - rainAnchor + 50.0, 100.0) - 50.0 - rainSeed;
         ${snow ? 'transformed.xz += vec2(sin(rainTime * 0.62831853 + rainPhase), cos(rainTime * 0.44879895 + rainSeed.x)) * 0.6;' : 'transformed.x -= (position.y - rainPhase + 25.0) * rainWind / 23.0;'}
-      `).replace('#include <project_vertex>', '#include <project_vertex>\nrainDistance = length(mvPosition.xyz);');
-      shader.fragmentShader = `uniform sampler2D rainDepth;\nuniform vec2 rainResolution;\nvarying float rainDistance;\n${shader.fragmentShader}`
+      `).replace('#include <project_vertex>', '#include <project_vertex>\nrainDistance = length(mvPosition.xyz);\nrainWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = `${interiorShader}\nuniform sampler2D rainDepth;\nuniform vec2 rainResolution;\nvarying float rainDistance;\nvarying vec3 rainWorld;\n${shader.fragmentShader}`
         .replace('#include <color_fragment>', `
           if (gl_FragCoord.z > texture2D(rainDepth, gl_FragCoord.xy / rainResolution).r) discard;
+          if (rainDistance < indoorDistance(cameraPosition, normalize(rainWorld - cameraPosition))) discard;
           #include <color_fragment>
           diffuseColor.a *= smoothstep(1.5, 5.0, rainDistance) * (1.0 - smoothstep(35.0, 65.0, rainDistance));
           ${snow ? 'diffuseColor.a *= 1.0 - smoothstep(0.2, 0.5, length(gl_PointCoord - 0.5));' : ''}

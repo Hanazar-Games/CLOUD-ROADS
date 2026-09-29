@@ -1,4 +1,18 @@
 import type { VehicleProfile } from './VehicleConfig';
+import { Box3, Vector3 } from 'three';
+
+export function cabinBounds(p: VehicleProfile, rideHeight: number): Box3 {
+  const top = p.height - rideHeight;
+  if (p.shape === 'roadster') return new Box3(new Vector3(-0.81, -0.25, -0.85), new Vector3(0.81, 1.055, 1.23));
+  if (p.bus) return new Box3(new Vector3(-p.width / 2 + 0.075, p.eye.y - 1.15, -p.length / 2 + 0.045),
+    new Vector3(p.width / 2 - 0.075, top - 0.1, p.length / 2 - 0.045));
+  const passenger = ['sedan', 'suv', 'supercar'].includes(p.shape), nose = -p.chassisLength / 2;
+  const front = passenger ? p.body === 'limousine' ? -2.45 : p.body === 'pickup' ? -1.35 : -0.8 : nose + 0.08;
+  const back = passenger ? p.body === 'limousine' ? 2.5 : p.body === 'pickup' ? 0.3 : p.shape === 'suv' || p.body === 'hatchback'
+    ? p.chassisLength / 2 - 0.12 : p.shape === 'supercar' ? 0.95 : 1.3 : nose + (p.chassisLength > 6 ? 2.5 : 2);
+  const roof = p.body === 'expedition' ? top - 0.4 : passenger || p.body === 'van' ? top : Math.min(top, p.eye.y + 0.4);
+  return new Box3(new Vector3(-p.width / 2 + 0.06, -0.3, front), new Vector3(p.width / 2 - 0.06, roof - 0.09, back));
+}
 
 export interface CabinSeat { id: string; label: string; role: 'driver' | 'passenger' | 'operator'; x: number; y: number; along: number; row: number; column: number; floor: number }
 export interface SeatAdjustment { x: number; along: number; height: number; recline: number }

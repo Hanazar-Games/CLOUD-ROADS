@@ -27,6 +27,7 @@ import { PresetPanel } from '../settings/PresetPanel';
 import { KeyBindingPanel } from '../settings/KeyBindingPanel';
 import { GaragePanel } from '../garage/GaragePanel';
 import { trafficScenarios } from '../traffic/TrafficSystem';
+import { InteriorVolume } from '../render/InteriorVolume';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -37,8 +38,9 @@ export class Game {
   private readonly renderer = new WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
   private readonly scene = new Scene();
   private readonly sky = new SkySystem(this.scene);
-  private readonly weather = new WeatherSystem(new Scene());
-  private readonly clouds = new CloudSystem(this.initialSeed, this.sky.sun, this.renderer.extensions.has('EXT_color_buffer_float'));
+  private readonly interior = new InteriorVolume();
+  private readonly weather = new WeatherSystem(new Scene(), this.interior);
+  private readonly clouds = new CloudSystem(this.initialSeed, this.sky.sun, this.renderer.extensions.has('EXT_color_buffer_float'), this.interior);
   private readonly camera = new PerspectiveCamera(65, 1, 0.5, 7000);
   private readonly input = new InputManager(this.canvas);
   private readonly settings = new SettingsDialog(() => this.input.clear());
@@ -71,7 +73,7 @@ export class Game {
     this.weather.setSeason(this.world.season);
     this.sky.sun.setTerrain(this.world.options.terrain);
     element<HTMLInputElement>('seed').value = this.initialSeed;
-    this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
+    this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world, () => this.walking?.active ? this.walking.person : undefined);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world, () => this.driving.parked ? this.driving.car : undefined);
     this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), category => {
       this.settings.show();
@@ -148,7 +150,7 @@ export class Game {
     }, { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
-      else if (this.walking.active && (this.driving.canBoard(this.walking.person) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
+      else if (this.walking.active && (this.driving.canBoard(this.walking.person, true) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
       else { this.stopWalking(); this.driving.start(); }
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
@@ -493,6 +495,7 @@ export class Game {
     this.cancelAccess();
     if (this.driving.active) {
       if (!this.driving.exitLocation()) return;
+      this.driving.car.equipment.locked = false;
       this.driving.car.park(); this.driving.autopilot.cancel();
       this.access = { car: this.driving.car, sequence: new VehicleAccess(this.driving.operations, false) };
     } else if (this.walking.active) {
@@ -649,6 +652,7 @@ export class Game {
       service: this.world.services.reduce((level, site) => Math.max(level, ...site.ground.pads.map(pad => Math.max(0, 1 - Math.hypot(pad.x - this.camera.position.x - this.world.origin.x, pad.y - this.camera.position.y, pad.z - this.camera.position.z - this.world.origin.z) / 160))), 0),
       walkingSpeed: this.walking.active && moving && this.walking.person.grounded ? this.walking.person.speed : 0 });
     this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
+    this.interior.update(this.driving.interior, this.camera.position);
     this.clouds.update(frozen ? 0 : dt, this.camera, this.world.origin, this.weather.profile, this.world.shelter, this.viewRadius * CHUNK_SIZE);
     this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
     this.world.serviceMesh.windows.material.emissiveIntensity = this.sky.sun.night * 0.35;
@@ -666,11 +670,13 @@ export class Game {
       this.syncAudioUI();
       if (!this.driving.active) this.driving.describeEquipment();
       const nearby = this.walking.active ? this.driving.nearbyVehicle(this.walking.person) : undefined;
-      const boardable = this.walking.active && (this.driving.canBoard(this.walking.person) || !!nearby);
+      const boardable = this.walking.active && (this.driving.canBoard(this.walking.person, true) || !!nearby);
+      const locked = (nearby ? this.driving.entryVehicle(nearby) : this.driving.car).equipment.locked;
       element('boarding-help').hidden = !boardable && !this.access;
       element('boarding-help').textContent = this.access ? this.access.sequence.closing ? '车门关闭中 · 请稍候'
         : `车门打开中 · 准备${this.access.sequence.entering ? '上' : '下'}车`
-        : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
+        : locked ? `车辆已锁 · ${this.input.bindings.label('VehicleLock')} 解锁`
+          : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
       element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? trafficScenarios[this.world.traffic.scenario] : '交通已关闭'}`;
       this.garagePanel.update();
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
@@ -761,6 +767,11 @@ export class Game {
         'Roof opening': this.driving.systems.roofOpen.toFixed(2),
         'Washer fluid': this.driving.systems.washerFluid.toFixed(2),
         'Cabin exposure': this.driving.systems.cabinExposure.toFixed(2),
+        'Cabin sealed': this.interior.uniforms.interiorActive.value ? 'yes' : 'no',
+        'Vehicle locked': this.driving.car.equipment.locked ? 'yes' : 'no',
+        'Reverse lights': this.driving.car.reversing ? 'on' : 'off',
+        'Fridge temperature': this.driving.car.equipment.fridgeTemperature.toFixed(1),
+        'Fridge cooling': this.driving.car.equipment.fridgeCooling ? 'on' : 'off',
         'Cabin seat': this.driving.cabin.selected.id,
         'Cabin floor': this.driving.cabin.selected.floor,
         'Vehicle operations': `${this.driving.operations.doors.toFixed(2)} / ${this.driving.operations.cargo.toFixed(2)} / ${this.driving.operations.aux.toFixed(2)}`,

@@ -9,7 +9,9 @@ it('uses Backquote ignition and conflict-free ordinary keys for all default acti
   expect(keys.format('{Ignition} 点火 · {PauseToggle} 暂停')).toBe('· 点火 · / 暂停');
   expect(bindingActions.some(([, key]) => /^F\d+$/.test(key))).toBe(false);
   expect(new Set(Object.values(keys.snapshot())).size).toBe(bindingActions.length);
-  keys.bind('Ignition', 'Shift+KeyU'); expect(keys.format('{Ignition} 点火')).toBe('Shift+U 点火');
+  expect(keys.resolve('KeyJ', true)).toBe('VehicleLock');
+  expect(keys.resolve('KeyU', true)).toBe('Fridge');
+  keys.bind('Ignition', 'Shift+KeyO'); expect(keys.format('{Ignition} 点火')).toBe('Shift+O 点火');
 });
 
 it('rebinds actions, rejects conflicts and restores defaults', () => {

@@ -2,6 +2,7 @@ import { PerspectiveCamera } from 'three';
 import { expect, it, vi } from 'vitest';
 import { CloudSystem } from '../src/atmosphere/CloudSystem';
 import { SunSystem } from '../src/atmosphere/SunSystem';
+import { weatherProfiles } from '../src/atmosphere/WeatherSystem';
 
 it('keeps cloud phase and fog unchanged when the render origin moves', () => {
   const clouds = new CloudSystem('CLOUD-ROAD-001', new SunSystem()), camera = new PerspectiveCamera();
@@ -61,4 +62,20 @@ it('resizes the reusable render target and releases every GPU resource', () => {
   });
   clouds.dispose();
   for (const dispose of released) expect(dispose).toHaveBeenCalledOnce();
+});
+
+it('anchors drifting mist to world coordinates and removes local layers in shelter', () => {
+  const clouds = new CloudSystem('mist', new SunSystem()), camera = new PerspectiveCamera();
+  camera.position.set(4000, 650, -7000);
+  clouds.update(0.1, camera, { x: 0, z: 0 }, weatherProfiles.denseFog);
+  const phase = clouds.material.uniforms.mistPhase.value.clone();
+  clouds.update(0, camera, { x: 0, z: 0 }, weatherProfiles.denseFog);
+  expect(clouds.material.uniforms.mistPhase.value).toEqual(phase);
+  camera.position.x -= 4096; camera.position.z += 7168;
+  clouds.update(0, camera, { x: 4096, z: -7168 }, weatherProfiles.denseFog);
+  expect(clouds.material.uniforms.mistPhase.value).toEqual(phase);
+  expect(clouds.material.uniforms.mistStrength.value).toBeGreaterThan(0);
+  clouds.update(0, camera, { x: 4096, z: -7168 }, weatherProfiles.denseFog, 1);
+  expect(clouds.material.uniforms.mistStrength.value).toBe(0);
+  clouds.dispose();
 });
