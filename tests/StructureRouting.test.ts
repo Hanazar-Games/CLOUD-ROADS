@@ -28,7 +28,7 @@ describe('terrain-led structure alignments', () => {
       const t = Math.max(0, Math.min(1, (128 - z - 400) / 1400));
       return 500 - Math.sin(t * Math.PI) ** 2 * 360;
     } };
-    const options = { ...DEFAULT_OPTIONS, routeStyle, elevationMode }, generator = new RoadGenerator('deep-valley', terrain, options);
+    const options = { ...DEFAULT_OPTIONS, bridgeHeight: 500, routeStyle, elevationMode }, generator = new RoadGenerator('deep-valley', terrain, options);
     let point = generator.start; const samples = [];
     while (point.distance < 2600) {
       const segment = generator.next(point);

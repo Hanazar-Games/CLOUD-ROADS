@@ -84,7 +84,8 @@ export class World {
   private renderTunnels: TunnelSpan[] = [];
   private renderServices: ServiceArea[] = [];
   private renderSamples: RoadSample[] = [];
-  private scout: { road: RoadSpine; kind: 'service' | 'pass' | 'junction'; id: number; progress: number } | undefined;
+  private scout: { road: RoadSpine; kind: 'service' | 'pass' | 'junction' | 'landmark'; id: number; progress: number } | undefined;
+  landmarkStatus = '';
   private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
   roadReady = false;
@@ -278,6 +279,14 @@ export class World {
   }
   get serviceSearchProgress(): number | null { return this.scout?.kind === 'service' ? this.scout.progress : null; }
   get junctionSearchProgress(): number | null { return this.scout?.kind === 'junction' ? this.scout.progress : null; }
+  get landmarkSearchProgress(): number | null { return this.scout?.kind === 'landmark' ? this.scout.progress : null; }
+
+  requestLandmarkView(): void {
+    if (this.scout?.kind === 'landmark') { this.scout = undefined; this.landmarkStatus = '已取消定位。'; return; }
+    if (this.scout || !this.roadReady || !this.options.landmarkBridges) return;
+    this.landmarkStatus = '沿当前分支寻找可衔接的大桥，可再次点击取消。';
+    this.scout = { road: this.road.fork(), kind: 'landmark', id: (this.roadSample?.distance ?? 0) + 200, progress: 0 };
+  }
 
   inspectCrossing(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     const site = this.crossings[0];
@@ -312,12 +321,30 @@ export class World {
 
   private advanceServiceView(camera: PerspectiveCamera): void {
     const scout = this.scout!;
+    if (scout.kind === 'landmark') {
+      const limit = scout.id + this.options.landmarkMax * 2 + 12000;
+      const distance = scout.road.segments.at(-1)?.end.distance ?? scout.id;
+      scout.road.advanceToDistance(Math.max(scout.id, distance) + 384);
+      scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / limit);
+      const segment = scout.road.segments.find(s => s.start.structure?.landmark && s.start.structure.start > scout.id
+        && s.start.distance >= s.start.structure.start - 1e-6);
+      if (segment) {
+        const sample = segment.sample(0); this.placeOnRoad(camera, sample, 6); this.roadReady = false;
+        this.serviceView = { heading: sample.heading, pitch: -0.03 };
+        this.landmarkStatus = `已到达 ${(sample.distance / 1000).toFixed(1)} km · ${(sample.structure!.end - sample.structure!.start).toFixed(0)} m 双塔斜拉桥。`;
+        this.scout = undefined;
+      } else if (distance > limit) {
+        this.scout = undefined; this.landmarkStatus = '当前范围未找到可衔接桥位，请提高最大坡度或使用自然起伏。';
+      }
+      return;
+    }
     if (scout.kind === 'junction') {
       const target = scout.id * JUNCTION_INTERVAL;
       const ready = scout.road.advanceToDistance(target + 1400);
       scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / (target + 1400));
       if (!ready) return;
       const sample = scout.road.segments.find(s => s.start.distance <= target - 100 && s.end.distance >= target - 100)!.atDistance(target - 100);
+      if (sample.structure?.landmark) { scout.id++; return; }
       this.placeOnRoad(camera, sample, 6);
       this.roadReady = false;
       this.serviceView = { heading: sample.heading, pitch: -0.04 };
@@ -344,7 +371,7 @@ export class World {
     scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / target);
     if (!ready) return;
     const site = this.network.active.servicePlanner.detect(scout.road.samples).find(site => site.id === scout.id);
-    if (!site) throw new Error('Service area search did not produce a complete site');
+    if (!site) { scout.id++; return; }
     const pad = site.ground.pads.at(-1)!, point = padPoint(pad, -pad.side * 75, -110, 75);
     const ground = this.height.sample(point.x, point.z);
     point.y = Math.max(point.y, ground + 35);

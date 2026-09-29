@@ -4,13 +4,23 @@ import { parsePreset, validatePreset, PresetStore, type SettingRules } from '../
 
 const rules: SettingRules = { 'vehicle-kind': { choices: ['roadster', 'crane'] }, 'hud-style': { choices: ['digital', 'dial', 'minimal'] },
   'steering-assist': { boolean: true }, 'vehicle-max-speed': { min: 20, max: 400 } };
-const preset = () => ({ format: 'cloud-roads-preset', version: 7, name: '雨中山路', seed: 'preset-seed', world: { ...DEFAULT_OPTIONS },
+const preset = () => ({ format: 'cloud-roads-preset', version: 8, name: '雨中山路', seed: 'preset-seed', world: { ...DEFAULT_OPTIONS },
   factorySpeed: true, settings: { 'vehicle-kind': 'crane', 'hud-style': 'dial', 'steering-assist': false, 'vehicle-max-speed': 79 } });
 
 it('round-trips settings without runtime position, speed, mileage or device consumption', () => {
   const data = preset(); expect(parsePreset(JSON.stringify(data), rules)).toEqual(data);
   expect(validatePreset({ ...data, position: { x: 1, z: 2 } }, rules)).toBe(false);
   expect(validatePreset({ ...data, settings: { ...data.settings, 'vehicle-trip': 250 } }, rules)).toBe(false);
+});
+
+it('restores an explicit startup snapshot independently of named presets and safely cancels it', () => {
+  const data = new Map<string, string>();
+  const store = new PresetStore({ getItem: key => data.get(key) ?? null, setItem: (key, value) => { data.set(key, value); } }, rules);
+  const saved = parsePreset(JSON.stringify(preset()), rules);
+  expect(store.startup()).toBeUndefined(); store.save(saved); store.setStartup(saved);
+  expect(store.startup()).toEqual(saved);
+  store.save({ ...saved, seed: 'changed' }); expect(store.startup()!.seed).toBe(saved.seed);
+  store.setStartup(null); expect(store.startup()).toBeUndefined(); expect(store.list()).toHaveLength(1);
 });
 
 it('rejects malformed, oversized, out-of-range and incomplete imports before they can apply', () => {

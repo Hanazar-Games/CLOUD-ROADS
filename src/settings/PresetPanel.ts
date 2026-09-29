@@ -44,18 +44,7 @@ export class PresetPanel {
     element('preset-apply').addEventListener('click', () => this.attempt(() => {
       const selected = this.selected(); if (!selected) return;
       const preset = parsePreset(JSON.stringify(selected), this.rules);
-      this.loadWorld(preset);
-      for (const id of [...controls, ...graphics]) {
-        const node = element<HTMLInputElement | HTMLSelectElement>(id), value = preset.settings[id];
-        if (node instanceof HTMLInputElement && node.type === 'checkbox') node.checked = value as boolean;
-        else node.value = String(value);
-        if (controls.includes(id)) node.dispatchEvent(new Event(node instanceof HTMLSelectElement || node.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
-      }
-      for (const id of toggles) {
-        const node = element<HTMLButtonElement>(id);
-        if ((node.getAttribute('aria-pressed') === 'true') !== preset.settings[id] && !node.disabled) node.click();
-      }
-      this.finish(preset); this.status(`已应用「${preset.name}」，关闭设置后可从新起点出发。`);
+      this.apply(preset); this.status(`已应用「${preset.name}」，关闭设置后可从新起点出发。`);
     }), options);
     element('preset-delete').addEventListener('click', () => this.attempt(() => {
       const selected = this.selected(); if (!selected || selected === this.imported) return;
@@ -63,7 +52,38 @@ export class PresetPanel {
     }), options);
     element('preset-import').addEventListener('change', () => { void this.importFile(); }, options);
     element('preset-import-open').addEventListener('click', () => element<HTMLInputElement>('preset-import').click(), options);
+    element('startup-save').addEventListener('click', () => this.attempt(() => {
+      const preset = this.capture(); this.store.setStartup(preset);
+      element('startup-status').textContent = `已保存「${preset.name}」；下次打开自动恢复，后续调整请再次保存。`;
+    }), options);
+    element('startup-clear').addEventListener('click', () => this.attempt(() => {
+      this.store.setStartup(null); element('startup-status').textContent = '已取消启动恢复，命名预设仍保留。';
+    }), options);
     this.refresh();
+  }
+
+  restoreStartup(seed?: string): boolean {
+    try {
+      const preset = this.store.startup(); if (!preset) return false;
+      this.apply(seed ? { ...preset, seed } : preset);
+      element('startup-status').textContent = `已恢复「${preset.name}」${seed ? '，使用链接中的世界种子' : ''}。`;
+      return true;
+    } catch (error) { this.error(error); return false; }
+  }
+
+  private apply(preset: SettingsPreset): void {
+    this.loadWorld(preset);
+    for (const id of [...controls, ...graphics]) {
+      const node = element<HTMLInputElement | HTMLSelectElement>(id), value = preset.settings[id];
+      if (node instanceof HTMLInputElement && node.type === 'checkbox') node.checked = value as boolean;
+      else node.value = String(value);
+      if (controls.includes(id)) node.dispatchEvent(new Event(node instanceof HTMLSelectElement || node.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
+    }
+    for (const id of toggles) {
+      const node = element<HTMLButtonElement>(id);
+      if ((node.getAttribute('aria-pressed') === 'true') !== preset.settings[id] && !node.disabled) node.click();
+    }
+    this.finish(preset);
   }
 
   private capture(): SettingsPreset {
@@ -73,7 +93,7 @@ export class PresetPanel {
       settings[id] = node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
-    const preset = { format: 'cloud-roads-preset', version: 7, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
+    const preset = { format: 'cloud-roads-preset', version: 8, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
     return parsePreset(JSON.stringify(preset), this.rules);
   }
   private async importFile(): Promise<void> {

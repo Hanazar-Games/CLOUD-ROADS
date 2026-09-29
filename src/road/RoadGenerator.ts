@@ -7,6 +7,7 @@ import type { MountainGuide } from '../terrain/MountainRanges';
 import { serviceTarget } from '../service/ServiceSchedule';
 import { StructurePlanner } from './StructurePlanner';
 import { junctionApproach, junctionLead, junctionsEnabled, junctionTarget } from './JunctionSchedule';
+import { landmarkTarget, planLandmark } from './LandmarkBridge';
 
 export interface RoadTerrain { sample(x: number, z: number): number; route?(z: number): MountainGuide | undefined }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -27,6 +28,23 @@ export class RoadGenerator {
 
   next(start: RoadControlPoint): RoadSegment {
     if (absoluteElevation(this.options)) start = this.elevationTarget(start);
+    if (start.structure?.landmark && start.distance >= start.structure.finish - 1e-6)
+      start = { ...start, structure: undefined, structureStep: undefined };
+    if (this.options.landmarkBridges && !start.structure && start.distance >= (start.nextLandmark ?? landmarkTarget(this.seed, 0, this.options))) {
+      const structure = planLandmark(start, this.terrain, this.options);
+      start = { ...start, structure, structureStep: 0,
+        nextLandmark: structure ? landmarkTarget(this.seed, structure.end, this.options) : start.distance + 960 };
+    }
+    if (start.structure?.landmark) {
+      const plan = start.structure, step = start.structureStep ?? 0, approaching = step < plan.approach!.length;
+      const grade = approaching ? plan.approach![step] : 0;
+      const remaining = start.distance < plan.end - 1e-6 ? plan.end - start.distance : plan.finish - start.distance;
+      const segment = new RoadSegment({ ...start, mountain: undefined, junction: undefined }, plan.heading, grade,
+        approaching ? 96 : Math.min(96, remaining));
+      segment.end.structureStep = approaching ? step + 1 : step;
+      segment.end.nextMountain = segment.end.nextStructure = plan.finish + 192;
+      return segment;
+    }
     const junction = junctionsEnabled(this.options) && junctionApproach(start.distance, this.options);
     start = { ...start, junction: junction || undefined };
     if (junction) {
@@ -152,7 +170,8 @@ export class RoadGenerator {
         const routeCost = guide ? Math.abs(segment.end.position.y - guide.height) / 150
           + Math.abs(segment.end.position.x - guide.x) / 1500 : 0;
         const climbCost = start.climb ? Math.min(1, Math.abs(this.terrain.sample(segment.end.position.x, segment.end.position.z) + 1 - start.climb.target) / this.climbGain(start.climb.cycle)) * 0.15 : 0;
-        const score = terrainCost + cliffCost + curvatureCost + slopeCost + repetitionCost + routeCost + climbCost;
+        const score = terrainCost * (0.25 + this.options.terrainFollow * 1.5) + cliffCost + this.earthworkCost(segment)
+          + curvatureCost + slopeCost + repetitionCost + routeCost * (1 + this.options.terrainFollow * 2) + climbCost;
         if (score < bestScore) { bestScore = score; best = segment; }
       }
     }
@@ -181,7 +200,16 @@ export class RoadGenerator {
       numerator += response * (this.terrain.sample(point.x, point.z) + 1 - point.y);
       denominator += response * response;
     }
-    return clamp(start.grade + 0.5 * numerator / denominator, this.options.maxGrade);
+    return clamp(start.grade + (0.15 + this.options.terrainFollow * 0.7) * numerator / denominator, this.options.maxGrade);
+  }
+
+  private earthworkCost(segment: RoadSegment): number {
+    let cost = 0;
+    for (const t of [0.5, 1]) {
+      const p = segment.sample(t).position, gap = p.y - this.terrain.sample(p.x, p.z);
+      cost += Math.max(0, gap - this.options.bridgeHeight) / 20 + Math.abs(gap - 1) / 100;
+    }
+    return cost * this.options.terrainFollow;
   }
 
   private highwaySegment(start: RoadControlPoint, straight = false): RoadSegment {
@@ -191,8 +219,9 @@ export class RoadGenerator {
     const desired = this.start.heading + clamp(guide ? direction * 0.6 + Math.atan2(guide.x - x, 1800) * 0.4 : direction, 0.35);
     const heading = this.limitHeading(start, straight ? this.start.heading : start.heading + clamp((desired - start.heading) * 0.16, Math.PI / 60));
     const limit = this.options.maxGrade;
-    const grade = absoluteElevation(this.options) ? this.nextGrade(start, this.desiredGrade(start, heading))
-      : limit === 0 ? 0 : clamp(start.grade + clamp(this.desiredGrade(start, heading) - start.grade, 0.002 * Math.max(1, limit / 0.03)), limit);
+    const desiredGrade = this.desiredGrade(start, heading, 96 + this.options.terrainFollow * 384);
+    const grade = absoluteElevation(this.options) ? this.nextGrade(start, desiredGrade)
+      : limit === 0 ? 0 : clamp(start.grade + clamp(desiredGrade - start.grade, 0.002 * Math.max(1, limit / 0.03)), limit);
     return new RoadSegment(start, heading, grade);
   }
 
@@ -206,9 +235,15 @@ export class RoadGenerator {
     const length = hairpin ? Math.round([0, 0, 272, 224, 192, 160][level] * (0.88 + variation * 0.24))
       : plan.stage === 0 || exiting ? 96 : [0, 0, 288, 192, 96, 96][level] * (1 + variation * 0.16);
     const heading = this.limitHeading(start, hairpin ? target : start.heading + clamp(target - start.heading, Math.PI / 10), length);
-    const desired = this.desiredGrade(start, heading, length);
-    const grade = this.nextGrade(start, desired);
-    const segment = new RoadSegment(start, heading, grade, length, hairpin ? 'hairpin' : 'traverse');
+    let segment = new RoadSegment(start, heading, this.nextGrade(start, this.desiredGrade(start, heading, length)), length, hairpin ? 'hairpin' : 'traverse');
+    if (this.options.terrainFollow > 0 && hairpin && !absoluteElevation(this.options)) {
+      let score = this.earthworkCost(segment);
+      for (const scale of [1.15, 1.3]) {
+        const candidate = new RoadSegment(start, heading, this.nextGrade(start, this.desiredGrade(start, heading, length * scale)), length * scale, 'hairpin');
+        const cost = this.earthworkCost(candidate) + (scale - 1) * 0.1;
+        if (cost < score) { segment = candidate; score = cost; }
+      }
+    }
     const aligned = Math.abs(target - heading) < 1e-8;
     const stage = !aligned ? plan.stage : plan.stage + (level === 5 && hairpin ? 2 : 1);
     segment.end.mountain = exiting && aligned ? undefined : { ...plan, stage };

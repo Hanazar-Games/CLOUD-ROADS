@@ -52,7 +52,8 @@ export class StructurePlanner {
         if (distance(d) - distance(entry) > (kind === 'tunnel' ? MAX_TUNNEL_LENGTH : 4800)) return;
       } else if (entry >= 0) {
         const end = this.boundary(inside, d - 32, d, false);
-        if (kind === 'bridge' ? peak <= 200 || gap(end + 32) < -25 : peak < 35 || distance(end) - distance(entry) < 120) return;
+        if (kind === 'bridge' ? peak <= 200 || gap(end + 32) < -25
+          || this.options.terrainFollow >= 0.5 && peak > this.options.bridgeHeight : peak < 35 || distance(end) - distance(entry) < 120) return;
         if (kind === 'tunnel' && (distance(end) - distance(entry) > MAX_TUNNEL_LENGTH
           || gap(entry - 24) > 5 || gap(end + 24) > 5)) return;
         return { kind, start: distance(entry), end: distance(end), finish: distance(end + ROAD_STEP), grade, heading: start.heading };

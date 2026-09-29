@@ -3,7 +3,7 @@ export const ROAD_SAMPLES = 48;
 export interface RoadVector { x: number; y: number; z: number }
 export interface MountainPlan { stage: number; side: number }
 export interface ClimbPlan { cycle: number; base: number; target: number; ascending: boolean }
-export interface StructurePlan { kind: 'bridge' | 'tunnel'; start: number; end: number; finish: number; grade: number; heading: number }
+export interface StructurePlan { kind: 'bridge' | 'tunnel'; start: number; end: number; finish: number; grade: number; heading: number; landmark?: boolean; approach?: readonly number[] }
 export interface RoadControlPoint {
   routeId?: string;
   opening?: number;
@@ -20,6 +20,8 @@ export interface RoadControlPoint {
   climb?: ClimbPlan;
   structure?: StructurePlan;
   nextStructure?: number;
+  structureStep?: number;
+  nextLandmark?: number;
 }
 export interface RoadSample extends RoadControlPoint {
   tangent: RoadVector;

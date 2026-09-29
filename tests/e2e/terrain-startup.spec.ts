@@ -1,0 +1,53 @@
+import { expect, test } from '@playwright/test';
+import { openSettings, closeSettings, control } from './settings';
+
+test('restores explicit local startup settings, honors shared seeds and cancels without deleting named presets', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/?seed=STARTUP-054'); await openSettings(page);
+  await (await control(page, page.locator('#terrain-follow'))).fill('95');
+  await page.locator('#bridge-height').fill('80');
+  await page.locator('#landmark-min').fill('60'); await page.locator('#landmark-max').fill('90');
+  await page.locator('#landmark-length').fill('1600'); await page.locator('#landmark-clearance').fill('100');
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('truck8');
+  await (await control(page, page.locator('#preset-name'))).fill('贴山启动');
+  await page.locator('#preset-save').click(); await page.locator('#startup-save').click();
+  await expect(page.locator('#startup-status')).toContainText('已保存');
+  await page.reload(); await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes');
+  await expect(page.locator('#explorer')).toBeHidden();
+  await openSettings(page); await expect(page.locator('#vehicle-kind')).toHaveValue('truck8');
+  await (await control(page, page.locator('#terrain-follow'))).fill('0');
+  await page.reload(); await openSettings(page);
+  await expect(page.locator('#terrain-follow')).toHaveValue('95');
+  await expect(page.locator('#bridge-height')).toHaveValue('80');
+  await expect(page.locator('#landmark-min')).toHaveValue('60'); await expect(page.locator('#landmark-max')).toHaveValue('90');
+  await expect(page.locator('#landmark-length')).toHaveValue('1600');
+  await page.goto('/?seed=SHARED-054'); await openSettings(page);
+  await expect(page.locator('#seed')).toHaveValue('SHARED-054'); await expect(page.locator('#terrain-follow')).toHaveValue('95');
+  await (await control(page, page.locator('#startup-clear'))).click();
+  await expect(page.locator('#startup-status')).toContainText('已取消');
+  await page.reload(); await openSettings(page);
+  await expect(page.locator('#terrain-follow')).toHaveValue('80');
+  await expect(page.locator('#preset-list option')).toHaveText(['贴山启动']);
+  expect(errors).toEqual([]);
+});
+
+test('rejects reversed bridge intervals and locates a complete two-tower landmark on winding roads', async ({ page }) => {
+  test.setTimeout(120000);
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/?seed=LANDMARK-054');
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('meadow');
+  await page.locator('#route-style').selectOption('5');
+  await page.locator('#landmark-min').fill('100'); await page.locator('#landmark-max').fill('50');
+  await page.locator('#world-options button[type="submit"]').click(); await expect(page.locator('#explorer')).toBeVisible();
+  await page.locator('#landmark-min').fill('50');
+  await page.locator('#world-options button[type="submit"]').click();
+  await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 30000 });
+  await page.locator('#drive-toggle').click(); await expect(page.locator('#drive-hud')).toBeVisible();
+  await (await control(page, page.locator('#landmark-view'))).click(); await closeSettings(page);
+  await expect(page.locator('#drive-hud')).toBeHidden();
+  await expect(page.locator('#landmark-status')).toContainText('已到达', { timeout: 80000 });
+  await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 30000 });
+  await expect.poll(async () => Number(await page.locator('[data-metric="Cable spans"]').textContent())).toBeGreaterThan(0);
+  await expect(page.locator('#landmark-status')).toContainText('1200 m');
+  expect(errors).toEqual([]);
+});

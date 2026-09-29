@@ -8,6 +8,8 @@ const fields: Record<keyof WorldOptions, [string, number?]> = {
   altitudeMin: ['altitude-min'], altitudeMax: ['altitude-max'], elevationDirection: ['elevation-direction'],
   mountainHeight: ['mountain-height'], mountainMin: ['mountain-min'], mountainMax: ['mountain-max'],
   mountainDensity: ['mountain-density', 100], vegetationDensity: ['vegetation-density', 100], junctions: ['junctions'], interchanges: ['interchanges'],
+  terrainFollow: ['terrain-follow', 100], bridgeHeight: ['bridge-height'], landmarkBridges: ['landmark-bridges'],
+  landmarkMin: ['landmark-min', 0.001], landmarkMax: ['landmark-max', 0.001], landmarkLength: ['landmark-length'], landmarkClearance: ['landmark-clearance'],
 };
 
 export class WorldSettings {
@@ -28,7 +30,7 @@ export class WorldSettings {
       }
       return [key, type === 'boolean' ? node.checked : type === 'number' ? Number(node.value) / scale : node.value];
     }));
-    for (const prefix of ['climb', 'altitude', 'mountain'] as const) {
+    for (const prefix of ['climb', 'altitude', 'mountain', 'landmark'] as const) {
       const min = `${prefix}Min` as const, max = `${prefix}Max` as const;
       if (element<HTMLInputElement>(`${prefix}-min`).disabled && Number(value[min]) > Number(value[max])) {
         value[min] = this.applied[min]; value[max] = this.applied[max];
@@ -59,7 +61,11 @@ export class WorldSettings {
     const radius = element<HTMLInputElement>('highway-radius');
     radius.disabled = element<HTMLSelectElement>('road-type').value !== 'highway';
     element('highway-radius-value').textContent = `${radius.value} m${radius.disabled ? ' · 仅高速生效' : ''}`;
-    for (const id of ['max-grade', 'mountain-density', 'vegetation-density']) element(`${id}-value`).textContent = `${element<HTMLInputElement>(id).value}%`;
+    for (const id of ['max-grade', 'mountain-density', 'vegetation-density', 'terrain-follow']) element(`${id}-value`).textContent = `${element<HTMLInputElement>(id).value}%`;
+    for (const id of ['bridge-height', 'landmark-length', 'landmark-clearance']) element(`${id}-value`).textContent = `${element<HTMLInputElement>(id).value} m`;
+    const landmarks = element<HTMLInputElement>('landmark-bridges').checked;
+    for (const id of ['landmark-min', 'landmark-max', 'landmark-length', 'landmark-clearance']) element<HTMLInputElement>(id).disabled = !landmarks;
+    element<HTMLInputElement>('landmark-max').setCustomValidity(landmarks && Number(element<HTMLInputElement>('landmark-min').value) > Number(element<HTMLInputElement>('landmark-max').value) ? '上限不能低于下限。' : '');
     const mode = element<HTMLSelectElement>('elevation-mode').value, absolute = mode === 'fixed' || mode === 'random';
     element<HTMLSelectElement>('elevation-direction').disabled = !absolute;
     for (const [prefix, enabled] of [['climb', mode === 'cycles'], ['altitude', absolute], ['mountain', element<HTMLSelectElement>('mountain-height').value === 'range']] as const) {

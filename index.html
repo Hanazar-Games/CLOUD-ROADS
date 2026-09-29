@@ -201,6 +201,24 @@
             <label class="speed-label" for="max-grade">最大坡度 <output id="max-grade-value">6%</output></label>
             <input id="max-grade" type="range" min="0" max="40" step="1" value="6" aria-describedby="max-grade-help" />
             <p id="max-grade-help" class="panel-help">同时限制上下坡；0% 为水平道路，40% 表示每水平前进 100 米最多升降 40 米。点击应用后重新生成，高落差仍优先架桥。</p>
+            <details class="world-options" open>
+              <summary>贴山选线与地标大桥</summary>
+              <label class="speed-label" for="terrain-follow">道路贴山程度 <output id="terrain-follow-value">80%</output></label>
+              <input id="terrain-follow" type="range" min="0" max="100" step="5" value="80" />
+              <label class="speed-label" for="bridge-height">普通桥梁目标高度 <output id="bridge-height-value">120 m</output></label>
+              <input id="bridge-height" type="range" min="20" max="1000" step="10" value="120" />
+              <p class="panel-help">贴山程度越高，越优先贴近天然山坡、缩短高架并减少深挖。目标高度是选线偏好，受坡度、直道和固定海拔约束，并非硬限高；想建高桥可降低贴山程度并提高目标高度。地形不因调节而被抬高填平。</p>
+              <label for="landmark-bridges"><input id="landmark-bridges" type="checkbox" checked /> 定期生成双塔超级斜拉桥</label>
+              <div class="climb-range">
+                <label for="landmark-min">地标间隔下限 · km<input id="landmark-min" type="number" min="50" max="300" step="10" value="100" required /></label>
+                <label for="landmark-max">地标间隔上限 · km<input id="landmark-max" type="number" min="50" max="300" step="10" value="200" required /></label>
+              </div>
+              <label class="speed-label" for="landmark-length">斜拉桥长度 <output id="landmark-length-value">1200 m</output></label>
+              <input id="landmark-length" type="range" min="800" max="2000" step="100" value="1200" />
+              <label class="speed-label" for="landmark-clearance">桥面目标净空 <output id="landmark-clearance-value">60 m</output></label>
+              <input id="landmark-clearance" type="range" min="20" max="300" step="10" value="60" />
+              <p class="panel-help">默认每约 100–200 km 安排一次，0–5 档道路均适用。桥面完全拉直、水平，设两座主塔；提前缓坡接入，桥区避让岔路与服务区，过桥恢复蜿蜒。间隔按当前分支里程计算，地形难以衔接时继续寻找；0% 坡度或固定海拔可能无法满足净空。应用后重新生成。</p>
+            </details>
             <label for="elevation-mode">上下坡节奏</label>
             <select id="elevation-mode" aria-describedby="climb-help altitude-help"><option value="natural">自然起伏 · 跟随地形</option><option value="cycles">上下山偏好 · 目标爬升</option><option value="fixed">固定海拔往返 · 上下山</option><option value="random">区间内随机升降</option></select>
             <div class="climb-range">
@@ -302,6 +320,12 @@
         <p class="panel-help">保存世界种子、道路与地形、车型与调校、仪表、设备、天气、画质和声音设置。仅在主动保存时写入当前浏览器；不保存位置、车速、行程或玻璃水余量。</p>
         <label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="60" value="我的山路" autocomplete="off" />
         <div class="actions"><button id="preset-save" type="button">保存 / 更新本机预设</button><button id="preset-export" type="button">导出当前设置 JSON</button></div>
+        <div class="equipment-status">
+          <p>本机启动设置</p>
+          <p class="panel-help">保存当前参数后，下次打开自动恢复到该世界起点。之后修改参数需再次保存；普通命名预设仍需手动应用。链接中的种子优先，不保存行驶进度。</p>
+          <div class="actions"><button id="startup-save" type="button">保存当前为启动设置</button><button id="startup-clear" type="button">取消启动恢复</button></div>
+          <p id="startup-status" role="status" class="panel-help">未启用启动恢复。</p>
+        </div>
         <label for="preset-list">本机预设与导入预览</label><select id="preset-list" aria-describedby="preset-summary"><option value="">尚无预设</option></select>
         <p id="preset-summary" class="panel-help"></p>
         <div class="actions"><button id="preset-apply" type="button" disabled>应用预设并返回起点</button><button id="preset-delete" type="button" disabled>删除所选本机预设</button></div>
@@ -328,6 +352,8 @@
         <p class="panel-help">深谷大桥下可遇到山谷公路或铁路高架，两端连接山体隧道。它们是沿途景观，驾驶路线请沿主路和岔路探索。</p>
         <p class="panel-help">起点前后都有道路；主线每 20 km 一组互通。双向高速为上下两条交叉高速，四条右转匝道与四条左转环道连接全部方向，驶出后继续无限生成。山路和单向高速使用分支匝道。「下一匝道」定位附近，双向高速再次点击可俯瞰互通；入弯请减速。</p>
         <div class="actions road-actions"><button id="service-view" type="button" disabled>下一服务区</button></div>
+        <div class="actions road-actions"><button id="landmark-view" type="button" disabled>下一座超级斜拉桥</button></div>
+        <p id="landmark-status" class="panel-help" role="status"></p>
         <div class="actions road-actions"><button id="pass-view" type="button" disabled>下一垭口</button><span id="route-stage">山谷</span></div>
         <p class="panel-help">高山路线沿山谷爬升，经过垭口后下山，再进入下一片山地。垭口定位可由返回起点取消。</p>
         <p class="panel-help">服务区约 10–20 公里一处，深谷地段以架空平台连接匝道。点击可前往下一处，定位期间可继续探索，返回起点可取消。</p>

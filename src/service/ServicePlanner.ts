@@ -50,6 +50,10 @@ export class ServicePlanner {
   detect(samples: readonly RoadSample[]): ServiceArea[] {
     if (!samples.length) return [];
     const first = samples[0].distance, last = samples.at(-1)!.distance, sites: ServiceArea[] = [];
+    const landmarks = new Map<number, { start: number; end: number }>();
+    for (const sample of samples) if (sample.structure?.landmark && !landmarks.has(sample.structure.start))
+      landmarks.set(sample.structure.start, { start: sample.distance, end: sample.structure.finish });
+    const reserved = [...landmarks.values()];
     let roadIndex: RoadIndex | undefined;
     const edges: RoadEdge[] = [];
     for (const id of this.cache.keys()) if (serviceTarget(this.seed, id) < first - 2000 || serviceTarget(this.seed, id) > last + 2000) this.cache.delete(id);
@@ -65,6 +69,7 @@ export class ServicePlanner {
         let chosen: RoadSample | undefined, score = Infinity, bucket = -1;
         for (const sample of samples) {
           if (Math.abs(sample.distance - target) > (this.profile.centers.length === 2 ? 360 : 600) || Math.floor(sample.distance / 24) === bucket) continue;
+          if (reserved.some(span => sample.distance > span.start - MERGE_END - 300 && sample.distance < span.end + MERGE_END + 300)) continue;
           if (sample.structure?.kind === 'tunnel' && sample.distance > sample.structure.start - 245 && sample.distance < sample.structure.end + 245) continue;
           bucket = Math.floor(sample.distance / 24);
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;

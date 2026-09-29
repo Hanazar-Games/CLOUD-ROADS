@@ -125,6 +125,7 @@ export class RoadNetwork {
       if (distance > current.distance + 2800 || distance < current.distance - 1400) continue;
       const segment = route.road.segments.find(s => s.start.distance <= distance && s.end.distance >= distance);
       if (!segment) continue;
+      if (route.road.segments.some(s => s.start.structure?.landmark && s.end.distance > distance - 3000 && s.start.distance < distance + 3000)) continue;
       const sample = segment.atDistance(distance);
       const childId = `branch-${hashSeed(seed).toString(36)}-${hashSeed(`${seed}:id`).toString(36)}`;
       if (this.options.roadType === 'highway' && !this.options.oneWay && this.options.interchanges) {
@@ -133,7 +134,7 @@ export class RoadNetwork {
         for (const [i, direction] of [1, -1].entries()) {
           let start: RoadControlPoint = { ...sample, routeId: exits[i], position: { ...sample.position, y: interchange.upperHeight },
             heading: sample.heading + direction * Math.PI / 2, grade: 0, distance: 0, bank: 0, junction: true, elevated: true,
-            mountain: undefined, structure: undefined, climb: undefined };
+            mountain: undefined, structure: undefined, structureStep: undefined, nextStructure: undefined, nextLandmark: undefined, climb: undefined };
           const prefix: RoadSegment[] = [];
           for (let j = 0; j < 12; j++) { const segment = new RoadSegment(start, start.heading, 0); prefix.push(segment); start = segment.end; }
           const child = this.add({ id: exits[i], seed: exits[i], origin: { ...start, junction: undefined, elevated: undefined, nextMountain: start.distance + 600 },
@@ -187,7 +188,8 @@ export class RoadNetwork {
   private ramp(entry: RoadSample, id: string, kind: Junction['kind'], direction: JunctionRamp['direction']): RoadSegment[] {
     const prefix: RoadSegment[] = [];
     let start: RoadControlPoint = { ...entry, position: { ...entry.position, y: entry.position.y + 0.015 }, distance: 0, routeId: id,
-      mountain: undefined, climb: undefined, structure: undefined, nextStructure: undefined, opening: undefined, junction: true, bank: 0 };
+      mountain: undefined, climb: undefined, structure: undefined, structureStep: undefined, nextLandmark: undefined,
+      nextStructure: undefined, opening: undefined, junction: true, bank: 0 };
     const grade = Math.min(this.options.maxGrade, 0.06);
     const pieces = kind === 'fork' ? [[0.32, 260, 0], [0.85, 300, 0]]
       : direction === 'left' ? [[0.32, 260, 0], [Math.PI / 2, 360, grade], [Math.PI, 480, grade * 0.8], [Math.PI * 1.5, 480, 0], [Math.PI * 1.5, 600, 0]]

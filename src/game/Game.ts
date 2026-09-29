@@ -158,7 +158,7 @@ export class Game {
       else this.walking.start();
       this.setPaused(false); this.canvas.focus();
     }, { signal: this.events.signal });
-    for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'crossing-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'cloud-view']) {
+    for (const id of ['sun-view', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'crossing-view', 'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'landmark-view', 'cloud-view']) {
       element(id).addEventListener('click', () => { this.settings.close(); this.stopTravel(); }, { signal: this.events.signal });
     }
     element('debug-close').addEventListener('click', () => {
@@ -312,6 +312,9 @@ export class Game {
       this.setPaused(false);
       this.canvas.focus();
     }, { signal: this.events.signal });
+    element('landmark-view').addEventListener('click', () => {
+      this.world.requestLandmarkView(); this.setPaused(false); this.canvas.focus();
+    }, { signal: this.events.signal });
     element('pass-view').addEventListener('click', () => {
       this.world.requestPassView();
       if (this.world.searching) {
@@ -367,6 +370,7 @@ export class Game {
       if (preset.factorySpeed) this.driving.car.setSpeedLimit();
       this.driving.describeTuning(); this.applyGraphics(); this.customGraphics(); this.syncAudioUI();
     });
+    if (this.presets.restoreStartup(new URLSearchParams(location.search).has('seed') ? this.initialSeed : undefined)) this.settings.close();
     this.loop.start();
   }
 
@@ -451,7 +455,7 @@ export class Game {
     this.stopTravel();
     this.world.resetCamera(this.camera);
     for (const id of ['drive-toggle', 'walk-toggle', 'road-view', 'hairpin-view', 'bridge-view', 'junction-view', 'crossing-view',
-      'tunnel-view', 'lights-view', 'service-view', 'pass-view']) element<HTMLButtonElement>(id).disabled = true;
+      'tunnel-view', 'lights-view', 'service-view', 'pass-view', 'landmark-view']) element<HTMLButtonElement>(id).disabled = true;
     this.flight.reset();
     this.setPaused(false);
     this.setClouds(this.clouds.enabled);
@@ -686,6 +690,10 @@ export class Game {
       const searching = this.world.serviceSearchProgress;
       element<HTMLButtonElement>('service-view').disabled = this.world.searching || !this.world.roadReady;
       element('service-view').textContent = searching === null ? '下一服务区' : `定位中 · ${Math.round(searching * 100)}%`;
+      const landmarkSearch = this.world.landmarkSearchProgress;
+      element<HTMLButtonElement>('landmark-view').disabled = !this.world.options.landmarkBridges || !this.world.roadReady || this.world.searching && landmarkSearch === null;
+      element('landmark-view').textContent = landmarkSearch === null ? '下一座超级斜拉桥' : `取消大桥定位 · ${Math.round(landmarkSearch * 100)}%`;
+      element('landmark-status').textContent = this.world.landmarkStatus;
       const passSearch = this.world.passSearchProgress;
       element<HTMLButtonElement>('pass-view').disabled = this.world.searching || !this.world.roadReady || this.world.options.terrain !== 'alpine' || this.world.network.active.id !== 'root';
       element('pass-view').textContent = passSearch === null ? '下一垭口' : `定位中 · ${Math.round(passSearch * 100)}%`;
@@ -830,6 +838,7 @@ export class Game {
         Temperature: ground ? `${this.world.season.temperature(ground.height).toFixed(1)} °C` : '—',
         Humidity: ground ? `${(ground.biome.humidity * 100).toFixed(0)}%` : '—',
         'Road segments': this.world.road.segments.length, 'Road ready': this.world.roadReady ? 'yes' : 'generating',
+        'Terrain adherence': `${Math.round(this.world.options.terrainFollow * 100)}%`, 'Preferred bridge height': `${this.world.options.bridgeHeight} m`,
         'Hairpins': this.world.road.segments.filter((segment) => segment.kind === 'hairpin').length,
         'Bridges': this.world.bridges.length, 'Bridge piers': this.world.bridgeMesh.pierCount,
         'Tallest bridge': `${Math.max(0, ...this.world.bridges.map(bridge => bridge.depth)).toFixed(0)} m`,

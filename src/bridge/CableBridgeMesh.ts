@@ -23,10 +23,11 @@ export function cableSpans(spans: readonly BridgeSpan[], terrain: RoadTerrain, c
       || Math.abs(anchor.heading - plan.heading) > 1e-8 || Math.abs(anchor.grade - plan.grade) > 1e-8) continue;
     const key = `${anchor.routeId ?? ''}:${plan.start}`;
     if (visited.has(key)) continue;
-    const length = plan.end - plan.start >= 960 ? 576 : 384;
-    const center = Math.round((plan.start + plan.end) / (2 * BRIDGE_SPACING)) * BRIDGE_SPACING;
+    const length = plan.landmark ? plan.end - plan.start : plan.end - plan.start >= 960 ? 576 : 384;
+    const center = plan.landmark ? (plan.start + plan.end) / 2 : Math.round((plan.start + plan.end) / (2 * BRIDGE_SPACING)) * BRIDGE_SPACING;
     const start = center - length / 2, end = center + length / 2;
-    if (start < plan.start + 24 || end > plan.end - 24 || end < span.start.distance || start > span.end.distance) continue;
+    if (start < plan.start + (plan.landmark ? -1e-6 : 24) || end > plan.end - (plan.landmark ? -1e-6 : 24)
+      || end < span.start.distance || start > span.end.distance) continue;
     visited.add(key);
     const speed = Math.hypot(1, plan.grade), sin = Math.sin(plan.heading), cos = Math.cos(plan.heading);
     const at = (distance: number): RoadSample => {
@@ -36,7 +37,7 @@ export function cableSpans(spans: readonly BridgeSpan[], terrain: RoadTerrain, c
     };
     const towers = [at(center - length / 4), at(center + length / 4)];
     if (towers.some(s => corridor.crossesBelow(s, profile.outerHalfWidth + 20)
-      || profile.centers.some(offset => s.position.y - terrain.sample(s.position.x + cos * offset, s.position.z + sin * offset) <= 200))) continue;
+      || profile.centers.some(offset => s.position.y - terrain.sample(s.position.x + cos * offset, s.position.z + sin * offset) <= (plan.landmark ? 5 : 200)))) continue;
     if (span.samples.some(s => s.distance >= start && s.distance <= end && (Math.abs(s.curvature) > 1e-8 || Math.abs(s.bank) > 1e-8
       || Math.abs(s.grade - plan.grade) > 1e-8 || Math.abs(s.heading - plan.heading) > 1e-8
       || Math.hypot(s.position.x - at(s.distance).position.x, s.position.y - at(s.distance).position.y, s.position.z - at(s.distance).position.z) > 0.02))) continue;
