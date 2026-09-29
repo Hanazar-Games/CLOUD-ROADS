@@ -3,8 +3,6 @@ import { roadProfile } from './RoadProfile';
 import { ROAD_STEP, RoadSegment, type RoadControlPoint, type StructurePlan } from './RoadSegment';
 import type { WorldOptions } from '../world/WorldOptions';
 
-export const MAX_TUNNEL_LENGTH = 5000;
-
 export class StructurePlanner {
   private readonly halfWidth: number;
   readonly gradeStep: number;
@@ -22,6 +20,7 @@ export class StructurePlanner {
     const ahead = [192, 384, 576, 768].map(d => ground(d) - y);
     const kind = ahead.some(gap => gap < -100) ? 'bridge' : ahead.some(gap => gap > 35) ? 'tunnel' : undefined;
     if (!kind) return;
+    if (kind === 'tunnel' && this.options.routeStyle >= 2) return;
     if (kind === 'tunnel' && [192, 384, 576, 768].every(d =>
       Math.abs(ground(d) - ground(d - 192)) / 192 <= this.options.maxGrade * 0.8)) return;
     const limit = kind === 'bridge' ? 0.01 : 0.03, grade = Math.max(-limit, Math.min(limit, start.grade));
@@ -49,13 +48,12 @@ export class StructurePlanner {
           if (entry < approachLength + 24) return;
         }
         peak = Math.max(peak, kind === 'bridge' ? gap(d) : -gap(d));
-        if (distance(d) - distance(entry) > (kind === 'tunnel' ? MAX_TUNNEL_LENGTH : 4800)) return;
+        if (kind === 'bridge' && distance(d) - distance(entry) > 4800) return;
       } else if (entry >= 0) {
         const end = this.boundary(inside, d - 32, d, false);
         if (kind === 'bridge' ? peak <= 200 || gap(end + 32) < -25
           || this.options.terrainFollow >= 0.5 && peak > this.options.bridgeHeight : peak < 35 || distance(end) - distance(entry) < 120) return;
-        if (kind === 'tunnel' && (distance(end) - distance(entry) > MAX_TUNNEL_LENGTH
-          || gap(entry - 24) > 5 || gap(end + 24) > 5)) return;
+        if (kind === 'tunnel' && (gap(entry - 24) > 5 || gap(end + 24) > 5)) return;
         return { kind, start: distance(entry), end: distance(end), finish: distance(end + ROAD_STEP), grade, heading: start.heading };
       }
     }

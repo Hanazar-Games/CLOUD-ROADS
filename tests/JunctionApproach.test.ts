@@ -29,20 +29,15 @@ it.each([
   { terrain: 'alpine' as const, roadType: 'mountain' as const, routeStyle: 5 as const, maxGrade: 0.4 },
   { terrain: 'forest' as const, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade: 0.03 },
   { terrain: 'karst' as const, roadType: 'mountain' as const, routeStyle: 3 as const, maxGrade: 0.06 },
-])('keeps a single exposed exit in $terrain with winding level $routeStyle', config => {
+])('preserves buried approaches in $terrain instead of excavating an artificial junction gap', config => {
   const settings = { ...DEFAULT_OPTIONS, ...config }, seed = 'CLOUD-ROAD-001';
   const terrain = new HeightFunction(seed, settings.terrain, settings.roadType);
   const road = new RoadSpine(seed, terrain, settings), network = new RoadNetwork(seed, terrain, settings, road);
   while (!road.advanceToDistance(23000)) { /* Generate the reserved site. */ }
   const sample = road.segments.find(s => s.start.distance <= 20000 && s.end.distance >= 20000)!.atDistance(20000);
   for (let i = 0; i < 200; i++) network.update(sample.position.x, sample.position.z, sample.position.y + 1, 4000);
-  const junction = network.junctions.find(j => j.route === 'root')!;
-  expect(junction.distance).toBe(20000); expect(junction.exits).toHaveLength(junction.interchange ? 2 : junction.kind === 'stack' ? 3 : 1);
-  expect(Math.abs(junction.sample.grade)).toBeLessThan(0.001);
-  expect(network.active.tunnels.some(t => t.start.distance < 20280 && t.end.distance > 19900)).toBe(false);
-  const branch = network.routes.find(r => r.id === junction.exits[0])!;
-  expect(branch.road.samples[0].position.y - sample.position.y).toBeCloseTo(junction.interchange ? 14 : 0.015, 6);
-  expect(branch.road.samples.filter(s => s.distance < 200).every(s => Math.abs(s.grade) < 0.001)).toBe(true);
+  expect(network.junctions.find(j => j.route === 'root')).toBeUndefined();
+  expect(network.active.tunnels.some(t => t.start.distance < 21200 && t.end.distance > 18500)).toBe(true);
 });
 
 it.each(['mountain', 'highway'] as const)('reserves level, straight %s exits even with maximum winding and grade', roadType => {

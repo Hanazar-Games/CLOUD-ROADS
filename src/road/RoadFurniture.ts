@@ -82,7 +82,10 @@ export class RoadFurniture {
           }
         }
         const avenue = this.options.roadType === 'avenue';
-        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || !avenue && !sample.junction && hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
+        const portal = tunnels.some(span => span.start.routeId === sample.routeId &&
+          (!span.openStart && distance >= span.start.distance - 180 && distance < span.start.distance
+            || !span.openEnd && distance > span.end.distance && distance <= span.end.distance + 180));
+        if (serviceAccess || sample.opening !== undefined || Math.floor(distance / 40) === Math.floor(previous.distance / 40) || !portal && !avenue && !sample.junction && hashSeed(`${this.seed}:${sample.routeId ?? ''}:lighting:${Math.floor(distance / 720)}`) % 4 !== 0) continue;
         for (const side of this.profile.centers.length === 2 || avenue ? [-1, 1] : [1]) {
           const offset = side * (this.profile.outerHalfWidth + (onBridge ? 0.15 : 0.9));
           this.box(this.poles, sample, offset, 4.5, 0.17, 9, 0.17);

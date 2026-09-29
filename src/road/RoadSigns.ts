@@ -2,6 +2,7 @@ import { BoxGeometry, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshStan
 import type { ServiceArea } from '../service/ServicePlanner';
 import { padPoint, type ServicePoint } from '../service/ServiceTerrain';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
+import { tunnelSignalSamples } from '../tunnel/TunnelLayout';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
@@ -9,7 +10,7 @@ import type { RoadSample } from './RoadSegment';
 import { createSignAtlas, SIGN_ROWS, SIGN_GUTTER, SIGN_TILE_WIDTH, SIGN_TILE_HEIGHT, signLabels } from './SignAtlas';
 import type { Junction } from './RoadNetwork';
 
-const CAPACITY = 2048;
+const CAPACITY = 8192;
 
 export class RoadSigns {
   private readonly atlas = createSignAtlas();
@@ -27,12 +28,15 @@ export class RoadSigns {
     this.profile = roadProfile(options);
     this.boards.geometry.setAttribute('signTile', this.tiles);
     this.boards.material.onBeforeCompile = shader => {
-      shader.vertexShader = `attribute float signTile;\n${shader.vertexShader}`.replace('#include <uv_vertex>', `
+      shader.vertexShader = `attribute float signTile; varying float vLaneSignal;\n${shader.vertexShader}`.replace('#include <uv_vertex>', `
         #include <uv_vertex>
+        vLaneSignal = step(${signLabels.indexOf('↓')}.0, signTile);
         vec2 inset = vec2(${SIGN_GUTTER / SIGN_TILE_WIDTH}, ${SIGN_GUTTER / SIGN_TILE_HEIGHT});
         vMapUv = (mix(inset, 1.0 - inset, uv) + vec2(mod(signTile, 4.0), floor(signTile / 4.0))) / vec2(4.0, ${SIGN_ROWS}.0);
         vEmissiveMapUv = vMapUv;
       `);
+      shader.fragmentShader = `varying float vLaneSignal;\n${shader.fragmentShader}`.replace('#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= mix(1.0, 22.0, vLaneSignal);');
     };
     this.boards.count = this.posts.count = this.backs.count = 0;
     this.boards.visible = this.posts.visible = this.backs.visible = false;
@@ -95,14 +99,30 @@ export class RoadSigns {
       }
       for (const span of tunnels) for (const [sample, flip] of [[span.start, false], [span.end, true]] as const) for (const center of this.profile.centers) {
         if (flip ? span.openEnd : span.openStart) continue;
-        const p = this.position(sample, center, 8.7), sign = flip ? 1 : -1;
-        p.x += sample.tangent.x * sign * 2.7; p.z += sample.tangent.z * sign * 2.7;
-        this.add(p, sample.heading + (flip ? Math.PI : 0), 6, 0.55, 5);
+        const p = this.tunnelPosition(sample, center, 9.75), sign = flip ? 1 : -1, heading = sample.heading + (flip ? Math.PI : 0);
+        p.x += sample.tangent.x * sign * 2.8; p.y += sample.tangent.y * sign * 2.8; p.z += sample.tangent.z * sign * 2.8;
+        this.add(p, heading, 6, 0.55, 5);
+        const exact = span.entrance !== undefined && span.exit !== undefined || !span.openStart && !span.openEnd;
+        const length = span.length ?? span.end.distance - span.start.distance;
+        const digits = `${exact ? '' : '≥'}${(Math.floor(length / 10) / 100).toFixed(2)}`;
+        const width = digits.length * 0.4 + 1;
+        [...digits].forEach((digit, i) => {
+          const offset = i * 0.4 - width / 2 + 0.2;
+          this.add({ x: p.x + Math.cos(heading) * offset, y: p.y - 0.65, z: p.z + Math.sin(heading) * offset }, heading, 0.4, 0.48, signLabels.indexOf(digit));
+        });
+        this.add({ x: p.x + Math.cos(heading) * (width / 2 - 0.5), y: p.y - 0.65, z: p.z + Math.sin(heading) * (width / 2 - 0.5) }, heading, 0.9, 0.48, 8);
+      }
+      for (const span of tunnels) for (const sample of tunnelSignalSamples(span)) {
+        for (const direction of this.options.oneWay ? [1] : [1, -1]) for (const lane of this.profile.lanes) {
+          const p = this.tunnelPosition(sample, lane.offset, 6.1);
+          p.x -= sample.tangent.x * direction * 0.3; p.y -= sample.tangent.y * direction * 0.3; p.z -= sample.tangent.z * direction * 0.3;
+          this.add(p, sample.heading + (direction < 0 ? Math.PI : 0), 0.8, 0.8, signLabels.indexOf(lane.direction === direction ? '↓' : 'X'));
+        }
       }
       for (const span of tunnels) for (let i = 1; i < span.samples.length; i++) {
         const sample = span.samples[i];
         if (Math.floor(sample.distance / 96) === Math.floor(span.samples[i - 1].distance / 96)) continue;
-        for (const center of this.profile.centers) this.add(this.position(sample, center - this.profile.halfWidth - 0.41, 2.2), sample.heading - Math.PI / 2, 1.2, 0.4, 11);
+        for (const center of this.profile.centers) this.add(this.tunnelPosition(sample, center - this.profile.halfWidth - 0.41, 2.2), sample.heading - Math.PI / 2, 1.2, 0.4, 11);
       }
       for (const site of services) {
         for (const pad of site.ground.pads) {
@@ -148,6 +168,12 @@ export class RoadSigns {
   private position(sample: RoadSample, offset: number, height: number): ServicePoint {
     const { right } = roadFrame(sample), p = sample.position;
     return { x: p.x + right.x * offset, y: p.y + right.y * offset + height, z: p.z + right.z * offset };
+  }
+
+  private tunnelPosition(sample: RoadSample, offset: number, height: number): ServicePoint {
+    const { right, normal } = roadFrame(sample), p = sample.position;
+    return { x: p.x + right.x * offset + normal.x * height, y: p.y + right.y * offset + normal.y * height,
+      z: p.z + right.z * offset + normal.z * height };
   }
 
   private add(point: ServicePoint, heading: number, width: number, height: number, tile: number, post = 0): void {

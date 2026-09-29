@@ -704,7 +704,7 @@ export class Game {
       element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || this.world.searching || !junctions;
       element('junction-view').textContent = junctionSearch === null ? '下一匝道' : `定位中 · ${Math.round(junctionSearch * 100)}%`;
       element('junction-status').textContent = junction ? `${junction.interchange ? '双层高速 · 四向互通 · 8 条匝道' : junction.kind === 'stack' ? '多向立交 · 左转 / 右转 / 回转' : '平面分流'} · ${Math.max(0, Math.round(((junction.ramps.find(r => r.sample.distance > (this.world.roadSample?.distance ?? 0) - 30)?.sample.distance ?? junction.distance) - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
-        : junctions ? '每 20 km 一组 · 按方向标牌分流' : '出口关闭 · 主线双向延伸';
+        : junctions ? '每 20 km 寻找互通 · 隧道内顺延' : '出口关闭 · 主线双向延伸';
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;

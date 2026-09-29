@@ -34,27 +34,30 @@ it('finds complete covered sections, avoids bridges and keeps decisions stable i
   const span = spans[0];
   expect(detector.detect(samples, [{ ...span, depth: 90, openStart: false, openEnd: false }])).toHaveLength(0);
   expect(new TunnelDetector({ sample: () => 100 }).detect(samples, [])).toHaveLength(0);
-  expect(detector.detect(span.samples, [])).toHaveLength(0);
+  const clipped = detector.detect(span.samples, []);
+  expect(clipped).toHaveLength(1);
+  expect(clipped[0].openStart).toBe(true);
+  expect(clipped[0].openEnd).toBe(true);
 });
 
-it('retains every ventilation instance across a full highway window with repeated tunnels', () => {
+it.each([0, 0.025])('retains every fixture across a full highway window with curvature %f', curvature => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
   const start = route()[0], segment = new RoadSegment(start, 0, 0, 24000);
-  const samples = Array.from({ length: 12001 }, (_, i) => segment.sample(i / 12000));
+  const samples = Array.from({ length: 12001 }, (_, i) => ({ ...segment.sample(i / 12000), curvature }));
   const terrain = { sample: (_x: number, z: number) => -z % 4000 > 100 && -z % 4000 < 3900 ? 300 : 200 };
   const spans = new TunnelDetector(terrain, options).detect(samples, []), scene = new Scene(), mesh = new TunnelMesh(scene, 'capacity', options);
   mesh.update(spans, RoadCorridor.fromSamples(samples, [], options), terrain, 1, 0, 0, true);
   expect(mesh.fans.count).toBeGreaterThan(512);
-  for (const batch of [mesh.fans, mesh.equipment, mesh.lights]) expect(batch.count).toBeLessThanOrEqual(batch.instanceMatrix.count);
+  for (const batch of [mesh.fans, mesh.equipment, mesh.lights, mesh.reflectors]) expect(batch.count).toBeLessThanOrEqual(batch.instanceMatrix.count);
   expect(mesh.ribs.geometry.getAttribute('position').count).toBeGreaterThan(0);
   mesh.dispose(); expect(scene.children).toHaveLength(0);
 }, 20_000);
 
-it('keeps winding traverses open and reserves tunnels for the connecting cruise sections', () => {
-  const samples = route().map(sample => ({ ...sample, mountain: { stage: 3, side: 1, grade: 0.04 } }));
+it('keeps buried winding traverses continuous regardless of curvature or mountain stage', () => {
+  const samples = route().map(sample => ({ ...sample, curvature: 0.025, mountain: { stage: 3, side: 1, grade: 0.04 } }));
   const winding = { ...DEFAULT_OPTIONS, routeStyle: 3 as const };
   expect(new TunnelDetector(hill).detect(samples, []).length).toBeGreaterThan(0);
-  expect(new TunnelDetector(hill, winding).detect(samples, [])).toHaveLength(0);
+  expect(new TunnelDetector(hill, winding).detect(samples, [])).toHaveLength(1);
   expect(new TunnelDetector(hill, winding).detect(route(), []).length).toBeGreaterThan(0);
 });
 
@@ -62,7 +65,9 @@ it('does not carve artificial open gaps into a covered run longer than 5 km', ()
   const segment = new RoadSegment(route()[0], 0, 0, 6500);
   const samples = Array.from({ length: 3251 }, (_, i) => segment.sample(i / 3250));
   const terrain = { sample: (_x: number, z: number) => z < -100 && z > -6400 ? 300 : 200 };
-  expect(new TunnelDetector(terrain).detect(samples, [])).toHaveLength(0);
+  const spans = new TunnelDetector(terrain).detect(samples, []);
+  expect(spans).toHaveLength(1);
+  expect(spans[0].end.distance - spans[0].start.distance).toBeGreaterThan(6200);
 });
 
 it('keeps streamed tunnel interiors roofed without rendering false portals or cover end walls', () => {

@@ -28,7 +28,7 @@ export function planLandmark(start: RoadControlPoint, terrain: RoadTerrain, opti
       if (Math.abs(peak) > Math.min(0.08, options.maxGrade)) continue;
       for (let i = 1; i <= steps * 2; i++) {
         const t = (i <= steps ? i : i - steps) / steps, blend = t * t * (3 - 2 * t);
-        approach.push(i <= steps ? start.grade + (peak - start.grade) * blend : peak * (1 - blend));
+        approach.push((i <= steps ? start.grade + (peak - start.grade) * blend : peak * (1 - blend)) || 0);
       }
     }
     let point = start;

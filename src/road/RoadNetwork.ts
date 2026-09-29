@@ -7,7 +7,7 @@ import type { RoadTerrain } from './RoadGenerator';
 import { RoadSegment, type RoadControlPoint, type RoadSample } from './RoadSegment';
 import { RoadSpine } from './RoadSpine';
 import { roadProfile } from './RoadProfile';
-import { JUNCTION_INTERVAL, junctionsEnabled } from './JunctionSchedule';
+import { JUNCTION_INTERVAL, junctionLead, junctionsEnabled } from './JunctionSchedule';
 import { highwayInterchange, type HighwayInterchange } from './HighwayInterchange';
 
 export interface JunctionRamp { id: string; sample: RoadSample; direction: 'left' | 'right' | 'return' }
@@ -107,9 +107,8 @@ export class RoadNetwork {
 
   private refresh(route: NetworkRoute): void {
     route.bridges = route.bridgeDetector.detect(route.road.samples);
-    route.services = route.servicePlanner.detect(route.road.samples);
-    route.tunnels = route.tunnelDetector.detect(route.road.samples, route.bridges)
-      .filter(span => !route.services.some(site => site.start < span.end.distance && site.end > span.start.distance));
+    route.tunnels = route.tunnelDetector.detect(route.road.samples, route.bridges);
+    route.services = route.servicePlanner.detect(route.road.samples, route.tunnels);
     route.version = route.road.version; this.version++;
   }
 
@@ -123,6 +122,7 @@ export class RoadNetwork {
       if (existing && existing.exits.every(exit => this.cache.has(exit))) continue;
       const distance = index * JUNCTION_INTERVAL;
       if (distance > current.distance + 2800 || distance < current.distance - 1400) continue;
+      if (route.tunnels.some(span => span.start.distance < distance + 1200 && span.end.distance > distance - junctionLead(this.options))) continue;
       const segment = route.road.segments.find(s => s.start.distance <= distance && s.end.distance >= distance);
       if (!segment) continue;
       if (route.road.segments.some(s => s.start.structure?.landmark && s.end.distance > distance - 3000 && s.start.distance < distance + 3000)) continue;

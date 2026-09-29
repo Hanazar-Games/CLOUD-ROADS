@@ -8,6 +8,7 @@ import { roadProfile } from '../road/RoadProfile';
 import type { RoadSample } from '../road/RoadSegment';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import type { TunnelSpan } from './TunnelDetector';
+import { tunnelSignalSamples } from './TunnelLayout';
 import { createTerrainMaterial } from '../terrain/TerrainMaterial';
 
 type Point = [number, number, number];
@@ -39,10 +40,12 @@ export class TunnelMesh {
   readonly cover = new Mesh(new BufferGeometry(), createTerrainMaterial(this.terrainOrigin));
   readonly portals = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0xbcb8a8, roughness: 0.85, side: DoubleSide }));
   readonly ribs = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x64777b, roughness: 0.82, side: DoubleSide }));
-  readonly lights = new InstancedMesh(new BoxGeometry(0.7, 0.12, 1.8),
-    new MeshStandardMaterial({ color: 0xffdeb4, emissive: 0xffc982, emissiveIntensity: 2 }), 2048);
-  readonly equipment = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.72 }), 50000);
-  readonly fans = new InstancedMesh(fanGeometry(), new MeshStandardMaterial({ vertexColors: true, metalness: 0.6, roughness: 0.5, side: DoubleSide }), 1024);
+  readonly lights = new InstancedMesh(new BoxGeometry(),
+    new MeshStandardMaterial({ color: 0xffdeb4, emissive: 0xffc982, emissiveIntensity: 2 }), 16384);
+  readonly reflectors = new InstancedMesh(new BoxGeometry(),
+    new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffdc91, emissiveIntensity: 0.65, roughness: 0.35 }), 16384);
+  readonly equipment = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.72 }), 100000);
+  readonly fans = new InstancedMesh(fanGeometry(), new MeshStandardMaterial({ vertexColors: true, metalness: 0.6, roughness: 0.5, side: DoubleSide }), 2048);
   readonly lampPositions: TunnelLamp[] = [];
   private readonly profile;
   private readonly biomes;
@@ -72,19 +75,19 @@ export class TunnelMesh {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.48, 0.31, 0.075), band * 0.7);
       `);
     };
-    this.lights.count = 0;
+    this.lights.count = this.reflectors.count = 0;
     this.equipment.count = this.fans.count = 0;
-    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.equipment, this.fans]) {
+    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.reflectors, this.equipment, this.fans]) {
       mesh.visible = false;
       mesh.receiveShadow = true;
-      mesh.castShadow = mesh !== this.lights;
+      mesh.castShadow = mesh !== this.lights && mesh !== this.reflectors;
       scene.add(mesh);
     }
   }
 
   update(spans: readonly TunnelSpan[], corridor: RoadCorridor, terrain: RoadTerrain, version: number,
     originX: number, originZ: number, nearRoute: boolean): void {
-    const spanKey = this.version === version ? this.spanKey : spans.map(span => `${span.start.routeId ?? ''}:${span.start.distance}:${span.end.distance}:${!!span.openStart}:${!!span.openEnd}`).join(',');
+    const spanKey = this.version === version ? this.spanKey : spans.map(span => `${span.start.routeId ?? ''}:${span.start.distance}:${span.end.distance}:${!!span.openStart}:${!!span.openEnd}:${span.entrance}:${span.exit}`).join(',');
     this.version = version;
     if (this.spanKey !== spanKey) {
       this.spanKey = spanKey;
@@ -101,7 +104,7 @@ export class TunnelMesh {
         coverIndices.push(indices[0], indices[1], indices[2], indices[1], indices[3], indices[2]);
       };
       const uv: number[] = [], liningNormals: number[] = [];
-      this.lights.count = 0;
+      this.lights.count = this.reflectors.count = 0;
       this.equipment.count = this.fans.count = 0;
       this.lampPositions.length = 0;
       const half = this.profile.halfWidth + 0.75;
@@ -113,8 +116,7 @@ export class TunnelMesh {
         this.profile.outerHalfWidth + 4, 50, 80, 120, 160])].sort((a, b) => a - b);
       for (const span of spans) {
         const rows = span.samples.filter((sample, i) => i === 0 || i === span.samples.length - 1
-          || Math.floor(sample.distance / 8) !== Math.floor(span.samples[i - 1].distance / 8));
-        let nextLamp = Math.ceil(span.start.distance / 24) * 24;
+          || Math.floor(sample.distance / (Math.abs(sample.curvature) > 0.01 ? 4 : 8)) !== Math.floor(span.samples[i - 1].distance / (Math.abs(sample.curvature) > 0.01 ? 4 : 8)));
         const extents = new Map<RoadSample, number[]>();
         const edge = this.profile.outerHalfWidth + 4;
         for (const sample of rows) extents.set(sample, [-1, 1].map(side => {
@@ -139,9 +141,11 @@ export class TunnelMesh {
           const ground = corridor.height(p[0] + this.anchorX, p[2] + this.anchorZ, natural);
           const approach = Math.min(1, span.openStart ? 1 : (sample.distance - span.start.distance) / 80,
             span.openEnd ? 1 : (span.end.distance - sample.distance) / 80);
-          const entrance = Math.max(ground, p[1] + 9.5);
-          const roof = entrance + (Math.max(natural, entrance) - entrance) * approach * approach * (3 - 2 * approach);
-          p[1] = ground + (roof - ground) * blend - 0.3 * (1 - blend);
+          const entrance = Math.abs(offset) <= edge ? Math.max(ground, p[1] + 9.5) : ground;
+          const roof = Math.abs(offset) <= edge ? Math.max(natural, p[1] + 9.5) : natural;
+          const portal = ground + (entrance - ground) * blend;
+          const restore = approach * approach * (3 - 2 * approach);
+          p[1] = portal + (roof - portal) * restore - 0.01 * (1 - blend);
           return { point: p, raised: p[1] > ground + 0.1 };
         };
         const tops = rows.map(sample => columns.map(offset => top(sample, offset)));
@@ -184,15 +188,23 @@ export class TunnelMesh {
               if (corners.some(corner => corner.raised)) coverQuad(corners[0].point, corners[1].point, corners[2].point, corners[3].point);
             }
           }
-          if (sample.distance >= nextLamp) {
-            nextLamp += 24;
-            for (const center of this.profile.centers) {
-              const [x, y, z] = this.point(sample, center, 7.35);
-              this.lights.setMatrixAt(this.lights.count++, new Matrix4().makeRotationY(-sample.heading).setPosition(x, y, z));
+          const entrance = span.entrance ?? (span.openStart ? -Infinity : span.start.distance);
+          const exit = span.exit ?? (span.openEnd ? Infinity : span.end.distance);
+          const portalDistance = Math.min(sample.distance - entrance, exit - sample.distance);
+          const spacing = portalDistance < 160 ? 8 : portalDistance < 320 ? 16 : 48;
+          if (Math.floor(sample.distance / spacing) !== Math.floor((rows[i - 1]?.distance ?? sample.distance - 2) / spacing)) {
+            for (const center of this.profile.centers) for (const side of [-1, 1]) {
+              const offset = center + side * half * 0.5;
+              const [x, y, z] = this.point(sample, offset, 6.85);
+              this.box(sample, offset, 6.95, 0.45, 0.1, 1.8, 0xffffff, this.lights);
               this.lampPositions.push({ x: x + this.anchorX, y: y - 0.3, z: z + this.anchorZ });
-              for (const side of [-1, 1]) this.box(sample, center + side * (half - 0.08), 0.65, 0.12, 0.22, 0.38, 0xffe6a8);
             }
           }
+          if (i > 0 && Math.floor(sample.distance / 16) !== Math.floor(rows[i - 1].distance / 16))
+            for (const center of this.profile.centers) for (const side of [-1, 1]) {
+              this.box(sample, center + side * (half - 0.13), 0.8, 0.16, 0.16, 1.2, side < 0 ? 0xe0f9ea : 0xffd875, this.reflectors);
+              this.box(sample, center + side * (half - 0.12), 2.8, 0.14, 0.08, 0.65, 0xd5f0e7, this.reflectors);
+            }
           if (i > 0 && Math.floor(sample.distance / 96) !== Math.floor(rows[i - 1].distance / 96)) {
             for (const center of this.profile.centers) {
               this.box(sample, center + half - 0.22, 1.4, 0.35, 1.3, 0.65, 0xac3935);
@@ -209,6 +221,12 @@ export class TunnelMesh {
               }
             }
           }
+        }
+        for (const sample of tunnelSignalSamples(span)) for (const lane of this.profile.lanes) {
+          const center = this.profile.centers.reduce((a, b) => Math.abs(a - lane.offset) < Math.abs(b - lane.offset) ? a : b);
+          const ceiling = 4.2 + 3.4 * Math.sqrt(Math.max(0, 1 - ((lane.offset - center) / half) ** 2));
+          this.box(sample, lane.offset, (ceiling + 6.5) / 2, 0.07, Math.max(0.05, ceiling - 6.5), 0.08, 0x778585);
+          this.box(sample, lane.offset, 6.1, 0.9, 0.9, 0.15, 0x1c2b31);
         }
         for (const sample of [span.start, span.end]) {
           if (sample === span.start ? span.openStart : span.openEnd) continue;
@@ -235,7 +253,7 @@ export class TunnelMesh {
             quad(portals, outerA, outerB, this.point(sample, center + ax * 1.14, outerHeight(ay)), this.point(sample, center + bx * 1.14, outerHeight(by)));
           }
           for (const center of this.profile.centers) {
-            this.box(sample, center, 8.65, half * 1.4, 0.5, 2.4, 0x667c7c);
+            this.box(sample, center, 9.5, Math.max(6.4, half * 1.4), 1.5, 2.4, 0x465b5c);
             for (const side of [-1, 1]) {
               const wing = { ...sample, position: { x: sample.position.x + sample.tangent.x * end * 4,
                 y: sample.position.y + sample.tangent.y * end * 4, z: sample.position.z + sample.tangent.z * end * 4 } };
@@ -267,26 +285,26 @@ export class TunnelMesh {
         mesh.geometry.dispose();
         mesh.geometry = geometry;
       }
-      for (const mesh of [this.lights, this.equipment, this.fans]) {
+      for (const mesh of [this.lights, this.reflectors, this.equipment, this.fans]) {
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
     this.terrainOrigin.set(originX, originZ);
-    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.equipment, this.fans]) {
+    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.reflectors, this.equipment, this.fans]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = nearRoute && spans.length > 0;
     }
   }
 
-  private box(sample: RoadSample, offset: number, height: number, width: number, tall: number, length: number, color: number): void {
-    if (this.equipment.count >= this.equipment.instanceMatrix.count) throw new Error('Tunnel equipment capacity exceeded');
+  private box(sample: RoadSample, offset: number, height: number, width: number, tall: number, length: number, color: number, mesh = this.equipment): void {
+    if (mesh.count >= mesh.instanceMatrix.count) throw new Error('Tunnel equipment capacity exceeded');
     const { right: r, normal: n } = roadFrame(sample), p = this.point(sample, offset, height), t = sample.tangent;
     this.matrix.set(r.x * width, n.x * tall, -t.x * length, p[0], r.y * width, n.y * tall, -t.y * length, p[1],
       r.z * width, n.z * tall, -t.z * length, p[2], 0, 0, 0, 1);
-    this.equipment.setMatrixAt(this.equipment.count, this.matrix);
-    this.equipment.setColorAt(this.equipment.count++, this.color.setHex(color));
+    mesh.setMatrixAt(mesh.count, this.matrix);
+    mesh.setColorAt(mesh.count++, this.color.setHex(color));
   }
 
   private point(sample: RoadSample, offset: number, height: number, along = 0): Point {
@@ -297,7 +315,7 @@ export class TunnelMesh {
   }
 
   dispose(): void {
-    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.equipment, this.fans]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
-    this.lights.dispose(); this.equipment.dispose(); this.fans.dispose();
+    for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.reflectors, this.equipment, this.fans]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
+    this.lights.dispose(); this.reflectors.dispose(); this.equipment.dispose(); this.fans.dispose();
   }
 }

@@ -55,9 +55,17 @@ it('spaces service areas 10–20 km apart and reproduces placement in overlappin
   expect(new ServicePlanner('services', { sample: () => 200 }).detect(samples.slice(0, 1000))).toEqual([]);
 });
 
+it('leaves a long buried road intact and invalidates service sites when tunnel coverage arrives', () => {
+  const samples = route(), terrain = { sample: () => 800 };
+  expect(new ServicePlanner('services', terrain).detect(samples)).toEqual([]);
+  const planner = new ServicePlanner('services', { sample: () => 200 });
+  expect(planner.detect(samples, []).length).toBeGreaterThan(0);
+  expect(planner.detect(samples, [{ start: samples[0], end: samples.at(-1)!, samples, openStart: true, openEnd: true }])).toEqual([]);
+});
+
 it.each(['mountain', 'highway'] as const)('grounds %s parking and access roads without changing the main carriageway', roadType => {
   const options = { ...DEFAULT_OPTIONS, roadType }, samples = route();
-  const site = new ServicePlanner('services', { sample: () => 220 }, options).detect(samples)[0];
+  const site = new ServicePlanner('services', { sample: x => Math.abs(x - 128) < 30 ? 200 : 220 }, options).detect(samples)[0];
   expect(site.ground.pads).toHaveLength(roadType === 'highway' ? 2 : 1);
   const corridor = RoadCorridor.fromSamples(samples, [], options, [], [site.ground]);
   for (const pad of site.ground.pads) {
@@ -112,9 +120,13 @@ it.each([
 ])(
   'keeps real $terrain $routeStyle $roadType $roadWidth m pavement above rendered terrain and access lanes clear', choice => {
   const seed = 'CLOUD-ROAD-001', options = { ...DEFAULT_OPTIONS, ...choice }, terrain = new HeightFunction(seed, choice.terrain, choice.roadType);
-  const spine = new RoadSpine(seed, terrain, options);
-  while (!spine.advanceToDistance(serviceTarget(seed, 1) + SERVICE_SEARCH_RADIUS + 64)) { /* Complete the service window. */ }
-  const sites = new ServicePlanner(seed, terrain, options).detect(spine.samples), site = sites[0];
+  const spine = new RoadSpine(seed, terrain, options), planner = new ServicePlanner(seed, terrain, options);
+  let sites: ReturnType<ServicePlanner['detect']> = [];
+  for (let id = 1; id <= 32 && !sites.length; id++) {
+    while (!spine.advanceToDistance(serviceTarget(seed, id) + SERVICE_SEARCH_RADIUS + 64)) { /* Search exposed service sites. */ }
+    sites = planner.detect(spine.samples);
+  }
+  const site = sites[0];
   expect(site).toBeDefined();
   const bridges = new BridgeDetector(terrain, options).detect(spine.samples);
   const corridor = RoadCorridor.fromSamples(spine.samples, bridges, options, [], sites.map(site => site.ground));

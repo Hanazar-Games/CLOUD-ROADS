@@ -15,7 +15,7 @@ import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
 import { surfaceGravity, DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
-import type { TunnelSpan } from '../tunnel/TunnelDetector';
+import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
 import { TunnelMesh } from '../tunnel/TunnelMesh';
 import { RoadFurniture } from '../road/RoadFurniture';
 import { RoadsideScenery } from '../road/RoadsideScenery';
@@ -30,7 +30,7 @@ import { CrossingPlanner } from '../road/CrossingPlanner';
 import { CrossingMesh } from '../road/CrossingMesh';
 import { SeasonState, type Season } from '../season/SeasonState';
 import { seasonMaterial } from '../season/SeasonMaterial';
-import { JUNCTION_INTERVAL, junctionsEnabled } from '../road/JunctionSchedule';
+import { JUNCTION_INTERVAL, junctionLead, junctionsEnabled } from '../road/JunctionSchedule';
 import { JunctionMesh } from '../road/JunctionMesh';
 import { InterchangeMesh } from '../road/InterchangeMesh';
 import { TrafficSystem } from '../traffic/TrafficSystem';
@@ -350,6 +350,8 @@ export class World {
       if (!ready) return;
       const sample = scout.road.segments.find(s => s.start.distance <= target - 100 && s.end.distance >= target - 100)!.atDistance(target - 100);
       if (sample.structure?.landmark) { scout.id++; return; }
+      const tunnels = new TunnelDetector(this.height, this.options).detect(scout.road.samples, []);
+      if (tunnels.some(span => span.start.distance < target + 1200 && span.end.distance > target - junctionLead(this.options))) { scout.id++; return; }
       this.placeOnRoad(camera, sample, 6);
       this.roadReady = false;
       this.serviceView = { heading: sample.heading, pitch: -0.04 };
@@ -413,7 +415,9 @@ export class World {
 
   inspectLights(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     if (!this.roadReady) return undefined;
-    const lamp = this.furniture.lampPositions.find(point => point.sample.distance > (this.roadSample?.distance ?? 0) + 100) ?? this.furniture.lampPositions[0];
+    const exposed = this.furniture.lampPositions.filter(point => !this.renderTunnels.some(span => span.start.routeId === point.sample.routeId
+      && point.sample.distance >= span.start.distance - 120 && point.sample.distance <= span.end.distance + 120));
+    const lamp = exposed.find(point => point.sample.distance > (this.roadSample?.distance ?? 0) + 100) ?? exposed[0] ?? this.furniture.lampPositions[0];
     if (!lamp) return undefined;
     this.placeOnRoad(camera, lamp.sample, 3);
     return { heading: lamp.sample.heading, pitch: Math.atan(lamp.sample.grade) };

@@ -12,15 +12,18 @@ import { serviceFacility, type ServiceFacility } from './ServiceArchitecture';
 import { MERGE_END, serviceMerge } from './ServiceMerge';
 import { Garage, GARAGE_APRON } from '../garage/Garage';
 import { connectGarage } from '../garage/GarageAccess';
+import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
 
 export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number; accessSide?: number }
 
 export class ServicePlanner {
   private readonly profile;
   private readonly cache = new Map<number, ServiceArea>();
+  private readonly tunnels: TunnelDetector;
 
   constructor(private readonly seed: string, private readonly terrain: RoadTerrain, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
+    this.tunnels = new TunnelDetector(terrain, options);
   }
 
   private pad(sample: RoadSample, side: number, facility?: ServiceFacility): ServicePad {
@@ -48,13 +51,15 @@ export class ServicePlanner {
     return true;
   }
 
-  detect(samples: readonly RoadSample[]): ServiceArea[] {
+  detect(samples: readonly RoadSample[], tunnels: readonly TunnelSpan[] = this.tunnels.detect(samples, [])): ServiceArea[] {
     if (!samples.length) return [];
     const first = samples[0].distance, last = samples.at(-1)!.distance, sites: ServiceArea[] = [];
     const landmarks = new Map<number, { start: number; end: number }>();
     for (const sample of samples) if (sample.structure?.landmark && !landmarks.has(sample.structure.start))
       landmarks.set(sample.structure.start, { start: sample.distance, end: sample.structure.finish });
     const reserved = [...landmarks.values()];
+    const approach = (this.options.roadType === 'highway' ? MERGE_END : 220) + 160;
+    const buried = (distance: number) => tunnels.some(span => distance > span.start.distance - approach && distance < span.end.distance + approach);
     let roadIndex: RoadIndex | undefined;
     const edges: RoadEdge[] = [];
     for (const id of this.cache.keys()) if (serviceTarget(this.seed, id) < first - 2000 || serviceTarget(this.seed, id) > last + 2000) this.cache.delete(id);
@@ -62,6 +67,7 @@ export class ServicePlanner {
       const target = serviceTarget(this.seed, id), facility = serviceFacility(this.seed, id);
       if (target - SERVICE_SEARCH_RADIUS < first || target + SERVICE_SEARCH_RADIUS > last) continue;
       let site = this.cache.get(id);
+      if (site && buried(site.sample.distance)) { this.cache.delete(id); site = undefined; }
       if (!site) {
         if (!roadIndex) {
           for (let i = 1; i < samples.length; i++) edges.push({ a: samples[i - 1].position, b: samples[i].position });
@@ -71,7 +77,7 @@ export class ServicePlanner {
         for (const sample of samples) {
           if (Math.abs(sample.distance - target) > (this.profile.centers.length === 2 ? 360 : 600) || Math.floor(sample.distance / 24) === bucket) continue;
           if (reserved.some(span => sample.distance > span.start - MERGE_END - 300 && sample.distance < span.end + MERGE_END + 300)) continue;
-          if (sample.structure?.kind === 'tunnel' && sample.distance > sample.structure.start - 245 && sample.distance < sample.structure.end + 245) continue;
+          if (buried(sample.distance)) continue;
           bucket = Math.floor(sample.distance / 24);
           let cost = Math.abs(sample.grade) * 5000 + Math.abs(sample.curvature) * 50000 + Math.abs(sample.distance - target) * 0.025;
           for (const side of this.options.roadType === 'highway' && !this.options.oneWay ? [-1, 1] : [1]) {
@@ -87,7 +93,7 @@ export class ServicePlanner {
         }
         if (!chosen) continue;
         const merging = this.options.roadType === 'highway' && chosen.distance - MERGE_END >= first && chosen.distance + MERGE_END <= last
-          && !samples.some(p => Math.abs(p.distance - chosen!.distance) < MERGE_END + 10 && p.structure?.kind === 'tunnel');
+          && !tunnels.some(span => span.start.distance < chosen!.distance + MERGE_END + 10 && span.end.distance > chosen!.distance - MERGE_END - 10);
         const sample = chosen, pads: ServicePad[] = [], access: ServiceGround['access'] = [];
         for (const side of this.options.roadType === 'highway' && !this.options.oneWay ? [-1, 1] : [1]) {
           const pad = this.pad(sample, side, facility);

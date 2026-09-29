@@ -82,12 +82,13 @@ it('pauses and cancels service searches, visits consecutive sites and replays th
     expect(world.serviceSearchProgress).toBeNull();
     do { world.update(camera); } while (!world.roadReady && frames++ < 4000);
     expect(world.services).toHaveLength(1);
+    expect(world.tunnels.some(span => span.start.distance < world.services[0].end + 160 && span.end.distance > world.services[0].start - 160)).toBe(false);
     return world.services[0];
   };
   const first = visit(), firstPosition = camera.position.clone().add({ x: world.origin.x, y: 0, z: world.origin.z });
   const second = visit();
   expect(second.sample.distance - first.sample.distance).toBeGreaterThanOrEqual(10000);
-  expect(second.sample.distance - first.sample.distance).toBeLessThanOrEqual(20000);
+  expect(second.sample.distance - first.sample.distance).toBeLessThanOrEqual(20000 * (second.id - first.id));
   world.resetCamera(camera);
   expect(world.roadReady).toBe(false);
   world.update(camera);
