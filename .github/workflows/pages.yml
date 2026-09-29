@@ -28,7 +28,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - run: npm test -- --maxWorkers=2
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pages
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
