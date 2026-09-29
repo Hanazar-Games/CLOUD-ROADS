@@ -15,14 +15,15 @@ export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGe
   car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
   const systems = new VehicleSystems(); systems.roofOpen = roofClosed ? 0 : 1;
   model.sync(car, { x: 0, z: 0 }, systems); model.root.updateMatrixWorld(true);
-  const trailer = model.root.getObjectByName('trailer'), inverse = [model.root.matrixWorld.clone().invert()], transform = new Matrix4();
-  if (trailer) { inverse.push(trailer.matrixWorld.clone().invert()); parts.push([]); }
+  const trailers = car.trailers.map((_, i) => model.root.getObjectByName(`trailer-${i}`)!);
+  const inverse = [model.root, ...trailers].map(root => root.matrixWorld.clone().invert()), transform = new Matrix4();
+  for (let i = 0; i < trailers.length; i++) parts.push([]);
   model.root.traverse(object => {
     if (!(object instanceof Mesh) || object instanceof InstancedMesh || Array.isArray(object.material) || !object.visible) return;
     let part = 0;
     for (let parent = object.parent; parent && parent !== model.root; parent = parent.parent) {
       if (!parent.visible) return;
-      if (parent === trailer) part = 1;
+      const index = trailers.indexOf(parent); if (index >= 0) part = index + 1;
     }
     const material = object.material as MeshStandardMaterial;
     if (!material.color || !object.geometry.getAttribute('normal') || object.name === 'windshield-water') return;
@@ -54,8 +55,8 @@ export class ParkedVehicles {
   private garageEntries: readonly (readonly ParkedEntry[])[] = [];
   private extraEntries: ParkedEntry[] = [];
   private anchorX = 0; private anchorZ = 0;
-  constructor(private readonly scene: Scene, seed: string) {
-    this.fleet = new ParkedFleet(seed);
+  constructor(private readonly scene: Scene, seed: string, gravity = 9.81) {
+    this.fleet = new ParkedFleet(seed, gravity);
     this.material.onBeforeCompile = shader => {
       shader.vertexShader = `attribute float paintMask;\n${shader.vertexShader}`.replace('#include <color_vertex>', `
         #include <color_vertex>
@@ -96,7 +97,7 @@ export class ParkedVehicles {
         if (!meshes || meshes[0].count >= 256) continue;
         const car = this.fleet.vehicle(entry);
         for (let i = 0; i < meshes.length; i++) {
-          const body = i ? car.trailer! : car, mesh = meshes[i];
+          const body = i ? car.trailers[i - 1] : car, mesh = meshes[i];
           this.matrix.makeRotationY(-body.heading).setPosition(body.x - this.anchorX, body.y, body.z - this.anchorZ);
           this.matrix.multiply(this.tilt.makeRotationX(body.pitch));
           this.matrix.multiply(this.tilt.makeRotationZ(body.roll));

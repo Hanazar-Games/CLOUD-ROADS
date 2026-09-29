@@ -21,7 +21,7 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   await page.keyboard.press('KeyL'); await expect(metric('Vehicle lights')).toHaveText('high');
   await page.keyboard.press('KeyB'); await expect(metric('Wiper sweep')).toHaveText('0.000');
   await page.keyboard.press('KeyB'); await expect(page.locator('#vehicle-wipers-status')).toHaveText('雨刮 · 间歇');
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Slash');
   const sweep = await metric('Wiper sweep').evaluate(field => new Promise<string>(resolve => {
     const observer = new MutationObserver(() => { observer.disconnect(); resolve(field.textContent!); });
     observer.observe(field, { childList: true });
@@ -41,7 +41,7 @@ test('operates headlights and wipers, freezes controls in dialogs and adapts to 
   await expect(page.locator('#vehicle-wipers')).toHaveValue('intermittent');
   await expect(page.locator('#suspension-damping-value')).toHaveText('130%');
   await (await control(page, page.locator('#vehicle-wipers'))).selectOption('high');
-  await toggleSettings(page); await (await control(page, page.locator('#world'))).focus(); await page.keyboard.press('F8');
+  await toggleSettings(page); await (await control(page, page.locator('#world'))).focus(); await page.keyboard.press('Slash');
   await expect.poll(async () => Number(await metric('Wiper sweep').textContent())).toBeGreaterThan(0.2);
   expect(errors).toEqual([]);
 });

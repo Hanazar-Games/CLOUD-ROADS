@@ -10,6 +10,11 @@ import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { WalkingPhysics } from '../src/walking/WalkingPhysics';
 
 const create = () => new Garage('garage-test', { x: 1000, y: 100, z: 2000 });
+
+it('does not spawn a road train in bays shorter than its articulated length', () => {
+  const garage = create(); garage.configure(100, 'roadTrain', true);
+  expect(garage.entries).toHaveLength(0);
+});
 function surfaceFor(garage: Garage) {
   return new DrivingSurface({ seed: 'garage-test', options: DEFAULT_OPTIONS, garage,
     road: new RoadSpine('garage-test', { sample: () => 100 }), bridges: [], tunnels: [], services: [], groundHeight: () => 69 });
@@ -113,7 +118,7 @@ it('walks continuously down and up the spiral through a floor seam without dropp
   }
 });
 
-it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('supports %s on every storey without colliding with another floor', kind => {
+it.each((Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[]).filter(kind => vehicleProfiles[kind].length + 1 <= Math.max(...garageSlots.map(s => s.length))))('supports %s on every storey without colliding with another floor', kind => {
   const garage = create(), surface = surfaceFor(garage), car = new VehiclePhysics(kind);
   for (let floor = 0; floor < 5; floor++) {
     const angle = 1.4, p = garage.rampPoint(floor, angle);

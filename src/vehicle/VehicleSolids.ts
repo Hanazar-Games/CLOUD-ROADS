@@ -27,10 +27,10 @@ export function vehicleSolids(car: VehiclePhysics): VehicleSolid[] {
     add(body, body.front, back, Math.min(p.height - ride, p.eye.y + 0.4));
     add(body, back, body.rear, p.shape === 'tractor' ? 0.2 : p.shape === 'flatbed' ? 0.38 : p.shape === 'crane' ? 0.75 : p.height - ride);
   }
-  if (p.trailer && bodies[1]) {
-    const trailer = bodies[1];
-    add(trailer, trailer.front, trailer.rear, p.trailer.body === 'flatbed' || p.trailer.body === 'stake' ? 0.37 : p.height - ride);
-    if (p.trailer.body === 'stake') for (const side of [-1, 1]) {
+  for (const [i, config] of (p.trailers ?? []).entries()) {
+    const trailer = bodies[i + 1];
+    add(trailer, trailer.front, trailer.rear, config.body === 'flatbed' || config.body === 'stake' ? 0.37 : p.height - ride);
+    if (config.body === 'stake') for (const side of [-1, 1]) {
       const offset = vehicleOffset(side * (p.width / 2 - 0.03), 0, trailer.pitch, trailer.roll);
       add({ ...trailer, x: trailer.x + Math.cos(trailer.heading) * offset.x - Math.sin(trailer.heading) * offset.z,
         y: trailer.y + offset.y, z: trailer.z + Math.sin(trailer.heading) * offset.x + Math.cos(trailer.heading) * offset.z },

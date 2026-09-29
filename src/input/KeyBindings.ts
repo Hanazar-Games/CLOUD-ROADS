@@ -3,11 +3,13 @@ export const bindingActions = [
   ['KeyA', 'KeyA', '驾驶 / 移动', '左转 / 左移 / 吊车左回转'], ['KeyD', 'KeyD', '驾驶 / 移动', '右转 / 右移 / 吊车右回转'],
   ['Space', 'Space', '驾驶 / 移动', '按住手刹漂移 / 跳跃 / 飞行上升'], ['ShiftLeft', 'ShiftLeft', '驾驶 / 移动', '跑步 / 飞行下降（左键）'],
   ['ShiftRight', 'ShiftRight', '驾驶 / 移动', '跑步 / 飞行下降（右键）'], ['ControlLeft', 'ControlLeft', '驾驶 / 移动', '飞行加速（左键）'],
-  ['ControlRight', 'ControlRight', '驾驶 / 移动', '飞行加速（右键）'], ['F2', 'F2', '驾驶 / 移动', '点火 / 熄火'],
+  ['ControlRight', 'ControlRight', '驾驶 / 移动', '飞行加速（右键）'], ['Ignition', 'Backquote', '驾驶 / 移动', '点火 / 熄火'],
   ['KeyF', 'KeyF', '驾驶 / 移动', '安全上下车'], ['KeyR', 'KeyR', '驾驶 / 移动', '回到道路'],
   ['BracketLeft', 'BracketLeft', '驾驶 / 移动', '手动降挡'], ['BracketRight', 'BracketRight', '驾驶 / 移动', '手动升挡'],
-  ['Transmission', 'F6', '驾驶 / 移动', '自动 / 手动变速箱'],
-  ['Autopilot', 'F4', '自动驾驶', '开启 / 退出自动驾驶'], ['AutoMode', 'F5', '自动驾驶', '切换控制模式（同时退出）'],
+  ['Powertrain', 'Shift+KeyI', '驾驶 / 移动', '切换燃油 / 电动动力'], ['Regeneration', 'Shift+KeyN', '驾驶 / 移动', '电动能量回收 0–3 档'],
+  ['TrailerBrake', 'Shift+KeyH', '车型操作', '挂车独立制动开关'],
+  ['Transmission', 'Shift+KeyT', '驾驶 / 移动', '自动 / 手动变速箱'],
+  ['Autopilot', 'Semicolon', '自动驾驶', '开启 / 退出自动驾驶'], ['AutoMode', 'Quote', '自动驾驶', '切换控制模式（同时退出）'],
   ['AutoSlower', 'Minus', '自动驾驶', '最高巡航速度 −5 km/h'], ['AutoFaster', 'Equal', '自动驾驶', '最高巡航速度 +5 km/h'],
   ['KeyL', 'KeyL', '设备', '自动 / 关 / 近光 / 远光'], ['LightPower', 'Shift+KeyL', '设备', '车灯亮度循环'],
   ['LightRange', 'Shift+KeyB', '设备', '车灯距离循环'], ['KeyQ', 'KeyQ', '设备', '左转灯 / 收吊臂'],
@@ -24,14 +26,14 @@ export const bindingActions = [
   ['ArrowUp', 'ArrowUp', '视角 / 座椅', '座椅前移'], ['ArrowDown', 'ArrowDown', '视角 / 座椅', '座椅后移'],
   ['ArrowLeft', 'ArrowLeft', '视角 / 座椅', '座椅左移'], ['ArrowRight', 'ArrowRight', '视角 / 座椅', '座椅右移'],
   ['Home', 'Home', '视角 / 座椅', '靠背直立'], ['End', 'End', '视角 / 座椅', '靠背后仰'], ['Backspace', 'Backspace', '视角 / 座椅', '重置座椅'],
-  ['KeyM', 'KeyM', '菜单', '操作菜单'], ['Panel', 'F7', '菜单', '载具面板'], ['Settings', 'F10', '菜单', '旅程设置'],
-  ['F8', 'F8', '菜单', '暂停 / 继续'], ['Pause', 'Pause', '菜单', '暂停 / 继续（备用）'], ['F3', 'F3', '菜单', '调试信息'],
+  ['KeyM', 'KeyM', '菜单', '操作菜单'], ['Panel', 'Shift+KeyM', '菜单', '载具面板'], ['Settings', 'Shift+KeyP', '菜单', '旅程设置'],
+  ['PauseToggle', 'Slash', '菜单', '暂停 / 继续'], ['Pause', 'Pause', '菜单', '暂停 / 继续（备用）'], ['Debug', 'Backslash', '菜单', '调试信息'],
   ...Array.from({ length: 10 }, (_, i) => [`Digit${i}`, `Digit${i}`, '电台', `频道 ${i || 10}`]),
 ] as readonly (readonly string[])[];
 
 const valid = (key: string) => /^(Shift\+)?(Key[A-Z]|Digit[0-9]|F([2-9]|10)|Space|Comma|Period|Slash|Semicolon|Quote|Backquote|Minus|Equal|BracketLeft|BracketRight|Backslash|PageUp|PageDown|Home|End|Arrow(Up|Down|Left|Right)|Backspace|Pause|ShiftLeft|ShiftRight|ControlLeft|ControlRight)$/.test(key);
 export const keyLabel = (key: string): string => key.replace(/Key|Digit/g, '').replace('Comma', '，').replace('Period', '。')
-  .replace('BracketLeft', '[').replace('BracketRight', ']').replace('Minus', '−').replace('Equal', '=');
+  .replace('Backquote', '·').replace('Backslash', '反斜杠').replace('Slash', '/').replace('Semicolon', ';').replace('Quote', "'").replace('BracketLeft', '[').replace('BracketRight', ']').replace('Minus', '−').replace('Equal', '=');
 
 export class KeyBindings {
   private values: Record<string, string> = Object.fromEntries(bindingActions.map(([id, key]) => [id, key]));
@@ -52,7 +54,7 @@ export class KeyBindings {
     this.values = { ...values };
   }
   format(text: string): string {
-    return text.replace(/(?<![A-Za-z0-9°])(?:F[2-8]|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
-      (key: string, index: number) => key === 'L' && /\d\s?$/.test(text.slice(0, index)) ? key : this.label(key.length === 1 ? `Key${key}` : key));
+    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
+      (key: string, index: number) => key === 'L' && /\d\s?$/.test(text.slice(0, index)) ? key : this.label(key.startsWith('{') ? key.slice(1, -1) : key.length === 1 ? `Key${key}` : key));
   }
 }

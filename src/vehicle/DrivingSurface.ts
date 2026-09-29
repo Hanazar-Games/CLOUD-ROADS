@@ -100,7 +100,7 @@ export class DrivingSurface {
     return { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
   }
 
-  spawn(x: number, z: number, vehicle: VehicleProfile = vehicleProfiles.roadster): { x: number; z: number; heading: number; trailerHeading: number } | undefined {
+  spawn(x: number, z: number, vehicle: VehicleProfile = vehicleProfiles.roadster): { x: number; z: number; heading: number; trailerHeadings: number[] } | undefined {
     const road = this.world.road, nearest = road.nearest(x, z);
     if (!nearest) return undefined;
     const margin = Math.max(6, vehicle.length + 3);
@@ -117,12 +117,17 @@ export class DrivingSurface {
     for (let attempt = 0; attempt < 81; attempt++) {
       const d = distance + Math.ceil(attempt / 2) * 6 * (attempt % 2 ? 1 : -1);
       if (d < start || d > end) continue;
-      const spawn = point(d), trailer = vehicle.trailer;
-      const hitch = { x: spawn.x + Math.sin(spawn.heading) * (trailer?.hitchAlong ?? 0), z: spawn.z - Math.cos(spawn.heading) * (trailer?.hitchAlong ?? 0) };
-      const rear = point(d + direction * ((trailer?.hitchAlong ?? 0) - (trailer?.wheelbase ?? 0)));
-      const trailerHeading = trailer ? Math.atan2(hitch.x - rear.x, rear.z - hitch.z) : spawn.heading;
+      const spawn = point(d), trailerHeadings: number[] = [];
       const bodies = [{ ...spawn, front: vehicle.chassisLength / 2, rear: -vehicle.chassisLength / 2 }];
-      if (trailer) bodies.push({ ...hitch, heading: trailerHeading, front: trailer.front, rear: trailer.front - trailer.length });
+      let parent = spawn, hitchDistance = d;
+      for (const trailer of vehicle.trailers ?? []) {
+        hitchDistance += direction * trailer.hitchAlong;
+        const hitch = { x: parent.x + Math.sin(parent.heading) * trailer.hitchAlong, z: parent.z - Math.cos(parent.heading) * trailer.hitchAlong };
+        const rear = point(hitchDistance - direction * trailer.wheelbase);
+        const heading = Math.atan2(hitch.x - rear.x, rear.z - hitch.z);
+        trailerHeadings.push(heading); parent = { ...hitch, heading };
+        bodies.push({ ...parent, front: trailer.front, rear: trailer.front - trailer.length });
+      }
       const fits = bodies.every(body => {
         const steps = Math.ceil(body.front - body.rear);
         for (let i = 0; i <= steps; i++) {
@@ -137,7 +142,7 @@ export class DrivingSurface {
         }
         return true;
       });
-      if (fits) { this.level = road.nearest(spawn.x, spawn.z)!.position.y; return { ...spawn, trailerHeading }; }
+      if (fits) { this.level = road.nearest(spawn.x, spawn.z)!.position.y; return { ...spawn, trailerHeadings }; }
     }
     return undefined;
   }

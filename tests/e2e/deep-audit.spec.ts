@@ -59,8 +59,8 @@ test('keeps the cabin radio and audio status consistent with pause and volume mu
   await page.goto('/?seed=FLEET-FLAT'); await page.locator('#drive-toggle').click(); await page.keyboard.press('Digit6');
   const state = page.locator('[data-metric="Audio state"]'), radio = page.locator('#radio-reading');
   await expect(state).toHaveText('running'); await expect(radio).not.toContainText('静音');
-  await page.keyboard.press('F8'); await expect(state).toHaveText('suspended'); await expect(radio).toContainText('静音');
-  await page.keyboard.press('F8'); await expect(state).toHaveText('running'); await expect(radio).not.toContainText('静音');
+  await page.keyboard.press('Slash'); await expect(state).toHaveText('suspended'); await expect(radio).toContainText('静音');
+  await page.keyboard.press('Slash'); await expect(state).toHaveText('running'); await expect(radio).not.toContainText('静音');
   await (await control(page, page.locator('#master-volume'))).fill('0');
   await expect(page.locator('#audio-status')).toHaveText('总音量为零'); await expect(radio).toContainText('静音');
   await page.locator('#master-volume').fill('80'); await page.locator('#music-volume').fill('0');

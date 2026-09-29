@@ -18,7 +18,7 @@ test('opens before exiting, freezes the transition in menus and closes after ent
   await expect(metric(page, 'Travel mode')).toHaveText('walking');
   await page.keyboard.press('KeyF');
   await expect(metric(page, 'Travel mode')).toHaveText('driving');
-  await page.keyboard.press('F2'); await expect(metric(page, 'Ignition')).not.toHaveText('off');
+  await page.keyboard.press('Backquote'); await expect(metric(page, 'Ignition')).not.toHaveText('off');
   await expect.poll(door).toBe(0);
   await expect(page.locator('#boarding-help')).toBeHidden();
 });
@@ -44,14 +44,14 @@ test('starts and stops the engine, opens real doors for boarding and prevents mo
   await page.keyboard.down('KeyW'); await page.waitForTimeout(500); await page.keyboard.up('KeyW');
   await expect(page.locator('#vehicle-speed')).toHaveText('0');
   await expect(page.locator('#engine-rpm')).toHaveText('0');
-  await page.keyboard.press('F2'); await expect(metric(page, 'Ignition')).toHaveText('starting');
-  await page.keyboard.press('F8'); await page.waitForTimeout(1000);
+  await page.keyboard.press('Backquote'); await expect(metric(page, 'Ignition')).toHaveText('starting');
+  await page.keyboard.press('Slash'); await page.waitForTimeout(1000);
   await expect(metric(page, 'Ignition')).toHaveText('starting');
-  await page.keyboard.press('F8'); await expect(metric(page, 'Ignition')).toHaveText('running');
+  await page.keyboard.press('Slash'); await expect(metric(page, 'Ignition')).toHaveText('running');
   await page.keyboard.down('KeyW'); await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(12);
   await page.keyboard.up('KeyW'); await page.keyboard.press('KeyF');
   await expect(metric(page, 'Travel mode')).toHaveText('driving');
-  await page.keyboard.press('F2'); await expect(metric(page, 'Ignition')).toHaveText('off');
+  await page.keyboard.press('Backquote'); await expect(metric(page, 'Ignition')).toHaveText('off');
   expect(Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(1);
   await page.keyboard.down('Space'); await expect(page.locator('#vehicle-speed')).toHaveText('0'); await page.keyboard.up('Space');
   await page.keyboard.press('KeyF'); await expect(metric(page, 'Travel mode')).toHaveText('walking');
@@ -60,7 +60,7 @@ test('starts and stops the engine, opens real doors for boarding and prevents mo
   await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
   await expect(metric(page, 'Ignition')).toHaveText('off');
   await page.keyboard.press('KeyP'); await page.locator('[data-seat="front"]').click();
-  await page.keyboard.press('F2'); await expect(metric(page, 'Ignition')).toHaveText('off');
+  await page.keyboard.press('Backquote'); await expect(metric(page, 'Ignition')).toHaveText('off');
   expect(errors).toEqual([]);
 });
 

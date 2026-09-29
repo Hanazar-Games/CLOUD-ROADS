@@ -37,8 +37,8 @@ it('drives the 350 km/h supercar to its factory limit on level ground and retain
 
 it('adds an 18 m open stake trailer with three non-steering axles', () => {
   const p = vehicleProfiles.stake18;
-  expect(p.length).toBe(18); expect(p.trailer.body).toBe('stake');
-  expect(p.trailer.wheels).toHaveLength(6); expect(p.trailer.wheels.every(w => !w.steer)).toBe(true);
+  expect(p.length).toBe(18); expect(p.trailers[0].body).toBe('stake');
+  expect(p.trailers[0].wheels).toHaveLength(6); expect(p.trailers[0].wheels.every(w => !w.steer)).toBe(true);
 });
 
 it('interlocks passenger doors and cargo bays until fully shut, freezes animations and rejects passenger operation', () => {

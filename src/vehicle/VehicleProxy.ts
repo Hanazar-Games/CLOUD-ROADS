@@ -1,9 +1,9 @@
 import { BoxGeometry, Color, Float32BufferAttribute, type BufferGeometry } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { vehicleProfiles, type VehicleKind } from './VehicleConfig';
+import { vehicleProfiles, type VehicleProfile, type VehicleKind } from './VehicleConfig';
 
 export function vehicleProxy(kind: VehicleKind): BufferGeometry[] {
-  const p = vehicleProfiles[kind], parts: BufferGeometry[] = [], ground = -p.radius - p.rest;
+  const p: VehicleProfile = vehicleProfiles[kind], parts: BufferGeometry[] = [], ground = -p.radius - p.rest;
   const box = (width: number, height: number, length: number, x: number, y: number, z: number, paint = false, hex = 0x344450) => {
     const geometry = new BoxGeometry(width, height, length).toNonIndexed().translate(x, y, z);
     geometry.deleteAttribute('uv');
@@ -20,8 +20,8 @@ export function vehicleProxy(kind: VehicleKind): BufferGeometry[] {
   for (const wheel of [p.wheels[0], p.wheels[1], ...p.wheels.slice(-2)])
     box(0.24, p.radius * 2, p.radius * 1.6, wheel.x, ground + p.radius, -wheel.along, false, 0x24282a);
   const result = [merge()];
-  if ('trailer' in p) {
-    box(p.width, p.height - 0.8, p.trailer.length, 0, ground + 0.8 + (p.height - 0.8) / 2, p.trailer.length / 2 - p.trailer.front, true);
+  for (const trailer of p.trailers ?? []) {
+    box(p.width, p.height - 0.8, trailer.length, 0, ground + 0.8 + (p.height - 0.8) / 2, trailer.length / 2 - trailer.front, true);
     result.push(merge());
   }
   return result;

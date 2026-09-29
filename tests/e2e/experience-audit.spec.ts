@@ -67,10 +67,10 @@ test('keeps ten radio channels audible and bounded through rapid tuning and paus
     await expect.poll(level).toBeGreaterThan(0.005); expect(await level()).toBeLessThan(0.5);
   }
   for (const channel of ['7', '8', '10']) await page.locator('#radio-station').selectOption(channel);
-  await closeSettings(page); await page.keyboard.press('F8'); await expect(state).toHaveText('suspended');
+  await closeSettings(page); await page.keyboard.press('Slash'); await expect(state).toHaveText('suspended');
   await openSettings(page); await page.locator('[data-settings-target="audio"]').click();
   await page.locator('#radio-station').selectOption('1'); await closeSettings(page);
-  await page.keyboard.press('F8'); await expect(state).toHaveText('running');
+  await page.keyboard.press('Slash'); await expect(state).toHaveText('running');
   await expect.poll(level).toBeGreaterThan(0.005);
   expect(await page.evaluate(() => Reflect.get(window, 'voiceCount'))).toBe(voices); expect(errors).toEqual([]);
 });

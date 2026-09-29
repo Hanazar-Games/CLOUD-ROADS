@@ -4,7 +4,7 @@ import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig'
 
 it.each(Object.keys(vehicleProfiles) as VehicleKind[])('preserves %s dimensions and trailer parts in a bounded distant model', kind => {
   const profile = vehicleProfiles[kind], geometries = vehicleProxy(kind);
-  expect(geometries).toHaveLength('trailer' in profile ? 2 : 1);
+  expect(geometries).toHaveLength('trailers' in profile ? 1 + profile.trailers.length : 1);
   for (const geometry of geometries) {
     geometry.computeBoundingBox(); const bounds = geometry.boundingBox!;
     expect(bounds.max.x - bounds.min.x).toBeLessThanOrEqual(profile.width + 0.1);

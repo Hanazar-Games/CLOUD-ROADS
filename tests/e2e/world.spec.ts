@@ -36,20 +36,20 @@ test('renders WebGL, resizes, flies, pauses and exposes debug telemetry', async 
   await expect(page.locator('#fps')).not.toHaveText('—');
   await expect(page.locator('#error')).toBeHidden();
   await (await control(page, page.locator('#world'))).focus();
-  await page.keyboard.press('F3');
+  await page.keyboard.press('Backslash');
   await expect(page.locator('#debug')).toBeVisible();
   const before = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await expect(page.locator('#position')).not.toHaveText(before!);
   await page.keyboard.up('KeyW');
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Slash');
   await expect(page.locator('#notice')).toContainText('已暂停');
   const stopped = await page.locator('#position').textContent();
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(250);
   await page.keyboard.up('KeyW');
   await expect(page.locator('#position')).toHaveText(stopped!);
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Slash');
   await page.setViewportSize({ width: 1100, height: 720 });
   await expect.poll(() => page.locator('#world').evaluate((canvas: HTMLCanvasElement) => canvas.width / canvas.height)).toBeCloseTo(1100 / 720, 2);
   expect(errors).toEqual([]);
@@ -65,7 +65,7 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
   await expect(metric('Active chunks')).toHaveText('289');
   const originalAltitude = await page.locator('#altitude').textContent();
   await (await control(page, page.locator('#world'))).focus();
-  await page.keyboard.press('F3');
+  await page.keyboard.press('Backslash');
   await (await control(page, page.locator('#speed'))).fill('1200');
   await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('ControlLeft');
@@ -99,18 +99,22 @@ test('streams a 30 km flight, rebases, recycles, and returns to the same seed', 
 });
 
 test('clears held keys on blur and ignores flight keys while editing the seed', async ({ page }) => {
+  const nextHud = () => page.locator('#position').evaluate(node => new Promise<void>(resolve => {
+    const observer = new MutationObserver(() => { observer.disconnect(); resolve(); });
+    observer.observe(node, { childList: true });
+  }));
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   await (await control(page, page.locator('#world'))).focus();
   await page.keyboard.down('KeyW');
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await page.waitForTimeout(300);
+  await nextHud();
   const stopped = await page.locator('#position').textContent();
-  await page.waitForTimeout(300);
+  await nextHud();
   await expect(page.locator('#position')).toHaveText(stopped!);
   await page.keyboard.up('KeyW');
   await (await control(page, page.locator('#seed'))).focus();
   await page.keyboard.type('wasd');
-  await page.waitForTimeout(300);
+  await nextHud();
   await expect(page.locator('#position')).toHaveText(stopped!);
 });

@@ -1,7 +1,9 @@
+export type Powertrain = 'combustion' | 'ev';
 import type { VehicleProfile } from './VehicleConfig';
 
 export class Transmission {
   mode: 'auto' | 'manual' = 'auto';
+  powertrain: Powertrain = 'combustion';
   gear = 1;
   rpm: number;
   readonly redline: number;
@@ -22,12 +24,20 @@ export class Transmission {
   }
 
   get driveScale(): number {
+    if (this.powertrain === 'ev') return 1;
     return this.shiftTime > 0 ? 0.25 : this.rpm >= this.redline ? 0.1 : Math.min(1, 0.55 + this.rpm / this.redline);
   }
 
-  reset(): void { this.gear = 1; this.rpm = this.idle; this.shiftTime = this.cooldown = 0; }
+  reset(): void { this.gear = 1; this.rpm = this.powertrain === 'ev' ? 0 : this.idle; this.shiftTime = this.cooldown = 0; }
+
+  selectPowertrain(kind: Powertrain, speed: number): void {
+    this.powertrain = kind; this.reset();
+    if (kind === 'combustion' && speed > 0) while (this.gear < this.gears && this.revs(speed, this.gear) > this.redline * 0.86) this.gear++;
+    this.update(1 / 120, speed, 0);
+  }
 
   shift(direction: number, speed: number): boolean {
+    if (this.powertrain === 'ev') return false;
     const next = this.gear + Math.sign(direction);
     if (!direction || next < 1 || next > this.gears || this.cooldown > 0 || speed < -0.1
       || direction < 0 && this.revs(speed, next) > this.redline * 0.95) return false;
@@ -37,6 +47,7 @@ export class Transmission {
 
   update(dt: number, speed: number, throttle: number): void {
     if (!Number.isFinite(dt) || dt <= 0) return;
+    if (this.powertrain === 'ev') { this.gear = 1; this.rpm = Math.abs(speed) / this.maxSpeed * 14000; this.shiftTime = this.cooldown = 0; return; }
     dt = Math.min(dt, 0.1);
     this.shiftTime = Math.max(0, this.shiftTime - dt); this.cooldown = Math.max(0, this.cooldown - dt);
     const wheelRPM = this.revs(Math.abs(speed), speed < 0 ? 1 : this.gear);

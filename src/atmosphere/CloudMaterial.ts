@@ -15,7 +15,7 @@ export class CloudMaterial extends ShaderMaterial {
         inverseProjection: { value: new Matrix4() }, cameraWorld: { value: new Matrix4() },
         phase: { value: new Vector2() }, altitude: { value: 0 },
         nearFar: { value: new Vector2(0.5, 7000) }, fogRange: { value: new Vector2(1000, 1950) },
-        cloudsEnabled: { value: true }, immersion: { value: 0 },
+        planet: { value: 0 }, cloudsEnabled: { value: true }, immersion: { value: 0 },
         antialias: { value: true }, pixelSize: { value: new Vector2(1, 1) }, cloudSteps: { value: 20 },
         weatherCover: { value: 0 }, nightAmount: { value: 0 },
         sunDirection: { value: sun.direction }, sunColor: { value: sun.sunColor }, solar: { value: sun.light },
@@ -57,6 +57,7 @@ export class CloudMaterial extends ShaderMaterial {
         }
 
         float fogAmount(float distance, vec3 ray) {
+          if (planet == 1.0) return 0.0;
           float base = smoothstep(fogRange.x, fogRange.y, distance);
           float falloff = clamp(ray.y * min(distance, fogRange.y) * 0.003, -1.2, 1.2);
           float layer = abs(falloff) < 0.01 ? 1.0 : (1.0 - exp(-falloff)) / falloff;

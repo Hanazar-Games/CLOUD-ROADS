@@ -33,7 +33,7 @@ export class Autopilot {
   engage(car: VehiclePhysics, routes: readonly PilotRoute[], options: Readonly<WorldOptions>): boolean {
     this.cancel();
     if (car.ignition !== 'running' || car.speed < -0.1) { this.status = '请先点火并停止倒车'; return false; }
-    if (car.drifting || car.handbrake > 0.05) { this.status = '请先松开手刹并恢复抓地'; return false; }
+    if (car.drifting || car.handbrake > 0.05 || car.trailerBrake) { this.status = '请先松开手刹 / 挂车制动并恢复抓地'; return false; }
     const profile = roadProfile(options);
     const candidates = routes.flatMap(route => {
       const sample = route.road.nearest(car.x, car.z);
@@ -61,7 +61,7 @@ export class Autopilot {
       this.cancel('驾驶员已接管'); return manual;
     }
     if (car.drifting) { this.cancel('车辆正在侧滑，请接管'); return manual; }
-    if (car.ignition !== 'running' || car.speed < -0.2 || car.jackknifed) { this.cancel('车辆状态改变，请接管'); return { ...manual, handbrake: true }; }
+    if (car.ignition !== 'running' || car.speed < -0.2 || car.jackknifed || car.trailerBrake) { this.cancel('车辆状态改变，请接管'); return { ...manual, handbrake: true }; }
     let route = routes.find(r => r.id === this.routeId), near = route?.road.nearest(car.x, car.z);
     if (route && near && this.direction < 0 && near.distance < 8 && ['root', 'back'].includes(route.id)) {
       const next = routes.find(r => r.id === (route!.id === 'root' ? 'back' : 'root'));
@@ -85,8 +85,8 @@ export class Autopilot {
       }
       return route!.road.segments.find(s => s.start.distance <= d && s.end.distance >= d)?.atDistance(d);
     };
-    const comfort = this.settings.comfort, decel = Math.max(0.6, Math.min(car.profile.brake * car.brakeScale, 3.5 - comfort * 0.35) * clamp(grip, 0.2, 1));
-    const lateralAccel = Math.min(3.2 - comfort * 0.4, 9.81 * car.profile.width / (2 * car.profile.cg) * 0.3) * clamp(grip, 0.2, 1);
+    const comfort = this.settings.comfort, decel = Math.max(0.12, Math.min(car.profile.brake * car.brakeScale, car.gravity * 0.75, 3.5 - comfort * 0.35) * clamp(grip, 0.2, 1));
+    const lateralAccel = Math.min(3.2 - comfort * 0.4, car.gravity * 0.55, car.gravity * car.profile.width / (2 * car.profile.cg) * 0.3) * clamp(grip, 0.2, 1);
     const remaining = this.direction > 0 ? route.road.segments.at(-1)!.end.distance - near.distance
       : near.distance + (reverse?.road.segments.at(-1)?.end.distance ?? -route.road.segments[0].start.distance);
     let target = Math.min(car.maxSpeed, (this.settings.maxKmh - (this.settings.maxKmh - this.settings.minKmh) * (comfort - 1) * 0.06) / 3.6);
@@ -102,7 +102,7 @@ export class Autopilot {
     target = Math.min(target, Math.sqrt(2 * decel * Math.max(0, remaining - car.profile.length - 12)));
     let gap = Infinity, leadSpeed = 0;
     for (const other of obstacles) {
-      if (other === car || Math.hypot(other.x - car.x, other.z - car.z) > 300) continue;
+      if (other === car || Math.hypot(other.x - car.x, other.z - car.z) > Math.max(300, car.speed ** 2 / (2 * decel) + other.profile.length + 40)) continue;
       for (const body of other.bodies()) {
         const center = (body.front + body.rear) / 2, x = body.x + Math.sin(body.heading) * center, z = body.z - Math.cos(body.heading) * center;
         const p = route.road.nearest(x, z); if (!p || Math.abs(body.y - p.position.y - other.profile.radius - other.profile.rest) > 4) continue;
@@ -130,7 +130,7 @@ export class Autopilot {
     const steer = clamp(Math.atan(2 * car.wheelbase * cross / Math.max(4, dx * dx + dz * dz)) / car.steeringLock, -1, 1);
     const desired = clamp((target - car.speed) * 0.65 + Math.max(0, near.grade * this.direction) * 2.5, -1, 1);
     this.throttle += clamp(desired - this.throttle, -dt * 3, dt * (1.6 - comfort * 0.22));
-    if (gap < Math.max(2, car.speed ** 2 / Math.max(1, car.profile.brake * car.brakeScale * grip * 1.5))) this.throttle = -1;
+    if (gap < Math.max(2, car.speed ** 2 / Math.max(0.2, Math.min(car.profile.brake * car.brakeScale, car.gravity * 0.94) * grip * 1.5))) this.throttle = -1;
     return { throttle: speedControl ? car.speed < 0.1 && this.throttle < 0 ? 0 : this.throttle : manual.throttle,
       steer: steeringControl ? steer : manual.steer, handbrake: speedControl && target < 0.25 && car.speed < 0.5 };
   }

@@ -13,7 +13,7 @@ export interface VehicleProfile {
   power: number; force: number; maxSpeed: number; reverseSpeed: number; brake: number; drag: number;
   radius: number; rest: number; travel: number; suspensionRate: number; cg: number; steer: number; steerRate: number;
   wheels: readonly WheelPoint[]; eye: { x: number; y: number; along: number }; paint: number;
-  trailer?: TrailerConfig;
+  trailers?: readonly TrailerConfig[];
   body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'citybus' | 'coupe' | 'rally' | 'limousine' | 'expedition' | 'schoolbus' | 'shuttle' | 'mixer' | 'garbage' | 'refrigerated' | 'towtruck';
   bus?: { rows: readonly number[]; deckHeight: number };
 }
@@ -85,15 +85,15 @@ const fleet = {
     steer: 0.59, steerRate: 0.72, suspensionRate: 0.95, wheels: axles(2.3, [4.8, 3.4, 0, -3.4, -4.8], 2),
     eye: { x: -0.72, y: 1.55, along: 5.6 }, paint: 0xe1ad38 },
   semi15: { ...heavy, name: '15 米半挂', shape: 'tractor', length: 15, chassisLength: 5.6, height: 3.9, mass: 36000,
-    power: 420000, force: 190000, maxSpeed: 25, wheels: axles(2.08, [2.3, -0.65, -1.65]), trailer: trailer(15), paint: 0x657caa },
+    power: 420000, force: 190000, maxSpeed: 25, wheels: axles(2.08, [2.3, -0.65, -1.65]), trailers: [trailer(15)], paint: 0x657caa },
   semi20: { ...heavy, name: '20 米超长半挂', shape: 'tractor', length: 20, chassisLength: 5.6, height: 3.9, mass: 43000,
-    power: 480000, force: 215000, maxSpeed: 23.5, wheels: axles(2.08, [2.3, -0.65, -1.65]), trailer: trailer(20), paint: 0x9d5148 },
+    power: 480000, force: 215000, maxSpeed: 23.5, wheels: axles(2.08, [2.3, -0.65, -1.65]), trailers: [trailer(20)], paint: 0x9d5148 },
   stake18: { ...heavy, name: '18 米高栏仓栅半挂', shape: 'tractor', length: 18, chassisLength: 5.6, height: 3.9, mass: 34000,
     power: 460000, force: 195000, maxSpeed: 27, wheels: axles(2.08, [2.3, -0.65, -1.65]),
-    trailer: { ...trailer(18), body: 'stake', wheels: axles(2.08, [-9.6, -10.8, -12]).map(w => ({ ...w, steer: false })) }, paint: 0x51876a },
+    trailers: [{ ...trailer(18), body: 'stake', wheels: axles(2.08, [-9.6, -10.8, -12]).map(w => ({ ...w, steer: false })) }], paint: 0x51876a },
   heavySemi: { ...heavy, name: '1,020 马力重载半挂', shape: 'tractor', length: 20, chassisLength: 5.6, height: 3.9, mass: 50000,
     power: 750000, force: 310000, maxSpeed: 25, brake: 7, cg: 1.25, wheels: axles(2.08, [2.3, -0.65, -1.65]),
-    trailer: { ...trailer(20), body: 'flatbed' }, paint: 0x974b3a },
+    trailers: [{ ...trailer(20), body: 'flatbed' }], paint: 0x974b3a },
   minibus: { ...heavy, name: '8 米小客车', shape: 'bus', length: 8, chassisLength: 8, width: 2.35, height: 3.05, mass: 7800,
     power: 160000, force: 35000, maxSpeed: 30, radius: 0.44, rest: 0.76, cg: 1.1, drag: 3.2,
     wheels: axles(1.95, [2.25, -2.25]), eye: { x: -0.61, y: 1.35, along: 3.3 }, bus: { rows: [9], deckHeight: 0 }, paint: 0xc0cbb2 },
@@ -115,6 +115,11 @@ const fleet = {
 } as const satisfies Record<string, VehicleProfile>;
 export const vehicleProfiles = {
   ...fleet,
+  roadTrain: { ...fleet.semi20, name: '三节公路列车 · 3 × 10 m', length: 39.4, chassisLength: 6.4, mass: 72000,
+    power: 850000, force: 380000, maxSpeed: 25, reverseSpeed: 2.2, brake: 6.5, drag: 9, steerRate: 0.7,
+    wheels: axles(2.08, [2.7, -0.8, -2]), eye: { x: -0.65, y: 1.8, along: 2 }, paint: 0xc59a46,
+    trailers: [0, 1, 2].map(i => ({ body: 'box', length: 10, wheelbase: 8.2, hitchAlong: i ? -11.2 : -3,
+      front: -0.8, wheels: axles(2.08, [-7.55, -8.85]).map(w => ({ ...w, steer: false })) })) },
   coupe: { ...fleet.sedan, name: '双门运动轿跑', body: 'coupe', length: 4.5, chassisLength: 4.5, height: 1.5, mass: 1480,
     power: 230000, force: 11200, maxSpeed: 69, rest: 0.4, travel: 0.23, cg: 0.48, steer: 0.5, paint: 0x587dba },
   rally: { ...fleet.hatchback, name: '四驱拉力赛车', body: 'rally', width: 1.86, mass: 1330, height: 1.76,

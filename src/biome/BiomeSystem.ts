@@ -1,6 +1,6 @@
 import { Noise } from '../terrain/Noise';
 import { hashSeed } from '../world/WorldSeed';
-import { isAridTerrain, type TerrainKind } from '../world/WorldOptions';
+import { isAridTerrain, isExtraterrestrial, type TerrainKind } from '../world/WorldOptions';
 
 export type Biome = 'valley' | 'forest' | 'rock' | 'alpine' | 'snow' | 'desert';
 
@@ -36,14 +36,25 @@ export class BiomeSystem {
   private readonly noise: Noise;
   readonly treeDensity: number;
   readonly autumn: boolean;
+  readonly barren: boolean;
 
   constructor(seed: string, private readonly terrain: TerrainKind = 'alpine') {
     this.noise = new Noise(hashSeed(`${seed}:biomes`));
-    this.treeDensity = terrain === 'meadow' ? 0.18 : terrain === 'volcanic' ? 0.08 : terrain === 'tundra' ? 0.04 : 1;
+    this.barren = isExtraterrestrial(terrain);
+    this.treeDensity = this.barren ? 0 : terrain === 'meadow' ? 0.18 : terrain === 'volcanic' ? 0.08 : terrain === 'tundra' ? 0.04 : 1;
     this.autumn = terrain === 'autumn';
   }
 
   sample(x: number, z: number, height: number, normalY: number, target = createBiomeSample()): BiomeSample {
+    if (this.barren) {
+      const shade = 0.88 + this.noise.fractal(x / 420, z / 420, 2) * 0.15 + Math.sin(height / 24) * 0.035;
+      for (const kind of kinds) target.weights[kind] = kind === 'rock' ? 1 : 0;
+      const palette = this.terrain === 'moon' ? [0.24, 0.245, 0.25] : [0.42, 0.16, 0.075];
+      for (let i = 0; i < 3; i++) target.color[i] = palette[i] * shade;
+      target.kind = 'rock'; target.humidity = 0; target.snowLine = Infinity;
+      target.temperature = this.terrain === 'moon' ? -20 : -55;
+      return target;
+    }
     const arid = isAridTerrain(this.terrain);
     const climate = this.noise.fractal(x / 5000, z / 5000, 2);
     const humidity = clamp((arid ? 0.12 : this.terrain === 'karst' ? 0.84 : this.terrain === 'forest' || this.autumn ? 0.72 : 0.5)

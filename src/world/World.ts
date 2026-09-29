@@ -12,7 +12,7 @@ import { RoadCorridor } from '../road/RoadCorridor';
 import type { BridgeSpan } from '../bridge/BridgeDetector';
 import { BridgeMesh } from '../bridge/BridgeMesh';
 import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
-import { DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
+import { surfaceGravity, DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
@@ -109,7 +109,7 @@ export class World {
     this.furniture = new RoadFurniture(scene, seed, options);
     this.roadside = new RoadsideScenery(scene, seed, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height);
-    this.parkedVehicles = new ParkedVehicles(scene, seed);
+    this.parkedVehicles = new ParkedVehicles(scene, seed, surfaceGravity(options.terrain));
     this.traffic = new TrafficSystem(seed, options);
     this.trafficVehicles = new TrafficVehicles(scene, this.traffic);
     this.signs = new RoadSigns(scene, options);
@@ -191,8 +191,8 @@ export class World {
     this.tunnelMesh.update(this.renderTunnels, this.corridor, this.height, this.corridorVersion, this.origin.x, this.origin.z, nearRoute);
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
     this.roadside.update(this.renderSamples, this.renderBridges, this.renderTunnels, this.renderServices, this.corridor, this.height,
-      this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.chunks.vegetation.enabled);
-    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled);
+      this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.chunks.vegetation.enabled && !this.season.extraterrestrial);
+    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled && !this.season.extraterrestrial);
     this.parkedVehicles.update(this.renderServices, this.origin, camera.position, this.garage, [...this.serviceGarages.keys()]);
     this.garageMesh.update(this.origin, camera.position);
     for (const mesh of this.serviceGarages.values()) mesh.update(this.origin, camera.position);

@@ -1,5 +1,16 @@
 import { expect, it } from 'vitest';
-import { KeyBindings } from '../src/input/KeyBindings';
+import { bindingActions, KeyBindings } from '../src/input/KeyBindings';
+
+it('uses Backquote ignition and conflict-free ordinary keys for all default actions', () => {
+  const keys = new KeyBindings();
+  expect(keys.resolve('Backquote', false)).toBe('Ignition');
+  for (const code of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'Space']) expect(keys.resolve(code, true)).toBe(code);
+  expect(keys.label('Ignition')).toBe('·');
+  expect(keys.format('{Ignition} 点火 · {PauseToggle} 暂停')).toBe('· 点火 · / 暂停');
+  expect(bindingActions.some(([, key]) => /^F\d+$/.test(key))).toBe(false);
+  expect(new Set(Object.values(keys.snapshot())).size).toBe(bindingActions.length);
+  keys.bind('Ignition', 'Shift+KeyU'); expect(keys.format('{Ignition} 点火')).toBe('Shift+U 点火');
+});
 
 it('rebinds actions, rejects conflicts and restores defaults', () => {
   const keys = new KeyBindings();
@@ -9,7 +20,7 @@ it('rebinds actions, rejects conflicts and restores defaults', () => {
   expect(() => keys.bind('KeyL', 'F9')).toThrow();
   expect(() => keys.bind('KeyL', 'Escape')).toThrow();
   keys.reset();
-  expect(keys.resolve('F4', false)).toBe('Autopilot');
+  expect(keys.resolve('Semicolon', false)).toBe('Autopilot');
   expect(keys.resolve('KeyL', false)).toBe('KeyL');
 });
 

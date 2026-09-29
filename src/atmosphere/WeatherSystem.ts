@@ -90,7 +90,10 @@ export class WeatherSystem {
   get profile(): Readonly<WeatherProfile> { return this.current; }
   get liquidRain(): number { return this.profile.rain * (1 - this.frozenFraction); }
   get snowfall(): number { return this.profile.rain * this.frozenFraction; }
-  setSeason(season: SeasonState): void { this.season = season; }
+  setSeason(season: SeasonState): void {
+    this.season = season; this.transition(1);
+    if (season.extraterrestrial) { this.wetness = this.frozenFraction = 0; this.rain.visible = this.snow.visible = false; }
+  }
   get phase(): number { return this.time.value; }
   setKind(kind: WeatherKind, immediate = false): void { this.kind = kind; if (immediate) this.transition(1); }
   setFogDensity(density: number, immediate = false): void {
@@ -99,7 +102,9 @@ export class WeatherSystem {
   }
 
   private transition(blend: number): void {
-    const target = weatherProfiles[this.kind];
+    const target = this.season?.terrain === 'moon' ? { cover: 0, rain: 0, near: 1e8, far: 2e8, sunlight: 1, wind: 0 }
+      : this.season?.terrain === 'mars' ? { cover: 0, rain: 0, near: 1200, far: 3200, sunlight: 0.8, wind: 0.3 }
+        : weatherProfiles[this.kind];
     for (const key of Object.keys(target) as (keyof WeatherProfile)[]) {
       const value = target[key] / (key === 'near' || key === 'far' ? this.density : 1);
       this.current[key] += (value - this.current[key]) * blend;

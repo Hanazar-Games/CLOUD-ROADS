@@ -35,7 +35,7 @@ test('applies winding levels, drives them and preserves choices during far strea
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(20);
   await page.keyboard.up('KeyW');
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Slash');
   await page.locator('#world').evaluate(canvas => {
     const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
     extension.loseContext(); setTimeout(() => extension.restoreContext(), 1000);

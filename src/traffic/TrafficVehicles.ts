@@ -42,7 +42,7 @@ export class TrafficVehicles {
     for (const { car, signal } of this.traffic.entries) {
       const meshes = this.batches.get(key(car)) ?? this.batches.get(`${car.kind}:${detail(car) ? 'far' : 'near'}`); if (!meshes) continue;
       for (const [i, mesh] of meshes.entries()) {
-        const body = i ? car.trailer! : car;
+        const body = i ? car.trailers[i - 1] : car;
         this.matrix.makeRotationY(-body.heading).setPosition(body.x - origin.x, body.y, body.z - origin.z);
         this.matrix.multiply(this.local.makeRotationX(body.pitch)).multiply(this.local.makeRotationZ(body.roll));
         mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(car.paint));

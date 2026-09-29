@@ -40,7 +40,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
     await expect.poll(async () => Number(await page.locator('[data-metric="Tree canopies"]').textContent()), { timeout: 15_000 }).toBeGreaterThan(2000);
     await page.screenshot();
   }
-  await page.locator('#world').focus(); await page.keyboard.press('F8');
+  await page.locator('#world').focus(); await page.keyboard.press('Slash');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await openSettings(page);
   await page.locator('[data-settings-target="weather"]').click();

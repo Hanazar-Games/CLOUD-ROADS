@@ -115,7 +115,7 @@ test('shows the current release, archives the previous baseline and isolates dia
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-release="current"]')).toContainText(version);
-  await expect(dialog.locator('[data-release="current"]')).toContainText('四向互通 · 分级植被与拥堵车流');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('星际公路 · 电动动力与三节列车');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.50');
   await expect(dialog.locator('[data-release="history"]')).toContainText('多样驿站 · 渐缩汇入与十款新车');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.49');
@@ -259,7 +259,7 @@ test('closes modal settings and keeps pause button and keyboard state in sync', 
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#notice')).toContainText('已暂停');
   await toggleSettings(page);
-  await page.keyboard.press('F8');
+  await page.keyboard.press('Slash');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#pause')).toHaveText('暂停探索');
 });

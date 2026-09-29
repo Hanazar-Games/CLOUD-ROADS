@@ -38,10 +38,10 @@ it('shares wet-road grip between braking and turning and includes trailer tires'
 
 it('provides five suspension levels and distinct cars, trucks, buses, articulated rigs and a motorcycle', () => {
   expect(suspensionLevels).toEqual([1, 2, 3, 4, 5]);
-  expect(Object.keys(vehicleProfiles)).toHaveLength(37);
+  expect(Object.keys(vehicleProfiles)).toHaveLength(38);
   for (const [kind, length] of [['truck5', 5], ['truck8', 8], ['semi15', 15], ['semi20', 20]] as const) expect(vehicleProfiles[kind].length).toBe(length);
   expect(vehicleProfiles.motorcycle.wheels).toHaveLength(2);
-  expect(vehicleProfiles.semi20.trailer!.wheelbase).toBeGreaterThan(vehicleProfiles.semi15.trailer!.wheelbase);
+  expect(vehicleProfiles.semi20.trailers[0]!.wheelbase).toBeGreaterThan(vehicleProfiles.semi15.trailers[0]!.wheelbase);
 });
 
 it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settles %s on slopes in all five suspension settings and releases its model', kind => {
@@ -68,7 +68,7 @@ it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settl
   expect(size.y).toBeLessThan(car.profile.height + 0.2);
   let parts = 0;
   mesh.root.traverse(object => { if (object instanceof Mesh) parts++; });
-  expect(parts).toBeLessThan(100);
+  expect(parts).toBeLessThan(kind === 'roadTrain' ? 160 : 100);
   mesh.dispose(); expect(scene.children).toHaveLength(0);
 });
 
@@ -93,14 +93,14 @@ it.each(['semi15', 'semi20', 'stake18', 'heavySemi'] as const)('keeps %s hitched
     car.reset(30000, -40000, 0, flat);
   }
   drive(a, 12, 0.4, 1, flat, 30); drive(b, 12, 0.4, 1, flat, 144);
-  expect(a.trailer!.heading).not.toBeCloseTo(a.heading, 2);
-  expect(a.trailer!.heading).toBeCloseTo(b.trailer!.heading, 8);
+  expect(a.trailers[0]!.heading).not.toBeCloseTo(a.heading, 2);
+  expect(a.trailers[0]!.heading).toBeCloseTo(b.trailers[0]!.heading, 8);
   for (const car of [a, b]) {
     const hitch = car.hitch();
-    expect(Math.hypot(car.trailer!.x - hitch.x, car.trailer!.z - hitch.z)).toBeLessThan(0.001);
+    expect(Math.hypot(car.trailers[0]!.x - hitch.x, car.trailers[0]!.z - hitch.z)).toBeLessThan(0.001);
     drive(car, 25, -1, -1);
     expect(Math.abs(car.articulation)).toBeLessThanOrEqual(Math.PI * 0.44);
-    expect([car.x, car.y, car.trailer!.pitch, car.trailer!.heading].every(Number.isFinite)).toBe(true);
+    expect([car.x, car.y, car.trailers[0]!.pitch, car.trailers[0]!.heading].every(Number.isFinite)).toBe(true);
   }
 });
 
@@ -116,9 +116,9 @@ it.each(['semi15', 'semi20', 'stake18', 'heavySemi'] as const)('keeps every %s t
   const slope: SurfaceSampler = (x, z) => ({ height: 100 + x * 0.05 - z * 0.4, grip: 1 });
   const car = new VehiclePhysics(kind); car.reset(0, 0, 0, slope);
   drive(car, 5, 0, 0, slope);
-  expect(car.trailer!.wheels.every(w => w.grounded && w.compression > 0)).toBe(true);
+  expect(car.trailers[0]!.wheels.every(w => w.grounded && w.compression > 0)).toBe(true);
   expect(car.pitch).toBeCloseTo(Math.atan(0.4), 2);
-  expect(car.trailer!.pitch).toBeCloseTo(Math.atan(0.4), 2);
+  expect(car.trailers[0]!.pitch).toBeCloseTo(Math.atan(0.4), 2);
   car.reset(0, 0, 0, flat); drive(car, 25, 1, -1);
   const angle = Math.abs(car.articulation);
   drive(car, 8, 0, 1);
@@ -132,7 +132,7 @@ it('adds a four-axle flatbed, five-axle crane and a heavy-haul flatbed semi', ()
   expect(vehicleProfiles.crane.wheels).toHaveLength(10);
   expect(vehicleProfiles.crane.wheels.filter(w => w.steer)).toHaveLength(4);
   expect(vehicleProfiles.heavySemi.power).toBeGreaterThan(735500);
-  expect(vehicleProfiles.heavySemi.trailer.body).toBe('flatbed');
+  expect(vehicleProfiles.heavySemi.trailers[0].body).toBe('flatbed');
 });
 
 it('tunes acceleration and service braking without bypassing traction or parking brakes', () => {

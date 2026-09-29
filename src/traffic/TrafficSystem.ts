@@ -3,7 +3,7 @@ import { roadFrame } from '../road/RoadFrame';
 import { roadProfile } from '../road/RoadProfile';
 import type { RoadSample } from '../road/RoadSegment';
 import { createRng, hashSeed } from '../world/WorldSeed';
-import type { WorldOptions } from '../world/WorldOptions';
+import { surfaceGravity, type WorldOptions } from '../world/WorldOptions';
 import { VehiclePhysics } from '../vehicle/VehiclePhysics';
 import { vehicleProfiles, type VehicleKind } from '../vehicle/VehicleConfig';
 import { constrainVehicle } from '../service/ServiceCollision';
@@ -103,19 +103,20 @@ export class TrafficSystem {
 
   private place(entry: TrafficEntry, route: NetworkRoute, distance: number, yaw = 0): boolean {
     const sample = this.sample(route, distance);
-    const p = entry.car.profile, rear = this.sample(route, distance + entry.direction * ((p.trailer?.hitchAlong ?? 0) - (p.trailer?.wheelbase ?? 0)));
+    const p = entry.car.profile, rear = this.sample(route, distance + entry.direction * ((p.trailers?.[0].hitchAlong ?? 0) - (p.trailers?.[0].wheelbase ?? 0)));
     if (!sample || !rear) return false;
     const { right, normal } = roadFrame(sample), offset = entry.offset, car = entry.car;
     const x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;
     const heading = sample.heading + (entry.direction < 0 ? Math.PI : 0) + yaw, rearRight = roadFrame(rear).right;
-    const hitchX = x + Math.sin(heading) * (p.trailer?.hitchAlong ?? 0), hitchZ = z - Math.cos(heading) * (p.trailer?.hitchAlong ?? 0);
+    const hitchX = x + Math.sin(heading) * (p.trailers?.[0].hitchAlong ?? 0), hitchZ = z - Math.cos(heading) * (p.trailers?.[0].hitchAlong ?? 0);
     const trailerHeading = Math.atan2(hitchX - rear.position.x - rearRight.x * offset, rear.position.z + rearRight.z * offset - hitchZ);
     const wheel = car.wheelAngle, rearWheel = car.rearWheelAngle, trip = car.trip, speed = car.speed;
+    car.gravity = surfaceGravity(this.options.terrain);
     car.reset(x, z, heading, (px, pz) => {
-      const nearRear = p.trailer && Math.hypot(px - rear.position.x, pz - rear.position.z) < Math.hypot(px - sample.position.x, pz - sample.position.z);
+      const nearRear = p.trailers?.length && Math.hypot(px - rear.position.x, pz - rear.position.z) < Math.hypot(px - sample.position.x, pz - sample.position.z);
       const ground = nearRear ? rear : sample, up = nearRear ? roadFrame(rear).normal : normal;
       return { height: ground.position.y - (up.x * (px - ground.position.x) + up.z * (pz - ground.position.z)) / up.y, grip: 1 };
-    }, true, p.trailer ? trailerHeading : heading);
+    }, true, p.trailers?.length ? [trailerHeading] : []);
     car.wheelAngle = wheel; car.rearWheelAngle = rearWheel; car.trip = trip; car.speed = speed; car.parked = false; car.ignition = 'running';
     car.steering = Math.atan(sample.curvature * entry.direction * car.wheelbase);
     return true;
@@ -195,24 +196,25 @@ export class TrafficSystem {
     const car = entry.car, reverse = this.reverseRoute(route);
     const remaining = entry.direction > 0 ? route.road.segments.at(-1)!.end.distance - entry.distance
       : reverse?.ready ? (reverse.road.segments.at(-1)?.end.distance ?? 0) + entry.distance : entry.distance - route.road.segments[0].start.distance;
-    let target = Math.min(entry.cruise, Math.sqrt(Math.max(0, remaining - 30) * 5));
+    const deceleration = Math.min(3, car.gravity * 0.5);
+    let target = Math.min(entry.cruise, Math.sqrt(Math.max(0, remaining - 30) * Math.min(5, deceleration * 2)));
     if (this.scenario !== 'normal') target = Math.min(target, this.scenario === 'busy' ? 9 : 7);
     if (this.scenario === 'queue' || this.scenario === 'stopgo' && this.time % 36 < 20) {
       const center = this.queues.get(route.id);
       if (center !== undefined) {
         const gap = (center + entry.direction * 350 - entry.distance) * entry.direction - car.profile.chassisLength / 2;
-        if (gap > -car.profile.length) target = Math.min(target, Math.max(0, gap) / 1.4, Math.sqrt(Math.max(0, gap) * 6));
+        if (gap > -car.profile.length) target = Math.min(target, Math.max(0, gap) / 1.4, Math.sqrt(Math.max(0, gap) * deceleration * 2));
       }
     }
-    for (const ahead of [0, 15, 40, car.speed * 3]) {
+    for (const ahead of [0, 15, 40, Math.max(car.speed * 3, car.speed ** 2 / (2 * deceleration))]) {
       const sample = this.sample(route, entry.distance + entry.direction * ahead);
-      if (sample) target = Math.min(target, Math.sqrt(2.1 / Math.max(0.001, Math.abs(sample.curvature))), 20 / (1 + Math.abs(sample.grade) * 5));
+      if (sample) target = Math.min(target, Math.sqrt(Math.min(2.1, car.gravity * 0.55) / Math.max(0.001, Math.abs(sample.curvature))), 20 / (1 + Math.abs(sample.grade) * 5));
     }
     let gap = Infinity;
     const obstacles = parked;
     for (const other of obstacles) {
       if (other === car) continue;
-      if (Math.hypot(other.x - car.x, other.z - car.z) > 130) continue;
+      if (Math.hypot(other.x - car.x, other.z - car.z) > Math.max(130, car.speed ** 2 / (2 * deceleration) + other.profile.length + 30)) continue;
       for (const body of other.bodies()) {
         const center = (body.front + body.rear) / 2;
         const dx = body.x + Math.sin(body.heading) * center - car.x, dz = body.z - Math.cos(body.heading) * center - car.z;
@@ -244,8 +246,8 @@ export class TrafficSystem {
         entry.offset = change.from + (this.laneOffset(entry, change.lane) - change.from) * t * t * (3 - 2 * t);
       }
     }
-    target = Math.min(target, Math.max(0, gap) / 1.8, Math.sqrt(Math.max(0, gap) * 6));
-    const speed = car.speed + Math.max(-5 * dt, Math.min(1.5 * dt, target - car.speed));
+    target = Math.min(target, Math.max(0, gap) / 1.8, Math.sqrt(Math.max(0, gap) * deceleration * 2));
+    const speed = car.speed + Math.max(-Math.min(5, car.gravity * 0.9) * dt, Math.min(Math.min(1.5, car.gravity * 0.8) * dt, target - car.speed));
     const move = Math.min(speed * dt, Math.max(0, gap));
     const before = car.bodies(), distance = entry.distance + entry.direction * move;
     const yaw = Math.max(-0.25, Math.min(0.25, Math.atan2((entry.offset - previousOffset) * entry.direction, Math.max(0.1, move))));

@@ -22,7 +22,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
   await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(65);
-  await page.keyboard.up('KeyW'); await page.keyboard.press('F8');
+  await page.keyboard.up('KeyW'); await page.keyboard.press('Slash');
   expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBeLessThanOrEqual(3);
   expect(Math.abs(parseFloat((await metric('Road curvature').textContent())!))).toBeLessThanOrEqual(0.00084);
   await toggleSettings(page);

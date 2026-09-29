@@ -49,8 +49,9 @@ export class DrivingCamera {
       const distance = tunnel ? 4.8 : this.distanceFor(car);
       const height = tunnel ? 2.1 : Math.max(2.3, car.profile.height + 1.2) + this.height + this.pitch * 5;
       let focusX = car.x, focusZ = car.z;
-      if (car.trailer && car.profile.trailer) {
-        const t = car.trailer, offset = vehicleOffset(0, car.profile.trailer.front - car.profile.trailer.length, t.pitch, t.roll);
+      if (car.trailers.length) {
+        const t = car.trailers.at(-1)!, config = car.profile.trailers!.at(-1)!;
+        const offset = vehicleOffset(0, config.front - config.length, t.pitch, t.roll);
         focusX = (car.x + Math.sin(car.heading) * car.profile.chassisLength / 2 + t.x - Math.sin(t.heading) * offset.z) / 2;
         focusZ = (car.z - Math.cos(car.heading) * car.profile.chassisLength / 2 + t.z + Math.cos(t.heading) * offset.z) / 2;
       }

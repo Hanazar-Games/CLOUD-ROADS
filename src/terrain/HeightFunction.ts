@@ -2,6 +2,7 @@ import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
 import { DEFAULT_OPTIONS, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { MountainRanges } from './MountainRanges';
+import { planetHeight } from './PlanetTerrain';
 import { mountainIncision } from './MountainErosion';
 
 export class HeightFunction {
@@ -33,6 +34,7 @@ export class HeightFunction {
 
   private naturalHeight(x: number, z: number): number {
     const density = this.options.mountainDensity, sx = 128 + (x - 128) * density, sz = 128 + (z - 128) * density;
+    if (this.terrain === 'moon' || this.terrain === 'mars') return planetHeight(this.noise, sx, sz, this.terrain === 'mars');
     const warpX = this.noise.fractal(sx / 4200, sz / 4200, 2) * 650;
     const warpZ = this.noise.fractal(sx / 4200 + 73, sz / 4200 - 29, 2) * 650;
     const wx = sx + warpX, wz = sz + warpZ;

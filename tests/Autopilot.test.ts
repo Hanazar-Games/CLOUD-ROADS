@@ -20,6 +20,18 @@ function setup() {
 }
 const manual = { throttle: 0, steer: 0, handbrake: false };
 
+it('plans a longer stop under lunar gravity and rejects an applied trailer brake', () => {
+  const earth = setup(), moon = setup(); moon.car.gravity = 1.62;
+  const targets: number[] = [];
+  for (const { auto, car, routes, options } of [earth, moon]) {
+    car.speed = 20; car.parked = false;
+    const other = new VehiclePhysics(); other.reset(car.x + Math.sin(car.heading) * 160, car.z - Math.cos(car.heading) * 160, car.heading, ground);
+    auto.update(1 / 60, car, routes, [other], manual, 1); targets.push(auto.targetKmh);
+    car.trailerBrake = true; expect(auto.engage(car, routes, options)).toBe(false);
+  }
+  expect(targets[1]).toBeLessThan(targets[0]);
+});
+
 it('refuses engagement during a slide and yields without locking rear tires if traction is lost', () => {
   const { auto, car, routes, options } = setup();
   car.speed = 15; car.parked = false; car.lateralSpeed = 5; car.tireSlip = 0.8;

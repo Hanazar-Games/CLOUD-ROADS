@@ -1,5 +1,5 @@
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type Suspension, type VehicleKind, type VehicleProfile, type WheelPoint } from './VehicleConfig';
-import { Transmission } from './Transmission';
+import { Transmission, type Powertrain } from './Transmission';
 export interface VehicleInput { throttle: number; steer: number; handbrake: boolean }
 export interface SurfaceContact { height: number; grip: number }
 export type SurfaceSampler = (x: number, z: number) => SurfaceContact;
@@ -7,7 +7,7 @@ export type MotionConstraint = (car: VehiclePhysics, previousX: number, previous
 export interface WheelState { height: number; compression: number; grounded: boolean }
 export interface TrailerState { x: number; y: number; z: number; heading: number; pitch: number; roll: number; wheels: WheelState[] }
 export interface VehicleBody { x: number; y: number; z: number; heading: number; pitch: number; roll: number; front: number; rear: number }
-const STEP = 1 / 120, GRAVITY = 9.81;
+const STEP = 1 / 120;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const approach = (value: number, target: number, delta: number) => value + clamp(target - value, -delta, delta);
 const angle = (value: number) => Math.atan2(Math.sin(value), Math.cos(value));
@@ -17,6 +17,10 @@ export class VehiclePhysics {
   readonly profile: Readonly<VehicleProfile>;
   readonly transmission: Transmission;
   x = 0; y = 0; z = 0; heading = 0;
+  gravity = 9.81;
+  regeneration = 2;
+  regenerating = false;
+  trailerBrake = false;
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   lateralSpeed = 0; yawRate = 0; tireSlip = 0; handbrake = 0; rearWheelAngle = 0;
   paint: number;
@@ -32,7 +36,7 @@ export class VehiclePhysics {
   steeringAssist = true;
   steeringAssistStrength = 1;
   readonly wheels: WheelState[];
-  readonly trailer?: TrailerState;
+  readonly trailers: TrailerState[];
   private vy = 0; private pitchVelocity = 0; private rollVelocity = 0; private accumulator = 0;
   private readonly pitchInertia: number;
   private readonly rollInertia: number;
@@ -43,7 +47,7 @@ export class VehiclePhysics {
   private longitudinalAcceleration = 0;
   private previousHeading = 0;
   private previousPose = { y: 0, pitch: 0, roll: 0 };
-  private previousTrailer?: Omit<TrailerState, 'wheels'>;
+  private previousTrailers: Omit<TrailerState, 'wheels'>[] = [];
 
   constructor(readonly kind: VehicleKind = 'roadster') {
     this.profile = vehicleProfiles[kind]; this.wheels = this.profile.wheels.map(wheel);
@@ -56,22 +60,30 @@ export class VehiclePhysics {
     this.frontAxle = front.reduce((s, p) => s + p.along, 0) / front.length;
     this.wheelbase = this.frontAxle - this.rearAxle;
     this.yawInertia = (this.profile.chassisLength ** 2 + this.profile.width ** 2) / 7
-      + (this.profile.trailer ? this.profile.trailer.wheelbase * 0.35 : 0);
-    if (this.profile.trailer) this.trailer = { x: 0, y: 0, z: 0, heading: 0, pitch: 0, roll: 0, wheels: this.profile.trailer.wheels.map(wheel) };
+      + (this.profile.trailers ?? []).reduce((sum, t) => sum + t.wheelbase * 0.35, 0);
+    this.trailers = (this.profile.trailers ?? []).map(t => ({ x: 0, y: 0, z: 0, heading: 0, pitch: 0, roll: 0, wheels: t.wheels.map(wheel) }));
   }
 
-  get articulation(): number { return this.trailer ? angle(this.heading - this.trailer.heading) : 0; }
+  get articulations(): number[] { return this.trailers.map((t, i) => angle((i ? this.trailers[i - 1].heading : this.heading) - t.heading)); }
+  get articulation(): number { return this.articulations.reduce((a, b) => Math.abs(a) > Math.abs(b) ? a : b, 0); }
+  get powertrain(): Powertrain { return this.transmission.powertrain; }
+  setPowertrain(kind: Powertrain): void {
+    if (kind === this.powertrain) return;
+    this.transmission.selectPowertrain(kind, this.speed);
+    this.regenerating = false;
+    if (this.ignition === 'starting') this.ignitionTime = kind === 'ev' ? 0.15 : this.profile.mass > 4000 ? 1.25 : 0.75;
+  }
   get motionSpeed(): number { return Math.hypot(this.speed, this.lateralSpeed); }
   get slipAngle(): number { return Math.atan2(this.lateralSpeed, Math.max(0.5, Math.abs(this.speed))); }
   get drifting(): boolean { return this.motionSpeed > 3 && Math.abs(this.slipAngle) > 0.08 && this.tireSlip > 0.1; }
-  get engineRpm(): number { return this.ignition === 'off' ? 0 : this.ignition === 'starting' ? 240 : this.transmission.rpm; }
+  get engineRpm(): number { return this.ignition === 'off' ? 0 : this.ignition === 'starting' ? this.powertrain === 'ev' ? 0 : 240 : this.transmission.rpm; }
   toggleIgnition(): void {
     this.ignition = this.ignition === 'off' ? 'starting' : 'off';
-    this.ignitionTime = this.profile.mass > 4000 ? 1.25 : 0.75;
+    this.ignitionTime = this.powertrain === 'ev' ? 0.15 : this.profile.mass > 4000 ? 1.25 : 0.75;
   }
   get maxSpeed(): number { return this.speedLimit ?? this.profile.maxSpeed; }
   get steeringLock(): number {
-    const config = this.profile, stability = this.kind === 'motorcycle' ? 8 : Math.min(8, GRAVITY * config.width / (2 * config.cg) * 0.7);
+    const config = this.profile, stability = this.kind === 'motorcycle' ? 8 : Math.min(8, this.gravity * config.width / (2 * config.cg) * 0.7);
     const speed = this.motionSpeed * Math.sqrt(clamp(this.steeringAssistStrength, 0.25, 2));
     const blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
     const low = Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4)) / (1 + speed / 28);
@@ -86,35 +98,37 @@ export class VehiclePhysics {
   park(): void {
     this.speed = this.lateralSpeed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
-    this.transmission.reset();
+    this.transmission.reset(); this.trailerBrake = this.regenerating = false;
     this.parked = true; this.braking = false; this.saveMotion();
   }
   wheelSteering(point: WheelPoint): number {
     const curvature = Math.tan(this.steering) / this.wheelbase;
     return point.steer ? Math.atan((point.along - this.rearAxle) * curvature / (1 - point.x * curvature)) : 0;
   }
-  hitch(): { x: number; y: number; z: number } {
-    const along = this.profile.trailer?.hitchAlong ?? 0;
-    const offset = vehicleOffset(0, along, this.pitch, this.roll);
-    return { x: this.x - Math.sin(this.heading) * offset.z, y: this.y + offset.y,
-      z: this.z + Math.cos(this.heading) * offset.z };
+  hitch(index = 0): { x: number; y: number; z: number } {
+    const parent = index ? this.trailers[index - 1] : this;
+    const along = this.profile.trailers?.[index].hitchAlong ?? 0;
+    const offset = vehicleOffset(0, along, parent.pitch, parent.roll);
+    return { x: parent.x - Math.sin(parent.heading) * offset.z, y: parent.y + offset.y,
+      z: parent.z + Math.cos(parent.heading) * offset.z };
   }
 
-  reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeading = heading): void {
+  reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeadings: readonly number[] = []): void {
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
     this.speed = this.lateralSpeed = this.steering = this.pitch = this.roll = this.wheelAngle = this.rearWheelAngle = 0;
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
     this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
-    this.parked = true; this.braking = this.jackknifed = false;
+    this.parked = true; this.braking = this.jackknifed = this.regenerating = this.trailerBrake = false;
     this.transmission.reset();
     if (!preserveTrip) this.trip = 0;
     const contacts = this.contacts(surface), grade = this.slope(contacts, 'along'), bank = this.slope(contacts, 'x');
     this.pitch = Math.atan(grade); this.roll = this.kind === 'motorcycle' ? 0 : Math.atan(bank * Math.cos(this.pitch));
     const settled = this.contacts(surface);
     this.y = settled.reduce((sum, contact) => sum + contact.height, 0) / settled.length
-      + this.profile.radius + this.profile.rest - GRAVITY / suspensionTuning(this.suspension, this.profile).spring;
+      + this.profile.radius + this.profile.rest - this.gravity / suspensionTuning(this.suspension, this.profile).spring;
     this.syncWheels(settled);
-    if (this.trailer) { this.trailer.heading = trailerHeading; this.trailer.pitch = this.pitch; this.trailer.roll = this.roll; this.updateTrailer(0, surface, true); }
+    this.trailers.forEach((t, i) => { t.heading = trailerHeadings[i] ?? heading; t.pitch = this.pitch; t.roll = this.roll; });
+    this.updateTrailer(0, surface, true);
     this.saveMotion();
   }
 
@@ -142,7 +156,7 @@ export class VehiclePhysics {
     this.yawRate = 0;
     this.speed = vx * Math.sin(this.heading) - vz * Math.cos(this.heading);
     this.lateralSpeed = vx * Math.cos(this.heading) + vz * Math.sin(this.heading);
-    if (this.trailer && this.previousTrailer) { this.trailer.heading = this.previousTrailer.heading; Object.assign(this.trailer, this.hitch()); }
+    this.trailers.forEach((t, i) => { t.heading = this.previousTrailers[i].heading; Object.assign(t, this.hitch(i)); });
     this.syncWheels(this.contacts(surface)); this.updateTrailer(0, surface);
   }
 
@@ -168,18 +182,16 @@ export class VehiclePhysics {
     const body = previous ? { ...this.previousPose, heading: this.previousHeading } : this;
     const bodies: VehicleBody[] = [{ x, z, y: body.y, heading: body.heading, pitch: body.pitch, roll: body.roll,
       front: this.profile.chassisLength / 2, rear: -this.profile.chassisLength / 2 }];
-    const trailer = previous ? this.previousTrailer : this.trailer, config = this.profile.trailer;
-    if (trailer && config) bodies.push({ ...trailer, front: config.front, rear: config.front - config.length });
+    (previous ? this.previousTrailers : this.trailers).forEach((trailer, i) => {
+      const config = this.profile.trailers![i]; bodies.push({ ...trailer, front: config.front, rear: config.front - config.length });
+    });
     return bodies;
   }
 
   private saveMotion(): void {
     this.previousHeading = this.heading;
     this.previousPose = { y: this.y, pitch: this.pitch, roll: this.roll };
-    if (this.trailer) {
-      const { x, y, z, heading, pitch, roll } = this.trailer;
-      this.previousTrailer = { x, y, z, heading, pitch, roll };
-    }
+    this.previousTrailers = this.trailers.map(({ x, y, z, heading, pitch, roll }) => ({ x, y, z, heading, pitch, roll }));
   }
 
   private contacts(surface: SurfaceSampler): SurfaceContact[] {
@@ -218,26 +230,34 @@ export class VehiclePhysics {
     if (throttle && !input.handbrake && this.ignition === 'running') this.parked = false;
     const gripScale = clamp(this.gripScale, 0.25, 1.5);
     const grip = contacts.reduce((sum, c, i) => sum + c.grip * Number(this.wheels[i].grounded), 0) / count * gripScale;
-    const trailerContacts = this.trailerContacts(surface);
-    const brakingGrip = (grip * count + trailerContacts.reduce((sum, c, i) => sum + c.grip * Number(this.trailer!.wheels[i].grounded) * gripScale, 0)) / (count + trailerContacts.length);
+    const trailerContacts = this.trailers.flatMap((_, i) => this.trailerContacts(surface, i));
+    const trailerWheels = this.trailers.flatMap(t => t.wheels);
+    const trailerGrip = trailerContacts.reduce((sum, c, i) => sum + c.grip * Number(trailerWheels[i].grounded) * gripScale, 0) / Math.max(1, trailerContacts.length);
+    const brakingGrip = (grip * count + trailerGrip * trailerContacts.length) / (count + trailerContacts.length);
     const grade = this.slope(contacts, 'along'), oldSpeed = this.speed;
-    const slopeForce = GRAVITY * grade / Math.hypot(1, grade);
+    const tractorShare = this.trailers.length ? Math.min(0.4, 10000 / config.mass) : 1;
+    const trailerGrade = this.trailers.reduce((sum, t) => sum + Math.sin(t.pitch), 0) / Math.max(1, this.trailers.length);
+    const slopeForce = this.gravity * (grade / Math.hypot(1, grade) * tractorShare + trailerGrade * (1 - tractorShare));
     this.handbrake = approach(this.handbrake, input.handbrake ? clamp(this.handbrakeStrength, 0.4, 1) : 0, STEP * (input.handbrake ? 6 : 3));
-    const rearLoad = clamp(this.frontAxle / this.wheelbase + this.longitudinalAcceleration * Math.sign(this.speed || 1) * config.cg / (GRAVITY * this.wheelbase), 0.18, 0.8);
+    const rearLoad = clamp(this.frontAxle / this.wheelbase + this.longitudinalAcceleration * Math.sign(this.speed || 1) * config.cg / (this.gravity * this.wheelbase), 0.18, 0.8);
     const parking = this.parked || input.handbrake && this.motionSpeed < 1;
     const rearOnly = this.handbrake > 0 && !parking && throttle * this.speed >= 0;
-    this.braking = input.handbrake || this.handbrake > 0.01 || throttle * this.speed < 0;
+    this.regenerating = this.powertrain === 'ev' && this.ignition === 'running' && !parking && Math.abs(throttle) < 0.01
+      && this.motionSpeed > 0.1 && this.regeneration > 0 && grip > 0;
+    this.braking = this.regenerating || this.trailerBrake || input.handbrake || this.handbrake > 0.01 || throttle * this.speed < 0;
     this.transmission.update(STEP, this.speed, this.parked || this.ignition !== 'running' ? 0 : throttle);
     if (parking || this.braking) {
       const service = throttle * this.speed < 0 ? Math.abs(throttle) : 0;
+      const regeneration = this.regenerating ? Math.min(0.65 * clamp(this.regeneration, 0, 3), this.gravity * 0.35 * grip) : 0;
+      const trailerService = this.trailerBrake && this.trailers.length ? Math.min(config.brake * 0.45, this.gravity * 0.45) * trailerGrip : 0;
       const rearProjection = Math.abs(this.speed) / Math.max(0.1, Math.hypot(this.speed, this.lateralSpeed + this.yawRate * this.rearAxle));
-      const deceleration = parking ? Math.min(config.brake * 1.2, GRAVITY * 0.94) * brakingGrip
-        : Math.max(Math.min(GRAVITY * 0.94, config.brake * clamp(this.brakeScale, 0.5, 1.5)) * brakingGrip * service,
-          GRAVITY * 0.78 * this.axleGrip(contacts, false) * rearLoad * this.handbrake * rearProjection);
+      const deceleration = parking ? Math.min(config.brake * 1.2, this.gravity * 0.94) * brakingGrip
+        : Math.max(Math.min(this.gravity * 0.94, config.brake * clamp(this.brakeScale, 0.5, 1.5)) * brakingGrip * service,
+          this.gravity * 0.78 * this.axleGrip(contacts, false) * rearLoad * this.handbrake * rearProjection, regeneration, trailerService);
       this.speed = approach(this.speed - slopeForce * STEP, 0, deceleration * STEP);
     } else {
       const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) * clamp(this.powerScale, 0.5, 1.5) / config.mass;
-      const drive = (this.ignition === 'running' ? throttle : 0) * Math.min(engine, GRAVITY * 0.94) * grip * (throttle < 0 ? 0.55 : this.transmission.driveScale);
+      const drive = (this.ignition === 'running' ? throttle : 0) * Math.min(engine, this.gravity * 0.94) * grip * (throttle < 0 ? 0.55 : this.transmission.driveScale);
       this.speed += (drive - slopeForce) * STEP;
       this.speed = approach(this.speed, 0, (0.14 + config.drag * this.speed ** 2 / config.mass + Math.max(0, 1 - grip) * 0.5) * STEP);
     }
@@ -257,7 +277,7 @@ export class VehiclePhysics {
     this.trip += Math.hypot(this.speed, this.lateralSpeed) * STEP;
     this.wheelAngle = (this.wheelAngle + this.speed * STEP / config.radius) % (Math.PI * 2);
     this.rearWheelAngle = (this.rearWheelAngle + this.speed * (1 - this.handbrake) * STEP / config.radius) % (Math.PI * 2);
-    let lift = -GRAVITY, pitchForce = 0, rollForce = 0;
+    let lift = -this.gravity, pitchForce = 0, rollForce = 0;
     const next = this.contacts(surface);
     for (let i = 0; i < count; i++) {
       const p = config.wheels[i];
@@ -269,7 +289,7 @@ export class VehiclePhysics {
     this.vy += lift * STEP; this.y += this.vy * STEP;
     this.pitchVelocity += (pitchForce / this.pitchInertia + (this.longitudinalAcceleration - slopeForce) * config.cg * 0.22 / Math.max(1, this.pitchInertia) - this.pitchVelocity * 2) * STEP;
     if (this.kind === 'motorcycle') {
-      const lean = -Math.atan(lateralAcceleration / GRAVITY);
+      const lean = -Math.atan(lateralAcceleration / this.gravity);
       this.rollVelocity += ((lean - this.roll) * 45 - this.rollVelocity * 13) * STEP;
     } else this.rollVelocity += (rollForce / this.rollInertia + lateralAcceleration * config.cg * 0.3 - this.rollVelocity * 3) * STEP;
     this.pitch = clamp(this.pitch + this.pitchVelocity * STEP, -0.65, 0.65);
@@ -299,10 +319,10 @@ export class VehiclePhysics {
       const sideways = (this.lateralSpeed + this.yawRate * along) * cos - this.speed * sin;
       const speed = this.speed * cos + (this.lateralSpeed + this.yawRate * along) * sin;
       const slipAngle = Math.atan2(sideways, Math.max(3, Math.abs(speed)));
-      const capacity = grip * GRAVITY * load;
+      const capacity = grip * this.gravity * load;
       const demand = Math.abs(this.longitudinalAcceleration) * (rearOnly ? Number(!front) : load);
       const limit = Math.sqrt(Math.max(0, capacity ** 2 - demand ** 2));
-      const stiffness = GRAVITY * load * 12;
+      const stiffness = this.gravity * load * 12;
       const rollingForce = clamp(-slipAngle * stiffness, -limit, limit);
       const lockedForce = -sideways / Math.max(0.5, Math.hypot(speed, sideways)) * capacity * 0.78;
       const force = !front && rearOnly ? rollingForce * (1 - this.handbrake) + lockedForce * this.handbrake : rollingForce;
@@ -328,34 +348,36 @@ export class VehiclePhysics {
   }
 
   private updateTrailer(dt: number, surface: SurfaceSampler, reset = false): void {
-    const trailer = this.trailer, config = this.profile.trailer;
-    if (!trailer || !config) return;
-    const hitch = this.hitch(), dx = hitch.x - trailer.x, dz = hitch.z - trailer.z;
-    if (!reset) trailer.heading += (Math.cos(trailer.heading) * dx + Math.sin(trailer.heading) * dz) / (config.wheelbase * Math.cos(trailer.pitch));
-    const articulation = angle(this.heading - trailer.heading), limit = Math.PI * 0.43;
-    this.jackknifed = Math.abs(articulation) > limit;
-    if (this.jackknifed) { trailer.heading = this.heading - clamp(articulation, -limit, limit); this.speed = this.lateralSpeed = this.yawRate = 0; }
-    Object.assign(trailer, hitch);
-    const contacts = this.trailerContacts(surface);
-    const ground = contacts.reduce((sum, c) => sum + c.height, 0) / contacts.length;
-    const ride = this.profile.radius + this.profile.rest - GRAVITY / suspensionTuning(this.suspension, this.profile).spring;
-    const target = clamp(Math.atan2(trailer.y - ground - ride, config.wheelbase * Math.cos(trailer.pitch)), -0.65, 0.65);
-    const blend = reset ? 1 : 1 - Math.exp(-Math.sqrt(suspensionTuning(this.suspension, this.profile).spring) * dt);
-    const bank = config.wheels.reduce((s, p, i) => s + p.x * contacts[i].height, 0) / config.wheels.reduce((s, p) => s + p.x ** 2, 0);
-    const sideSlope = (bank + Math.tan(target) * Math.sin(trailer.roll) * Math.sin(trailer.pitch)) / Math.cos(trailer.roll);
-    trailer.roll += (clamp(Math.atan(sideSlope * Math.cos(target)), -0.5, 0.5) - trailer.roll) * blend;
-    trailer.pitch += (target - trailer.pitch) * blend;
-    config.wheels.forEach((p, i) => {
-      const mount = trailer.y + vehicleOffset(p.x, p.along, trailer.pitch, trailer.roll).y, wheel = trailer.wheels[i];
-      const ground = contacts[i].height + this.profile.radius;
-      wheel.height = Math.max(ground, mount - this.profile.rest);
-      wheel.compression = clamp(this.profile.rest - mount + ground, 0, this.profile.travel);
-      wheel.grounded = mount - ground < this.profile.rest + 0.03;
-    });
+    this.jackknifed = false;
+    for (let index = 0; index < this.trailers.length; index++) {
+      const trailer = this.trailers[index], config = this.profile.trailers![index];
+      const parent = index ? this.trailers[index - 1] : this;
+      const hitch = this.hitch(index), dx = hitch.x - trailer.x, dz = hitch.z - trailer.z;
+      if (!reset) trailer.heading += (Math.cos(trailer.heading) * dx + Math.sin(trailer.heading) * dz) / (config.wheelbase * Math.cos(trailer.pitch));
+      const articulation = angle(parent.heading - trailer.heading), limit = Math.PI * 0.43;
+      if (Math.abs(articulation) > limit) { this.jackknifed = true; trailer.heading = parent.heading - clamp(articulation, -limit, limit); this.speed = this.lateralSpeed = this.yawRate = 0; }
+      Object.assign(trailer, hitch);
+      const contacts = this.trailerContacts(surface, index);
+      const ground = contacts.reduce((sum, c) => sum + c.height, 0) / contacts.length;
+      const ride = this.profile.radius + this.profile.rest - this.gravity / suspensionTuning(this.suspension, this.profile).spring;
+      const target = clamp(Math.atan2(trailer.y - ground - ride, config.wheelbase * Math.cos(trailer.pitch)), -0.65, 0.65);
+      const blend = reset ? 1 : 1 - Math.exp(-Math.sqrt(suspensionTuning(this.suspension, this.profile).spring) * dt);
+      const bank = config.wheels.reduce((s, p, i) => s + p.x * contacts[i].height, 0) / config.wheels.reduce((s, p) => s + p.x ** 2, 0);
+      const sideSlope = (bank + Math.tan(target) * Math.sin(trailer.roll) * Math.sin(trailer.pitch)) / Math.cos(trailer.roll);
+      trailer.roll += (clamp(Math.atan(sideSlope * Math.cos(target)), -0.5, 0.5) - trailer.roll) * blend;
+      trailer.pitch += (target - trailer.pitch) * blend;
+      config.wheels.forEach((p, i) => {
+        const mount = trailer.y + vehicleOffset(p.x, p.along, trailer.pitch, trailer.roll).y, wheel = trailer.wheels[i];
+        const ground = contacts[i].height + this.profile.radius;
+        wheel.height = Math.max(ground, mount - this.profile.rest);
+        wheel.compression = clamp(this.profile.rest - mount + ground, 0, this.profile.travel);
+        wheel.grounded = mount - ground < this.profile.rest + 0.03;
+      });
+    }
   }
 
-  private trailerContacts(surface: SurfaceSampler): SurfaceContact[] {
-    const trailer = this.trailer, config = this.profile.trailer;
+  private trailerContacts(surface: SurfaceSampler, index: number): SurfaceContact[] {
+    const trailer = this.trailers[index], config = this.profile.trailers?.[index];
     if (!trailer || !config) return [];
     return config.wheels.map(p => {
       const offset = vehicleOffset(p.x, p.along, trailer.pitch, trailer.roll);

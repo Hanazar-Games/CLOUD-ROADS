@@ -56,6 +56,7 @@ export class VegetationMesh {
     if (this.season !== season) this.materials.forEach((material, layer) => seasonMaterial(material, season,
       deciduous(layer) ? 'foliage' : KINDS[layer] === 'pine' ? 'evergreen' : ['grass', 'meadow', 'shrub'].includes(KINDS[layer]) ? 'grass' : 'structure'));
     this.season = season;
+    this.materials[4].color.set(season.terrain === 'moon' ? '#c2c6ce' : season.terrain === 'mars' ? '#c77d56' : '#ffffff');
     for (const batch of this.batches.values()) {
       const geometry = this.geometry(batch.layer);
       if (batch.mesh.geometry !== geometry) { batch.mesh.geometry = geometry; batch.mesh.computeBoundingSphere(); }

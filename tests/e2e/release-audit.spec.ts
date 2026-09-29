@@ -93,7 +93,7 @@ test('updates parked lights and wipers and still freezes them while paused', asy
   await (await control(page, page.locator('#vehicle-wipers'))).selectOption('high');
   await toggleSettings(page);
   await expect.poll(async () => Number(await metric('Wiper sweep').textContent())).toBeGreaterThan(0.2);
-  await (await control(page, page.locator('#world'))).focus(); await page.keyboard.press('F8');
+  await (await control(page, page.locator('#world'))).focus(); await page.keyboard.press('Slash');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   const sweep = await metric('Wiper sweep').evaluate(field => new Promise<string>(resolve => {
     const observer = new MutationObserver(() => { observer.disconnect(); resolve(field.textContent!); });

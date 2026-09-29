@@ -55,7 +55,7 @@ it('uses the actual low flatbed and independently sloped trailer as solid suppor
   const car = new VehiclePhysics('flatbed12'); car.reset(0, 0, 0, flat);
   expect(vehicleSupport(car, 0, 3, 10)).toBeLessThan(2);
   const semi = new VehiclePhysics('semi15'); semi.reset(0, 0, 0, flat);
-  semi.trailer!.y = 20;
+  semi.trailers[0]!.y = 20;
   const body = semi.bodies()[1], z = body.z - body.rear - 1;
   expect(constrainVehicle({ x: 0, z }, 5, z, 0.3, 0, semi)).toBe(false);
   expect(vehicleSupport(semi, 0, z, 30)).toBeGreaterThan(20);

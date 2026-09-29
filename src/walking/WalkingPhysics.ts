@@ -9,6 +9,7 @@ const FOOTPRINT = [[0, 0], [-RADIUS, 0], [RADIUS, 0], [0, -RADIUS], [0, RADIUS]]
 
 export class WalkingPhysics {
   x = 0; y = 0; z = 0; heading = 0;
+  gravity = 18;
   grounded = true;
   private vx = 0; private vz = 0; private vy = 0;
   private accumulator = 0;
@@ -83,7 +84,7 @@ export class WalkingPhysics {
     if (this.grounded && floor >= this.y - 0.42) { this.y = floor; this.vy = 0; }
     else {
       this.grounded = false;
-      this.vy -= 18 * STEP;
+      this.vy -= this.gravity * STEP;
       const ceiling = surface.ceiling?.(this.x, this.z, this.y) ?? Infinity;
       this.y += this.vy * STEP;
       if (this.vy > 0 && this.y + 1.75 > ceiling) { this.y = ceiling - 1.75; this.vy = 0; }

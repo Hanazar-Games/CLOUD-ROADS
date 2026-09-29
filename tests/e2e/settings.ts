@@ -3,7 +3,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export async function ignite(page: Page): Promise<void> {
   if (!await page.locator('#drive-hud').isVisible()) return;
   await closeSettings(page);
-  if (await page.locator('#vehicle-ignition').getAttribute('aria-pressed') === 'false') await page.keyboard.press('F2');
+  if (await page.locator('#vehicle-ignition').getAttribute('aria-pressed') === 'false') await page.keyboard.press('Backquote');
   await expect(page.locator('[data-metric="Ignition"]')).toHaveText('running');
 }
 

@@ -238,14 +238,14 @@ describe('DrivingSurface', () => {
     const scene = world(true), surface = new DrivingSurface(scene), car = new VehiclePhysics('semi20');
     const start = scene.road.samples[0].position, spawn = surface.spawn(start.x, start.z, car.profile)!;
     expect(spawn).toBeDefined();
-    car.reset(spawn.x, spawn.z, spawn.heading, surface.sample, false, spawn.trailerHeading);
-    expect(car.trailer!.wheels.every(wheel => wheel.height > 90 && wheel.grounded)).toBe(true);
+    car.reset(spawn.x, spawn.z, spawn.heading, surface.sample, false, spawn.trailerHeadings);
+    expect(car.trailers[0]!.wheels.every(wheel => wheel.height > 90 && wheel.grounded)).toBe(true);
     scene.bridges = [{ start: scene.road.samples[0], end: scene.road.samples.at(-1)!, samples: scene.road.samples, depth: 151, openStart: true, openEnd: true }];
     car.update(1 / 60, { throttle: 0, steer: 0, handbrake: false }, surface.sample);
-    car.trailer!.heading += 0.7;
+    car.trailers[0]!.heading += 0.7;
     expect(surface.constrain(car, car.x, car.z)).toBe(true);
-    expect(car.trailer!.heading).toBeCloseTo(spawn.trailerHeading, 1);
-    expect(Math.hypot(car.trailer!.x - car.hitch().x, car.trailer!.z - car.hitch().z)).toBeLessThan(0.001);
+    expect(car.trailers[0]!.heading).toBeCloseTo(spawn.trailerHeadings[0], 1);
+    expect(Math.hypot(car.trailers[0]!.x - car.hitch().x, car.trailers[0]!.z - car.hitch().z)).toBeLessThan(0.001);
   });
   it('keeps elevated service guardrails solid for walkers and cars while leaving the road entrances open', () => {
     const scene = world(true), surface = new DrivingSurface(scene);

@@ -63,7 +63,7 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(5); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(6); expect(saved.settings['road-grip']).toBe(45);
   expect(saved.settings['vegetation-lod']).toBe('0.5'); expect(saved.settings['distant-trees']).toBe('0.25');
   expect(saved.settings['vehicle-detail-distance']).toBe('120'); expect(saved.settings['traffic-scenario']).toBe('stopgo');
   expect(saved.settings['handbrake-strength']).toBe(75); expect(saved.settings['countersteer-assist']).toBe(35);
@@ -132,7 +132,7 @@ test('provides all vehicle panels, HUD styles and a reachable menu in a narrow w
     await category(page, 'driving'); await page.locator('#vehicle-kind').selectOption(vehicle.value);
     await page.locator('#vehicle-panel-settings').click();
     await expect(page.locator('#vehicle-panel-title')).toHaveText(vehicle.name);
-    await expect(page.locator('#vehicle-panel-specs dd')).toHaveCount(8);
+    await expect(page.locator('#vehicle-panel-specs dd')).toHaveCount(9);
     await expect(page.locator('#panel-seats')).toBeDisabled();
     if (vehicle.value === 'motorcycle') await expect(page.locator('#vehicle-panel-equipment')).toContainText('无车窗与雨刮');
     await page.locator('#panel-driving').click(); await expect(page.locator('#vehicle-kind')).toBeInViewport();

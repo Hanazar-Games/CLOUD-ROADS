@@ -4,6 +4,7 @@ import { element } from '../debug/DebugUI';
 import type { InputManager } from '../input/InputManager';
 import type { World } from '../world/World';
 import { DrivingSurface } from './DrivingSurface';
+import { surfaceGravity } from '../world/WorldOptions';
 import { VehicleMesh } from './VehicleMesh';
 import { VehiclePhysics } from './VehiclePhysics';
 import { vehicleProfiles, suspensionLevels, suspensionNames, suspensionTuning, type Suspension, type VehicleKind } from './VehicleConfig';
@@ -72,6 +73,15 @@ export class DrivingSystem {
       if (['digital', 'dial', 'minimal'].includes(style)) element('drive-hud').dataset.style = style;
     }, options);
     this.systems.configure(this.car.profile.shape);
+    element('vehicle-energy').addEventListener('change', () => {
+      this.car.setPowertrain(element<HTMLSelectElement>('vehicle-energy').value === 'ev' ? 'ev' : 'combustion');
+      this.autopilot.cancel('动力类型改变，请重新开启'); this.describeEquipment();
+    }, options);
+    element('ev-regeneration').addEventListener('change', () => {
+      this.car.regeneration = Number(element<HTMLSelectElement>('ev-regeneration').value); this.describeEquipment();
+    }, options);
+    for (const [id, action] of [['panel-powertrain', 'Powertrain'], ['panel-regen', 'Regeneration'], ['vehicle-trailer-brake', 'TrailerBrake'], ['panel-trailer-brake', 'TrailerBrake']])
+      element(id).addEventListener('click', () => this.action(action), options);
     element('transmission-mode').addEventListener('change', () => {
       this.autopilot.cancel('变速箱模式改变，请重新开启');
       this.car.transmission.mode = element<HTMLSelectElement>('transmission-mode').value === 'manual' ? 'manual' : 'auto';
@@ -162,11 +172,12 @@ export class DrivingSystem {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
     if (resume && !this.parked) return false;
+    this.car.gravity = surfaceGravity(world.options.terrain);
     this.surface = new DrivingSurface(world);
     if (!resume) {
       const spawn = this.surface.spawn(this.camera.position.x + world.origin.x, this.camera.position.z + world.origin.z, this.car.profile);
       if (!spawn) { this.explainSpace(); return false; }
-      this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeading);
+      this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, false, spawn.trailerHeadings);
       this.cabin = new CabinState(this.car.profile); this.crane = new CraneSystems();
       this.operations = new VehicleOperations(this.car.profile);
       this.fleetId = undefined;
@@ -234,6 +245,7 @@ export class DrivingSystem {
     for (const [, field] of driftTuning) car[field] = this.car[field];
     if (this.parked) world.parkedVehicles.fleet.park(this.car, this.fleetId);
     this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
+    car.gravity = surfaceGravity(world.options.terrain);
     this.surface = new DrivingSurface(world); this.cabin = new CabinState(car.profile); this.crane = new CraneSystems();
     this.operations = new VehicleOperations(car.profile); this.systems.configure(car.profile.shape);
     if (car.profile.shape === 'roadster') this.systems.roofOpen = this.systems.roofTarget = car.roofOpen;
@@ -258,7 +270,7 @@ export class DrivingSystem {
     if (!this.active || !this.surface || !this.getWorld().roadReady || !this.cabin.driver || !this.crane.stowed) return;
     const spawn = this.surface.spawn(this.car.x, this.car.z, this.car.profile);
     if (!spawn) { this.explainSpace(); return; }
-    this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
+    this.car.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeadings);
     this.cameraRig.reset(); this.input.clear(); this.collisionTime = 0;
   }
 
@@ -317,7 +329,7 @@ export class DrivingSystem {
     }
     if (code === 'Refill') this.systems.refill(this.car.motionSpeed);
     if (code === 'ViewReset') this.cameraRig.reset();
-    if (code === 'Transmission' && this.cabin.driver) {
+    if (code === 'Transmission' && this.cabin.driver && this.car.powertrain !== 'ev') {
       this.car.transmission.mode = this.car.transmission.mode === 'auto' ? 'manual' : 'auto';
       element<HTMLSelectElement>('transmission-mode').value = this.car.transmission.mode;
     }
@@ -325,14 +337,21 @@ export class DrivingSystem {
       const input = element<HTMLInputElement>(id), next = Number(input.value) + step;
       input.value = String(next > Number(input.max) ? Number(input.min) : next); input.dispatchEvent(new Event('input'));
     }
-    if (code === 'F2') this.ignite();
+    if (code === 'Powertrain' && this.cabin.driver) {
+      this.car.setPowertrain(this.car.powertrain === 'ev' ? 'combustion' : 'ev'); this.autopilot.cancel('动力类型改变，请重新开启'); this.describeEquipment();
+    }
+    if (code === 'Regeneration' && this.cabin.driver && this.car.powertrain === 'ev') { this.car.regeneration = (this.car.regeneration + 1) % 4; this.describeEquipment(); }
+    if (code === 'TrailerBrake' && this.cabin.driver && this.car.trailers.length) {
+      this.car.trailerBrake = !this.car.trailerBrake; this.autopilot.cancel('挂车制动已接管'); this.describeEquipment();
+    }
+    if (code === 'Ignition') this.ignite();
     for (const action of ['doors', 'cargo', 'aux'] as const) if (code === operationKeys[action]) this.operate(action);
     if (code === 'KeyN') this.systems.cycleFan();
     if (code === 'KeyK' && this.systems.hasWindows) this.systems.ambientLight = !this.systems.ambientLight;
     if (code === 'KeyU' && this.systems.hasWindows) this.systems.cabinLight = !this.systems.cabinLight;
     if (code === 'KeyO' && this.car.kind === 'crane') this.crane.toggle(this.cabin.selected.role === 'operator', this.car.motionSpeed);
     if (code === 'Backspace') { this.cabin.resetAdjustment(); this.cameraRig.reset(); }
-    if (this.cabin.driver && (code === 'BracketLeft' || code === 'BracketRight')) {
+    if (this.cabin.driver && this.car.powertrain !== 'ev' && (code === 'BracketLeft' || code === 'BracketRight')) {
       this.car.transmission.mode = 'manual'; element<HTMLSelectElement>('transmission-mode').value = 'manual';
       this.car.transmission.shift(code === 'BracketRight' ? 1 : -1, this.car.speed);
     }
@@ -400,7 +419,7 @@ export class DrivingSystem {
       element('vehicle-speed').textContent = String(Math.round(this.car.motionSpeed * 3.6));
       element('vehicle-gear').textContent = this.car.parked ? 'P' : this.car.speed < -0.1 ? 'R' : this.car.speed > 0.1 ? 'D' : 'N';
       element('vehicle-trip').textContent = (this.car.trip / 1000).toFixed(2);
-      element('transmission-status').textContent = `${this.car.transmission.mode === 'auto' ? 'AT' : 'MT'} · ${this.car.transmission.gear} 挡`;
+      element('transmission-status').textContent = this.car.powertrain === 'ev' ? `EV · 单速 · 回收 ${this.car.regeneration}` : `${this.car.transmission.mode === 'auto' ? 'AT' : 'MT'} · ${this.car.transmission.gear} 挡`;
       element('engine-rpm').textContent = String(Math.round(this.car.engineRpm / 10) * 10);
       this.describeEquipment();
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
@@ -408,12 +427,12 @@ export class DrivingSystem {
         : !this.crane.stowed ? '吊车未收妥 · 请回操作席按 O 收车'
         : !this.operations.driveReady ? '车门 / 舱门 / 支架未收妥 · J / Y / I 关闭'
         : this.exitBlockedTime > 0 ? '请停稳车辆，并在车旁有空位时下车'
-        : this.car.ignition === 'off' ? '发动机已熄火 · F2 点火'
+        : this.car.ignition === 'off' ? '动力已关闭 · {Ignition} 启动'
         : this.car.ignition === 'starting' ? '点火中 · 请稍候'
         : this.car.jackknifed ? '铰接角过大 · 向前回正' : this.collisionTime > 0 ? '注意整车转弯空间 · R 回正'
         : this.car.drifting ? `漂移 ${Math.round(Math.abs(this.car.slipAngle) * 180 / Math.PI)}° · 松开 Space，反打方向回正`
         : this.car.handbrake > 0.05 ? this.car.motionSpeed > 0.5 ? '手刹 · 转向可甩尾' : '手刹驻车'
-        : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
+        : this.car.trailerBrake ? '挂车独立制动 · 松开后再起步' : this.car.regenerating ? '电动能量回收' : this.car.braking ? '制动' : this.car.parked ? 'W 起步 · S 倒车'
           : this.cameraRig.view === 'chase' ? '跟车视角' : this.cameraRig.view === 'cockpit' ? '驾驶舱' : '引擎盖视角';
       element('vehicle-status').textContent = this.input.bindings.format(element('vehicle-status').textContent!);
       this.describePilot();
@@ -424,7 +443,7 @@ export class DrivingSystem {
       element('hud-mode').textContent = operator ? 'CRANE' : this.cabin.driver ? 'DRIVE' : 'PASSENGER';
       element('drive-hud').classList.toggle('braking', this.car.braking);
       element('suspension-compression').textContent = `轮端压缩 ${this.car.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`
-        + (this.car.trailer ? ` · 挂车 ${this.car.trailer.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm` : '');
+        + this.car.trailers.map((t, i) => ` · 挂车 ${i + 1} ${t.wheels.map(w => Math.round(w.compression * 100)).join(' / ')} cm`).join('');
     }
   }
 
@@ -460,6 +479,8 @@ export class DrivingSystem {
   private selectVehicle(kind: VehicleKind): void {
     if (kind === this.car.kind) return;
     const next = new VehiclePhysics(kind);
+    next.gravity = surfaceGravity(this.getWorld().options.terrain);
+    next.setPowertrain(this.car.powertrain); next.regeneration = this.car.regeneration;
     next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
     next.powerScale = this.car.powerScale; next.brakeScale = this.car.brakeScale; next.steeringScale = this.car.steeringScale;
     for (const [, field] of driftTuning) next[field] = this.car[field];
@@ -472,7 +493,7 @@ export class DrivingSystem {
         element<HTMLSelectElement>('vehicle-kind').value = this.car.kind;
         element('vehicle-summary').textContent = '当前路段尚未就绪或容不下这辆车，请选择更宽的道路后重试。'; return;
       }
-      next.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeading);
+      next.reset(spawn.x, spawn.z, spawn.heading, this.surface.sample, true, spawn.trailerHeadings);
     }
     this.autopilot.cancel(); this.parked = false;
     this.fleetId = undefined;
@@ -494,10 +515,10 @@ export class DrivingSystem {
     element('vehicle-wipers-help').textContent = this.systems.hasWindshield ? '自动按雨量调速；间歇每次刮动后停顿。关闭后完成当前刮动并归位。' : '此摩托车没有挡风玻璃，不提供雨刮。';
     this.describeSuspension();
     const power = p.power * this.car.powerScale;
-    element('vehicle-summary').textContent = `${p.length} m · ${(p.mass / 1000).toLocaleString('zh-CN')} 吨 · ${p.wheels.length + (p.trailer?.wheels.length ?? 0)} 轮 · ${Math.round(power / 1000)} kW / ${Math.round(power / 735.5)} 马力。`
+    element('vehicle-summary').textContent = `${p.length} m · ${(p.mass / 1000).toLocaleString('zh-CN')} 吨 · ${p.wheels.length + (p.trailers ?? []).reduce((sum, t) => sum + t.wheels.length, 0)} 轮 · ${Math.round(power / 1000)} kW / ${Math.round(power / 735.5)} 马力。`
       + (p.shape === 'crane' ? '五轴底盘、双前轴转向；停车按 P 进入后部操作席，O 展开或收车，收妥才能驾驶。'
         : p.shape === 'flatbed' ? '四轴底盘、双前轴转向，开放货台与折叠坡板，窄弯留足车尾空间。'
-          : p.trailer ? '半挂有内轮差和倒车折叠，窄弯请放慢并留足外侧空间。' : p.shape === 'motorcycle' ? '两轮独立悬挂，转弯自动侧倾，低速自动平衡。' : p.mass > 4000 ? '重车加速较慢，陡坡与湿路请提前减速。' : '五档弹簧与阻尼按车型匹配。');
+          : (p.trailers?.length ?? 0) > 1 ? '三节 10 m 车厢独立铰接；Y 联动尾门，可单独施加挂车制动。总长含牵引车与连接杆，窄弯需慢行。' : p.trailers?.length ? '半挂有内轮差和倒车折叠，窄弯请放慢并留足外侧空间。' : p.shape === 'motorcycle' ? '两轮独立悬挂，转弯自动侧倾，低速自动平衡。' : p.mass > 4000 ? '重车加速较慢，陡坡与湿路请提前减速。' : '五档弹簧与阻尼按车型匹配。');
     element('camera-distance-value').textContent = `${Number(this.cameraRig.distanceFor(this.car).toFixed(1))} m`;
   }
 
@@ -523,13 +544,27 @@ export class DrivingSystem {
   }
 
   describeEquipment(): void {
-    const ignition = this.car.ignition;
+    const ignition = this.car.ignition, ev = this.car.powertrain === 'ev', driver = this.active && this.cabin.driver;
+    element<HTMLSelectElement>('vehicle-energy').value = this.car.powertrain;
+    element<HTMLSelectElement>('ev-regeneration').value = String(this.car.regeneration);
+    element<HTMLSelectElement>('ev-regeneration').disabled = !ev;
+    element<HTMLSelectElement>('transmission-mode').disabled = ev;
+    element('powertrain-status').textContent = `${ev ? 'EV 单速驱动 · 松电门回收受轮胎抓地力限制' : '燃油动力 · 自动或手动换挡'}。${this.input.bindings.label('Powertrain')} 切换动力，${this.input.bindings.label('Regeneration')} 调回收；切换保留车速，无续航限制。`;
+    element('panel-powertrain').textContent = `${ev ? 'EV → 燃油' : '燃油 → EV'} · ${this.input.bindings.label('Powertrain')}`;
+    element<HTMLButtonElement>('panel-powertrain').disabled = !driver;
+    element('panel-regen').textContent = `能量回收 ${this.car.regeneration} · ${this.input.bindings.label('Regeneration')}`;
+    element<HTMLButtonElement>('panel-regen').disabled = !driver || !ev;
+    for (const id of ['vehicle-trailer-brake', 'panel-trailer-brake']) {
+      const button = element<HTMLButtonElement>(id); button.hidden = !this.car.trailers.length; button.disabled = !driver;
+      button.setAttribute('aria-pressed', String(this.car.trailerBrake));
+      button.textContent = `挂车制动 · ${this.car.trailerBrake ? '松开' : '施加'} · ${this.input.bindings.label('TrailerBrake')}`;
+    }
     for (const id of ['vehicle-ignition', 'panel-ignition']) {
       const button = element<HTMLButtonElement>(id); button.disabled = !this.active || !this.cabin.driver;
-      button.textContent = `${ignition === 'off' ? '点火' : ignition === 'starting' ? '取消点火' : '熄火'} · F2`;
+      button.textContent = `${ignition === 'off' ? ev ? '上电' : '点火' : ignition === 'starting' ? '取消启动' : ev ? '断电' : '熄火'} · {Ignition}`;
       button.setAttribute('aria-pressed', String(ignition !== 'off'));
     }
-    element('ignition-status').textContent = ignition === 'running' ? '发动机运转' : ignition === 'starting' ? '正在点火' : '发动机关闭';
+    element('ignition-status').textContent = ignition === 'running' ? ev ? 'EV 已就绪' : '发动机运转' : ignition === 'starting' ? ev ? '高压系统自检' : '正在点火' : ev ? 'EV 已断电' : '发动机关闭';
     const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
     for (const action of ['doors', 'cargo', 'aux'] as const) for (const prefix of ['vehicle', 'panel']) {
       const node = element<HTMLButtonElement>(`${prefix}-${action}`), label = this.operations.label(action);

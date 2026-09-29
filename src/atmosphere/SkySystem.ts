@@ -31,9 +31,10 @@ export class SkySystem {
     this.light.color.copy(this.sun.sunColor);
     this.light.intensity = this.sun.light.x * sunlight * (1 - shelter);
     this.ambient.color.copy(this.sun.ambient);
-    if (season?.kind === 'winter') { this.light.color.r *= 0.94; this.ambient.color.b *= 1.12; }
-    if (season?.kind === 'autumn') { this.light.color.b *= 0.93; this.ambient.color.r *= 1.05; }
+    if (!this.sun.extraterrestrial && season?.kind === 'winter') { this.light.color.r *= 0.94; this.ambient.color.b *= 1.12; }
+    if (!this.sun.extraterrestrial && season?.kind === 'autumn') { this.light.color.b *= 0.93; this.ambient.color.r *= 1.05; }
     this.ambient.intensity = ((2.4 - Math.max(0, this.sun.time) * 0.6) * (1 - this.sun.night) + 0.5 * this.sun.night) * (1 - shelter * 0.72);
+    this.ambient.intensity *= this.sun.terrain === 'moon' ? 0.22 : this.sun.terrain === 'mars' ? 0.65 : 1;
     this.focus.set(camera.position.x + origin.x, camera.position.y - 250, camera.position.z + origin.z);
     this.right.crossVectors(this.sun.direction, up).normalize();
     this.vertical.crossVectors(this.right, this.sun.direction).normalize();

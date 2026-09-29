@@ -22,9 +22,7 @@ export class VehicleMesh {
   private readonly materials: MeshStandardMaterial[] = [];
   private readonly geometries: BufferGeometry[] = [];
   private readonly wheels: WheelMesh[] = [];
-  private readonly trailerWheels: WheelMesh[] = [];
-  private readonly trailerRoot = new Group();
-  private readonly trailerBody = new Group();
+  private readonly trailers: { root: Group; body: Group; wheels: WheelMesh[] }[] = [];
   private readonly steering = new Group();
   private readonly fittings = new VehicleFittings();
   private readonly tail;
@@ -263,33 +261,38 @@ export class VehicleMesh {
       }
     };
     addFenders(profile.wheels, this.chassis);
-    if (profile.trailer) {
-      this.trailerRoot.name = 'trailer';
-      this.root.add(this.trailerRoot); this.trailerRoot.add(this.trailerBody);
-      const trailer = profile.trailer, center = trailer.length / 2 - trailer.front;
+    for (const [index, trailer] of (profile.trailers ?? []).entries()) {
+      const root = new Group(), body = new Group(), wheels: WheelMesh[] = [];
+      root.name = `trailer-${index}`; this.trailers.push({ root, body, wheels });
+      this.root.add(root); root.add(body);
+      const center = trailer.length / 2 - trailer.front;
+      if (trailer.front < 0) {
+        block(0.18, 0.18, -trailer.front + 0.25, 0, 0, -trailer.front / 2, metal, body);
+        block(0.38, 0.18, 0.32, 0, 0, 0, trim, body);
+      }
       const top = profile.height - this.rideHeight;
-      block(profile.width - 0.06, 0.24, trailer.length, 0, 0, center, trim, this.trailerBody);
-      if (trailer.body === 'flatbed') flatbedDetails(profile.width, -trailer.front, trailer.length - trailer.front, this.trailerBody, kit);
-      this.fittings.cargo(this.trailerBody, profile.width, -trailer.front, trailer.length - trailer.front, 0.3, top, trailer.body, kit, this.rideHeight);
+      block(profile.width - 0.06, 0.24, trailer.length, 0, 0, center, trim, body);
+      if (trailer.body === 'flatbed') flatbedDetails(profile.width, -trailer.front, trailer.length - trailer.front, body, kit);
+      this.fittings.cargo(body, profile.width, -trailer.front, trailer.length - trailer.front, 0.3, top, trailer.body, kit, this.rideHeight);
       for (const side of [-1, 1]) {
-        block(0.04, 0.13, trailer.length - 0.2, side * profile.width / 2, 0.35, center, paint, this.trailerBody);
-        block(0.12, 0.6, 0.12, side * 0.82, -0.25, 1.7, metal, this.trailerBody);
-        block(0.22, 0.08, 0.3, side * 0.82, -0.55, 1.7, trim, this.trailerBody);
-        block(0.34, 0.14, 0.06, side * 0.84, -0.12, trailer.length - trailer.front + 0.02, this.tail, this.trailerBody);
-        block(0.18, 0.1, 0.065, side * 1.1, -0.12, trailer.length - trailer.front + 0.035, this.signals[side < 0 ? 0 : 1], this.trailerBody);
+        block(0.04, 0.13, trailer.length - 0.2, side * profile.width / 2, 0.35, center, paint, body);
+        block(0.12, 0.6, 0.12, side * 0.82, -0.25, 1.7, metal, body);
+        block(0.22, 0.08, 0.3, side * 0.82, -0.55, 1.7, trim, body);
+        block(0.34, 0.14, 0.06, side * 0.84, -0.12, trailer.length - trailer.front + 0.02, this.tail, body);
+        block(0.18, 0.1, 0.065, side * 1.1, -0.12, trailer.length - trailer.front + 0.035, this.signals[side < 0 ? 0 : 1], body);
         for (let z = 0; z < trailer.length - trailer.front; z += 2)
-          block(0.035, 0.07, 0.16, side * (profile.width / 2 + 0.025), 0.18, z, lamp, this.trailerBody);
+          block(0.035, 0.07, 0.16, side * (profile.width / 2 + 0.025), 0.18, z, lamp, body);
       }
       const back = trailer.length - trailer.front + 0.025;
-      block(profile.width - 0.1, 0.1, 0.1, 0, -0.48, back, metal, this.trailerBody);
+      block(profile.width - 0.1, 0.1, 0.1, 0, -0.48, back, metal, body);
       for (const side of [-1, 1]) {
-        block(0.1, 0.42, 0.1, side * 0.76, -0.25, back - 0.12, trim, this.trailerBody);
+        block(0.1, 0.42, 0.1, side * 0.76, -0.25, back - 0.12, trim, body);
         for (let z = 0.8; z < trailer.length - trailer.front - 0.4; z += 1.2)
-          block(0.026, 0.055, 0.42, side * (profile.width / 2 + 0.017), 0.32, z, metal, this.trailerBody);
+          block(0.026, 0.055, 0.42, side * (profile.width / 2 + 0.017), 0.32, z, metal, body);
       }
-      for (const x of [-0.84, -0.42, 0, 0.42, 0.84]) block(0.2, 0.065, 0.016, x, -0.48, back + 0.059, amber, this.trailerBody);
-      addWheels(trailer.wheels, this.trailerRoot, this.trailerWheels);
-      addFenders(trailer.wheels, this.trailerBody);
+      for (const x of [-0.84, -0.42, 0, 0.42, 0.84]) block(0.2, 0.065, 0.016, x, -0.48, back + 0.059, amber, body);
+      addWheels(trailer.wheels, root, wheels);
+      addFenders(trailer.wheels, body);
     }
     this.headlight.position.set(0, profile.shape === 'motorcycle' ? 0.3 : 0.05, -profile.chassisLength / 2 + 0.08);
     this.headlight.target.position.set(0, -0.5, -40);
@@ -298,7 +301,7 @@ export class VehicleMesh {
       const front = -profile.chassisLength / 2;
       for (const y of [-0.17, -0.11, -0.05]) block(profile.width * 0.53, 0.012, 0.014, 0, y, front - 0.04, metal);
     }
-    for (const parent of [this.chassis, this.trailerBody, this.steering, ...this.fittings.hinges.map(h => h.root), ...this.wheels.map(wheel => wheel.spin), ...this.trailerWheels.map(wheel => wheel.spin)])
+    for (const parent of [this.chassis, ...this.trailers.map(t => t.body), this.steering, ...this.fittings.hinges.map(h => h.root), ...this.wheels.map(wheel => wheel.spin), ...this.trailers.flatMap(t => t.wheels.map(wheel => wheel.spin))])
       this.geometries.push(...mergeVehicleParts(parent));
   }
 
@@ -311,12 +314,13 @@ export class VehicleMesh {
     this.root.rotation.y = -car.heading;
     this.chassis.rotation.set(car.pitch, 0, car.roll, 'YXZ');
     this.syncWheels(this.wheels, car.wheels, car.y, car.pitch, car.roll, car);
-    if (car.trailer) {
-      const t = car.trailer, dx = t.x - car.x, dz = t.z - car.z, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
-      this.trailerRoot.position.set(cos * dx + sin * dz, t.y - car.y, -sin * dx + cos * dz);
-      this.trailerRoot.rotation.y = car.heading - t.heading;
-      this.trailerBody.rotation.set(t.pitch, 0, t.roll, 'YXZ');
-      this.syncWheels(this.trailerWheels, t.wheels, t.y, t.pitch, t.roll, car);
+    for (const [i, t] of car.trailers.entries()) {
+      const { root, body, wheels } = this.trailers[i];
+      const dx = t.x - car.x, dz = t.z - car.z, cos = Math.cos(car.heading), sin = Math.sin(car.heading);
+      root.position.set(cos * dx + sin * dz, t.y - car.y, -sin * dx + cos * dz);
+      root.rotation.y = car.heading - t.heading;
+      body.rotation.set(t.pitch, 0, t.roll, 'YXZ');
+      this.syncWheels(wheels, t.wheels, t.y, t.pitch, t.roll, car);
     }
     this.steering.rotation.z = -car.steering * 2;
     const on = systems.beam !== 'off', high = systems.beam === 'high';
@@ -473,7 +477,7 @@ export class VehicleMesh {
     if (p.shape === 'truck' && p.body !== 'dumptruck' && p.body !== 'tanker' && p.body !== 'firetruck' && p.body !== 'mixer') {
       this.fittings.cargo(this.chassis, w, cabBack + 0.15, length / 2, sill + 0.035, top, 'box', kit, this.rideHeight, !p.body);
     } else if (p.shape === 'tractor') {
-      block(1.6, 0.14, 1.25, 0, 0.08, -p.trailer!.hitchAlong, metal);
+      block(1.6, 0.14, 1.25, 0, 0.08, -p.trailers![0].hitchAlong, metal);
       for (const side of [-1, 1]) block(0.36, 0.36, 1.1, side * 0.92, -0.08, -0.1, metal);
     } else if (p.shape === 'suv') {
       for (const side of [-1, 1]) block(0.055, 0.07, cabLength - 0.25, side * (w / 2 - 0.2), roof + 0.02, cabCenter, metal);

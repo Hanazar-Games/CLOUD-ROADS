@@ -44,7 +44,7 @@ it('batches a populated parking lot by vehicle kind, removes claimed instances a
   for (let i = 0; i < 32; i++) renderer.update([site], { x: 0, z: 0 }, camera);
   expect(renderer.drawBatches).toBeLessThanOrEqual(31); expect(renderer.drawBatches).toBeGreaterThan(5);
   const count = () => scene.children.reduce((n, mesh) => n + Number((mesh as unknown as { count: number }).count), 0);
-  expect(count()).toBe(renderer.fleet.entries.reduce((n, e) => n + ('trailer' in vehicleProfiles[e.kind] ? 2 : 1), 0));
+  expect(count()).toBe(renderer.fleet.entries.reduce((n, e) => n + ('trailers' in vehicleProfiles[e.kind] ? 2 : 1), 0));
   for (const object of scene.children) {
     const mesh = object as InstancedMesh, mask = mesh.geometry.getAttribute('paintMask'), colors = mesh.geometry.getAttribute('color');
     expect(mask.array.some(value => value === 1)).toBe(true);
@@ -75,8 +75,8 @@ it('keeps the fleet visible during LOD construction and substantially reduces di
 it('retains an articulated trailer pose when a borrowed semi is returned to the static fleet', () => {
   const scene = new Scene(), renderer = new ParkedVehicles(scene, 'rest');
   renderer.fleet.sync([site]);
-  const entry = renderer.fleet.entries.find(e => 'trailer' in vehicleProfiles[e.kind])!;
-  const car = renderer.fleet.take(entry.id)!, trailer = car.trailer!;
+  const entry = renderer.fleet.entries.find(e => 'trailers' in vehicleProfiles[e.kind])!;
+  const car = renderer.fleet.take(entry.id)!, trailer = car.trailers[0]!;
   trailer.heading = 1.2; trailer.x += 8; trailer.z += 4;
   renderer.fleet.park(car, entry.id);
   const camera = new Vector3(car.x, car.y + 10, car.z), matrix = new Matrix4();

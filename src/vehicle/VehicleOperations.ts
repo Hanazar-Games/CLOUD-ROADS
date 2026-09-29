@@ -11,6 +11,7 @@ export class VehicleOperations {
   constructor(readonly profile: VehicleProfile) {}
   label(action: VehicleOperation): string {
     const p = this.profile;
+    if (action === 'cargo' && (p.trailers?.length ?? 0) > 1) return '三节联动车厢尾门';
     if (action === 'cargo' && (p.body === 'tanker' || p.body === 'mixer')) return '';
     if (action === 'aux' && p.body === 'mixer') return '卸料溜槽';
     if (action === 'aux' && p.body === 'schoolbus') return '侧面停车提示牌';
@@ -19,7 +20,7 @@ export class VehicleOperations {
     if (action === 'cargo' && p.body === 'firetruck') return '';
     if (action === 'aux' && (p.body === 'ambulance' || p.body === 'firetruck')) return '救援警示灯';
     if (action === 'doors') return p.bus ? '乘客门' : p.shape === 'motorcycle' ? '' : '驾驶室车门';
-    if (action === 'cargo') return p.bus ? '行李舱' : p.shape === 'flatbed' || p.trailer?.body === 'flatbed' ? '装载坡板' : p.shape === 'truck' || p.trailer ? '货厢尾门' : '';
+    if (action === 'cargo') return p.bus ? '行李舱' : p.shape === 'flatbed' || p.trailers?.[0].body === 'flatbed' ? '装载坡板' : p.shape === 'truck' || p.trailers?.length ? '货厢尾门' : '';
     return p.shape === 'supercar' ? '主动尾翼' : p.shape === 'crane' ? '工程警示灯' : p.shape === 'motorcycle' ? '驻车支架' : '';
   }
   get driveReady(): boolean {

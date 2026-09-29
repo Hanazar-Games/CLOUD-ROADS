@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
 
-const idle: SoundState = { driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
+const idle: SoundState = { powertrain: 'combustion', regeneration: false, atmosphere: 1, driving: false, speed: 0, throttle: false, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
   supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0, tireSlip: 0 };
@@ -25,6 +25,23 @@ class AudioContextStub {
   async close() { this.state = 'closed'; }
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('voices EV drive and regeneration without combustion idle or automatic shift effects', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const ev = { ...idle, driving: true, powertrain: 'ev' as const, rpm: 0, nature: false };
+  audio.update(0.1, ev); expect(context.gains[3].gain.value).toBe(0);
+  audio.update(0.1, { ...ev, speed: 10 });
+  expect(context.oscillators[0].type).toBe('sine'); expect(context.gains[3].gain.value).toBeGreaterThan(0);
+  const pitch = context.oscillators[0].frequency.value;
+  audio.update(0.1, { ...ev, speed: 10, regeneration: true, shifts: 9 });
+  expect(context.oscillators[0].frequency.value).toBeGreaterThan(pitch);
+  expect(context.gains.every(g => Number.isFinite(g.gain.value))).toBe(true);
+  audio.update(0.1, { ...ev, powertrain: 'combustion', rpm: 850 });
+  expect(context.oscillators[0].type).toBe('triangle'); expect(context.gains[3].gain.value).toBeGreaterThan(0);
+  audio.setActive(false); await Promise.resolve(); expect(context.gains[3].gain.value).toBe(0);
+  audio.dispose();
+});
 
 it('follows tire slip, wetness and tire volume without stale squeal on pause or leaving the vehicle', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });

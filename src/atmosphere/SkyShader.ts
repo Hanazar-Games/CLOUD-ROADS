@@ -1,7 +1,7 @@
 export const skyShader = /* glsl */`
   uniform vec3 sunDirection, sunColor, zenithColor, horizonColor, hazeColor, ambientColor;
   uniform vec2 solar;
-  uniform float immersion, weatherCover, nightAmount;
+  uniform float immersion, weatherCover, nightAmount, planet;
 
   vec3 skyGradient(vec3 ray) {
     float height = max(ray.y, 0.0);
@@ -23,12 +23,19 @@ export const skyShader = /* glsl */`
     float disc = smoothstep(cos(radius * 1.2), cos(radius * 0.85), alignment);
     float halo = pow(max(alignment, 0.0), 320.0) * 0.3 + pow(max(alignment, 0.0), 24.0) * 0.08;
     float aboveHorizon = smoothstep(-0.005, 0.005, ray.y);
-    sky += sunColor * (disc * 8.0 * aboveHorizon + halo) * (1.0 - weatherCover) * (1.0 - nightAmount);
+    sky += sunColor * (disc * 8.0 * aboveHorizon + halo * (planet == 1.0 ? 0.0 : 1.0)) * (1.0 - weatherCover) * (1.0 - nightAmount);
     vec3 starCell = floor(ray * 650.0);
     float star = fract(sin(dot(starCell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
     float stars = smoothstep(0.9985, 1.0, star) * smoothstep(0.0, 0.25, ray.y);
     float moon = smoothstep(0.99982, 0.9999, dot(ray, normalize(vec3(0.45, 0.55, -0.7))));
-    sky += (vec3(0.42, 0.5, 0.65) * stars + vec3(0.7, 0.8, 1.0) * moon) * nightAmount * (1.0 - weatherCover);
+    sky += vec3(0.42, 0.5, 0.65) * stars * (planet == 1.0 ? 0.45 + nightAmount * 0.55 : nightAmount) * (1.0 - weatherCover);
+    if (planet == 0.0) sky += vec3(0.7, 0.8, 1.0) * moon * nightAmount * (1.0 - weatherCover);
+    if (planet == 1.0) {
+      vec3 earthDirection = normalize(vec3(0.45, 0.55, -0.7));
+      float earth = smoothstep(0.999, 0.99908, dot(ray, earthDirection));
+      float land = smoothstep(0.1, 0.4, sin(ray.x * 280.0) * cos(ray.y * 350.0));
+      sky = mix(sky, mix(vec3(0.08, 0.22, 0.52), vec3(0.36, 0.48, 0.38), land), earth);
+    }
     return mix(sky, airColor(ray), immersion);
   }
 `;

@@ -12,6 +12,7 @@ const font: Record<string, number[]> = {
   M:[17,27,21,21,17,17,17], N:[17,25,25,21,19,19,17], O:[14,17,17,17,17,17,14], P:[30,17,17,30,16,16,16], R:[30,17,17,30,20,18,17],
   S:[15,16,16,14,1,1,30], T:[31,4,4,4,4,4,4], U:[17,17,17,17,17,17,14], W:[17,17,17,21,21,27,17],
   '<':[1,2,4,8,4,2,1], '>':[16,8,4,2,4,8,16], '.':[0,0,0,0,0,6,6], '-':[0,0,0,31,0,0,0], '/':[1,2,2,4,8,8,16],
+  V:[17,17,17,17,17,10,4],
   X:[17,17,10,4,10,17,17],
 };
 export class VehicleDisplay {
@@ -36,7 +37,9 @@ export class VehicleDisplay {
       `L ${systems.beam === 'off' ? '-' : systems.beam === 'high' ? 'HI' : 'ON'} W ${systems.wiperRate ? 'ON' : '-'} G ${systems.washerSpray ? 'ON' : '-'}`,
       `AIR ${systems.fan} ${systems.ambientLight ? 'LED' : '---'} ${systems.cabinLight ? 'READ' : '----'}`,
     ];
-    if (car.ignition !== 'running') lines[5] = car.ignition === 'starting' ? 'ENGINE STARTING' : 'ENGINE OFF';
+    if (car.powertrain === 'ev') lines[1] = `EV ${car.parked ? 'P' : car.speed < -0.1 ? 'R' : 'D'} REGEN ${car.regeneration}${car.regenerating ? ' ON' : ''}`;
+    if (car.trailerBrake) lines[5] = 'TRAILER BRAKE ON';
+    if (car.ignition !== 'running') lines[5] = car.powertrain === 'ev' ? car.ignition === 'starting' ? 'EV STARTING' : 'EV OFF' : car.ignition === 'starting' ? 'ENGINE STARTING' : 'ENGINE OFF';
     if (operations && !operations.driveReady) lines[5] = operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
     if (crane) lines.splice(3, 3,
       `CRANE ${crane.stowed ? 'PARK' : crane.enabled ? 'ON' : 'STOW'}`,

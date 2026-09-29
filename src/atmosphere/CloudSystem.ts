@@ -51,7 +51,8 @@ export class CloudSystem {
     const x = wrapCloudCoordinate(camera.position.x + origin.x + this.driftX);
     const z = wrapCloudCoordinate(camera.position.z + origin.z + this.driftZ);
     this.sample = this.field.sample(x, camera.position.y, z);
-    const density = this.enabled ? this.sample.density : 0;
+    const earth = !this.sun.extraterrestrial;
+    const density = this.enabled && earth ? this.sample.density : 0;
     const near = 1000 * distance / 2048, far = 1950 * distance / 2048;
     const clarity = Math.max(0, 1 - weather.cover * 4);
     this.fog.near = Math.min(near + (12 - near) * density, weather.near * (1 + (distance / 2048 - 1) * clarity));
@@ -67,7 +68,8 @@ export class CloudSystem {
     uniforms.nearFar.value.set(camera.near, camera.far);
     uniforms.fogRange.value.set(this.fog.near, this.fog.far);
     uniforms.immersion.value = Math.min(1, density / 0.75) * (1 - shelter);
-    uniforms.cloudsEnabled.value = this.enabled && shelter < 0.99;
+    uniforms.cloudsEnabled.value = this.enabled && earth && shelter < 0.99;
+    uniforms.planet.value = this.sun.terrain === 'moon' ? 1 : this.sun.terrain === 'mars' ? 2 : 0;
     uniforms.weatherCover.value = weather.cover;
     uniforms.nightAmount.value = this.sun.night;
   }

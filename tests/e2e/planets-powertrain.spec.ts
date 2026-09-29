@@ -1,0 +1,54 @@
+import { expect, test } from '@playwright/test';
+import { closeSettings, control, ignite } from './settings';
+
+test('drives planetary worlds with a three-link train, EV controls and ordinary shortcuts', async ({ page }, info) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  await page.goto('/?seed=PLANET-TRAIN');
+  await (await control(page, page.locator('#road-type'))).selectOption('highway');
+  await (await control(page, page.locator('#route-style'))).selectOption('0');
+  await (await control(page, page.locator('#max-grade'))).fill('0');
+  await (await control(page, page.locator('#daylight'))).fill('0');
+  await (await control(page, page.locator('#weather-kind'))).selectOption('storm');
+  await (await control(page, page.locator('#season-kind'))).selectOption('winter');
+  await (await control(page, page.locator('#vehicle-kind'))).selectOption('roadTrain');
+  await (await control(page, page.locator('#vehicle-energy'))).selectOption('ev');
+  for (const [terrain, name, gravity] of [['moon', '月球 · 环形山与月海', '1.62'], ['mars', '火星 · 赤色峡谷', '3.71']] as const) {
+    await (await control(page, page.locator('#terrain-kind'))).selectOption(terrain);
+    await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
+    await expect(metric('Landscape')).toHaveText(name);
+    await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
+    await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 45_000 });
+    await expect(metric('Rain visible')).toHaveText('no');
+    await expect(metric('Tree canopies')).toHaveText('0');
+    await expect(metric('Wildflowers')).toHaveText('0');
+    await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
+    await expect(metric('Powertrain')).toHaveText('ev');
+    await expect(metric('Surface gravity')).toHaveText(gravity);
+    await expect(metric('Trailer count')).toHaveText('3');
+    await page.screenshot({ path: info.outputPath(`${terrain}-train.png`) });
+    await (await control(page, page.locator('#driving-view'))).selectOption('hood');
+    await closeSettings(page); await page.screenshot({ path: info.outputPath(`${terrain}-sky.png`) });
+    await (await control(page, page.locator('#driving-view'))).selectOption('chase'); await closeSettings(page);
+    await page.keyboard.down('KeyW'); await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(4); await page.keyboard.up('KeyW');
+    await page.keyboard.press('Shift+KeyI'); await expect(metric('Powertrain')).toHaveText('combustion');
+    await expect(page.locator('#vehicle-speed')).not.toHaveText('0');
+    await page.keyboard.press('Shift+KeyI'); await page.keyboard.press('Shift+KeyN');
+    await expect(page.locator('#transmission-status')).toContainText('EV');
+    await expect(page.locator('#ev-regeneration')).toHaveValue(terrain === 'moon' ? '3' : '0');
+    await page.keyboard.press('Shift+KeyH'); await expect(page.locator('#vehicle-trailer-brake')).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Shift+KeyH'); await page.keyboard.press('KeyR');
+    await page.keyboard.press('KeyY'); await expect(page.locator('#vehicle-cargo')).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('KeyY');
+    await (await control(page, page.locator('#drive-toggle'))).click();
+  }
+  await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
+  await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
+  await expect(metric('Road ready')).toHaveText('yes', { timeout: 30_000 });
+  await expect(page.locator('#weather-kind')).toHaveValue('storm'); await expect(page.locator('#season-kind')).toHaveValue('winter');
+  await closeSettings(page); await expect(page.locator('#season-status')).toContainText('冬季');
+  expect(errors).toEqual([]);
+});

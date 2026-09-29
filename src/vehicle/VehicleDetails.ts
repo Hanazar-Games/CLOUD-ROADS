@@ -122,7 +122,7 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
   for (let i = 0; i < 4; i++) block(0.025, 0.025, 0.05, i * 0.075 - 0.025, p.eye.y - 0.54, dashZ + 0.01, i ? metal : amber, parent);
   block(0.16, 0.5, 0.22, 0.08, p.eye.y - 0.79, dashZ + 0.12, trim, parent);
   if (p.shape === 'flatbed') flatbedDetails(p.width, nose + 2.8, end, parent, kit);
-  if (p.shape === 'tractor' && p.trailer?.body === 'flatbed') {
+  if (p.shape === 'tractor' && p.trailers?.[0].body === 'flatbed') {
     for (const side of [-1, 1]) {
       cylinder(0.1, 2.35, side * 1.07, 0.85, -0.25, metal, parent);
       block(0.32, 0.6, 0.6, side * 0.89, 1.55, -0.05, trim, parent);

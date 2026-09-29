@@ -33,9 +33,9 @@ test('animates windows, roof and washer water, and preserves pause through setti
   await (await control(page, page.locator('#cabin-fan'))).selectOption('3');
   await closeSettings(page);
   await expect(metric('Cabin exposure')).toHaveText('0.00');
-  await page.keyboard.press('F8'); await openSettings(page); await page.keyboard.press('Escape');
+  await page.keyboard.press('Slash'); await openSettings(page); await page.keyboard.press('Escape');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('F8'); await page.keyboard.press('KeyG');
+  await page.keyboard.press('Slash'); await page.keyboard.press('KeyG');
   await expect.poll(async () => parseFloat((await metric('Glass water').textContent())!)).toBeGreaterThan(0);
   await page.keyboard.press('KeyF');
   await (await control(page, page.locator('#washer-refill'))).click();

@@ -2,7 +2,7 @@ import { element } from '../debug/DebugUI';
 import type { InputManager } from '../input/InputManager';
 import { bindingActions, keyLabel } from '../input/KeyBindings';
 
-const storageKey = 'cloud-roads.key-bindings.v1';
+const storageKey = 'cloud-roads.key-bindings.v2';
 export class KeyBindingPanel {
   private readonly events = new AbortController();
   private pending?: string;
@@ -79,7 +79,7 @@ export class KeyBindingPanel {
     footer('walking-controls', [['KeyW', '前进'], ['Space', '跳跃'], ['KeyE', '疾跑'], ['KeyF', '上车'], ['KeyM', '菜单']]);
     footer('flight-controls', [['KeyW', '前进'], ['Space', '上升'], ['ShiftLeft', '下降'], ['ControlLeft', '加速'], ['KeyM', '菜单']]);
     element('bindings-current').textContent = `自动驾驶 ${this.input.bindings.label('Autopilot')} · 模式 ${this.input.bindings.label('AutoMode')} · 速度 ${this.input.bindings.label('AutoSlower')} / ${this.input.bindings.label('AutoFaster')}`;
-    element('bindings-reset').title = `恢复 ${bindingActions.length} 项默认按键（例如自动驾驶 ${keyLabel('F4')}）`;
+    element('bindings-reset').title = `恢复 ${bindingActions.length} 项默认按键（例如自动驾驶 ${keyLabel('Semicolon')}）`;
   }
   private save(): void {
     try { localStorage.setItem(storageKey, JSON.stringify(this.input.bindings.snapshot())); this.status('按键已生效并保存到当前浏览器。'); }

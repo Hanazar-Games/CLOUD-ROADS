@@ -45,10 +45,10 @@ test('retains drift tuning across vehicles, resets it independently and supports
   await page.locator('#drift-reset').click(); await expect(page.locator('#road-grip')).toHaveValue('100');
   await expect(page.locator('#handbrake-strength')).toHaveValue('100'); await expect(page.locator('#countersteer-assist')).toHaveValue('60');
   await page.locator('#vehicle-kind').selectOption('sedan');
-  await (await control(page, page.locator('[data-binding="Space"]'))).click(); await page.keyboard.press('Slash');
+  await (await control(page, page.locator('[data-binding="Space"]'))).click(); await page.keyboard.press('F9');
   await closeSettings(page); await page.locator('#drive-toggle').click(); await ignite(page);
-  await page.keyboard.down('Slash'); await expect(metric(page, 'Handbrake pressure')).toHaveText('1.00');
-  await page.keyboard.up('Slash'); await expect(metric(page, 'Handbrake pressure')).toHaveText('0.00');
+  await page.keyboard.down('F9'); await expect(metric(page, 'Handbrake pressure')).toHaveText('1.00');
+  await page.keyboard.up('F9'); await expect(metric(page, 'Handbrake pressure')).toHaveText('0.00');
   await page.keyboard.down('Space'); await page.waitForTimeout(200); await expect(metric(page, 'Handbrake pressure')).toHaveText('0.00');
   await page.keyboard.up('Space');
 });

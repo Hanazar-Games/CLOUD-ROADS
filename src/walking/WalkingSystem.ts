@@ -3,6 +3,7 @@ import { element } from '../debug/DebugUI';
 import type { InputManager } from '../input/InputManager';
 import { DrivingSurface } from '../vehicle/DrivingSurface';
 import type { World } from '../world/World';
+import { surfaceGravity } from '../world/WorldOptions';
 import { WalkingPhysics } from './WalkingPhysics';
 import { PARK_HALF_LENGTH } from '../service/ServiceParking';
 import { padPoint } from '../service/ServiceTerrain';
@@ -26,6 +27,7 @@ export class WalkingSystem {
   start(position?: { x: number; y: number; z: number; heading: number }): boolean {
     const world = this.getWorld();
     if (!world.roadReady || world.searching || !this.input.enabled) return false;
+    this.person.gravity = 18 * surfaceGravity(world.options.terrain) / 9.81;
     this.surface = new DrivingSurface(world);
     this.surface.walking = true;
     this.surface.parkedVehicle = this.getParkedVehicle();

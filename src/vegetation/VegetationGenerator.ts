@@ -14,7 +14,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
   const plants: number[] = [], biome = createBiomeSample(), surface = new TerrainSurface(cells, positions);
   const clear = (x: number, z: number, radius: number) => corridor.distance(x, z, corridor.roadHalfWidth + radius + 2) >= corridor.roadHalfWidth + radius + 2
     && !corridor.tunnelCover(x, z) && !corridor.serviceCover(x, z);
-  for (let layer = 0; layer < (cells === 8 ? 1 : 2); layer++) {
+  for (let layer = 0; layer < (cells === 8 || biomes.barren ? 1 : 2); layer++) {
     for (let row = 0; row < PLANT_GRID; row++) for (let col = 0; col < PLANT_GRID; col++) {
       const x = (col + 0.12 + rng() * 0.76) * PLANT_SPACING, z = (row + 0.12 + rng() * 0.76) * PLANT_SPACING;
       const chance = rng(), size = rng(), rotation = rng() * Math.PI * 2, tint = 0.83 + rng() * 0.3, species = rng();
@@ -48,7 +48,7 @@ export function generateVegetation(seed: string, cx: number, cz: number, cells: 
       plants.push(x, height - 0.15, z, scale, rotation, kind, tint);
     }
   }
-  if (cells === 64 && corridor.edges.length) {
+  if (!biomes.barren && cells === 64 && corridor.edges.length) {
     const meadow = createRng(hashSeed(`${seed}:meadow:${cx}:${cz}`)), spacing = CHUNK_SIZE / MEADOW_GRID;
     for (let row = 0; row < MEADOW_GRID; row++) for (let col = 0; col < MEADOW_GRID; col++) {
       const x = (col + 0.15 + meadow() * 0.7) * spacing, z = (row + 0.15 + meadow() * 0.7) * spacing;

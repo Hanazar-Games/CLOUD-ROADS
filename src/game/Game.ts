@@ -69,6 +69,7 @@ export class Game {
     this.scene.background = this.sky.sun.haze;
     this.world = new World(this.scene, this.initialSeed);
     this.weather.setSeason(this.world.season);
+    this.sky.sun.setTerrain(this.world.options.terrain);
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world, () => this.driving.parked ? this.driving.car : undefined);
@@ -117,8 +118,8 @@ export class Game {
     window.addEventListener('blur', () => { this.windowFocused = false; this.audio.setActive(false); }, { signal: this.events.signal });
     window.addEventListener('focus', () => { this.windowFocused = true; }, { signal: this.events.signal });
     this.input.onAction = (code) => {
-      if (code === 'F3') this.debug.toggle();
-      if (code === 'Pause' || code === 'F8') this.setPaused(!this.paused);
+      if (code === 'Debug') this.debug.toggle();
+      if (code === 'Pause' || code === 'PauseToggle') this.setPaused(!this.paused);
       if (code === 'KeyM') this.cabinDialogs.showMenu();
       if (code === 'KeyP') this.cabinDialogs.showSeats();
       if (code === 'Panel') this.cabinDialogs.showVehicle();
@@ -375,6 +376,9 @@ export class Game {
       this.world.dispose();
       this.world = world;
       this.weather.setSeason(world.season);
+      this.sky.sun.setTerrain(world.options.terrain);
+      for (const id of ['weather-kind', 'season-kind']) element<HTMLSelectElement>(id).disabled = world.season.extraterrestrial;
+      element<HTMLInputElement>('fog-density').disabled = world.options.terrain === 'moon';
       this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
       this.world.traffic.scenario = element<HTMLSelectElement>('traffic-scenario').value as keyof typeof trafficScenarios;
@@ -613,7 +617,8 @@ export class Game {
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
     this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter), anchor);
-    this.audio.update(dt, { driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
+    this.audio.update(dt, { powertrain: this.driving.car.powertrain, regeneration: this.driving.car.regenerating,
+      atmosphere: this.world.options.terrain === 'moon' ? 0 : this.world.options.terrain === 'mars' ? 0.15 : 1, driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: this.driving.appliedThrottle > 0 && moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
@@ -621,7 +626,7 @@ export class Game {
       rpm: this.driving.car.engineRpm, shifts: this.driving.car.transmission.shifts, ignition: this.driving.car.ignition,
       traffic: moving ? this.world.traffic.entries.reduce((level, e) => Math.min(1, level + Math.max(0, 1 - Math.hypot(e.car.x - anchor.x, e.car.y - anchor.y, e.car.z - anchor.z) / 70) ** 2 * (0.15 + e.car.speed / 30)), 0) : 0,
       exposure: this.driving.systems.cabinExposure, wet: this.weather.wetness, night: this.sky.sun.night,
-      nature: !['desert', 'dunes', 'badlands', 'volcanic'].includes(this.world.options.terrain) && this.world.season.kind !== 'winter',
+      nature: !['moon', 'mars', 'desert', 'dunes', 'badlands', 'volcanic'].includes(this.world.options.terrain) && this.world.season.kind !== 'winter',
       horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
       washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor || this.driving.operations.moving,
       supercar: this.driving.car.kind === 'supercar', braking: this.driving.car.braking, operations: this.driving.operations.events,
@@ -658,12 +663,12 @@ export class Game {
       const snow = season.snow(roadHeight);
       const precipitation = this.weather.snowfall > 0.015 ? this.weather.liquidRain > 0.015 ? '雨夹雪' : '降雪' : this.weather.liquidRain > 0.015 ? '降雨' : '无降水';
       const condition = this.world.garages.some(g => g.shelter(x, y, z)) ? '地下车库 · 干燥路面' : this.world.shelter > 0.9 ? '隧道遮蔽' : snow > 0.15 ? '积雪路面，减速慢行' : this.weather.wetness > 0.2 ? '路面湿滑' : '路面正常';
-      element('season-status').textContent = `${seasonNames[season.kind]} · ${season.temperature(y).toFixed(1)} °C · ${precipitation} · ${condition}`;
-      element('drive-condition').textContent = `${seasonNames[season.kind]} · ${season.temperature(roadHeight).toFixed(0)} °C · ${condition}`;
+      element('season-status').textContent = season.extraterrestrial ? `${terrainNames[season.terrain]} · 低重力 · 无雨雪，地球季节设置已保留` : `${seasonNames[season.kind]} · ${season.temperature(y).toFixed(1)} °C · ${precipitation} · ${condition}`;
+      element('drive-condition').textContent = season.extraterrestrial ? `${terrainNames[season.terrain]} · ${this.driving.car.gravity.toFixed(2)} m/s² · 制动距离增加` : `${seasonNames[season.kind]} · ${season.temperature(roadHeight).toFixed(0)} °C · ${condition}`;
       element('drive-condition').dataset.snow = String(snow > 0.15 && this.world.shelter < 0.9);
       element('altitude').textContent = Math.round(y).toLocaleString();
       element('position').textContent = `${Math.round(x)} / ${Math.round(z)}`;
-      element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 F8 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
+      element('notice').textContent = !this.input.enabled ? '探索已中止 · 请重试当前世界' : this.paused ? '已暂停 · 按 {PauseToggle} 继续' : !this.world.roadReady ? '路线生成中 · 请稍候'
         : stats.queued > 0 ? `山地生成中 · ${stats.active} / ${stats.target} 分块`
         : this.input.pointerLockFailed ? '鼠标锁定不可用 · 请拖动观察' : '拖动视角 · 双击锁定鼠标 · Esc 释放';
       element('notice').textContent = this.input.bindings.format(element('notice').textContent!);
@@ -773,6 +778,7 @@ export class Game {
         Junctions: this.world.network.junctions.length,
         'Local lights': this.world.furniture.localLights.filter(light => light.intensity > 0).length,
         'Terrain shadows': this.sky.light.castShadow ? 'on' : 'off',
+        Powertrain: this.driving.car.powertrain, 'Surface gravity': this.driving.car.gravity, 'Trailer count': this.driving.car.trailers.length,
         Landscape: terrainNames[this.world.options.terrain],
         'Road layout': roadLayout(this.world.options),
         'Highway minimum radius': `${this.world.options.highwayRadius} m`,
