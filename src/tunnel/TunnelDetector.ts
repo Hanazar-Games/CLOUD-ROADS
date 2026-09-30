@@ -12,6 +12,26 @@ export interface TunnelSpan {
 }
 interface TunnelExtent { first: number; last: number; entrance?: number; exit?: number }
 
+export function openTunnelAccess(spans: readonly TunnelSpan[], openings: readonly { start: number; end: number }[]): TunnelSpan[] {
+  return spans.flatMap(span => {
+    if (!openings.some(w => w.start - 24 < span.end.distance && w.end + 24 > span.start.distance)) return [span];
+    const parts: RoadSample[][] = [];
+    let part: RoadSample[] = [];
+    for (const sample of span.samples) {
+      if (openings.some(w => sample.distance >= w.start - 24 && sample.distance <= w.end + 24)) {
+        if (part.length) parts.push(part); part = [];
+      } else part.push(sample);
+    }
+    if (part.length) parts.push(part);
+    return parts.filter(points => points.at(-1)!.distance - points[0].distance >= 24).map(points => {
+      const start = points[0], end = points.at(-1)!;
+      const entrance = start === span.start ? span.entrance : start.distance, exit = end === span.end ? span.exit : end.distance;
+      return { start, end, samples: points, entrance, exit, length: (exit ?? end.distance) - (entrance ?? start.distance),
+        openStart: start === span.start && span.openStart, openEnd: end === span.end && span.openEnd };
+    });
+  });
+}
+
 export class TunnelDetector {
   private readonly covered = new Map<number, boolean>();
   private readonly extents: TunnelExtent[] = [];

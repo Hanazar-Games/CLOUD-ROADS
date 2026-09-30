@@ -1,20 +1,25 @@
 import { MeshStandardMaterial, Vector4 } from 'three';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { roadProfile } from './RoadProfile';
+import { PavementTextures, pavementNormal, pavementPars, pavementRoughness } from './PavementTextures';
 
 export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPTIONS,
-  access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1)), direction = { value: 1 }): MeshStandardMaterial {
+  access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1)), direction = { value: 1 },
+  parkingAccess = Array.from({ length: 4 }, () => new Vector4(-1, -1, 0, 0)), textures = new PavementTextures()): MeshStandardMaterial {
   const profile = roadProfile(options);
   const material = new MeshStandardMaterial({ roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  textures.attach(material);
   material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, textures.uniforms);
     shader.uniforms.roadHalfWidth = { value: profile.width / 2 };
     shader.uniforms.roadCenter = { value: profile.centers.at(-1)! };
     shader.uniforms.roadLanes = { value: options.roadLanes };
     shader.uniforms.oneWay = { value: options.oneWay ? 1 : 0 };
     shader.uniforms.roadDirection = direction;
     shader.uniforms.serviceAccess = { value: access };
+    shader.uniforms.parkingAccess = { value: parkingAccess };
     shader.vertexShader = `varying vec2 vRoadUv;\n${shader.vertexShader}`.replace('#include <uv_vertex>', '#include <uv_vertex>\nvRoadUv = uv;');
-    shader.fragmentShader = `varying vec2 vRoadUv;\nuniform float roadHalfWidth;\nuniform float roadCenter;\nuniform float roadLanes;\nuniform float oneWay;\nuniform float roadDirection;\nuniform vec4 serviceAccess[4];\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
+    shader.fragmentShader = `varying vec2 vRoadUv;\nuniform float roadHalfWidth;\nuniform float roadCenter;\nuniform float roadLanes;\nuniform float oneWay;\nuniform float roadDirection;\nuniform vec4 serviceAccess[4];\nuniform vec4 parkingAccess[4];\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
       #include <color_fragment>
       float lateral = abs(abs(vRoadUv.x) - roadCenter);
       float localX = vRoadUv.x - sign(vRoadUv.x) * roadCenter;
@@ -22,16 +27,18 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       float laneCenter = (floor((localX + roadHalfWidth) / laneWidth) + 0.5) * laneWidth - roadHalfWidth;
       float aa = max(fwidth(vRoadUv.x), 0.015);
       float shoulder = smoothstep(roadHalfWidth - aa, roadHalfWidth + aa, lateral);
-      vec3 surface = mix(vec3(0.075, 0.08, 0.084), vec3(0.24, 0.25, 0.25), shoulder);
-      float grain = fract(sin(dot(floor(vRoadUv * 28.0), vec2(127.1, 311.7))) * 43758.5453);
-      surface *= 1.0 + (grain - 0.5) * 0.18 * (1.0 - smoothstep(0.015, 0.15, length(fwidth(vRoadUv))));
+      vec4 asphalt = texture2D(pavementAsphalt, vRoadUv * 0.5);
+      vec4 concrete = texture2D(pavementConcrete, vRoadUv * 0.5);
+      vec4 surfaceTexel = mix(asphalt, concrete, shoulder);
+      vec3 surface = surfaceTexel.rgb;
+      float surfaceRelief = pavementRelief(surfaceTexel, vRoadUv);
       float wheelTrack = exp(-pow((abs(localX - laneCenter) - 0.72) / 0.22, 2.0));
       surface *= 1.0 - wheelTrack * 0.065 * (1.0 - shoulder);
       float seam = 1.0 - smoothstep(0.018, 0.018 + aa, abs(lateral - roadHalfWidth * 0.96));
       surface *= 1.0 - seam * 0.18 * (1.0 - smoothstep(0.04, 0.4, length(fwidth(vRoadUv))));
       float gutter = smoothstep(roadHalfWidth + 0.85 - aa, roadHalfWidth + 0.85 + aa, lateral);
       float joint = 1.0 - smoothstep(0.015, max(0.025, fwidth(vRoadUv.y)), abs(mod(vRoadUv.y + 3.0, 6.0) - 3.0));
-      surface = mix(surface, vec3(0.32, 0.335, 0.33) * (1.0 - joint * 0.12), gutter);
+      surface = mix(surface, concrete.rgb * 1.2 * (1.0 - joint * 0.12), gutter);
       float edge = 1.0 - smoothstep(0.065 - aa, 0.065 + aa, abs(lateral - roadHalfWidth + 0.35));
       float opening = 0.0;
       for (int i = 0; i < 4; i++) {
@@ -39,6 +46,12 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
         opening = max(opening, max(step(access.x, vRoadUv.y) * step(vRoadUv.y, access.y), step(access.z, vRoadUv.y) * step(vRoadUv.y, access.w)));
       }
       edge *= 1.0 - opening * (roadCenter > 0.01 ? step(roadCenter, abs(vRoadUv.x)) : step(0.0, vRoadUv.x));
+      for (int i = 0; i < 4; i++) {
+        vec4 access = parkingAccess[i];
+        float entry = step(access.x, vRoadUv.y) * step(vRoadUv.y, access.y) * step(0.5, sign(vRoadUv.x) * access.z);
+        edge *= 1.0 - entry * step(roadCenter, abs(vRoadUv.x));
+        opening = max(opening, entry);
+      }
       float divider = 0.0;
       for (int i = 1; i < 4; i++) {
         if (float(i) < roadLanes && !(oneWay < 0.5 && roadCenter < 0.01 && float(i) == roadLanes * 0.5))
@@ -62,11 +75,13 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.83, 0.82, 0.72), max(shaft, head));
       float rumble = step(roadHalfWidth + 0.25, lateral) * step(lateral, roadHalfWidth + 0.8) * step(mod(vRoadUv.y, 1.3), 0.15);
       diffuseColor.rgb *= 1.0 - rumble * 0.3 * (1.0 - smoothstep(0.2, 1.0, fwidth(vRoadUv.y)));
+      surfaceRelief *= 1.0 - 0.8 * max(max(edge, center), max(divider * dash, max(shaft, head)));
     `).replace('#include <lights_fragment_end>', `
       #include <lights_fragment_end>
       float markingReflectance = max(stud, max(max(edge, center), max(divider * dash, max(shaft, head))));
       totalEmissiveRadiance += diffuseColor.rgb * markingReflectance * min(1.8, length(reflectedLight.directDiffuse) * 2.0);
-    `);
+    `).replace('#include <roughnessmap_fragment>', pavementRoughness).replace('#include <normal_fragment_maps>', pavementNormal);
+    shader.fragmentShader = pavementPars + shader.fragmentShader;
   };
   material.customProgramCacheKey = () => 'cloud-roads-asphalt';
   return material;

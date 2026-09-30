@@ -10,6 +10,12 @@ import { parkingSlots } from './ServiceParking';
 import { chargingBays, chargingPosts, chargingPostColumns } from './ServiceAmenities';
 import { serviceDetails } from './ServiceDetails';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
+import { accessQuads } from '../road/SurfaceRibbon';
+import type { RoadCorridor } from '../road/RoadCorridor';
+import { createPavementMaterial } from '../road/PavementMaterial';
+import type { PavementTextures } from '../road/PavementTextures';
+import { NearbyDetails } from '../render/NearbyDetails';
+import { chargerDetailGeometry, picnicDetailGeometry } from '../render/InfrastructureGeometry';
 
 type Point = [number, number, number];
 const quad = (data: number[], a: Point, b: Point, c: Point, d: Point) => data.push(...a, ...b, ...c, ...b, ...d, ...c);
@@ -27,7 +33,8 @@ export class ServiceMesh {
   private readonly materialOrigin = new Vector2();
   readonly structures = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.materialOrigin), 8000);
   readonly railings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xaebdc0, metalness: 0.6, roughness: 0.45 }), 16000);
-  readonly pavement = new Mesh(new BufferGeometry(), new MeshStandardMaterial({ color: 0x41494a, roughness: 0.87, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+  private readonly pavementOrigin = new Vector2();
+  readonly pavement: Mesh<BufferGeometry, MeshStandardMaterial>;
   readonly buildings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.78 }), 8000);
   readonly windows = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0x395764, metalness: 0.3, roughness: 0.22, emissive: 0xffd6a1, emissiveIntensity: 0 }), 2000);
   readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xece7ce, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 16000);
@@ -37,13 +44,19 @@ export class ServiceMesh {
   readonly treeTrunks = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 1 }), 128);
   private readonly batches = [this.buildings, this.windows, this.markings, this.lights, this.roofs, this.landscaping, this.treeTrunks, this.structures, this.railings];
   readonly lampPositions: (ServicePoint & { covered?: boolean })[] = [];
+  readonly chargerDetails: NearbyDetails;
+  readonly picnicDetails: NearbyDetails;
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
   private version = -1;
   private anchorX = 0;
   private anchorZ = 0;
 
-  constructor(scene: Scene, private readonly options: Readonly<WorldOptions>, private readonly terrain: RoadTerrain) {
+  constructor(scene: Scene, private readonly options: Readonly<WorldOptions>, private readonly terrain: RoadTerrain, textures?: PavementTextures) {
+    this.pavement = new Mesh(new BufferGeometry(), createPavementMaterial(this.pavementOrigin, textures));
+    this.chargerDetails = new NearbyDetails(scene, chargerDetailGeometry(), 'service-charger-details', 24);
+    this.picnicDetails = new NearbyDetails(scene, picnicDetailGeometry(), 'service-picnic-details', 24);
+    this.picnicDetails.mesh.material.metalness = 0; this.picnicDetails.mesh.material.roughness = 0.9;
     addRetroreflection(this.markings.material);
     for (const mesh of [this.pavement, ...this.batches]) {
       mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping || mesh === this.treeTrunks || mesh === this.structures;
@@ -52,11 +65,13 @@ export class ServiceMesh {
     for (const mesh of this.batches) mesh.count = 0;
   }
 
-  update(sites: readonly ServiceArea[], version: number, originX: number, originZ: number, vegetation = true): void {
+  update(sites: readonly ServiceArea[], version: number, originX: number, originZ: number, vegetation = true, corridor?: RoadCorridor): void {
     if (this.version !== version) {
       this.version = version;
       this.anchorX = sites[0]?.sample.position.x ?? 0;
       this.anchorZ = sites[0]?.sample.position.z ?? 0;
+      this.chargerDetails.clear(this.anchorX, this.anchorZ); this.picnicDetails.clear(this.anchorX, this.anchorZ);
+      this.pavementOrigin.set(this.anchorX % 40, this.anchorZ % 40);
       this.lampPositions.length = 0;
       for (const mesh of this.batches) mesh.count = 0;
       const data: number[] = [];
@@ -71,23 +86,36 @@ export class ServiceMesh {
             for (let x = -Math.floor((pad.halfWidth - 12) / 32) * 32; x < pad.halfWidth; x += 32) this.column(pad, x, along, -2);
           }
         }
-        for (const { a, b } of site.ground.access) {
+        const ribbons = accessQuads(site.ground.access);
+        for (const [index, { a, b }] of site.ground.access.entries()) {
           const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
           const aw = a.halfWidth ?? 3.5, bw = b.halfWidth ?? 3.5;
           const ay = a.slopeX * nx + a.slopeZ * nz, by = b.slopeX * nx + b.slopeZ * nz;
-          quad(data, vertex({ x: a.x - nx * aw, y: a.y - ay * aw, z: a.z - nz * aw }, 0.015), vertex({ x: a.x + nx * aw, y: a.y + ay * aw, z: a.z + nz * aw }, 0.015),
-            vertex({ x: b.x - nx * bw, y: b.y - by * bw, z: b.z - nz * bw }, 0.015), vertex({ x: b.x + nx * bw, y: b.y + by * bw, z: b.z + nz * bw }, 0.015));
+          const q = ribbons[index];
+          quad(data, vertex(q.leftA, 0.015), vertex(q.rightA, 0.015), vertex(q.leftB, 0.015), vertex(q.rightB, 0.015));
           const insidePad = site.ground.pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
             && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < pad.halfLength);
           if (!insidePad) {
             this.edge(this.structures, a, b, Math.max(aw, bw) * 2 + 0.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx + (a.slopeZ + b.slopeZ) / 2 * nz);
-            if (site.ground.elevated && !underpass.nearest(a.x, a.z, 7) && Math.floor(a.z / 32) !== Math.floor(b.z / 32)) this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
+            if (site.ground.elevated && !underpass.nearest(a.x, a.z, 7) && index % 8 === 4
+              && !corridor?.crossesBelow({ ...site.sample, position: a, routeId: 'service-access', distance: index * 4 }, 12))
+              this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
           }
           if (!insidePad) for (const side of [-1, 1]) {
             if (a.merge && side !== a.side && Math.floor(Math.hypot(a.x - site.sample.position.x, a.z - site.sample.position.z) / 4) % 3 !== 0) continue;
             const wa = Math.max(0.05, aw - (a.merge && side === a.side ? 0.7 : 0.08)), wb = Math.max(0.05, bw - (a.merge && side === a.side ? 0.7 : 0.08));
             this.edge(this.markings, { x: a.x + nx * side * wa, y: a.y + ay * side * wa, z: a.z + nz * side * wa },
               { x: b.x + nx * side * wb, y: b.y + by * side * wb, z: b.z + nz * side * wb }, 0.14, 0.018, 0.04);
+          }
+          if (site.accessWindows && index % 10 === 5) {
+            for (const direction of a.direction ? [a.direction] : [-1, 1]) {
+              const offset = a.direction ? 0 : direction * 3;
+              const p = (along: number, lateral = 0) => ({ x: a.x + (b.x - a.x) / length * along * direction + nx * (offset + lateral),
+                y: a.y + (b.y - a.y) / length * along * direction + ay * (offset + lateral),
+                z: a.z + (b.z - a.z) / length * along * direction + nz * (offset + lateral) });
+              this.edge(this.markings, p(-2), p(2), 0.18, 0.02, 0.045);
+              for (const wing of [-1, 1]) this.edge(this.markings, p(0.7, wing * 0.7), p(2), 0.18, 0.02, 0.045);
+            }
           }
         }
         if (site.mergeEnd) for (const side of this.options.oneWay ? [1] : [-1, 1]) for (const distance of [300, 475, 555]) {
@@ -254,8 +282,8 @@ export class ServiceMesh {
     for (const y of [1.2, 3.8]) box(3.8, 28, y, 0.16, 0.12, 28, 0x465952);
     for (const along of [25.5, 30.5]) box(3.78, along, 1.8, 0.12, 3.6, 0.2, 0xc9cfbe);
     for (const along of [27.7, 28.3]) box(3.65, along, 1.7, 0.22, 0.65, 0.06, 0xd8dfcf);
-    box(14, -38, 5.6, 26, 0.55, 23, 0x427b72);
-    box(14, -38, 5.94, 26.6, 0.15, 23.6, 0xd5ded4);
+    box(14, -38, 5.6, 26, 0.55, 23, 0x427b72, true);
+    box(14, -38, 5.94, 26.6, 0.15, 23.6, 0xd5ded4, true);
     for (const along of [-49.6, -26.4]) box(14, along, 5.63, 26.5, 0.3, 0.12, 0xe4b45d);
     for (const x of [3, 25]) for (const along of [-47, -29]) box(x, along, 2.8, 0.4, 5.6, 0.4, 0xadb4a8);
     for (const along of [-43, -33]) {
@@ -283,13 +311,14 @@ export class ServiceMesh {
       (x, a, y, w, h, l, color) => this.box(this.windows, pad, x * pad.side, a, y, w, h, l, color),
       (x, a, y, w, h, l, color) => this.box(this.lights, pad, x * pad.side, a, y, w, h, l, color));
     for (const along of [54, 64]) {
+      this.detailAt(this.picnicDetails, pad, 15, along, 0);
       box(15, along, 0.9, 4, 0.16, 1.5, 0x886c4e);
       for (const z of [-1.3, 1.3]) box(15, along + z, 0.5, 4.5, 0.16, 0.45, 0x967950);
       for (const x of [13.5, 16.5]) box(x, along, 0.4, 0.16, 0.8, 1.2, 0x54615b);
     }
     for (const x of [10, 21]) for (const along of [51, 68]) box(x, along, 1.9, 0.23, 3.8, 0.23, 0x8e7450);
-    for (const x of [10, 21]) box(x, 59.5, 3.85, 0.3, 0.25, 18, 0x8e7450);
-    if (architecture === 'courtyard') this.box(this.roofs, pad, 15.5 * pad.side, 59.5, 3.9, 12, 0.8, 18, 0xd5b481);
+    for (const x of [10, 21]) box(x, 59.5, 3.85, 0.3, 0.25, 18, 0x8e7450, true);
+    if (architecture === 'courtyard') this.box(this.roofs, pad, 15.5 * pad.side, 59.5, 3.9, 12, 0.8, 18, 0xd5b481, true);
     else for (let along = 51; along <= 68; along += architecture === 'modern' ? 3.4 : 1.7) box(15.5, along, 4, 12, 0.18, 0.3, architecture === 'modern' ? 0x667c80 : 0xb09770);
     for (const along of [-12, 4, 59]) {
       box(29, along, 0.25, 4, 0.5, 8, 0xafb2a1, true);
@@ -349,17 +378,27 @@ export class ServiceMesh {
   }
 
   private amenities(pad: ServicePad): void {
-    const box = (x: number, a: number, y: number, w: number, h: number, l: number, color: number) => this.box(this.buildings, pad, x * pad.side, a, y, w, h, l, color);
+    const box = (x: number, a: number, y: number, w: number, h: number, l: number, color: number, followGrade = false) => this.box(this.buildings, pad, x * pad.side, a, y, w, h, l, color, followGrade);
     for (const a of chargingPosts) for (const x of chargingPostColumns) {
       box(x, a, 2.25, 0.22, 4.5, 0.22, 0x738b8c);
       box(x, a, 0.14, 0.45, 0.28, 0.45, 0xaeb7ad);
     }
-    box(-57, -64, 4.55, 11, 0.16, 30, 0x738b8c);
+    box(-57, -64, 4.55, 11, 0.16, 30, 0x738b8c, true);
+    for (const x of chargingPostColumns) {
+      box(x, -64, 4.32, 0.18, 0.32, 29, 0x546b70, true);
+      box(x, -64, 4.67, 0.12, 0.18, 30.3, 0x92a8aa, true);
+      for (const a of chargingPosts) {
+        box(x, a, 4.27, 0.52, 0.1, 0.6, 0x3b5156, true);
+        box(x - 0.16, a, 2.31, 0.07, 4.62, 0.07, 0x697c80);
+        box(x - 0.08, a, 4.62, 0.24, 0.07, 0.07, 0x697c80);
+      }
+    }
     for (let a = -77; a <= -51; a += 2) {
-      box(-57, a, 4.67, 10.5, 0.06, 1.8, 0x23465e);
-      for (const x of [-62, -59.5, -57, -54.5, -52]) box(x, a, 4.71, 0.035, 0.015, 1.8, 0x9cbdc8);
+      box(-57, a, 4.67, 10.5, 0.06, 1.8, 0x23465e, true);
+      for (const x of [-62, -59.5, -57, -54.5, -52]) box(x, a, 4.71, 0.035, 0.015, 1.8, 0x9cbdc8, true);
     }
     for (const a of chargingBays) {
+      this.detailAt(this.chargerDetails, pad, -61.52, a, 1.5);
       box(-62, a, 1.1, 0.8, 2.2, 0.75, 0xe0e8df);
       box(-61.57, a, 1.5, 0.07, 0.55, 0.55, 0x1d4349);
       box(-61.52, a, 1.5, 0.035, 0.35, 0.36, 0x62cdb5);
@@ -377,6 +416,12 @@ export class ServiceMesh {
       box(x, a, 1.4, w, x === 7 ? 0.08 : 0.8, l, 0xb4d6c5);
     for (const x of [5.7, 8.3]) box(x, 83.9, 0.16, 0.38, 0.32, 1.1, 0xa9b5a6);
     for (let x = -3; x <= 9; x += 2) this.box(this.markings, pad, x * pad.side, 89, 0.037, 0.7, 0.02, 3.4, 0xe1dcc4, true);
+  }
+
+  private detailAt(batch: NearbyDetails, pad: ServicePad, x: number, along: number, height: number): void {
+    const p = padPoint(pad, x * pad.side, along, height);
+    this.matrix.makeRotationY(-pad.heading + (pad.side < 0 ? Math.PI : 0)).setPosition(p.x - this.anchorX, p.y, p.z - this.anchorZ);
+    batch.add(this.matrix);
   }
 
   private box(mesh: InstancedMesh, pad: ServicePad, x: number, along: number, y: number, w: number, h: number, l: number, color: number, followGrade = false): void {
@@ -494,6 +539,7 @@ export class ServiceMesh {
   }
 
   dispose(): void {
+    this.chargerDetails.dispose(); this.picnicDetails.dispose();
     for (const mesh of [this.pavement, ...this.batches]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
     for (const mesh of this.batches) mesh.dispose();
   }

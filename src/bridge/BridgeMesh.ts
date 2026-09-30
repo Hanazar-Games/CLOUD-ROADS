@@ -16,6 +16,8 @@ import { archAlignment, ArchBridgeMesh } from './ArchBridgeMesh';
 import type { ServiceArea } from '../service/ServicePlanner';
 import { CableBridgeMesh, cableSpans, cablePylonWidth } from './CableBridgeMesh';
 import { BridgeAbutments } from './BridgeAbutments';
+import { NearbyDetails } from '../render/NearbyDetails';
+import { drainGrateGeometry, expansionJointGeometry } from '../render/InfrastructureGeometry';
 
 const CAPACITY = MAX_ROAD_SEGMENTS * ROAD_SAMPLES;
 const RAIL_COLORS = [new Color(0x81949e), new Color(0xb0bec6), new Color(0xbb302b)];
@@ -35,6 +37,8 @@ export class BridgeMesh {
   readonly details: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
   readonly drains: InstancedMesh<CylinderGeometry, MeshStandardMaterial>;
   readonly railings: InstancedMesh<BoxGeometry, MeshStandardMaterial>;
+  readonly jointDetails: NearbyDetails;
+  readonly drainDetails: NearbyDetails;
   private readonly heights = new Map<string, number>();
   private readonly profile;
   private readonly matrix = new Matrix4();
@@ -45,6 +49,8 @@ export class BridgeMesh {
 
   constructor(scene: Scene, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
+    this.jointDetails = new NearbyDetails(scene, expansionJointGeometry(this.profile.halfWidth * 2), 'bridge-expansion-joints');
+    this.drainDetails = new NearbyDetails(scene, drainGrateGeometry(), 'bridge-drain-grates');
     this.deck = new BridgeDeck(this.material, options);
     this.archBridges = new ArchBridgeMesh(scene, this.material, options);
     this.cableBridges = new CableBridgeMesh(scene, this.material, options);
@@ -90,6 +96,7 @@ export class BridgeMesh {
       this.version = version;
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
+      this.jointDetails.clear(this.anchorX, this.anchorZ); this.drainDetails.clear(this.anchorX, this.anchorZ);
       this.archBridges.reset(this.anchorX, this.anchorZ);
       this.parapets.count = this.piers.count = this.columns.count = this.roundPiers.count = this.details.count = this.drains.count = this.railings.count = this.supports = 0;
       this.deck.rebuild(spans, this.anchorX, this.anchorZ);
@@ -131,6 +138,7 @@ export class BridgeMesh {
               if (tier) for (const direction of [-1, 1]) this.railing(sample, side, 0.92, 0.09, 0.09,
                 Math.hypot(length, 0.9), color, direction * Math.atan2(0.9, length));
               if (Math.floor(a.distance / 24) !== Math.floor(b.distance / 24)) {
+                this.drainDetails.addRoad(sample, side - Math.sign(side) * 0.42, 0.008);
                 const outlet = side + Math.sign(side) * 0.3;
                 this.box(this.drains, x + right.x * outlet - normal.x * 0.95, y + right.y * outlet - normal.y * 0.95,
                   z + right.z * outlet - normal.z * 0.95, 0.16, 1.1, 0.16, sample);
@@ -283,8 +291,9 @@ export class BridgeMesh {
         }
       }
     }
-    this.box(this.details, x + normal.x * 0.015, y + normal.y * 0.015, z + normal.z * 0.015,
-      deckWidth - 0.8, 0.02, 0.09, sample);
+    this.box(this.details, x + normal.x * 0.003, y + normal.y * 0.003, z + normal.z * 0.003,
+      deckWidth - 0.8, 0.012, 0.28, sample);
+    this.jointDetails.addRoad(sample, 0, 0.008);
     this.supports++;
   }
 
@@ -309,6 +318,7 @@ export class BridgeMesh {
   }
 
   dispose(): void {
+    this.jointDetails.dispose(); this.drainDetails.dispose();
     this.archBridges.dispose();
     this.cableBridges.dispose(); this.abutments.dispose();
     this.deck.removeFromParent(); this.deck.geometry.dispose();

@@ -10,6 +10,19 @@ import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import { Raycaster, Scene, Vector3 } from 'three';
 import { InterchangeMesh } from '../src/road/InterchangeMesh';
 import { RoadCorridor } from '../src/road/RoadCorridor';
+import { roadProfile } from '../src/road/RoadProfile';
+
+it('keeps the full ramp width level with the carriageway until it clears the merge', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
+  const center = new RoadSegment(new RoadGenerator('merge-level', { sample: () => 100 }, options).start, 0, 0).sample(0);
+  const plan = highwayInterchange('merge-level', center, options), width = roadProfile(options).outerHalfWidth;
+  for (const ramp of plan.ramps) for (const p of ramp.points) {
+    const u = (p.x - center.position.x) * Math.cos(center.heading) + (p.z - center.position.z) * Math.sin(center.heading);
+    const v = (p.x - center.position.x) * Math.sin(center.heading) - (p.z - center.position.z) * Math.cos(center.heading);
+    if (Math.abs(u) < width + 4) expect(p.y).toBeCloseTo(center.position.y, 5);
+    if (Math.abs(v) < width + 4) expect(p.y).toBeCloseTo(plan.upperHeight, 5);
+  }
+});
 
 it.each(Array.from({ length: 8 }, (_, i) => i))('drives a long semi continuously through ramp %s', index => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade: 0 };

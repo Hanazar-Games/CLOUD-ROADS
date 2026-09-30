@@ -1,10 +1,14 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { AudioSystem, type SoundState } from '../src/audio/AudioSystem';
+import { hornProfile, type HornVoice } from '../src/audio/VehicleHorn';
+import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
+import { engineSound, type EngineVoice } from '../src/audio/VehicleEngine';
+import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 
-const idle: SoundState = { powertrain: 'combustion', regeneration: false, atmosphere: 1, driving: false, speed: 0, throttle: 0, shifting: false, impact: 0, scrape: 0, mass: 1200, motorcycle: false,
+const idle: SoundState = { powertrain: 'combustion', regeneration: false, fuelCut: false, atmosphere: 1, driving: false, speed: 0, throttle: 0, shifting: false, impact: 0, scrape: 0, mass: 1200, motorcycle: false,
   rain: 0, shelter: 0, cockpit: false, signal: false, wiper: 0, walkingSpeed: 0,
   rpm: 850, shifts: 0, exposure: 0, wet: 0, nature: true, night: 0, horn: false, fan: 0, washer: 0, motor: false,
-  supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', traffic: 0, tireSlip: 0 };
+  supercar: false, braking: false, operations: 0, service: 0, ignition: 'running', nearbyEngines: [], tireSlip: 0, vehicle: 'roadster', trafficHorns: [] };
 const param = () => ({ value: 0, setTargetAtTime(value: number) { this.value = value; },
   setValueAtTime(value: number) { this.value = value; }, linearRampToValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() });
 const gain = () => ({ gain: param(), connect: vi.fn(), disconnect: vi.fn() });
@@ -15,7 +19,8 @@ class AudioContextStub {
   createGain() { const node = gain(); this.gains.push(node); return node; }
   oscillators: { type: string; frequency: ReturnType<typeof param>; stop: ReturnType<typeof vi.fn> }[] = [];
   createOscillator() { const node = { type: 'sine', frequency: param(), connect: vi.fn(), start: vi.fn(), stop: vi.fn(), disconnect: vi.fn() }; this.oscillators.push(node); return node; }
-  createBiquadFilter() { return { frequency: param(), Q: param(), connect: vi.fn() }; }
+  createBiquadFilter() { return { frequency: param(), Q: param(), connect: vi.fn(), disconnect: vi.fn() }; }
+  createStereoPanner() { return { pan: param(), connect: vi.fn(), disconnect: vi.fn() }; }
   compressors = 0;
   createDynamicsCompressor() { this.compressors++; return { threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), connect: vi.fn() }; }
   createBuffer(_channels: number, size: number) { return { getChannelData: () => new Float32Array(size) }; }
@@ -25,6 +30,91 @@ class AudioContextStub {
   async close() { this.state = 'closed'; }
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it.each(['player', 'traffic'])('keeps music at full level when muted %s horns are triggered', async source => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.sfxVolume = 0; audio.musicDucking = 0; audio.hornFocus = 1;
+  audio.toggle(); await Promise.resolve();
+  const state = { ...idle, horn: source === 'player', trafficHorns: source === 'traffic'
+    ? [{ id: 'nearby', kind: 'truck8' as const, volume: 1, pan: 0 }] : [] };
+  const mix = audio as unknown as { musicDuck: number; ambienceDuck: number };
+  for (let i = 0; i < 30; i++) audio.update(0.1, state);
+  expect(audio.musicPlaying).toBe(true); expect(mix.musicDuck).toBe(1); expect(mix.ambienceDuck).toBe(1);
+  audio.sfxVolume = 1;
+  for (let i = 0; i < 30; i++) audio.update(0.1, state);
+  expect(mix.musicDuck).toBeLessThan(0.5);
+  audio.sfxVolume = 0;
+  for (let i = 0; i < 40; i++) audio.update(0.1, state);
+  expect(mix.musicDuck).toBeGreaterThan(0.99); audio.dispose();
+});
+
+it('provides stronger horns with adjustable priority, exhaust voicing and independent shift volume', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const nodes = audio as unknown as { playerHorn: HornVoice; windGain: ReturnType<typeof gain>; harmonicGain: ReturnType<typeof gain>; shiftGain: ReturnType<typeof gain> };
+  audio.hornVolume = 1; audio.update(0.1, { ...idle, horn: true }); const normal = nodes.playerHorn.level.gain.value;
+  audio.hornVolume = 3; audio.hornFocus = 1;
+  for (let i = 0; i < 20; i++) audio.update(0.1, { ...idle, horn: true });
+  expect(nodes.playerHorn.level.gain.value).toBeGreaterThan(normal * 2);
+  const focused = nodes.windGain.gain.value;
+  audio.hornFocus = 0;
+  for (let i = 0; i < 20; i++) audio.update(0.1, { ...idle, horn: true });
+  expect(nodes.windGain.gain.value).toBeGreaterThan(focused * 1.8);
+  audio.exhaustVolume = 0; audio.update(0.1, { ...idle, driving: true }); expect(nodes.harmonicGain.gain.value).toBe(0);
+  audio.shiftVolume = 1; expect(audio.preview('shift')).toBe(true); expect(audio.previewing).toBe(true);
+  audio.shiftVolume = 0; expect(audio.previewing).toBe(false); expect(audio.preview('shift')).toBe(false);
+  const pulses = nodes.shiftGain.gain.linearRampToValueAtTime.mock.calls.length;
+  audio.update(0.1, { ...idle, driving: true, shifts: 1 });
+  expect(nodes.shiftGain.gain.linearRampToValueAtTime.mock.calls.slice(pulses).every(([value]) => value === 0)).toBe(true);
+  audio.dispose();
+});
+
+it('reduces combustion exhaust on overrun and makes cabin isolation and music layers adjustable', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const nodes = audio as unknown as { windGain: ReturnType<typeof gain>; harmonicGain: ReturnType<typeof gain>; bassGain: ReturnType<typeof gain>; melodyGain: ReturnType<typeof gain> };
+  audio.update(0.1, { ...idle, driving: true, rpm: 3500 }); const combustion = nodes.harmonicGain.gain.value;
+  audio.update(0.1, { ...idle, driving: true, rpm: 3500, fuelCut: true }); expect(nodes.harmonicGain.gain.value).toBeLessThan(combustion * 0.5);
+  audio.cabinIsolation = 1; audio.update(0.1, { ...idle, cockpit: true }); expect(nodes.windGain.gain.value).toBe(0);
+  audio.update(0.1, { ...idle, cockpit: true, exposure: 1 }); expect(nodes.windGain.gain.value).toBeGreaterThan(0);
+  audio.bassVolume = audio.melodyVolume = 0; audio.update(0.1, idle);
+  expect(nodes.bassGain.gain.value).toBe(0); expect(nodes.melodyGain.gain.value).toBe(0);
+  audio.dispose();
+});
+
+it('gives the entire fleet distinct horn voicings with deeper heavy-vehicle tones', () => {
+  const profiles = Object.keys(vehicleProfiles).map(kind => hornProfile(kind as VehicleKind));
+  expect(new Set(profiles.map(p => p.frequencies.join(':'))).size).toBe(profiles.length);
+  expect(hornProfile('semi20').frequencies[0]).toBeLessThan(hornProfile('sedan').frequencies[0]);
+  expect(hornProfile('motorcycle').frequencies[0]).toBeGreaterThan(hornProfile('sedan').frequencies[0]);
+  for (const p of profiles) for (const frequency of p.frequencies) expect(frequency).toBeGreaterThan(90);
+});
+
+it('makes horns prominent with independent controls, bounded spatial voices and immediate pause cleanup', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const voices = audio as unknown as { playerHorn: HornVoice; npcHorns: { id?: string; voice: HornVoice }[] };
+  const sound = { ...idle, driving: true, horn: true, trafficHorns: Array.from({ length: 10 }, (_, i) => ({
+    id: `npc:${i}`, kind: 'truck8' as const, volume: 1 - i * 0.05, pan: i % 2 ? -0.8 : 0.8 })) };
+  audio.update(0.1, sound);
+  expect(voices.playerHorn.level.gain.value).toBeGreaterThan(0.35);
+  expect(voices.npcHorns).toHaveLength(4);
+  expect(voices.npcHorns.every(v => v.voice.level.gain.value > 0)).toBe(true);
+  expect(voices.npcHorns[0].voice.pan.pan.value).toBe(0.8);
+  const nodes = context.oscillators.length;
+  audio.hornVolume = 0; audio.update(0.1, sound);
+  expect(voices.playerHorn.level.gain.value).toBe(0); expect(audio.preview('horn')).toBe(false);
+  expect(voices.npcHorns[0].voice.level.gain.value).toBeGreaterThan(0);
+  audio.npcHornVolume = 0; audio.update(0.1, sound);
+  expect(voices.npcHorns.every(v => v.voice.level.gain.value === 0)).toBe(true);
+  audio.hornVolume = audio.npcHornVolume = 1;
+  for (let i = 0; i < 20; i++) audio.update(0.1, { ...sound, trafficHorns: sound.trafficHorns.slice(i % 5) });
+  expect(context.oscillators).toHaveLength(nodes);
+  audio.setActive(false); await Promise.resolve();
+  expect(voices.playerHorn.level.gain.value).toBe(0);
+  expect(voices.npcHorns.every(v => v.voice.level.gain.value === 0)).toBe(true);
+  audio.dispose(); expect(context.oscillators.every(v => v.stop.mock.calls.length === 1)).toBe(true);
+});
 
 it('does not play a gear change when switching to a vehicle with a reset shift counter', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
@@ -141,7 +231,7 @@ it('follows tire slip, wetness and tire volume without stale squeal on pause or 
   audio.dispose();
 });
 
-it('mutes propulsion when off, keeps cabin equipment powered and fades bounded traffic audio', async () => {
+it('mutes propulsion when off and keeps cabin equipment powered', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
   audio.update(0.1, { ...idle, driving: true, fan: 3 });
@@ -152,12 +242,31 @@ it('mutes propulsion when off, keeps cabin equipment powered and fades bounded t
   expect(context.gains.some((g, i) => i > 3 && g.gain.value > 0 && g.gain.value === running[i])).toBe(true);
   audio.update(0.1, { ...idle, driving: true, ignition: 'starting', rpm: 240 });
   expect(context.gains[3].gain.value).toBeGreaterThan(0);
-  const count = context.gains.length;
-  audio.update(0.1, { ...idle, traffic: 1 }); const near = context.gains.at(-3)!.gain.value;
-  expect(near).toBeGreaterThan(0);
-  audio.update(0.1, { ...idle, traffic: 0.5 }); expect(context.gains.at(-3)!.gain.value).toBeCloseTo(near / 2);
-  audio.setActive(false); await Promise.resolve(); expect(context.gains.at(-3)!.gain.value).toBe(0);
-  expect(context.gains).toHaveLength(count); audio.dispose();
+  audio.dispose();
+});
+
+it('voices nearby engines outside a vehicle with stable bounded spatial slots and independent volume', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const car = new VehiclePhysics('truck8'); car.ignition = 'running'; car.x = 5;
+  const sound = engineSound('parked', car, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 })!;
+  const slots = (audio as unknown as { nearbyEngines: { id?: string; voice: EngineVoice }[] }).nearbyEngines;
+  audio.update(0.1, { ...idle, nearbyEngines: [sound] });
+  const slot = slots.find(s => s.id === 'parked')!;
+  expect(slot.voice.level.gain.value).toBeGreaterThan(0); expect(slot.voice.pan.pan.value).toBe(1);
+  audio.nearbyEngineVolume = 0; audio.update(0.1, { ...idle, nearbyEngines: [sound] });
+  expect(slot.voice.level.gain.value).toBe(0);
+  audio.nearbyEngineVolume = 1;
+  const nodes = context.oscillators.length;
+  for (let i = 0; i < 12; i++) audio.update(0.1, { ...idle, nearbyEngines: Array.from({ length: 20 }, (_, j) => ({ ...sound, id: `${i}:${j}` })) });
+  expect(slots).toHaveLength(6); expect(slots.every(s => s.voice.level.gain.value > 0)).toBe(true);
+  expect(context.oscillators).toHaveLength(nodes);
+  audio.update(0.1, { ...idle, nearbyEngines: [sound], atmosphere: 0 });
+  expect(slots.every(s => s.voice.level.gain.value === 0)).toBe(true);
+  audio.update(0.1, { ...idle, nearbyEngines: [sound] });
+  audio.setActive(false); await Promise.resolve();
+  expect(slots.every(s => s.voice.level.gain.value === 0)).toBe(true);
+  audio.dispose(); expect(context.oscillators.every(v => v.stop.mock.calls.length === 1)).toBe(true);
 });
 
 it('voices the supercar separately and keeps music and operational effects on a bounded audio graph', async () => {
@@ -233,7 +342,7 @@ it('rejects previews of muted sound groups and reports completion and interrupti
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
   audio.engineVolume = 0;
   expect(audio.preview('engine')).toBe(false); expect(audio.preview('shift')).toBe(false);
-  audio.effectsVolume = 0; expect(audio.preview('horn')).toBe(false);
+  audio.hornVolume = 0; expect(audio.preview('horn')).toBe(false);
   audio.engineVolume = 1;
   expect(audio.preview('engine')).toBe(true); expect(audio.previewing).toBe(true);
   expect(audio.preview('horn')).toBe(false); expect(audio.previewing).toBe(false);
@@ -241,7 +350,7 @@ it('rejects previews of muted sound groups and reports completion and interrupti
   audio.update(1.3, idle); expect(audio.previewing).toBe(false);
   audio.preview('engine'); audio.engineVolume = 0; audio.update(0.1, idle);
   expect(audio.previewing).toBe(false);
-  audio.effectsVolume = 1; audio.preview('horn'); audio.setActive(false);
+  audio.hornVolume = 1; audio.preview('horn'); audio.setActive(false);
   expect(audio.previewing).toBe(false); audio.dispose();
 });
 

@@ -1,0 +1,52 @@
+import { expect, test } from '@playwright/test';
+import { control } from './settings';
+
+test('edits precise tuning safely, disables irrelevant controls and restores a saved mix', async ({ page }, info) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?seed=POWERTRAIN-MIX');
+  await (await control(page, page.locator('#engine-inertia'))).fill('150');
+  const number = page.locator('#engine-inertia-number'); await expect(number).toHaveValue('150');
+  await number.fill('999'); await number.press('Enter');
+  await expect(page.locator('#engine-inertia')).toHaveValue('200'); await expect(number).toHaveValue('200');
+  await number.fill('50'); await number.press('Escape');
+  await expect(page.locator('#explorer')).toBeVisible(); await expect(number).toHaveValue('200');
+  await page.locator('#engine-shiftPoint').fill('110'); await page.locator('#engine-engineBraking').fill('160');
+  await page.locator('#vehicle-kind').selectOption('truck8'); await expect(page.locator('#engine-inertia')).toHaveValue('200');
+  await page.locator('#transmission-mode').selectOption('manual');
+  await expect(page.locator('#engine-shiftPoint-number')).toBeDisabled(); await expect(page.locator('#engine-coastRpm')).toBeDisabled();
+  await page.locator('#transmission-mode').selectOption('auto');
+  await page.locator('#vehicle-energy').selectOption('ev'); await expect(number).toBeDisabled();
+  await page.locator('#vehicle-energy').selectOption('combustion'); await expect(number).toBeEnabled();
+  await (await control(page, page.locator('#horn-volume'))).fill('300');
+  await page.locator('#shift-volume').fill('75'); await page.locator('#music-bass-volume').fill('130');
+  await page.locator('#horn-focus').fill('90'); await page.locator('#cabin-isolation').fill('85');
+  await page.locator('#audio-group-horns').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('audio-mix-desktop.png') });
+  await (await control(page, page.locator('#preset-name'))).fill('动力与混音'); await page.locator('#preset-save').click();
+  await expect(page.locator('#preset-status')).toContainText('已保存');
+  await (await control(page, page.locator('#engine-tuning-reset'))).click(); await expect(number).toHaveValue('100');
+  await (await control(page, page.locator('#audio-mix-reset'))).click(); await expect(page.locator('#horn-volume')).toHaveValue('200');
+  await page.reload(); await (await control(page, page.locator('#preset-apply'))).click();
+  await expect(page.locator('#engine-inertia')).toHaveValue('200'); await expect(page.locator('#engine-engineBraking')).toHaveValue('160');
+  await expect(page.locator('#horn-volume')).toHaveValue('300'); await expect(page.locator('#music-bass-volume')).toHaveValue('130');
+  await expect(page.locator('#shift-volume')).toHaveValue('75'); await expect(page.locator('#cabin-isolation')).toHaveValue('85');
+  expect(errors).toEqual([]);
+});
+
+test('keeps compact settings readable, searches switches and supports keyboard categories', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/?seed=COMPACT-SETTINGS');
+  await (await control(page, page.locator('#horn-volume'))).fill('250');
+  await page.locator('#audio-group-horns').scrollIntoViewIfNeeded();
+  const overflow = await page.locator('#settings-content').evaluate(node => node.scrollWidth - node.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await expect(page.locator('#horn-volume-number')).toHaveValue('250');
+  await page.screenshot({ path: info.outputPath('audio-mix-mobile.png') });
+  await page.locator('#settings-search').fill('新手'); await page.locator('#settings-search').press('Enter');
+  await expect(page.locator('#beginner-mode')).toBeFocused();
+  const driving = page.locator('[data-settings-target="driving"]'); await driving.focus(); await driving.press('ArrowRight');
+  await expect(page.locator('[data-settings-target="autopilot"]')).toBeFocused();
+  await page.locator('#settings-search').fill('转速惯性'); await page.locator('#settings-search').press('Enter');
+  await expect(page.locator('#engine-inertia')).toBeFocused();
+  await page.locator('#engine-inertia').press('ArrowRight'); await expect(page.locator('#engine-inertia-number')).toHaveValue('105');
+  await page.screenshot({ path: info.outputPath('engine-tuning-mobile.png') });
+});

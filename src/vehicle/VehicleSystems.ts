@@ -36,7 +36,13 @@ export class VehicleSystems {
   rain = 0;
   signal: SignalMode = 'off';
   lightPower = 1;
-  fogLights = false;
+  private fog = false;
+  private manualFog?: boolean;
+  get fogLights(): boolean { return this.manualFog ?? this.fog; }
+  set fogLights(on: boolean) { this.manualFog = on; }
+  updateFog(fog: boolean): void {
+    if (fog !== this.fog) { this.fog = fog; this.manualFog = undefined; }
+  }
   lightRange = 180;
   private blink = 0;
   private lastSignal: SignalMode = 'off';

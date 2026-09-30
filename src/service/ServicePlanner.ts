@@ -13,8 +13,10 @@ import { MERGE_END, serviceMerge } from './ServiceMerge';
 import { Garage, GARAGE_APRON } from '../garage/Garage';
 import { connectGarage } from '../garage/GarageAccess';
 import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
+import { accessQuads } from '../road/SurfaceRibbon';
+import { exposedBarriers } from '../road/RampBarrier';
 
-export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number; accessSide?: number }
+export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number; accessSide?: number; accessWindows?: { start: number; end: number; side: number }[] }
 
 export class ServicePlanner {
   private readonly profile;
@@ -133,31 +135,20 @@ export class ServicePlanner {
           }
         }
         if (elevated || merging) {
-          for (const { a, b } of access) {
-            const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
+          const rims = accessQuads(access, 0.2);
+          for (const [index, { a }] of access.entries()) {
             const insidePad = pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
               && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < pad.halfLength + 2);
             if (insidePad) continue;
-            for (const side of [-1, 1]) {
-              const point = (p: ServiceAccessPoint) => ({ x: p.x + nx * side * 3.7, y: p.y + (p.slopeX * nx + p.slopeZ * nz) * side * 3.7, z: p.z + nz * side * 3.7 });
-              const from = point(a), to = point(b);
+            const q = rims[index];
+            for (const [from, to] of [[q.leftA, q.leftB], [q.rightA, q.rightB]]) {
               if ((roadIndex.nearest(from.x, from.z)?.distanceSquared ?? Infinity) > (this.profile.outerHalfWidth + 0.3) ** 2) barriers.push({ a: from, b: to });
             }
           }
         }
         if (merging) {
-          const merge = auxiliary!, ramps = new RoadIndex(access);
-          // Join rail ends outside the common pavement instead of fencing across the mouth.
-          const onRamp = (x: number, z: number) => !!ramps.nearest(x, z, 3.95);
-          const mergeIndex = new RoadIndex(merge.access);
-          const onMerge = (x: number, z: number) => {
-            const nearest = mergeIndex.nearest(x, z, this.profile.laneWidth + 2);
-            if (!nearest) return false;
-            const edge = merge.access[nearest.index];
-            return nearest.distanceSquared < ((edge.a.halfWidth ?? 3.5) + 0.3) ** 2;
-          };
-          const joined = barriers.filter(({ a, b }) => !onMerge(a.x, a.z) && !onMerge(b.x, b.z));
-          joined.push(...merge.barriers.filter(({ a, b }) => !onRamp(a.x, a.z) && !onRamp(b.x, b.z)));
+          const merge = auxiliary!;
+          const joined = exposedBarriers([...barriers, ...merge.barriers], [...accessQuads(access, 0.2), ...accessQuads(merge.access, 0.25)]);
           barriers.splice(0, barriers.length, ...joined); access.push(...merge.access);
         }
         site = { id, sample, facility, mergeEnd: merging ? MERGE_END : undefined, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };

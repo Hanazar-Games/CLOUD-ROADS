@@ -15,7 +15,7 @@ import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
 import { surfaceGravity, DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
 import { roadProfile } from '../road/RoadProfile';
 import { roadFrame } from '../road/RoadFrame';
-import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
+import { TunnelDetector, openTunnelAccess, type TunnelSpan } from '../tunnel/TunnelDetector';
 import { TunnelMesh } from '../tunnel/TunnelMesh';
 import { RoadFurniture } from '../road/RoadFurniture';
 import { RoadsideScenery } from '../road/RoadsideScenery';
@@ -38,6 +38,7 @@ import { TrafficVehicles } from '../traffic/TrafficVehicles';
 import { Garage } from '../garage/Garage';
 import { GarageMesh } from '../garage/GarageMesh';
 import { placeRoadGarage } from '../garage/GarageAccess';
+import { PavementTextures } from '../road/PavementTextures';
 
 export interface GroundSample {
   height: number;
@@ -46,6 +47,8 @@ export interface GroundSample {
 }
 
 export class World {
+  detailLevel = 1;
+  readonly pavementTextures = new PavementTextures();
   readonly season: SeasonState;
   readonly origin = new FloatingOrigin();
   readonly chunks: ChunkManager;
@@ -106,19 +109,19 @@ export class World {
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
     this.network = new RoadNetwork(seed, this.height, options, new RoadSpine(seed, this.height, options));
     this.roadDebug = new RoadDebug(scene);
-    this.roadMesh = new RoadMesh(scene, options);
+    this.roadMesh = new RoadMesh(scene, options, undefined, this.pavementTextures);
     this.bridgeMesh = new BridgeMesh(scene, options);
     this.tunnelMesh = new TunnelMesh(scene, seed, options);
     this.furniture = new RoadFurniture(scene, seed, options);
     this.roadside = new RoadsideScenery(scene, seed, options);
-    this.serviceMesh = new ServiceMesh(scene, options, this.height);
+    this.serviceMesh = new ServiceMesh(scene, options, this.height, this.pavementTextures);
     this.parkedVehicles = new ParkedVehicles(scene, seed, surfaceGravity(options.terrain));
     this.traffic = new TrafficSystem(seed, options);
     this.trafficVehicles = new TrafficVehicles(scene, this.traffic);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
     this.junctionMesh = new JunctionMesh(scene, options);
-    this.interchangeMesh = new InterchangeMesh(scene);
+    this.interchangeMesh = new InterchangeMesh(scene, this.pavementTextures);
     this.season = new SeasonState(options.terrain);
     this.chunks.setSeason(this.season);
     this.roadMesh.setSeason(this.season);
@@ -127,9 +130,11 @@ export class World {
       this.bridgeMesh.piers, this.bridgeMesh.details, this.bridgeMesh.railings, this.furniture.rails, this.furniture.poles,
       this.serviceMesh.structures, this.serviceMesh.railings, this.serviceMesh.buildings, this.serviceMesh.treeTrunks,
       this.serviceMesh.roofs, this.junctionMesh.parts, this.roadside.hardware, this.roadside.trunks, this.roadside.screens]) seasonMaterial(mesh.material, this.season, 'structure');
-    for (const mesh of [this.serviceMesh.pavement, this.serviceMesh.markings, this.junctionMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
+    for (const mesh of [this.serviceMesh.pavement, this.interchangeMesh.pavement, this.serviceMesh.markings, this.junctionMesh.markings]) seasonMaterial(mesh.material, this.season, 'pavement');
     seasonMaterial(this.serviceMesh.landscaping.material, this.season, 'foliage');
     seasonMaterial(this.roadside.foliage.material, this.season, 'foliage');
+    for (const details of [this.bridgeMesh.jointDetails, this.bridgeMesh.drainDetails, this.serviceMesh.chargerDetails, this.serviceMesh.picnicDetails])
+      seasonMaterial(details.mesh.material, this.season, 'structure');
   }
 
   setSeason(kind: Season): void { this.season.set(kind); this.chunks.vegetation.setSeason(this.season); }
@@ -154,11 +159,19 @@ export class World {
     this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
     if (this.roadReady && !this.garageEntrance && this.garagePlacementVersion !== this.network.version) {
       this.garagePlacementVersion = this.network.version;
-      const crossings = this.crossingPlanner.plan([this.road.samples], RoadCorridor.fromSamples(this.road.samples, this.network.active.bridges, this.options, this.network.active.tunnels));
-      this.garageEntrance = placeRoadGarage(this.garage, this.road.samples, this.height, roadProfile(this.options).outerHalfWidth, this.network.active.services, crossings.flatMap(site => site.samples.map(p => p.position)));
+      for (const route of [this.network.active, ...this.network.routes.filter(route => route !== this.network.active && route.ready)]) {
+        const crossings = this.crossingPlanner.plan([route.road.samples], RoadCorridor.fromSamples(route.road.samples, route.bridges, this.options, route.tunnels));
+        this.garageEntrance = placeRoadGarage(this.garage, route.road.samples, this.height, roadProfile(this.options).outerHalfWidth, route.services, crossings.flatMap(site => site.samples.map(p => p.position)));
+        if (this.garageEntrance) break;
+      }
       if (this.garageEntrance) this.corridorVersion = -1;
     }
     if (this.roadReady && this.corridorVersion !== this.network.version) {
+      const entrance = this.garageEntrance;
+      if (entrance?.accessWindows) {
+        const route = this.network.routes.find(r => r.id === (entrance.sample.routeId ?? 'root'));
+        if (route) route.tunnels = openTunnelAccess(route.tunnels, entrance.accessWindows);
+      }
       this.services = this.network.active.services;
       this.bridges = this.network.active.bridges;
       this.tunnels = this.network.active.tunnels;
@@ -183,7 +196,7 @@ export class World {
     this.roadDebug.update({ version: this.corridorVersion, segments: this.road.segments, samples: this.road.samples }, this.origin.x, this.origin.z, nearRoute);
     for (const [i, route] of this.renderRoutes.entries()) {
       let mesh = i === 0 ? this.roadMesh : this.extraRoads.get(route.id);
-      if (!mesh) { mesh = new RoadMesh(this.scene, this.options, 64); mesh.setSeason(this.season); this.extraRoads.set(route.id, mesh); }
+      if (!mesh) { mesh = new RoadMesh(this.scene, this.options, 64, this.pavementTextures); mesh.setSeason(this.season); this.extraRoads.set(route.id, mesh); }
       mesh.update(route.source, this.origin.x, this.origin.z, nearRoute, route.services, route.tunnels);
       mesh.mesh.material.roughness = this.roadMesh.mesh.material.roughness;
     }
@@ -193,12 +206,15 @@ export class World {
     this.furniture.update(this.renderSamples, this.renderTunnels, this.renderBridges, this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.renderServices);
     this.roadside.update(this.renderSamples, this.renderBridges, this.renderTunnels, this.renderServices, this.corridor, this.height,
       this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.chunks.vegetation.enabled && !this.season.extraterrestrial);
-    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled && !this.season.extraterrestrial);
+    this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled && !this.season.extraterrestrial, this.corridor);
     this.parkedVehicles.update(this.renderServices, this.origin, camera.position, this.garage, [...this.serviceGarages.keys()]);
     this.garageMesh.update(this.origin, camera.position);
     for (const mesh of this.serviceGarages.values()) mesh.update(this.origin, camera.position);
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
     this.interchangeMesh.update(this.network.junctions.flatMap(j => j.interchange ? [j.interchange] : []), this.origin, this.corridor, this.height);
+    for (const details of [this.bridgeMesh.jointDetails, this.bridgeMesh.drainDetails, this.tunnelMesh.cabinetDetails,
+      this.crossingMesh.tunnels.cabinetDetails, this.serviceMesh.chargerDetails, this.serviceMesh.picnicDetails])
+      details.update({ x, y: camera.position.y, z }, this.origin.x, this.origin.z, this.detailLevel, nearRoute);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.interchange || j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
     if (explore && this.scout) this.advanceServiceView(camera);

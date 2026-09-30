@@ -1,7 +1,8 @@
 import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
+import { accessQuads, ribbonHeight } from '../road/SurfaceRibbon';
 
 export interface ServicePoint { x: number; y: number; z: number }
-export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slopeZ: number; halfWidth?: number; merge?: boolean; side?: number }
+export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slopeZ: number; halfWidth?: number; merge?: boolean; side?: number; direction?: number }
 export interface ServicePad extends ServicePoint { heading: number; grade: number; side: number; halfWidth: number; halfLength: number }
 export interface ServiceBarrier extends RoadEdge<ServicePoint> { height?: number }
 export interface ServiceCrossover { kind: 'over' | 'under'; access: RoadEdge<ServiceAccessPoint>[]; barriers: ServiceBarrier[]; supports: ServicePoint[]; deck: number; roof?: number }
@@ -39,10 +40,14 @@ export class ServiceTerrain {
   private readonly elevatedAccess = new Set<RoadEdge<ServiceAccessPoint>>();
   private readonly crossAccess;
   private readonly crossIndex;
+  private readonly ribbons;
+  private readonly accessReach;
 
   constructor(readonly sites: readonly ServiceGround[]) {
     this.access = sites.flatMap(site => site.access);
     this.index = new RoadIndex(this.access);
+    this.ribbons = accessQuads(this.access);
+    this.accessReach = Math.max(10, ...this.access.map(e => Math.max(e.a.halfWidth ?? 3.5, e.b.halfWidth ?? 3.5) * 2));
     this.pads = sites.flatMap(site => site.pads);
     this.crossAccess = sites.flatMap(site => site.crossover?.access ?? []);
     this.crossIndex = new RoadIndex(this.crossAccess);
@@ -93,6 +98,10 @@ export class ServiceTerrain {
         + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
       ground += (Math.min(elevated ? ground : foundation + 5, target) - ground) * (1 - smooth((Math.sqrt(nearest.distanceSquared) - 6) / 16)) * roadBlend;
     }
+    for (const i of this.index.within(x - this.accessReach, z - this.accessReach, x + this.accessReach, z + this.accessReach)) {
+      const height = ribbonHeight(this.ribbons[i], x, z);
+      if (height !== undefined) ground = Math.min(ground, height - (this.elevatedAccess.has(this.access[i]) ? 2 : 0.38));
+    }
     for (const i of this.index.within(x - 10, z - 10, x + 10, z + 10)) {
       const { a, b } = this.access[i];
       if (!a.merge) continue;
@@ -109,10 +118,16 @@ export class ServiceTerrain {
   contains(x: number, z: number): boolean {
     return this.sites.some(site => site.excavation && excavationDistance(site.excavation, x, z) < 20)
       || this.pads.some(pad => { const p = this.local(pad, x, z); return Math.abs(p.x) < pad.halfWidth + 8 && Math.abs(p.along) < pad.halfLength + 8; })
+      || this.index.within(x - this.accessReach, z - this.accessReach, x + this.accessReach, z + this.accessReach).some(i => ribbonHeight(this.ribbons[i], x, z) !== undefined)
       || !!this.index.nearest(x, z, 10) || !!this.crossIndex.nearest(x, z, 12);
   }
 
   crossesBelow(point: ServicePoint, radius: number): boolean {
+    for (const i of this.index.within(point.x - radius - this.accessReach, point.z - radius - this.accessReach, point.x + radius + this.accessReach, point.z + radius + this.accessReach)) {
+      const { a, b } = this.access[i], dx = b.x - a.x, dz = b.z - a.z;
+      const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+      if (point.y - a.y - (b.y - a.y) * t > 6 && Math.hypot(point.x - a.x - dx * t, point.z - a.z - dz * t) < radius + Math.max(a.halfWidth ?? 3.5, b.halfWidth ?? 3.5)) return true;
+    }
     for (const i of this.crossIndex.within(point.x - radius, point.z - radius, point.x + radius, point.z + radius)) {
       const { a, b } = this.crossAccess[i], dx = b.x - a.x, dz = b.z - a.z;
       const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / (dx * dx + dz * dz)));

@@ -1,10 +1,11 @@
-import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, type Scene } from 'three';
+import { BoxGeometry, Color, DynamicDrawUsage, Float32BufferAttribute, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, type Scene } from 'three';
 import { vehicleTemplate } from '../service/ParkedVehicles';
 import { MAX_TRAFFIC, type TrafficSystem } from './TrafficSystem';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
 import { vehicleProxy } from '../vehicle/VehicleProxy';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
-import { sideLampPositions } from '../vehicle/VehicleSafety';
+import { compactSideLights, sideLampPositions, sideMarkerX } from '../vehicle/VehicleSafety';
+import { FogLampBatch } from '../vehicle/FogLampBatch';
 
 export class TrafficVehicles {
   private readonly batches = new Map<string, InstancedMesh[]>();
@@ -17,9 +18,26 @@ export class TrafficVehicles {
   private readonly matrix = new Matrix4();
   private readonly local = new Matrix4();
   private readonly color = new Color();
+  private readonly fogLamps: FogLampBatch;
   constructor(private readonly scene: Scene, readonly traffic: TrafficSystem) {
+    this.fogLamps = new FogLampBatch(scene, MAX_TRAFFIC, 'traffic-fog-lamps');
     this.material.onBeforeCompile = shader => {
-      shader.vertexShader = `attribute float paintMask; attribute float glassMask; varying float vTrafficGlass;\n${shader.vertexShader}`.replace('#include <color_vertex>', `
+      shader.vertexShader = `attribute float paintMask; attribute float glassMask; varying float vTrafficGlass;
+        attribute vec4 wheelPivot; attribute float wheelSteer; attribute vec2 trafficMotion;
+        mat3 trafficWheelRotation() {
+          if (wheelPivot.w == 0.0 && wheelSteer == 0.0) return mat3(1.0);
+          float turn = -atan(wheelSteer * trafficMotion.y / (1.0 - wheelPivot.x * trafficMotion.y));
+          float spin = -trafficMotion.x * wheelPivot.w;
+          float c = cos(turn), s = sin(turn), a = cos(spin), b = sin(spin);
+          return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c) * mat3(1.0, 0.0, 0.0, 0.0, a, b, 0.0, -b, a);
+        }
+        ${shader.vertexShader}`.replace('#include <beginnormal_vertex>', `
+          #include <beginnormal_vertex>
+          mat3 wheelRotation = trafficWheelRotation(); objectNormal = wheelRotation * objectNormal;
+        `).replace('#include <begin_vertex>', `
+          #include <begin_vertex>
+          transformed = wheelRotation * (transformed - wheelPivot.xyz) + wheelPivot.xyz;
+        `).replace('#include <color_vertex>', `
         #include <color_vertex>
         vTrafficGlass = glassMask;
         #if defined(USE_INSTANCING_COLOR) && defined(USE_COLOR)
@@ -35,11 +53,19 @@ export class TrafficVehicles {
     for (const mesh of [this.lamps, this.drivers]) mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     scene.add(this.lamps, this.drivers);
   }
-  update(origin: { x: number; z: number }, darkness: number, anchor = origin): void {
+  update(origin: { x: number; z: number }, darkness: number, anchor = origin, fog = false): void {
+    this.fogLamps.update(this.traffic.entries.map(e => e.car), origin, fog);
+    if (fog) darkness = Math.max(0.3, darkness);
     const detail = (car: { x: number; z: number }) => Math.hypot(car.x - anchor.x, car.z - anchor.z) <= this.detailDistance;
     const key = (car: { kind: VehicleKind; x: number; z: number }) => `${car.kind}:${detail(car) ? 'near' : 'far'}`;
     const missing = this.traffic.entries.find(e => !this.batches.has(key(e.car)));
-    if (missing) this.batches.set(key(missing.car), (detail(missing.car) ? vehicleTemplate(missing.car.kind) : vehicleProxy(missing.car.kind)).map((geometry, i) => {
+    if (missing) this.batches.set(key(missing.car), (detail(missing.car) ? vehicleTemplate(missing.car.kind, false, true) : vehicleProxy(missing.car.kind)).map((geometry, i) => {
+      const count = geometry.getAttribute('position').count;
+      if (!geometry.hasAttribute('wheelPivot')) {
+        geometry.setAttribute('wheelPivot', new Float32BufferAttribute(new Float32Array(count * 4), 4));
+        geometry.setAttribute('wheelSteer', new Float32BufferAttribute(new Float32Array(count), 1));
+      }
+      geometry.setAttribute('trafficMotion', new InstancedBufferAttribute(new Float32Array(MAX_TRAFFIC * 2), 2).setUsage(DynamicDrawUsage));
       const mesh = new InstancedMesh(geometry, this.material, MAX_TRAFFIC); mesh.name = `traffic-${key(missing.car)}-${i}`;
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
       mesh.count = 0; mesh.receiveShadow = true; this.scene.add(mesh); return mesh;
@@ -52,6 +78,7 @@ export class TrafficVehicles {
         const body = i ? car.trailers[i - 1] : car;
         this.matrix.makeRotationY(-body.heading).setPosition(body.x - origin.x, body.y, body.z - origin.z);
         this.matrix.multiply(this.local.makeRotationX(body.pitch)).multiply(this.local.makeRotationZ(body.roll));
+        mesh.geometry.getAttribute('trafficMotion').setXY(mesh.count, car.wheelAngle % (Math.PI * 2), Math.tan(car.steering) / car.wheelbase);
         mesh.setMatrixAt(mesh.count, this.matrix); mesh.setColorAt(mesh.count++, this.color.setHex(car.paint));
       }
       this.matrix.makeRotationY(-car.heading).setPosition(car.x - origin.x, car.y, car.z - origin.z);
@@ -72,7 +99,8 @@ export class TrafficVehicles {
         this.lamps.setMatrixAt(this.lamps.count, this.local.premultiply(this.matrix));
         this.lamps.setColorAt(this.lamps.count++, this.color.setHex(end < 0 ? darkness > 0.2 ? 0xffedbb : 0x637075 : car.braking ? 0xff351c : darkness > 0.2 ? 0x992211 : 0x43110c));
         if (signal === side && this.traffic.time % 0.8 < 0.4) {
-          this.local.makeScale(0.14, 0.13, 0.055).setPosition(side * p.width * 0.43, 0.02, end * (p.chassisLength / 2 + 0.07));
+          this.local.makeScale(0.18, 0.08, 0.025).setPosition(side * p.width * (p.shape === 'roadster' ? 0.36 : 0.42),
+            compactSideLights(p) ? -0.1 : 0.19, end * (p.chassisLength / 2 + 0.065));
           this.lamps.setMatrixAt(this.lamps.count, this.local.premultiply(this.matrix));
           this.lamps.setColorAt(this.lamps.count++, this.color.setHex(0xff990b));
         }
@@ -89,8 +117,9 @@ export class TrafficVehicles {
         for (const side of [-1, 1]) {
           const flashing = signal === side && this.traffic.time % 0.8 < 0.4;
           if (p.shape !== 'motorcycle') for (const z of lampLayout[part]) {
-            if (darkness > 0.2) lamp(side * (p.width / 2 + 0.055), 0.06, z, 0.035, 0.07, 0.18, 0xffab36);
-            if (flashing) lamp(side * (p.width / 2 + 0.055), 0.145, z, 0.04, 0.07, 0.14, 0xff990b);
+            const compact = compactSideLights(p, part), x = side * (sideMarkerX(p, z) + 0.042);
+            if (darkness > 0.2) lamp(x, compact ? -0.1 : 0.06, z - (compact ? 0.043 : 0), 0.012, compact ? 0.052 : 0.07, compact ? 0.09 : 0.18, 0xffab36);
+            if (flashing) lamp(x, compact ? -0.1 : 0.145, z + (compact ? 0.045 : 0), 0.012, compact ? 0.052 : 0.07, compact ? 0.065 : 0.14, 0xff990b);
           }
           if (part) {
             const trailer = p.trailers![part - 1], rear = trailer.length - trailer.front + 0.09;
@@ -103,7 +132,7 @@ export class TrafficVehicles {
     const upload = (mesh: InstancedMesh) => {
       mesh.visible = mesh.count > 0;
       if (!mesh.count) return;
-      for (const attribute of [mesh.instanceMatrix, mesh.instanceColor!]) {
+      for (const attribute of [mesh.instanceMatrix, mesh.instanceColor!, ...mesh.geometry.hasAttribute('trafficMotion') ? [mesh.geometry.getAttribute('trafficMotion') as InstancedBufferAttribute] : []]) {
         attribute.setUsage(DynamicDrawUsage); attribute.clearUpdateRanges();
         attribute.addUpdateRange(0, mesh.count * attribute.itemSize); attribute.needsUpdate = true;
       }
@@ -113,6 +142,7 @@ export class TrafficVehicles {
     upload(this.lamps); upload(this.drivers);
   }
   dispose(): void {
+    this.fogLamps.dispose();
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
     for (const mesh of [this.lamps, this.drivers]) { mesh.removeFromParent(); mesh.material.dispose(); mesh.dispose(); }
     this.box.dispose(); this.material.dispose();

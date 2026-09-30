@@ -36,6 +36,9 @@ export class VehiclePhysics {
   damping = 1;
   powerScale = 1; brakeScale = 1; steeringScale = 1;
   gripScale = 1; handbrakeStrength = 1; countersteerAssist = 0.6;
+  private allowDrift = true;
+  turningRadius?: number;
+  steeringResponse = 1;
   speedLimit?: number;
   steeringAssist = true;
   steeringAssistStrength = 1;
@@ -45,7 +48,7 @@ export class VehiclePhysics {
   private readonly pitchInertia: number;
   private readonly rollInertia: number;
   readonly wheelbase: number;
-  private readonly rearAxle: number;
+  readonly rearAxle: number;
   private readonly frontAxle: number;
   private readonly yawInertia: number;
   private longitudinalAcceleration = 0;
@@ -79,6 +82,16 @@ export class VehiclePhysics {
     if (this.ignition === 'starting') this.ignitionTime = kind === 'ev' ? 0.15 : this.profile.mass > 4000 ? 1.25 : 0.75;
   }
   get motionSpeed(): number { return Math.hypot(this.speed, this.lateralSpeed); }
+  get driftEnabled(): boolean { return this.allowDrift; }
+  set driftEnabled(value: boolean) {
+    this.allowDrift = value;
+    if (!value) this.lateralSpeed = this.yawRate = this.tireSlip = 0;
+  }
+  get mechanicalLock(): number {
+    return this.turningRadius !== undefined && Number.isFinite(this.turningRadius)
+      ? Math.min(1.05, Math.atan(this.wheelbase / clamp(this.turningRadius, 3, 100)))
+      : Math.min(0.8, this.profile.steer * clamp(this.steeringScale, 0.6, 1.4));
+  }
   get slipAngle(): number { return Math.atan2(this.lateralSpeed, Math.max(0.5, Math.abs(this.speed))); }
   get drifting(): boolean { return this.motionSpeed > 3 && Math.abs(this.slipAngle) > 0.08 && this.tireSlip > 0.1; }
   get engineRpm(): number { return this.ignition === 'off' ? 0 : this.ignition === 'starting' ? this.powertrain === 'ev' ? 0 : 240 : this.transmission.rpm; }
@@ -92,9 +105,9 @@ export class VehiclePhysics {
     const config = this.profile, stability = this.kind === 'motorcycle' ? 8 : Math.min(8, this.gravity * config.width / (2 * config.cg) * 0.7);
     const speed = this.motionSpeed * Math.sqrt(clamp(this.steeringAssistStrength, 0.25, 2));
     const blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
-    const low = Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4)) / (1 + speed / 28);
+    const low = this.mechanicalLock / (1 + speed / 28);
     const high = Math.min(low, Math.atan(this.wheelbase * stability * 1.15 / Math.max(1, speed * speed)));
-    return this.steeringAssist ? low + (high - low) * smooth : Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4));
+    return this.steeringAssist ? low + (high - low) * smooth : this.mechanicalLock;
   }
   setSpeedLimit(kmh?: number): void {
     if (kmh !== undefined && !Number.isFinite(kmh)) return;
@@ -121,7 +134,7 @@ export class VehiclePhysics {
       z: parent.z + Math.cos(parent.heading) * offset.z };
   }
 
-  reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeadings: readonly number[] = []): void {
+  reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeadings: readonly number[] = [], preservePowertrain = false): void {
     this.reverseSelected = false;
     this.impact = this.scrape = 0;
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
@@ -129,7 +142,7 @@ export class VehiclePhysics {
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
     this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.parked = true; this.braking = this.jackknifed = this.regenerating = this.trailerBrake = false;
-    this.transmission.reset();
+    if (!preservePowertrain) this.transmission.reset();
     if (!preserveTrip) this.trip = 0;
     const contacts = this.contacts(surface), grade = this.slope(contacts, 'along'), bank = this.slope(contacts, 'x');
     this.pitch = Math.atan(grade); this.roll = this.kind === 'motorcycle' ? 0 : Math.atan(bank * Math.cos(this.pitch));
@@ -166,6 +179,7 @@ export class VehiclePhysics {
     this.yawRate = 0;
     this.speed = vx * Math.sin(this.heading) - vz * Math.cos(this.heading);
     this.lateralSpeed = vx * Math.cos(this.heading) + vz * Math.sin(this.heading);
+    if (!this.driftEnabled) this.lateralSpeed = 0;
     this.trailers.forEach((t, i) => { t.heading = this.previousTrailers[i].heading; Object.assign(t, this.hitch(i)); });
     this.syncWheels(this.contacts(surface)); this.updateTrailer(0, surface);
   }
@@ -187,6 +201,7 @@ export class VehiclePhysics {
     this.x += dx; this.z += dz;
     this.speed = vx * Math.sin(this.heading) - vz * Math.cos(this.heading);
     this.lateralSpeed = vx * Math.cos(this.heading) + vz * Math.sin(this.heading);
+    if (!this.driftEnabled) this.lateralSpeed = 0;
     this.syncWheels(this.contacts(surface)); this.updateTrailer(0, surface);
   }
 
@@ -257,11 +272,11 @@ export class VehiclePhysics {
     this.handbrake = approach(this.handbrake, input.handbrake ? clamp(this.handbrakeStrength, 0.4, 1) : 0, STEP * (input.handbrake ? 6 : 3));
     const rearLoad = clamp(this.frontAxle / this.wheelbase + this.longitudinalAcceleration * Math.sign(this.speed || 1) * config.cg / (this.gravity * this.wheelbase), 0.18, 0.8);
     const parking = this.parked || input.handbrake && this.motionSpeed < 1;
-    const rearOnly = this.handbrake > 0 && !parking && throttle * this.speed >= 0;
+    const rearOnly = this.driftEnabled && this.handbrake > 0 && !parking && throttle * this.speed >= 0;
     this.regenerating = this.powertrain === 'ev' && this.ignition === 'running' && !parking && Math.abs(throttle) < 0.01
       && this.motionSpeed > 0.1 && this.regeneration > 0 && grip > 0;
     this.braking = this.regenerating || this.trailerBrake || input.handbrake || this.handbrake > 0.01 || throttle * this.speed < 0;
-    this.transmission.update(STEP, this.speed, this.parked || this.ignition !== 'running' ? 0 : throttle);
+    this.transmission.update(STEP, this.speed, this.parked || this.ignition !== 'running' ? 0 : throttle, grade);
     if (parking || this.braking) {
       const service = throttle * this.speed < 0 ? Math.abs(throttle) : 0;
       const regeneration = this.regenerating ? Math.min(0.65 * clamp(this.regeneration, 0, 3), this.gravity * 0.35 * grip) : 0;
@@ -284,10 +299,10 @@ export class VehiclePhysics {
     const slide = Math.sign(this.slipAngle) * Math.max(0, Math.abs(this.slipAngle) - 0.08);
     const correction = this.motionSpeed > 3 ? slide * clamp(this.countersteerAssist, 0, 1) * Math.sign(this.speed || 1) : 0;
     const countersteering = input.steer * slide * Math.sign(this.speed || 1) > 0;
-    const mechanicalLock = Math.min(0.8, config.steer * clamp(this.steeringScale, 0.6, 1.4));
+    const mechanicalLock = this.mechanicalLock;
     const targetSteer = clamp(clamp(input.steer, -1, 1) * (countersteering ? mechanicalLock : steeringLock) + correction, -mechanicalLock, mechanicalLock);
     this.steering = approach(this.steering, targetSteer,
-      config.steerRate * (countersteering ? 1 : Math.max(0.08, Math.min(1, (steeringLock + Math.abs(correction)) / config.steer))) * STEP);
+      config.steerRate * clamp(this.steeringResponse, 0.25, 2) * (countersteering ? 1 : Math.max(0.08, Math.min(1, (steeringLock + Math.abs(correction)) / config.steer))) * STEP);
     this.longitudinalAcceleration = (this.speed - oldSpeed) / STEP + slopeForce;
     const lateralAcceleration = this.updateTires(contacts, rearLoad, brakingGrip, parking, rearOnly);
     this.x += (Math.sin(this.heading) * this.speed + Math.cos(this.heading) * this.lateralSpeed) * STEP;
@@ -327,6 +342,15 @@ export class VehiclePhysics {
   }
 
   private updateTires(contacts: SurfaceContact[], rearLoad: number, brakingGrip: number, parking: boolean, rearOnly: boolean): number {
+    if (!this.driftEnabled) {
+      this.lateralSpeed = this.tireSlip = 0;
+      const grounded = this.wheels.some(w => w.grounded);
+      const lateralLimit = Math.max(0.1, Math.min(6, this.gravity * brakingGrip * 0.85));
+      const desiredYaw = this.speed * Math.tan(this.steering) / this.wheelbase;
+      this.yawRate = grounded ? clamp(desiredYaw, -lateralLimit / Math.max(0.5, Math.abs(this.speed)), lateralLimit / Math.max(0.5, Math.abs(this.speed))) : 0;
+      this.heading += this.yawRate * STEP;
+      return this.speed * this.yawRate;
+    }
     let lateral = 0, longitudinal = 0, torque = 0, slip = 0;
     const inertia = this.yawInertia;
     for (const front of [true, false]) {

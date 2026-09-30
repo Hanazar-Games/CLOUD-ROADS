@@ -51,7 +51,7 @@ test('powers and pauses the refrigerator, saves preferences without locks and li
   const temperature = await metric(page, 'Fridge temperature').textContent(); await page.waitForTimeout(400);
   await expect(metric(page, 'Fridge temperature')).toHaveText(temperature!);
   await (await control(page, page.locator('#preset-name'))).fill('Cold night'); await page.locator('#preset-save').click();
-  const preferences = await page.evaluate(() => JSON.parse(localStorage.getItem('cloud-roads.presets.v12')!)[0].settings);
+  const preferences = await page.evaluate(() => JSON.parse(localStorage.getItem('cloud-roads.presets.v14')!)[0].settings);
   expect(preferences['fridge-temperature']).toBe(2); expect(preferences['vehicle-fridge']).toBe(true);
   expect(preferences).not.toHaveProperty('vehicle-lock');
   await closeSettings(page); await page.keyboard.down('s');

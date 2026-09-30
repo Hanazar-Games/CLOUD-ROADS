@@ -145,8 +145,11 @@ it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof a
   scene.updateMatrixWorld(true);
   const span = spans[0], x = roadType === 'highway' ? 8.2 : 0;
   const startZ = span.start.position.z, endZ = span.end.position.z;
+  mesh.cabinetDetails.update({ x, y: 203, z: (startZ + endZ) / 2 }, 0, 0, 2);
+  scene.updateMatrixWorld(true);
+  expect(mesh.cabinetDetails.mesh.count).toBeGreaterThan(0);
   const ray = new Raycaster(new Vector3(x, 203, startZ + 4), new Vector3(0, 0, -1), 0, startZ - endZ + 8);
-  expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals, mesh.ribs, mesh.equipment, mesh.fans])).toHaveLength(0);
+  expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.portals, mesh.ribs, mesh.equipment, mesh.fans, mesh.cabinetDetails.mesh])).toHaveLength(0);
   ray.set(new Vector3(x, 203, (startZ + endZ) / 2), new Vector3(0, 1, 0));
   ray.far = 200;
   const roof = ray.intersectObject(mesh.lining)[0];

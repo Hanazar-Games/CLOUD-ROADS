@@ -17,6 +17,7 @@ import { radioStations } from '../audio/RadioStations';
 import { VehicleOperations, operationKeys, type VehicleOperation } from './VehicleOperations';
 import type { ParkedEntry } from '../service/ServiceParking';
 import { Autopilot, pilotModes, type AutopilotSettings } from './Autopilot';
+import { transmissionTuning, type TransmissionTuning } from './Transmission';
 
 const driftTuning = [['road-grip', 'gripScale', 1], ['handbrake-strength', 'handbrakeStrength', 1], ['countersteer-assist', 'countersteerAssist', 0.6]] as const;
 
@@ -94,9 +95,18 @@ export class DrivingSystem {
     element('transmission-mode').addEventListener('change', () => {
       this.autopilot.cancel('变速箱模式改变，请重新开启');
       this.car.transmission.mode = element<HTMLSelectElement>('transmission-mode').value === 'manual' ? 'manual' : 'auto';
+      this.describeEquipment();
     }, options);
     element('engine-response').addEventListener('input', () => {
       this.car.transmission.response = Number(element<HTMLInputElement>('engine-response').value) / 100; this.describeTuning();
+    }, options);
+    for (const key of Object.keys(transmissionTuning) as (keyof TransmissionTuning)[]) element(`engine-${key}`).addEventListener('input', () => {
+      this.car.transmission.configure({ [key]: Number(element<HTMLInputElement>(`engine-${key}`).value) / 100 }); this.describeTuning();
+    }, options);
+    element('engine-tuning-reset').addEventListener('click', () => {
+      this.car.transmission.response = 1;
+      this.car.transmission.configure(Object.fromEntries(Object.entries(transmissionTuning).map(([key, [value]]) => [key, value])));
+      this.describeTuning();
     }, options);
     element('vehicle-windows').addEventListener('input', () => { this.systems.windowTarget = Number(element<HTMLInputElement>('vehicle-windows').value) / 100; this.describeEquipment(); }, options);
     element('vehicle-roof').addEventListener('click', () => { this.systems.toggleRoof(this.car.motionSpeed); this.describeEquipment(); }, options);
@@ -118,6 +128,18 @@ export class DrivingSystem {
     element('steering-assist-strength').addEventListener('input', () => {
       this.car.steeringAssistStrength = Number(element<HTMLInputElement>('steering-assist-strength').value) / 100; this.describeTuning();
     }, options);
+    element('drift-enabled').addEventListener('change', () => {
+      this.car.driftEnabled = element<HTMLInputElement>('drift-enabled').checked; this.describeTuning();
+    }, options);
+    const radius = () => {
+      this.car.turningRadius = element<HTMLInputElement>('custom-turning-radius').checked ? Number(element<HTMLInputElement>('turning-radius').value) : undefined;
+      this.describeTuning();
+    };
+    element('custom-turning-radius').addEventListener('change', radius, options);
+    element('turning-radius').addEventListener('input', radius, options);
+    element('steering-response').addEventListener('input', () => {
+      this.car.steeringResponse = Number(element<HTMLInputElement>('steering-response').value) / 100; this.describeTuning();
+    }, options);
     const tuning = [['vehicle-power', 'powerScale'], ['vehicle-brake', 'brakeScale'], ['vehicle-steering', 'steeringScale']] as const;
     for (const [id, field] of tuning) element(id).addEventListener('input', () => {
       this.car[field] = Number(element<HTMLInputElement>(id).value) / 100;
@@ -127,6 +149,8 @@ export class DrivingSystem {
     element('vehicle-tuning-reset').addEventListener('click', () => {
       this.car.transmission.response = 1;
       this.car.setSpeedLimit(); this.car.steeringAssist = true; this.car.steeringAssistStrength = 1;
+      this.car.turningRadius = undefined; this.car.steeringResponse = 1;
+      element<HTMLInputElement>('turning-radius').value = '12';
       for (const [id, field] of tuning) {
         this.car[field] = 1; element<HTMLInputElement>(id).value = '100'; element(`${id}-value`).textContent = '100%';
       }
@@ -137,6 +161,7 @@ export class DrivingSystem {
       this.car[field] = Number(element<HTMLInputElement>(id).value) / 100; this.describeTuning();
     }, options);
     element('drift-reset').addEventListener('click', () => {
+      this.car.driftEnabled = true;
       for (const [, field, value] of driftTuning) this.car[field] = value;
       this.describeTuning();
     }, options);
@@ -316,6 +341,9 @@ export class DrivingSystem {
     if (this.entryVehicle(entry).equipment.locked) return false;
     const car = world.traffic.take(entry.id) ?? world.parkedVehicles.fleet.take(entry.id); if (!car) return false;
     car.transmission.response = this.car.transmission.response;
+    car.transmission.configure(this.car.transmission.tuning);
+    car.driftEnabled = this.car.driftEnabled; car.turningRadius = this.car.turningRadius; car.steeringResponse = this.car.steeringResponse;
+    car.steeringAssist = this.car.steeringAssist; car.steeringAssistStrength = this.car.steeringAssistStrength;
     for (const [, field] of driftTuning) car[field] = this.car[field];
     if (this.parked) world.parkedVehicles.fleet.park(this.car, this.fleetId);
     this.mesh.dispose(); this.car = car; this.fleetId = entry.id; this.mesh = new VehicleMesh(this.scene, car.profile);
@@ -549,7 +577,7 @@ export class DrivingSystem {
       meter.value = Math.min(meter.max, this.car.engineRpm);
       element('engine-load-status').textContent = this.car.ignition !== 'running' ? '动力关闭' : box.shifting ? '换挡中 · 扭矩衔接'
         : this.car.regenerating ? '动能回收' : box.load > 0.03 ? `油门负载 ${Math.round(box.load * 100)}%`
-          : !this.car.parked && box.engineBrake > 0.05 ? '松油门 · 带挡滑行' : '怠速 / 自由滑行';
+          : box.fuelCut ? '收油断油 · 带挡滑行' : !this.car.parked && box.engineBrake > 0.05 ? '松油门 · 带挡滑行' : '怠速 / 自由滑行';
       this.describeEquipment();
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
         : this.cabin.standing ? `${this.cabinWalk.layout?.label} · ${this.cabinWalk.floor}F · ${this.cabinWalk.eyeHeight < 1.4 ? '低顶弯腰' : '离座步行'} · 不能驾驶`
@@ -577,11 +605,14 @@ export class DrivingSystem {
     }
   }
 
-  sync(night: number, rain: number, dt = 0): void {
+  sync(night: number, rain: number, dt = 0, fog = false): void {
+    this.systems.updateFog(fog);
+    element<HTMLInputElement>('vehicle-fog-lights').checked = this.systems.fogLights;
     this.car.roofOpen = this.systems.roofOpen;
     this.car.equipment.update(this.active ? this.systemsDt : this.parked ? dt : 0, this.car.ignition === 'running');
     element<HTMLButtonElement>('drive-toggle').disabled = !this.input.enabled || (!this.active && (!this.getWorld().roadReady || this.getWorld().searching));
     if (this.parked) {
+      if (this.car.ignition === 'running') this.car.transmission.update(dt, 0, 0);
       this.mesh.illuminateInterior(undefined, this.car, false);
       const world = this.getWorld();
       this.mesh.root.visible = Math.hypot(this.car.x - world.origin.x - this.camera.position.x, this.car.z - world.origin.z - this.camera.position.z) < 250;
@@ -621,11 +652,13 @@ export class DrivingSystem {
     next.setPowertrain(this.car.powertrain); next.regeneration = this.car.regeneration;
     next.suspension = this.car.suspension; next.damping = this.car.damping; next.trip = this.car.trip;
     next.powerScale = this.car.powerScale; next.brakeScale = this.car.brakeScale; next.steeringScale = this.car.steeringScale;
+    next.driftEnabled = this.car.driftEnabled; next.turningRadius = this.car.turningRadius; next.steeringResponse = this.car.steeringResponse;
     for (const [, field] of driftTuning) next[field] = this.car[field];
     next.setSpeedLimit(this.car.speedLimit === undefined ? undefined : this.car.maxSpeed * 3.6);
     next.steeringAssist = this.car.steeringAssist; next.steeringAssistStrength = this.car.steeringAssistStrength;
     next.transmission.mode = this.car.transmission.mode;
     next.transmission.response = this.car.transmission.response;
+    next.transmission.configure(this.car.transmission.tuning);
     if (this.active && this.surface) {
       const spawn = this.getWorld().roadReady ? this.surface.spawn(this.car.x, this.car.z, next.profile) : undefined;
       if (!spawn) {
@@ -668,6 +701,10 @@ export class DrivingSystem {
   }
 
   describeTuning(): void {
+    for (const key of Object.keys(transmissionTuning) as (keyof TransmissionTuning)[]) {
+      const value = Math.round(this.car.transmission.tuning[key] * 100);
+      element<HTMLInputElement>(`engine-${key}`).value = String(value); element(`engine-${key}-value`).textContent = `${value}%`;
+    }
     const response = String(Math.round(this.car.transmission.response * 100));
     element<HTMLInputElement>('engine-response').value = response; element('engine-response-value').textContent = `${response}%`;
     const kmh = Math.round(this.car.maxSpeed * 3.6);
@@ -675,6 +712,16 @@ export class DrivingSystem {
     element<HTMLInputElement>('vehicle-max-speed').value = String(kmh);
     element('vehicle-max-speed-value').textContent = `${kmh} km/h${this.car.speedLimit === undefined ? ' · 车型默认' : ''}`;
     element<HTMLInputElement>('steering-assist').checked = this.car.steeringAssist;
+    element<HTMLInputElement>('drift-enabled').checked = this.car.driftEnabled;
+    element<HTMLInputElement>('countersteer-assist').disabled = !this.car.driftEnabled;
+    element<HTMLInputElement>('custom-turning-radius').checked = this.car.turningRadius !== undefined;
+    const radius = element<HTMLInputElement>('turning-radius');
+    radius.disabled = this.car.turningRadius === undefined;
+    if (this.car.turningRadius !== undefined) radius.value = String(this.car.turningRadius);
+    element('turning-radius-value').textContent = `${(this.car.wheelbase / Math.tan(this.car.mechanicalLock)).toFixed(1)} m${radius.disabled ? ' · 车型默认' : ''}`;
+    element<HTMLInputElement>('vehicle-steering').disabled = !radius.disabled;
+    element<HTMLInputElement>('steering-response').value = String(Math.round(this.car.steeringResponse * 100));
+    element('steering-response-value').textContent = `${Math.round(this.car.steeringResponse * 100)}%`;
     const strength = element<HTMLInputElement>('steering-assist-strength');
     strength.value = String(Math.round(this.car.steeringAssistStrength * 100)); strength.disabled = !this.car.steeringAssist;
     element('steering-assist-strength-value').textContent = `${strength.value}%${this.car.steeringAssist ? '' : ' · 已关闭'}`;
@@ -691,6 +738,8 @@ export class DrivingSystem {
     element<HTMLSelectElement>('ev-regeneration').disabled = !ev;
     element<HTMLSelectElement>('transmission-mode').disabled = ev;
     element<HTMLInputElement>('engine-response').disabled = ev;
+    for (const key of Object.keys(transmissionTuning)) element<HTMLInputElement>(`engine-${key}`).disabled = ev
+      || this.car.transmission.mode === 'manual' && (key === 'shiftPoint' || key === 'coastRpm');
     element('powertrain-status').textContent = `${ev ? 'EV 单速驱动 · 松电门回收受轮胎抓地力限制' : '燃油动力 · 自动或手动换挡'}。${this.input.bindings.label('Powertrain')} 切换动力，${this.input.bindings.label('Regeneration')} 调回收；切换保留车速，无续航限制。`;
     element('panel-powertrain').textContent = `${ev ? 'EV → 燃油' : '燃油 → EV'} · ${this.input.bindings.label('Powertrain')}`;
     element<HTMLButtonElement>('panel-powertrain').disabled = !driver;

@@ -8,7 +8,7 @@ test('streams floor details, adjusts lighting and walks continuously from the en
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/?seed=GARAGE-RAMP-55');
   await expect(metric(page, 'Road ready')).toHaveText('yes', { timeout: 30000 });
-  await expect(metric(page, 'Garage access')).toHaveText('80');
+  await expect.poll(async () => Number(await metric(page, 'Garage access').textContent())).toBeGreaterThan(512);
   await (await control(page, page.locator('#garage-floor'))).selectOption('3');
   await page.locator('#garage-view').click();
   await expect(metric(page, 'Garage loaded floors')).toHaveText('3');

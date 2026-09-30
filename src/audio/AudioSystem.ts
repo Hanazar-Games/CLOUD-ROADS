@@ -1,14 +1,17 @@
 import type { Powertrain } from '../vehicle/Transmission';
 import { radioStations } from './RadioStations';
+import { HornVoice, type HornSound } from './VehicleHorn';
+import type { VehicleKind } from '../vehicle/VehicleConfig';
+import { EngineVoice, type EngineSound } from './VehicleEngine';
 
 export interface SoundState {
-  powertrain: Powertrain; regeneration: boolean; atmosphere: number;
+  powertrain: Powertrain; regeneration: boolean; fuelCut: boolean; atmosphere: number;
   driving: boolean; speed: number; throttle: number; shifting: boolean; impact: number; scrape: number; mass: number; motorcycle: boolean;
   rain: number; shelter: number; cockpit: boolean; signal: boolean; wiper: number; walkingSpeed: number;
   rpm: number; shifts: number; exposure: number; wet: number; nature: boolean; night: number;
-  horn: boolean; fan: number; washer: number; motor: boolean;
+  horn: boolean; vehicle: VehicleKind; trafficHorns: readonly HornSound[]; fan: number; washer: number; motor: boolean;
   supercar: boolean; braking: boolean; operations: number; service: number;
-  ignition: 'off' | 'starting' | 'running'; traffic: number; tireSlip: number;
+  ignition: 'off' | 'starting' | 'running'; nearbyEngines: readonly EngineSound[]; tireSlip: number;
 }
 const chords = [[130.81, 164.81, 196, 293.66], [87.31, 130.81, 174.61, 261.63], [110, 164.81, 220, 329.63], [98, 146.83, 196, 293.66]];
 const progressions = [[0, 1, 2, 3], [2, 3, 0, 1], [0, 2, 1, 3], [1, 3, 2, 0]];
@@ -16,8 +19,12 @@ const melodyNotes = [0, 2, 1, 3, 2, 1, 0, 3, 1, 2, 3, 2, 0, 1, 2, 0];
 export const audioChannels = [
   ['master', 'masterVolume', '总音量'], ['sfx', 'sfxVolume', '全部音效'], ['music', 'musicVolume', '背景音乐'],
   ['engine', 'engineVolume', '发动机 / 电机与换挡'], ['tire', 'tireVolume', '轮胎与路面'], ['nature', 'natureVolume', '山野环境'],
-  ['weather', 'weatherVolume', '风声与雨声'], ['cabin', 'cabinVolume', '车内设备'], ['effects', 'effectsVolume', '喇叭、提示与脚步'],
+  ['weather', 'weatherVolume', '风声与雨声'], ['cabin', 'cabinVolume', '车内设备'], ['effects', 'effectsVolume', '提示、倒车与脚步'],
+  ['horn', 'hornVolume', '本车喇叭'], ['npc-horn', 'npcHornVolume', 'NPC 喇叭'],
+  ['nearby-engine', 'nearbyEngineVolume', 'NPC / 车外发动机'],
   ['collision', 'collisionVolume', '碰撞与护栏擦碰'],
+  ['exhaust', 'exhaustVolume', '排气低频与谐波'], ['shift', 'shiftVolume', '换挡机械声'], ['turbo', 'turboVolume', '重车涡轮声'],
+  ['music-bass', 'bassVolume', '音乐低音层'], ['music-melody', 'melodyVolume', '音乐旋律层'],
 ] as const;
 export type MusicStyle = 'ambient' | 'night' | 'motion';
 
@@ -32,6 +39,16 @@ export class AudioSystem {
   weatherVolume = 0.9;
   cabinVolume = 0.75;
   effectsVolume = 0.7;
+  hornVolume = 2;
+  npcHornVolume = 1.6;
+  hornFocus = 0.7;
+  cabinIsolation = 0.78;
+  exhaustVolume = 1;
+  shiftVolume = 1;
+  turboVolume = 1;
+  bassVolume = 1;
+  melodyVolume = 1;
+  nearbyEngineVolume = 1;
   collisionVolume = 0.65;
   musicDucking = 0.35;
   musicStyle: MusicStyle = 'ambient';
@@ -54,11 +71,12 @@ export class AudioSystem {
   private skidGain?: GainNode;
   private skidTone?: OscillatorNode;
   private cabinGain?: GainNode;
-  private hornGain?: GainNode;
+  private playerHorn?: HornVoice;
+  private readonly npcHorns: { id?: string; voice: HornVoice }[] = [];
+  private readonly nearbyEngines: { id?: string; voice: EngineVoice }[] = [];
   private shiftGain?: GainNode;
   private natureGain?: GainNode;
   private harmonic?: OscillatorNode;
-  private horn?: OscillatorNode;
   private bird?: OscillatorNode;
   private melody?: OscillatorNode;
   private melodyGain?: GainNode;
@@ -71,13 +89,13 @@ export class AudioSystem {
   private rhythmGain?: GainNode;
   private turboGain?: GainNode;
   private serviceGain?: GainNode;
-  private trafficGain?: GainNode;
   private subEngine?: OscillatorNode;
   private subEngineGain?: GainNode;
   private impactGain?: GainNode;
   private scrapeGain?: GainNode;
   private load = 0;
   private musicDuck = 1;
+  private ambienceDuck = 1;
   private readonly pads: GainNode[] = [];
   private retuneAt?: number;
   private lastBrake = false;
@@ -105,7 +123,7 @@ export class AudioSystem {
   }
   get previewing(): boolean {
     return this.previewTime > 0 && this.audible && this.state === 'running' && this.sfxVolume > 0 && this.masterVolume > 0
-      && (this.previewKind === 'horn' ? this.effectsVolume : this.engineVolume) > 0;
+      && (this.previewKind === 'horn' ? this.hornVolume : this.engineVolume * (this.previewKind === 'shift' ? this.shiftVolume : 1)) > 0;
   }
 
   tune(channel: number): void {
@@ -157,7 +175,9 @@ export class AudioSystem {
           this.retuneAt = now;
           this.program!.gain.cancelScheduledValues(now); this.program!.gain.setValueAtTime(0, now);
         }
-        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.hornGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.trafficGain, this.tireGain, this.skidGain, this.impactGain, this.scrapeGain]) {
+        this.playerHorn?.mute(); this.npcHorns.forEach(slot => { slot.voice.mute(); slot.id = undefined; });
+        this.nearbyEngines.forEach(slot => { slot.voice.mute(); slot.id = undefined; });
+        for (const channel of [this.engineGain, this.wiperGain, this.clickGain, this.stepGain, this.shiftGain, this.cabinGain, this.pneumaticGain, this.reverseGain, this.turboGain, this.serviceGain, this.tireGain, this.skidGain, this.impactGain, this.scrapeGain]) {
           channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.delete(channel!.gain);
         }
       }
@@ -202,12 +222,14 @@ export class AudioSystem {
     this.clickGain = gain(this.sfx);
     const click = context.createOscillator(); click.type = 'sine'; click.frequency.value = 900; click.connect(this.clickGain); click.start(); this.sources.push(click);
     this.tireGain = noiseChannel(700, 'bandpass'); this.cabinGain = noiseChannel(500, 'lowpass'); this.shiftGain = noiseChannel(230, 'bandpass');
-    this.hornGain = gain(this.sfx); this.natureGain = gain(this.sfx);
+    this.playerHorn = new HornVoice(context, this.sfx);
+    for (let i = 0; i < 4; i++) this.npcHorns.push({ voice: new HornVoice(context, this.sfx) });
+    this.natureGain = gain(this.sfx);
     const oscillator = (type: OscillatorType, target: AudioNode) => {
       const node = context.createOscillator(); node.type = type; node.connect(target); node.start(); this.sources.push(node); return node;
     };
     this.harmonicGain = gain(filter, 0.16); this.harmonic = oscillator('sawtooth', this.harmonicGain);
-    this.horn = oscillator('triangle', this.hornGain); this.bird = oscillator('sine', this.natureGain);
+    this.bird = oscillator('sine', this.natureGain);
     this.program = gain(this.music, this.retuneAt === undefined ? 1 : 0);
     this.melodyGain = gain(this.program); this.melody = oscillator('sine', this.melodyGain);
     for (let i = 0; i < 4; i++) {
@@ -223,7 +245,7 @@ export class AudioSystem {
     this.turboGain = noiseChannel(1600, 'bandpass'); this.serviceGain = noiseChannel(150, 'lowpass');
     this.subEngineGain = gain(filter); this.subEngine = oscillator('sine', this.subEngineGain);
     this.skidGain = noiseChannel(1250, 'bandpass'); this.skidTone = oscillator('triangle', this.skidGain);
-    this.trafficGain = noiseChannel(400, 'lowpass');
+    for (let i = 0; i < 6; i++) this.nearbyEngines.push({ voice: new EngineVoice(context, this.sfx, noiseSource) });
     this.impactGain = noiseChannel(160, 'lowpass'); this.scrapeGain = noiseChannel(1150, 'bandpass');
   }
 
@@ -242,29 +264,33 @@ export class AudioSystem {
     const preview = this.previewing; this.previewTime = preview ? Math.max(0, this.previewTime - dt) : 0;
     const speed = Math.min(110, Math.abs(state.speed));
     const motorSpeed = preview && this.previewKind === 'engine' ? 6 + Math.sin(this.time * 3) * 5 : speed;
-    const cabin = state.cockpit ? 0.22 + state.exposure * 0.78 : 1;
+    const cabin = state.cockpit ? 1 - Math.max(0, Math.min(1, this.cabinIsolation)) * (1 - state.exposure) : 1;
     const rpm = preview && this.previewKind === 'engine' ? 2200 + Math.sin(this.time * 4) * 700 : state.rpm;
     const demand = preview && this.previewKind === 'engine' ? 0.5 + Math.sin(this.time * 2) * 0.5 : state.driving ? Math.max(0, Math.min(1, state.throttle)) : 0;
     this.load += (demand - this.load) * (1 - Math.exp(-Math.max(0, dt) * 8));
-    const duck = state.horn ? 0.4 : 1 - Math.max(0, Math.min(0.8, this.musicDucking)) * (state.driving ? Math.max(this.load, Math.min(1, state.impact / 8)) : 0);
+    const sounding = (state.horn || preview && this.previewKind === 'horn') && this.hornVolume > 0;
+    const nearbyHorn = state.trafficHorns.some(horn => horn.volume * this.npcHornVolume * state.atmosphere > 0.1);
+    const priority = this.sfxVolume > 0 ? (sounding ? 1 : nearbyHorn ? 0.6 : 0) * Math.max(0, Math.min(1, this.hornFocus)) : 0;
+    const duck = Math.min(1 - priority * 0.95, 1 - Math.max(0, Math.min(0.8, this.musicDucking)) * (state.driving ? Math.max(this.load, Math.min(1, state.impact / 8)) : 0));
+    this.ambienceDuck += (1 - priority * 0.65 - this.ambienceDuck) * (1 - Math.exp(-Math.max(0, dt) * (priority ? 15 : 3)));
     this.musicDuck += (duck - this.musicDuck) * (1 - Math.exp(-Math.max(0, dt) * (duck < this.musicDuck ? 8 : 1.8)));
     const ev = state.powertrain === 'ev';
     this.engine!.type = ev ? 'sine' : 'triangle';
     const frequency = ev ? 140 + motorSpeed * 22 + (state.regeneration ? 90 : 0) : Math.max(20, rpm / 60 * (state.supercar ? 3.2 : state.motorcycle ? 1.4 : state.mass > 4000 ? 2 : 2.5));
     set(this.engine!.frequency, frequency, 0.025); set(this.harmonic!.frequency, frequency * 2.01, 0.025);
     set(this.subEngine!.frequency, frequency * 0.5 * (1 + Math.sin(this.time * 17) * 0.003), 0.03);
-    set(this.subEngineGain!.gain, (ev ? 0 : state.mass > 4000 ? 0.17 : state.supercar ? 0.09 : 0.055) * (0.7 + this.load * 0.3));
-    set(this.turboGain!.gain, state.driving && state.ignition === 'running' && !ev && state.mass > 4000 ? this.load * Math.max(0, rpm - 1000) / 2800 * 0.05 * this.engineVolume : 0, 0.15);
-    set(this.trafficGain!.gain, Math.max(0, Math.min(1, state.traffic)) * 0.16 * cabin * this.engineVolume, 0.15);
-    set(this.serviceGain!.gain, Math.max(0, Math.min(1, state.service)) * 0.025 * cabin * this.natureVolume, 0.4);
-    set(this.harmonicGain!.gain, ev ? 0.025 : (state.supercar ? 0.2 : state.mass > 4000 ? 0.17 : 0.1) * (0.45 + this.load * 0.8));
+    const exhaust = this.exhaustVolume * (state.fuelCut && !preview ? 0.25 : 1);
+    set(this.subEngineGain!.gain, (ev ? 0 : state.mass > 4000 ? 0.17 : state.supercar ? 0.09 : 0.055) * (0.7 + this.load * 0.3) * exhaust);
+    set(this.turboGain!.gain, state.driving && state.ignition === 'running' && !ev && state.mass > 4000 ? this.load * Math.max(0, rpm - 1000) / 2800 * 0.05 * this.engineVolume * this.turboVolume : 0, 0.15);
+    set(this.serviceGain!.gain, Math.max(0, Math.min(1, state.service)) * 0.025 * cabin * this.natureVolume * this.ambienceDuck, 0.4);
+    set(this.harmonicGain!.gain, ev ? 0.025 : (state.supercar ? 0.2 : state.mass > 4000 ? 0.17 : 0.1) * (0.45 + this.load * 0.8) * exhaust);
     set(this.engineFilter!.frequency, (ev ? 3200 : state.supercar ? 700 : state.mass > 4000 ? 260 : 350) + 180 + this.load * 900 + state.exposure * 450);
     const running = (0.045 + Math.min(rpm, 10000) * 0.000003 + this.load * 0.085) * (state.shifting ? 0.42 : 1);
     const cranking = ev ? state.ignition === 'starting' ? 0.016 : motorSpeed < 0.1 ? 0 : 0.02 + Math.min(motorSpeed, 35) * 0.0008 + Math.max(this.load, Number(state.regeneration)) * 0.025 : state.ignition === 'starting' ? 0.025 + Math.max(0, Math.sin(this.time * 34)) * 0.055 : running;
     set(this.engineGain!.gain, (state.driving && state.ignition !== 'off' || preview && this.previewKind === 'engine' ? cranking : 0) * this.engineVolume, 0.025);
-    set(this.windGain!.gain, (0.045 + speed * 0.004) * state.atmosphere * cabin * (1 - state.shelter) * this.weatherVolume);
-    set(this.rainGain!.gain, state.rain * 0.17 * (0.35 + cabin * 0.65) * (1 - state.shelter) * this.weatherVolume);
-    set(this.tireGain!.gain, Math.min(0.15, speed * 0.004) * (1 + state.wet * 0.65) * (0.55 + cabin * 0.45) * this.tireVolume);
+    set(this.windGain!.gain, (0.045 + speed * 0.004) * state.atmosphere * cabin * (1 - state.shelter) * this.weatherVolume * this.ambienceDuck);
+    set(this.rainGain!.gain, state.rain * 0.17 * (0.35 + cabin * 0.65) * (1 - state.shelter) * this.weatherVolume * this.ambienceDuck);
+    set(this.tireGain!.gain, Math.min(0.15, speed * 0.004) * (1 + state.wet * 0.65) * (0.55 + cabin * 0.45) * this.tireVolume * this.ambienceDuck);
     const slide = state.driving ? Math.max(0, Math.min(1, state.tireSlip) - 0.08) : 0;
     set(this.skidTone!.frequency, (state.mass > 4000 ? 480 : state.motorcycle ? 850 : 650) + slide * 240);
     set(this.skidGain!.gain, slide * 0.07 * (1 - state.wet * 0.55) * (0.4 + cabin * 0.6) * this.tireVolume, 0.06);
@@ -272,16 +298,35 @@ export class AudioSystem {
     set(this.scrapeGain!.gain, state.driving ? Math.min(1, Math.max(0, state.scrape) / 25) * 0.07 * this.collisionVolume * (0.35 + cabin * 0.65) : 0, 0.06);
     set(this.wiperGain!.gain, state.driving && dt > 0 ? Math.min(0.07, Math.abs(state.wiper - this.lastWiper) / dt * 0.045) * this.cabinVolume : 0, 0.025);
     set(this.cabinGain!.gain, state.driving ? (state.fan * 0.009 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);
-    set(this.horn!.frequency, state.mass > 4000 ? 155 : state.motorcycle ? 490 : 350);
-    set(this.hornGain!.gain, (state.horn || preview && this.previewKind === 'horn' ? 0.14 : 0) * this.effectsVolume, 0.015);
+    this.playerHorn!.update(state.vehicle, sounding ? 0.65 * this.hornVolume * (state.cockpit ? 0.85 + state.exposure * 0.15 : 1) : 0);
+    const horns = state.trafficHorns.slice(0, 4), ids = new Set(horns.map(horn => horn.id));
+    for (const slot of this.npcHorns) if (!slot.id || !ids.has(slot.id)) {
+      slot.id = undefined; slot.voice.update(state.vehicle, 0);
+    }
+    for (const horn of horns) {
+      const slot = this.npcHorns.find(slot => slot.id === horn.id) ?? this.npcHorns.find(slot => !slot.id)!;
+      slot.id = horn.id;
+      slot.voice.update(horn.kind, 0.65 * this.npcHornVolume * horn.volume * state.atmosphere
+        * (0.2 + cabin * 0.8) / Math.sqrt(Math.max(1, horns.length)), horn.pan);
+    }
+    const engines = [...state.nearbyEngines].sort((a, b) => b.volume - a.volume).slice(0, 6), engineIds = new Set(engines.map(s => s.id));
+    const mix = Math.sqrt(Math.max(1, engines.reduce((sum, sound) => sum + sound.volume, 0)));
+    for (const slot of this.nearbyEngines) if (!slot.id || !engineIds.has(slot.id)) { slot.id = undefined; slot.voice.update(undefined); }
+    for (const sound of engines) {
+      const slot = this.nearbyEngines.find(s => s.id === sound.id) ?? this.nearbyEngines.find(s => !s.id)!;
+      slot.id = sound.id;
+      const loudness = sound.powertrain === 'ev' ? 0.035 + Math.min(sound.speed, 35) * 0.001 : sound.starting ? 0.075
+        : 0.09 + Math.min(sound.rpm, 10000) * 0.000005 + sound.load * 0.13;
+      slot.voice.update(sound, loudness * (sound.shifting ? 0.5 : 1) * sound.volume * this.nearbyEngineVolume * state.atmosphere * cabin * this.ambienceDuck / mix, cabin);
+    }
     set(this.reverseGain!.gain, state.driving && state.mass > 4000 && state.speed < -0.4 && this.time % 0.9 < 0.35 ? 0.035 * this.effectsVolume * (0.4 + cabin * 0.6) : 0, 0.015);
     if (state.driving && (this.lastBrake && !state.braking && state.mass > 4000 || state.operations > this.lastOperation))
       this.pulse(this.pneumaticGain!, 0.09 * this.cabinVolume, 0.12);
     this.lastBrake = state.braking; this.lastOperation = state.operations;
     const chirp = this.time % (state.night > 0.5 ? 1.4 : 8.7);
     set(this.bird!.frequency, state.night > 0.5 ? 3200 : 1700 + Math.sin(chirp * 19) * 650);
-    set(this.natureGain!.gain, state.nature && state.rain < 0.3 && chirp < 0.55 ? 0.035 * Math.sin(chirp / 0.55 * Math.PI) ** 2 * cabin * (1 - state.shelter) * this.natureVolume : 0, 0.015);
-    if (state.driving && state.ignition === 'running' && !ev && state.shifts > this.lastShift) this.pulse(this.shiftGain!, 0.13 * this.engineVolume, 0.045);
+    set(this.natureGain!.gain, state.nature && state.rain < 0.3 && chirp < 0.55 ? 0.035 * Math.sin(chirp / 0.55 * Math.PI) ** 2 * cabin * (1 - state.shelter) * this.natureVolume * this.ambienceDuck : 0, 0.015);
+    if (state.driving && state.ignition === 'running' && !ev && state.shifts > this.lastShift && this.shiftVolume > 0) this.pulse(this.shiftGain!, 0.13 * this.engineVolume * this.shiftVolume, 0.045);
     this.lastShift = state.shifts;
     if (state.driving && state.signal !== this.lastSignal) {
       this.pulse(this.clickGain!, 0.075 * this.effectsVolume, 0.018);
@@ -291,7 +336,7 @@ export class AudioSystem {
       this.step %= 1.6;
       this.pulse(this.stepGain!, 0.22 * this.effectsVolume, 0.025);
     }
-    for (const [channel, volume] of [[this.shiftGain!, this.engineVolume], [this.pneumaticGain!, this.cabinVolume],
+    for (const [channel, volume] of [[this.shiftGain!, this.engineVolume * this.shiftVolume], [this.pneumaticGain!, this.cabinVolume],
       [this.clickGain!, this.effectsVolume], [this.stepGain!, this.effectsVolume]] as const) {
       if (volume > 0 || this.targets.get(channel.gain) === 0) continue;
       const level = channel.gain.value;
@@ -324,18 +369,18 @@ export class AudioSystem {
     const beat = this.musicTime % (this.musicStyle === 'motion' ? 0.6 : 1.2), note = melodyNotes[(Math.floor(this.musicTime / (this.musicStyle === 'motion' ? 0.6 : 1.2)) + this.station * 3) % melodyNotes.length];
     musicSet(this.melody!.frequency, chords[this.chord][note] * 2 * transpose, 0.025);
     const phrase = Math.floor(this.musicTime / 4.8) % 4;
-    musicSet(this.melodyGain!.gain, musicLevel * (phrase === 3 ? 0.3 : 1) * (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
+    musicSet(this.melodyGain!.gain, this.melodyVolume * musicLevel * (phrase === 3 ? 0.3 : 1) * (this.musicStyle === 'night' ? 0.025 : 0.045) * Math.exp(-beat * 5), 0.04);
     musicSet(this.bass!.frequency, chords[chord][phrase % 2 ? 2 : 0] * transpose / 2, 0.16);
-    musicSet(this.bassGain!.gain, musicLevel * (this.musicStyle === 'motion' ? 0.07 : 0.035) * (0.7 + 0.3 * Math.exp(-beat * 3)), 0.08);
+    musicSet(this.bassGain!.gain, this.bassVolume * musicLevel * (this.musicStyle === 'motion' ? 0.07 : 0.035) * (0.7 + 0.3 * Math.exp(-beat * 3)), 0.08);
     musicSet(this.rhythmGain!.gain, this.musicStyle === 'motion' ? musicLevel * 0.014 * Math.exp(-(this.musicTime % 0.3) * 45) : 0, 0.012);
   }
 
   preview(kind: 'engine' | 'shift' | 'horn'): boolean {
     this.previewTime = 0;
     if (!this.audible || this.state !== 'running' || this.sfxVolume <= 0 || this.masterVolume <= 0
-      || (kind === 'horn' ? this.effectsVolume : this.engineVolume) <= 0) return false;
+      || (kind === 'horn' ? this.hornVolume : this.engineVolume * (kind === 'shift' ? this.shiftVolume : 1)) <= 0) return false;
     this.previewTime = 1.2; this.previewKind = kind;
-    if (kind === 'shift') this.pulse(this.shiftGain!, 0.13 * this.engineVolume, 0.045);
+    if (kind === 'shift') this.pulse(this.shiftGain!, 0.13 * this.engineVolume * this.shiftVolume, 0.045);
     return true;
   }
 
@@ -351,6 +396,8 @@ export class AudioSystem {
     if (this.disposed) return;
     this.disposed = true;
     this.audible = false; this.previewTime = 0;
+    this.playerHorn?.dispose(); this.npcHorns.forEach(slot => slot.voice.dispose()); this.npcHorns.length = 0;
+    this.nearbyEngines.forEach(slot => slot.voice.dispose()); this.nearbyEngines.length = 0;
     for (const source of this.sources) { source.stop(); source.disconnect(); }
     this.master?.disconnect();
     if (this.context && this.context.state !== 'closed') void this.context.close().catch(() => {});

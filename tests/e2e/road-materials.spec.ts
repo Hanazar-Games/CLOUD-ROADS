@@ -1,0 +1,31 @@
+import { expect, test } from '@playwright/test';
+import { closeSettings, control } from './settings';
+
+test('loads shared HD pavement, switches to small textures and renders wet winter roads', async ({ page }) => {
+  const errors: string[] = [], textures: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('response', response => { if (/\/assets\/(asphalt|concrete)-/.test(response.url()) && response.ok()) textures.push(response.url()); });
+  await page.goto('/?seed=CLOUD-ROAD-001');
+  await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20000 });
+  await expect.poll(() => textures.filter(url => url.includes('-2048-')).length).toBe(2);
+  await (await control(page, page.locator('#map-detail'))).selectOption('2');
+  await closeSettings(page);
+  await page.locator('#drive-toggle').click();
+  await expect(page.locator('#drive-hud')).toBeVisible();
+  await expect(page.locator('[data-metric="Map detail"]')).toHaveText('2');
+  expect(textures.filter(url => url.includes('-2048-'))).toHaveLength(2);
+  await (await control(page, page.locator('#map-detail'))).selectOption('0');
+  await expect.poll(() => textures.filter(url => url.includes('-256-')).length).toBe(2);
+  await (await control(page, page.locator('#season-kind'))).selectOption('winter');
+  await (await control(page, page.locator('#weather-rain'))).check();
+  await closeSettings(page);
+  await expect(page.locator('[data-metric="Map detail"]')).toHaveText('0');
+  await (await control(page, page.locator('#map-detail'))).selectOption('2');
+  await (await control(page, page.locator('#random-world'))).click();
+  await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20000 });
+  await expect(page.locator('[data-metric="Map detail"]')).toHaveText('2');
+  await closeSettings(page);
+  await expect(page.locator('#error')).toBeHidden();
+  expect(errors).toEqual([]);
+});

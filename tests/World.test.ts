@@ -24,9 +24,10 @@ const load = (world: World, camera: PerspectiveCamera) => {
 it.each(['alpine', 'forest', 'desert', 'mars'] as const)('gives the standalone garage a road entrance in %s terrain', terrain => {
   const scene = new Scene(), world = new World(scene, `GARAGE-${terrain}`, { ...DEFAULT_OPTIONS, terrain });
   const camera = new PerspectiveCamera(); world.resetCamera(camera); load(world, camera);
-  expect(world.garage.ground.access).toHaveLength(80);
-  expect(world.connections.some(site => site.ground === world.garage.ground && site.accessSide === 1)).toBe(true);
-  const last = world.garage.ground.access.at(-1)!.b;
+  expect(world.garage.ground.access.length).toBeGreaterThan(512);
+  expect(world.connections.some(site => site.ground === world.garage.ground && site.accessWindows?.length === 4)).toBe(true);
+  const last = world.garage.point(64, -80);
+  expect(world.garage.ground.access.some(({ b }) => Math.hypot(b.x - last.x, b.y - last.y, b.z - last.z) < 0.01)).toBe(true);
   expect(world.garage.surface(last.x, last.z, last.y)).toBeCloseTo(last.y);
   world.dispose(); expect(scene.children).toHaveLength(0);
 });

@@ -1,4 +1,4 @@
-import { Mesh, PerspectiveCamera, Points, Scene, SpotLight } from 'three';
+import { Mesh, PerspectiveCamera, Points, Raycaster, Scene, SpotLight, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { vehicleProfiles, type VehicleProfile } from '../src/vehicle/VehicleConfig';
 import { sideLampPositions, vehicleReflectors } from '../src/vehicle/VehicleSafety';
@@ -11,6 +11,54 @@ import { VehicleMesh } from '../src/vehicle/VehicleMesh';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 import { CraneSystems } from '../src/vehicle/CraneSystems';
+
+it('automatically enables fog lamps on fog entry, respects a manual override and rearms for the next fog', () => {
+  const systems = new VehicleSystems();
+  systems.updateFog(true); expect(systems.fogLights).toBe(true);
+  systems.fogLights = false; systems.updateFog(true); expect(systems.fogLights).toBe(false);
+  systems.updateFog(false); expect(systems.fogLights).toBe(false);
+  systems.updateFog(true); expect(systems.fogLights).toBe(true);
+  systems.updateFog(false); expect(systems.fogLights).toBe(false);
+  systems.fogLights = true; systems.updateFog(false); expect(systems.fogLights).toBe(true);
+});
+
+it.each(Object.entries(vehicleProfiles).filter(([, p]) => p.chassisLength < 6 && ['roadster', 'sedan', 'supercar', 'suv'].includes(p.shape)))(
+  'keeps %s side markers on bodywork outside the wheel openings', (_kind, p) => {
+  for (const z of sideLampPositions(p)) for (const wheel of p.wheels) {
+    expect(Math.abs(z + wheel.along) - 0.125).toBeGreaterThan(p.radius + 0.05);
+  }
+  for (const m of vehicleReflectors(p).filter(m => m.w < 0.04)) for (const wheel of p.wheels) {
+    expect(Math.abs(m.z + wheel.along) - m.l / 2).toBeGreaterThan(p.radius + 0.05);
+  }
+});
+
+it.each(['roadster', 'supercar'] as const)('mounts %s corner indicators against solid bodywork', kind => {
+  const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile);
+  model.chassis.updateMatrixWorld(true);
+  const solid: Mesh[] = [], corners = new Map<string, Vector3[]>();
+  model.chassis.traverse(object => {
+    if (!(object instanceof Mesh) || Array.isArray(object.material)) return;
+    if (object.material.emissive?.getHex() !== 0xff9b19) {
+      if (object.material.name === 'vehicle-paint') solid.push(object);
+      return;
+    }
+    const positions = object.geometry.getAttribute('position');
+    for (let i = 0; i < positions.count; i++) {
+      const p = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(object.matrixWorld);
+      if (Math.abs(p.z) < car.profile.chassisLength / 2) continue;
+      const key = `${Math.sign(p.x)}:${Math.sign(p.z)}`, points = corners.get(key) ?? [];
+      points.push(p); corners.set(key, points);
+    }
+  });
+  expect(corners.size).toBe(4);
+  for (const points of corners.values()) {
+    const center = points.reduce((sum, point) => sum.add(point), new Vector3()).divideScalar(points.length);
+    const direction = new Vector3(0, 0, -Math.sign(center.z));
+    const hits = new Raycaster(center, direction, 0, 0.1).intersectObjects(solid, false);
+    expect(hits.length, 'indicator needs a backing surface').toBeGreaterThan(0);
+  }
+  model.dispose();
+});
 
 it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('retains %s reflectors in every batched body', kind => {
   const p: VehicleProfile = vehicleProfiles[kind];

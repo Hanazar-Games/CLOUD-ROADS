@@ -9,6 +9,8 @@ import { padPoint, crossoverShelter } from '../service/ServiceTerrain';
 import { constrainObstacle, constrainVehicle } from '../service/ServiceCollision';
 import { serviceObstacles } from '../service/ServiceAmenities';
 import { vehicleSupport } from './VehicleSolids';
+import { accessQuads, ribbonHeight } from '../road/SurfaceRibbon';
+import { RoadDeckSurface } from '../road/RoadDeckSurface';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage' | 'garages' | 'connections'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
@@ -22,10 +24,13 @@ export class DrivingSurface {
   private sites;
   private access;
   private accessIndex;
+  private accessRibbons;
+  private accessReach = 8;
   private barriers;
   private barrierIndex;
   private serviceSource;
   private connectionSource;
+  private readonly decks = new WeakMap<DrivingWorld['road'], { version: number; bridges: DrivingWorld['bridges']; surface: RoadDeckSurface }>();
 
   constructor(private readonly world: DrivingWorld) {
     this.profile = roadProfile(world.options);
@@ -33,6 +38,8 @@ export class DrivingSurface {
     this.sites = [...world.services, ...world.connections ?? []];
     this.access = this.sites.flatMap(site => [...site.ground.access, ...site.ground.crossover?.access ?? []]);
     this.accessIndex = new RoadIndex(this.access);
+    this.accessRibbons = accessQuads(this.access);
+    this.accessReach = Math.max(8, ...this.access.map(e => Math.max(e.a.halfWidth ?? 3.5, e.b.halfWidth ?? 3.5) * 2));
     this.barriers = this.sites.flatMap(site => [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]);
     this.barrierIndex = new RoadIndex(this.barriers);
   }
@@ -48,16 +55,16 @@ export class DrivingSurface {
 
   private ground(x: number, z: number, ceiling = Infinity): SurfaceContact {
     const reference = Number.isFinite(ceiling) ? ceiling : this.level;
-    for (const garage of this.garages) {
-      const height = garage.surface(x, z, reference, ceiling);
-      if (height !== undefined) return { height, grip: garage.shelter(x, height + 0.5, z) ? 1
-        : (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) };
-    }
     const surfaces: SurfaceContact[] = [];
     const add = (height: number, sheltered = false) => {
       if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9))
         surfaces.push({ height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height, sheltered) ?? 1) });
     };
+    for (const garage of this.garages) {
+      const height = garage.surface(x, z, reference, ceiling);
+      if (height !== undefined) surfaces.push({ height, grip: garage.shelter(x, height + 0.5, z) ? 1
+        : (1 - this.wet * 0.38) * (this.world.season?.grip(height) ?? 1) });
+    }
     const samples = (this.world.network?.routes ?? [this.world]).flatMap(route => {
       const sample = route.road.nearest(x, z); return sample ? [{ sample, route }] : [];
     });
@@ -66,6 +73,16 @@ export class DrivingSurface {
       return error(a) - error(b);
     });
     for (const { sample, route } of samples) {
+      let deck = this.decks.get(route.road);
+      if (!deck || deck.version !== route.road.version || deck.bridges !== route.bridges) {
+        deck = { version: route.road.version, bridges: route.bridges, surface: new RoadDeckSurface(route.road.samples, this.world.options, route.bridges) };
+        this.decks.set(route.road, deck);
+      }
+      const contacts = deck.surface.sample(x, z);
+      if (contacts.length) {
+        for (const contact of contacts) add(contact.height, route.tunnels.some(span => contact.sample.distance >= span.start.distance && contact.sample.distance <= span.end.distance));
+        continue;
+      }
       const dx = x - sample.position.x, dz = z - sample.position.z;
       const lateral = dx * Math.cos(sample.heading) + dz * Math.sin(sample.heading);
       const along = dx * Math.sin(sample.heading) - dz * Math.cos(sample.heading);
@@ -83,17 +100,9 @@ export class DrivingSurface {
       const height = pad.y + pad.grade * along;
       if (Math.abs(lateral) <= pad.halfWidth && Math.abs(along) <= pad.halfLength) add(height);
     }
-    for (const i of this.accessIndex.within(x - 8, z - 8, x + 8, z + 8)) {
-      const { a, b } = this.access[i], dx = b.x - a.x, dz = b.z - a.z;
-      const along = ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz);
-      const joint = 0.4 / Math.hypot(dx, dz);
-      if (along < -joint || along > 1 + joint) continue;
-      const t = along;
-      if (Math.hypot(x - a.x - dx * t, z - a.z - dz * t) > (a.halfWidth ?? 3.5) + ((b.halfWidth ?? 3.5) - (a.halfWidth ?? 3.5)) * t) continue;
-      const height = a.y + (b.y - a.y) * t + 0.015
-        + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
-        + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      add(height);
+    for (const i of this.accessIndex.within(x - this.accessReach, z - this.accessReach, x + this.accessReach, z + this.accessReach)) {
+      const height = ribbonHeight(this.accessRibbons[i], x, z);
+      if (height !== undefined) add(height + 0.015);
     }
     if (surfaces.length) return reference === undefined ? surfaces[0] : surfaces.reduce((best, s) => Math.abs(s.height - reference) < Math.abs(best.height - reference) ? s : best);
     const height = this.world.groundHeight(x, z);
@@ -246,19 +255,20 @@ export class DrivingSurface {
     const roadHeight = y - (normal.x * (body.x - x) + normal.z * (body.z - z)) / normal.y;
     if (feet + height < roadHeight - 0.2) return false;
     const endpoint = !route.road.openStart && sample.distance < route.road.samples[0].distance + 2 && along < 2;
-    if (!endpoint && Math.abs(along) > 2) return false;
+    const end = sample.distance > route.road.samples.at(-1)!.distance - 2 && along > -2;
+    if (!endpoint && !end && Math.abs(along) > 2) return false;
     const bridge = route.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
     const tunnel = route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance);
     const previous = (previousX - x) * cos + (previousZ - z) * sin;
     let lateral = (body.x - x) * cos + (body.z - z) * sin, hit = false;
-    if (endpoint && feet < roadHeight + 2 && this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + radius)) {
-      along = 2.2; hit = true;
+    if ((endpoint || end) && feet < roadHeight + 2 && this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + radius)) {
+      along = endpoint ? Math.max(along, radius + 0.2) : Math.min(along, -radius - 0.2); hit = true;
     }
     for (const center of this.profile.centers) for (const side of [-1, 1]) {
       const inner = center !== 0 && side * center < 0;
       if (sample.opening !== undefined && this.connectedSurface(body.x, body.z, feet, radius)) continue;
       if (!inner && !hasRoadBarrier({ ...route, options: this.world.options,
-        services: [...route.services, ...(this.world.connections ?? []).filter(site => site.accessSide !== undefined && site.sample.routeId === sample.routeId)] }, sample, side)) continue;
+        services: [...route.services, ...(this.world.connections ?? []).filter(site => (site.accessSide !== undefined || site.accessWindows) && site.sample.routeId === sample.routeId)] }, sample, side)) continue;
       const offset = center + side * (this.profile.halfWidth + (inner ? 0.2 : tunnel ? 0.65 : bridge ? 0.25 : 0.3));
       const railHeight = y + right.y * offset;
       const screen = bridge && hasBridgeScreen(this.world.seed, sample, this.world.options)
@@ -283,14 +293,10 @@ export class DrivingSurface {
       if (feet < height - 0.15 && Math.abs(along) <= pad.halfLength
         && Math.abs(dx * Math.cos(pad.heading) + dz * Math.sin(pad.heading)) <= pad.halfWidth) ceiling = Math.min(ceiling, height - 1.45);
     }
-    const access = this.accessIndex.nearest(x, z, 8);
-    if (access && access.distanceSquared <= ((this.access[access.index].a.halfWidth ?? 3.5) + 0.3) ** 2 && this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[access.index])
-      || site.ground.crossover?.access.includes(this.access[access.index]))) {
-      const { a, b } = this.access[access.index], t = access.t;
-      const height = a.y + (b.y - a.y) * t
-        + (a.slopeX + (b.slopeX - a.slopeX) * t) * (x - a.x - (b.x - a.x) * t)
-        + (a.slopeZ + (b.slopeZ - a.slopeZ) * t) * (z - a.z - (b.z - a.z) * t);
-      if (feet < height - 0.15) ceiling = Math.min(ceiling, height - 1.45);
+    for (const i of this.accessIndex.within(x - this.accessReach, z - this.accessReach, x + this.accessReach, z + this.accessReach)) {
+      if (!this.sites.some(site => site.ground.elevated && site.ground.access.includes(this.access[i]) || site.ground.crossover?.access.includes(this.access[i]))) continue;
+      const height = ribbonHeight(this.accessRibbons[i], x, z);
+      if (height !== undefined && feet < height - 0.15) ceiling = Math.min(ceiling, height - 1.45);
     }
     for (const site of this.sites) {
       const cross = site.ground.crossover;
@@ -334,6 +340,8 @@ export class DrivingSurface {
     this.sites = [...this.world.services, ...this.world.connections ?? []];
     this.access = this.sites.flatMap(site => [...site.ground.access, ...site.ground.crossover?.access ?? []]);
     this.accessIndex = new RoadIndex(this.access);
+    this.accessRibbons = accessQuads(this.access);
+    this.accessReach = Math.max(8, ...this.access.map(e => Math.max(e.a.halfWidth ?? 3.5, e.b.halfWidth ?? 3.5) * 2));
     this.barriers = this.sites.flatMap(site => [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []]);
     this.barrierIndex = new RoadIndex(this.barriers);
   }

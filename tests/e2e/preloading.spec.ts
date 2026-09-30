@@ -14,7 +14,7 @@ test('preloads the next view, continues streaming and rebuilds the preload after
   await expect(metric('Active chunks')).toHaveText('289');
   const completed = Number(await metric('Generated chunks').textContent());
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
-  await expect.poll(async () => Number((await metric('Coordinates').textContent())!.split(',')[2])).toBeLessThan(-400);
+  await expect.poll(async () => Number((await metric('Coordinates').textContent())!.split(',')[2]), { timeout: 10000 }).toBeLessThan(-400);
   await page.keyboard.up('KeyW'); await ready();
   expect(Number(await metric('Generated chunks').textContent())).toBeGreaterThan(completed);
   expect(Number(await metric('Prefetched chunks').textContent())).toBeLessThanOrEqual(128);

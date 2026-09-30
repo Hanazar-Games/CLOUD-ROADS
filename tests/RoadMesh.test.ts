@@ -1,5 +1,5 @@
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
-import { Scene } from 'three';
+import { BufferAttribute, Scene } from 'three';
 import { describe, expect, it } from 'vitest';
 import { RoadMesh } from '../src/road/RoadMesh';
 import { RoadSpine } from '../src/road/RoadSpine';
@@ -29,7 +29,7 @@ describe('RoadMesh', () => {
     spine.segments.shift(); spine.version++;
     road.update(spine, 0, 0, true);
     const after = road.mesh.geometry.getAttribute('uv').getY(0);
-    for (const period of [12, 2000, 1.3]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
+    for (const period of [12, 2000, 1.3, 2, 40]) expect((before - after) / period).toBeCloseTo(Math.round((before - after) / period), 4);
     road.dispose();
   });
 
@@ -56,6 +56,7 @@ describe('RoadMesh', () => {
     const uv = geometry.getAttribute('uv');
     const count = spine.samples.length;
     expect(geometry.drawRange.count).toBe((count - 1) * 6);
+    expect((positions as BufferAttribute).updateRanges).toEqual([{ start: 0, count: count * 2 * 3 }]);
     for (let i = 0; i < count; i++) {
       const a = i * 2, b = a + 1;
       const width = Math.hypot(positions.getX(a) - positions.getX(b), positions.getY(a) - positions.getY(b), positions.getZ(a) - positions.getZ(b));

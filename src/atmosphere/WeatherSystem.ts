@@ -93,6 +93,9 @@ export class WeatherSystem {
   }
 
   get profile(): Readonly<WeatherProfile> { return this.current; }
+  get fogLightsNeeded(): boolean {
+    return !this.season?.extraterrestrial && (this.kind === 'fog' || this.kind === 'denseFog' || this.current.far < 500);
+  }
   get liquidRain(): number { return this.profile.rain * (1 - this.frozenFraction); }
   get snowfall(): number { return this.profile.rain * this.frozenFraction; }
   setSeason(season: SeasonState): void {

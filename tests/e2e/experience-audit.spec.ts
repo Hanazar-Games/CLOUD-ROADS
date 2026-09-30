@@ -9,15 +9,18 @@ test('reports muted preview groups and clears completed and interrupted previews
   await page.locator('#engine-volume').fill('0');
   for (const kind of ['engine', 'shift']) {
     await page.locator(`#preview-${kind}`).click();
-    await expect(status).toContainText('发动机与换挡'); await expect(status).not.toContainText('正在试听');
+    await expect(status).toContainText(kind === 'shift' ? '换挡机械声' : '发动机'); await expect(status).not.toContainText('正在试听');
   }
-  await page.locator('#effects-volume').fill('0'); await page.locator('#preview-horn').click();
-  await expect(status).toContainText('喇叭、提示与脚步'); await expect(status).not.toContainText('正在试听');
+  await page.locator('#horn-volume').fill('0'); await page.locator('#preview-horn').click();
+  await expect(status).toContainText('本车喇叭'); await expect(status).not.toContainText('正在试听');
   await page.locator('#engine-volume').fill('100'); await page.locator('#preview-engine').click();
   await expect(status).toContainText('正在试听'); await expect(status).toContainText('试听已结束');
   await page.locator('#preview-engine').click(); await expect(status).toContainText('正在试听');
   await page.locator('#engine-volume').fill('0'); await expect(status).toContainText('试听已结束');
-  await page.locator('#effects-volume').fill('100'); await page.locator('#preview-horn').click();
+  await page.locator('#engine-volume').fill('100'); await page.locator('#preview-shift').click();
+  await expect(status).toContainText('正在试听'); await page.locator('#shift-volume').fill('0');
+  await expect(status).toContainText('试听已结束');
+  await page.locator('#horn-volume').fill('100'); await page.locator('#preview-horn').click();
   await page.locator('#audio-toggle').click(); await expect(status).toContainText('试听已结束');
 });
 

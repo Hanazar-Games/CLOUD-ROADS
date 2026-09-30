@@ -1,4 +1,4 @@
-import { BufferGeometry, Color, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Scene, type Vector3 } from 'three';
+import { BufferGeometry, Color, Float32BufferAttribute, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Scene, Vector3, type Object3D } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { VehicleMesh } from '../vehicle/VehicleMesh';
 import { VehiclePhysics } from '../vehicle/VehiclePhysics';
@@ -10,8 +10,9 @@ import type { ParkedEntry } from './ServiceParking';
 import type { Garage } from '../garage/Garage';
 import { vehicleProxy } from '../vehicle/VehicleProxy';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
+import { FogLampBatch } from '../vehicle/FogLampBatch';
 
-export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGeometry[] {
+export function vehicleTemplate(kind: VehicleKind, roofClosed = false, animateWheels = false): BufferGeometry[] {
   const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile), parts: BufferGeometry[][] = [[]];
   car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
   const systems = new VehicleSystems(); systems.roofOpen = roofClosed ? 0 : 1;
@@ -21,10 +22,12 @@ export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGe
   for (let i = 0; i < trailers.length; i++) parts.push([]);
   model.root.traverse(object => {
     if (!(object instanceof Mesh) || object instanceof InstancedMesh || Array.isArray(object.material) || !object.visible) return;
-    let part = 0;
+    let part = 0, spinning = false, wheel: Object3D | undefined;
     for (let parent = object.parent; parent && parent !== model.root; parent = parent.parent) {
       if (!parent.visible) return;
       const index = trailers.indexOf(parent); if (index >= 0) part = index + 1;
+      if (parent.name === 'wheel-spin') spinning = true;
+      if (parent.name === 'wheel-steer' || parent.name === 'wheel-fixed') wheel = parent;
     }
     const material = object.material as MeshStandardMaterial;
     if (!material.color || !object.geometry.getAttribute('normal') || object.name === 'windshield-water') return;
@@ -43,12 +46,21 @@ export function vehicleTemplate(kind: VehicleKind, roofClosed = false): BufferGe
     geometry.setAttribute('glassMask', new Float32BufferAttribute(new Float32Array(count).fill(material.transparent && material.opacity < 0.9 ? 1 : 0), 1));
     geometry.setAttribute('paintMask', new Float32BufferAttribute(new Float32Array(count).fill(mask), 1)); parts[part].push(geometry);
     geometry.setAttribute('retroMask', new Float32BufferAttribute(new Float32Array(count).fill(Number(material.name === 'retro-reflector')), 1));
+    if (animateWheels) {
+      const pivots = new Float32Array(count * 4), center = wheel ? new Vector3().setFromMatrixPosition(wheel.matrixWorld).applyMatrix4(inverse[part]) : new Vector3();
+      if (wheel) for (let i = 0; i < count; i++) {
+        pivots[i * 4] = center.x; pivots[i * 4 + 1] = center.y; pivots[i * 4 + 2] = center.z; pivots[i * 4 + 3] = Number(spinning);
+      }
+      geometry.setAttribute('wheelPivot', new Float32BufferAttribute(pivots, 4));
+      geometry.setAttribute('wheelSteer', new Float32BufferAttribute(new Float32Array(count).fill(wheel?.name === 'wheel-steer' ? -center.z - car.rearAxle : 0), 1));
+    }
   });
   const geometries = parts.map(group => mergeGeometries(group)!);
   parts.flat().forEach(p => p.dispose()); model.dispose(); return geometries;
 }
 
 export class ParkedVehicles {
+  readonly fogLamps: FogLampBatch;
   readonly fleet: ParkedFleet;
   private readonly batches = new Map<string, InstancedMesh[]>();
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65 });
@@ -63,6 +75,7 @@ export class ParkedVehicles {
   private extraEntries: ParkedEntry[] = [];
   private anchorX = 0; private anchorZ = 0;
   constructor(private readonly scene: Scene, seed: string, gravity = 9.81) {
+    this.fogLamps = new FogLampBatch(scene, 64, 'parked-fog-lamps');
     this.fleet = new ParkedFleet(seed, gravity);
     this.material.onBeforeCompile = shader => {
       shader.vertexShader = `attribute float paintMask;\n${shader.vertexShader}`.replace('#include <color_vertex>', `
@@ -135,5 +148,5 @@ export class ParkedVehicles {
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.position.set(this.anchorX - origin.x, 0, this.anchorZ - origin.z); mesh.visible = mesh.count > 0; }
   }
   get drawBatches(): number { return [...this.batches.values()].flat().filter(m => m.count > 0).length; }
-  dispose(): void { for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); } this.material.dispose(); }
+  dispose(): void { this.fogLamps.dispose(); for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); } this.material.dispose(); }
 }

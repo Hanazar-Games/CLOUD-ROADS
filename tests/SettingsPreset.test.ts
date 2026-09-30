@@ -4,7 +4,7 @@ import { parsePreset, validatePreset, PresetStore, type SettingRules } from '../
 
 const rules: SettingRules = { 'vehicle-kind': { choices: ['roadster', 'crane'] }, 'hud-style': { choices: ['digital', 'dial', 'minimal'] },
   'steering-assist': { boolean: true }, 'vehicle-max-speed': { min: 20, max: 400 } };
-const preset = () => ({ format: 'cloud-roads-preset', version: 12, name: '雨中山路', seed: 'preset-seed', world: { ...DEFAULT_OPTIONS },
+const preset = () => ({ format: 'cloud-roads-preset', version: 14, name: '雨中山路', seed: 'preset-seed', world: { ...DEFAULT_OPTIONS },
   factorySpeed: true, settings: { 'vehicle-kind': 'crane', 'hud-style': 'dial', 'steering-assist': false, 'vehicle-max-speed': 79 } });
 
 it('round-trips settings without runtime position, speed, mileage or device consumption', () => {

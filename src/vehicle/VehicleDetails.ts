@@ -38,7 +38,7 @@ export function flatbedDetails(width: number, start: number, end: number, parent
   for (const y of [0.45, 0.85, 1.35]) block(width - 0.15, 0.075, 0.075, 0, y, start + 0.08, metal, parent);
 }
 
-export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDetailKit): void {
+export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDetailKit, rideHeight: number): void {
   const { block, cylinder, paint, trim, metal, lamp, amber } = kit;
   const nose = -p.chassisLength / 2, end = p.chassisLength / 2;
   if (p.shape !== 'motorcycle') {
@@ -65,9 +65,12 @@ export function vehicleDetails(p: VehicleProfile, parent: Group, kit: VehicleDet
         block(0.06, 0.035, 0.05, side * p.width * 0.22, -0.27, z, trim, parent);
       }
     }
+    const capZ = end - 0.65, arch = p.radius + 0.06;
+    const capY = Math.max(-0.02, ...p.wheels.filter(w => Math.abs(capZ + w.along) < arch)
+      .map(w => p.radius - rideHeight + Math.sqrt(arch ** 2 - (capZ + w.along) ** 2) + 0.1));
     for (const side of [-1, 1]) {
-      const cap = cylinder(0.07, 0.012, side * (p.width / 2 + 0.018), -0.02, end - 0.65, metal, parent); cap.rotation.z = Math.PI / 2;
-      block(0.017, 0.02, 0.13, side * (p.width / 2 + 0.028), -0.02, end - 0.65, trim, parent);
+      const cap = cylinder(0.07, 0.012, side * (p.width / 2 + 0.008), capY, capZ, metal, parent); cap.rotation.z = Math.PI / 2;
+      block(0.017, 0.02, 0.13, side * (p.width / 2 + 0.016), capY, capZ, trim, parent);
     }
   } else {
     const bezel = cylinder(0.115, 0.075, 0, 0.35, -0.85, metal, parent); bezel.rotation.x = Math.PI / 2;

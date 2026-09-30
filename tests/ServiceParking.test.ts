@@ -14,7 +14,7 @@ it('refreshes visible instances when different cars of the same kind swap across
     const car = new VehiclePhysics('sedan'); car.reset(x, 0, 0, () => ({ height: 0, grip: 1 })); renderer.fleet.park(car);
   }
   renderer.update([], { x: 0, z: 0 }, camera);
-  const mesh = scene.children[0] as InstancedMesh, matrix = new Matrix4();
+  const mesh = scene.children.find(object => object.name.startsWith('sedan')) as InstancedMesh, matrix = new Matrix4();
   mesh.getMatrixAt(0, matrix); expect(matrix.elements[12] + mesh.position.x).toBe(-1590);
   camera.x = 20; renderer.update([], { x: 0, z: 0 }, camera);
   mesh.getMatrixAt(0, matrix); expect(mesh.count).toBe(1); expect(matrix.elements[12] + mesh.position.x).toBe(1610);
@@ -59,7 +59,7 @@ it('batches a populated parking lot by vehicle kind, removes claimed instances a
   expect(renderer.drawBatches).toBeLessThanOrEqual(31); expect(renderer.drawBatches).toBeGreaterThan(5);
   const count = () => scene.children.reduce((n, mesh) => n + Number((mesh as unknown as { count: number }).count), 0);
   expect(count()).toBe(renderer.fleet.entries.reduce((n, e) => n + ('trailers' in vehicleProfiles[e.kind] ? 2 : 1), 0));
-  for (const object of scene.children) {
+  for (const object of scene.children.filter(object => object !== renderer.fogLamps.mesh)) {
     const mesh = object as InstancedMesh, mask = mesh.geometry.getAttribute('paintMask'), colors = mesh.geometry.getAttribute('color');
     expect(mask.array.some(value => value === 1)).toBe(true);
     expect(mask.array.some(value => value === 0)).toBe(true);

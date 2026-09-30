@@ -5,12 +5,40 @@ import { ServiceMesh } from '../src/service/ServiceMesh';
 import { ServicePlanner } from '../src/service/ServicePlanner';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
-import { padPoint } from '../src/service/ServiceTerrain';
+import { padPoint, type ServicePad } from '../src/service/ServiceTerrain';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { chargingBays, serviceObstacles } from '../src/service/ServiceAmenities';
 import { parkingSlots } from '../src/service/ServiceParking';
 import { DrivingSurface } from '../src/vehicle/DrivingSurface';
 import { RoadSpine } from '../src/road/RoadSpine';
+
+it.each([-0.02, 0.02])('connects solar canopy supports and panels on a %s grade in both directions', grade => {
+  const terrain = { sample: () => 400 }, generator = new RoadGenerator('canopy', terrain);
+  const segment = new RoadSegment(generator.start, 0, 0, 22000);
+  const site = new ServicePlanner('canopy', terrain).detect(Array.from({ length: 11001 }, (_, i) => segment.sample(i / 11000)))[0];
+  const scene = new Scene(), mesh = new ServiceMesh(scene, DEFAULT_OPTIONS, terrain);
+  const pads: ServicePad[] = [-1, 1].map(side => ({ ...site.ground.pads[0], x: side * 250, heading: 0.7, side, grade }));
+  mesh.update([{ ...site, ground: { ...site.ground, pads } }], 1, 0, 0); scene.updateMatrixWorld(true);
+  for (const pad of pads) {
+    for (const a of [-78, -50]) for (const x of [-62, -51.5]) {
+      const p = padPoint(pad, x * pad.side, a, 4.4);
+      const hits = new Raycaster(new Vector3(p.x, p.y, p.z), new Vector3(0, 1, 0), 0, 0.13).intersectObject(mesh.buildings);
+      expect(hits.length, 'support must touch the canopy underside').toBeGreaterThan(0);
+    }
+    for (const a of [-77, -65, -51]) {
+      const p = padPoint(pad, -56 * pad.side, a, 5);
+      const hits = new Raycaster(new Vector3(p.x, p.y, p.z), new Vector3(0, -1, 0), 0, 1).intersectObject(mesh.buildings);
+      expect(hits[0].point.y - padPoint(pad, 0, a).y).toBeCloseTo(4.7, 4);
+    }
+    const face = padPoint(pad, -61.52 * pad.side, -64, 1.5), outward = new Vector3(Math.cos(pad.heading) * pad.side, 0, Math.sin(pad.heading) * pad.side);
+    mesh.chargerDetails.update(face, 0, 0, 2); scene.updateMatrixWorld(true);
+    expect(mesh.chargerDetails.mesh.count).toBe(3);
+    const hit = new Raycaster(new Vector3(face.x, face.y, face.z).addScaledVector(outward, 1).add(new Vector3(0, 0.1, 0)), outward.clone().negate(), 0, 1.05)
+      .intersectObject(mesh.chargerDetails.mesh)[0];
+    expect(hit).toBeDefined(); expect(hit.distance).toBeGreaterThan(0.9);
+  }
+  mesh.dispose();
+});
 
 it('varies roofs and structures between service sites while keeping access lanes clear', () => {
   const terrain = { sample: () => 400 }, generator = new RoadGenerator('architecture', terrain);

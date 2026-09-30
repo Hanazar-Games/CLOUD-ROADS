@@ -10,6 +10,7 @@ import type { ServiceArea } from '../service/ServicePlanner';
 import type { TunnelSpan } from '../tunnel/TunnelDetector';
 import type { SeasonState } from '../season/SeasonState';
 import { seasonMaterial } from '../season/SeasonMaterial';
+import type { PavementTextures } from './PavementTextures';
 
 export class RoadMesh {
   readonly mesh: Mesh<BufferGeometry, MeshStandardMaterial>;
@@ -20,13 +21,14 @@ export class RoadMesh {
   private anchorX = 0;
   private anchorZ = 0;
   private readonly access = Array.from({ length: 4 }, () => new Vector4(-1, -1, -1, -1));
+  private readonly parkingAccess = Array.from({ length: 4 }, () => new Vector4(-1, -1, 0, 0));
   private readonly direction = { value: 1 };
 
-  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS, capacity = MAX_ROAD_SEGMENTS) {
+  constructor(scene: Scene, options: Readonly<WorldOptions> = DEFAULT_OPTIONS, capacity = MAX_ROAD_SEGMENTS, textures?: PavementTextures) {
     this.profile = roadProfile(options);
     this.barriers = new InstancedMesh(barrierGeometry(), new MeshStandardMaterial({ color: 0xbfc2c1, roughness: 0.94 }),
       options.roadType === 'highway' ? capacity * ROAD_SAMPLES * 2 : 1);
-    this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access, this.direction));
+    this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access, this.direction, this.parkingAccess, textures));
     const strips = this.profile.centers.length, stride = strips * 2;
     const rows = capacity * ROAD_SAMPLES + 1;
     for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['seasonExposure', 1]] as const) {
@@ -65,11 +67,17 @@ export class RoadMesh {
       const uv = this.mesh.geometry.getAttribute('uv') as BufferAttribute;
       const exposure = this.mesh.geometry.getAttribute('seasonExposure') as BufferAttribute;
       const cycleStart = Math.floor(first.distance / 78000) * 78000; // Shared period of 12 m dashes, 2 km arrows and 1.3 m grooves.
+      const facilities = services.filter(site => !site.accessWindows);
+      const parking = services.flatMap(site => site.accessWindows ?? []);
+      this.parkingAccess.forEach((range, i) => {
+        const opening = parking[i];
+        if (opening) range.set(opening.start - cycleStart, opening.end - cycleStart, opening.side, 0); else range.set(-1, -1, 0, 0);
+      });
       this.access.forEach((range, i) => {
-        const distance = services[i]?.sample.distance;
+        const distance = facilities[i]?.sample.distance;
         if (distance === undefined) range.set(-1, -1, -1, -1);
-        else if (services[i].accessSide !== undefined) range.set(services[i].start - cycleStart, services[i].end - cycleStart, -1, -1);
-        else range.set(distance - cycleStart - (services[i].mergeEnd ?? 230), distance - cycleStart - 155, distance - cycleStart + 155, distance - cycleStart + (services[i].mergeEnd ?? 230));
+        else if (facilities[i].accessSide !== undefined) range.set(facilities[i].start - cycleStart, facilities[i].end - cycleStart, -1, -1);
+        else range.set(distance - cycleStart - (facilities[i].mergeEnd ?? 230), distance - cycleStart - 155, distance - cycleStart + 155, distance - cycleStart + (facilities[i].mergeEnd ?? 230));
       });
       const { centers, halfWidth } = this.profile, stride = centers.length * 2;
       this.barriers.count = 0;
@@ -101,9 +109,15 @@ export class RoadMesh {
           }
         }
       }
-      for (const name of ['position', 'normal', 'uv', 'seasonExposure']) this.mesh.geometry.getAttribute(name).needsUpdate = true;
+      for (const name of ['position', 'normal', 'uv', 'seasonExposure']) {
+        const attribute = this.mesh.geometry.getAttribute(name) as BufferAttribute;
+        attribute.clearUpdateRanges(); attribute.addUpdateRange(0, spine.samples.length * stride * attribute.itemSize);
+        attribute.needsUpdate = true;
+      }
       this.mesh.geometry.setDrawRange(0, (spine.samples.length - 1) * centers.length * 6);
       this.mesh.geometry.computeBoundingSphere();
+      this.barriers.instanceMatrix.clearUpdateRanges();
+      this.barriers.instanceMatrix.addUpdateRange(0, this.barriers.count * 16);
       this.barriers.instanceMatrix.needsUpdate = true;
       if (this.barriers.count) this.barriers.computeBoundingSphere();
     }

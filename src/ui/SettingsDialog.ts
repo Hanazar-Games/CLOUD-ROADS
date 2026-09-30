@@ -3,11 +3,16 @@ import { element } from '../debug/DebugUI';
 export class SettingsDialog {
   private readonly dialog = element<HTMLDialogElement>('explorer');
   private readonly events = new AbortController();
+  private readonly sliders = new Map<HTMLInputElement, HTMLInputElement>();
   get open(): boolean { return this.dialog.open; }
 
   constructor(private readonly clearInput: () => void) {
     const options = { signal: this.events.signal }, button = element('controls-toggle');
     const content = element('settings-content');
+    for (const label of content.querySelectorAll<HTMLLabelElement>('label:not([for])')) {
+      const input = label.querySelector<HTMLInputElement>('input[id]'); if (input) label.htmlFor = input.id;
+    }
+    for (const event of ['input', 'change', 'click']) this.dialog.addEventListener(event, () => this.syncParameters(), options);
     const tabs = [...this.dialog.querySelectorAll<HTMLButtonElement>('[data-settings-target]')];
     let activeTab: HTMLButtonElement | undefined;
     const search = element<HTMLInputElement>('settings-search'), results = element('settings-search-results');
@@ -87,6 +92,13 @@ export class SettingsDialog {
       syncCategory();
     }, options);
     for (const tab of tabs) {
+      tab.addEventListener('keydown', event => {
+        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const index = tabs.indexOf(tab), next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+          : (index + (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
+        tabs[next].focus(); tabs[next].click();
+      }, options);
       tab.addEventListener('click', () => {
         const section = element(`settings-${tab.dataset.settingsTarget}`);
         section.querySelectorAll('details').forEach(detail => { detail.open = true; });
@@ -99,7 +111,38 @@ export class SettingsDialog {
   show(): void {
     if (this.dialog.inert || this.open) return;
     if (document.pointerLockElement) document.exitPointerLock();
-    this.clearInput(); this.dialog.showModal();
+    this.syncParameters(); this.clearInput(); this.dialog.showModal();
+  }
+  private syncParameters(): void {
+    for (const slider of this.dialog.querySelectorAll<HTMLInputElement>('input[type=range]')) {
+      let number = this.sliders.get(slider);
+      if (!number) {
+        const label = this.dialog.querySelector<HTMLLabelElement>(`label[for="${slider.id}"]`);
+        if (!label) continue;
+        const copy = label.cloneNode(true) as HTMLElement; copy.querySelectorAll('output').forEach(output => output.remove());
+        number = document.createElement('input'); number.type = 'number'; number.id = `${slider.id}-number`; number.className = 'parameter-number';
+        number.setAttribute('aria-label', `${copy.textContent!.trim()} · 精确数值`);
+        number.setAttribute('aria-describedby', slider.getAttribute('aria-describedby') ?? 'settings-help');
+        const wrapper = document.createElement('div'); wrapper.className = 'parameter-control'; slider.before(wrapper); wrapper.append(slider, number);
+        const field = number, commit = () => {
+          const previous = slider.value;
+          if (Number.isFinite(field.valueAsNumber)) slider.value = field.value;
+          field.value = slider.value;
+          if (slider.value !== previous) slider.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        field.addEventListener('change', commit, { signal: this.events.signal });
+        field.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); commit(); }
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); field.value = slider.value; slider.focus(); }
+        }, { signal: this.events.signal });
+        this.sliders.set(slider, field);
+      }
+      number.min = slider.min; number.max = slider.max; number.step = slider.step; number.disabled = slider.disabled;
+      number.title = `${slider.min}–${slider.max}，步长 ${slider.step || 1}`;
+      if (document.activeElement !== number) number.value = slider.value;
+      const fill = (slider.valueAsNumber - Number(slider.min)) / (Number(slider.max) - Number(slider.min));
+      slider.style.setProperty('--range-fill', `${Math.max(0, Math.min(1, fill)) * 100}%`);
+    }
   }
   close(): void { if (this.open) { this.clearInput(); this.dialog.close(); this.focusWorld(); } }
   private focusWorld(): void { if (!element('world').inert && !document.querySelector('dialog[open]')) element('world').focus(); }

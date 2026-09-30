@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { InstancedMesh, Scene } from 'three';
+import { InstancedBufferAttribute, InstancedMesh, Scene } from 'three';
 import { TrafficVehicles } from '../src/traffic/TrafficVehicles';
 import { MAX_TRAFFIC, TrafficSystem } from '../src/traffic/TrafficSystem';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
@@ -20,6 +20,27 @@ it('uploads only occupied instance ranges even when a traffic batch grows or shr
       expect(mesh.boundingSphere!.radius).toBeGreaterThan(0);
     }
   }
+  renderer.dispose();
+});
+
+it('animates wheel travel per vehicle without adding body draw batches', () => {
+  const scene = new Scene(), traffic = new TrafficSystem('wheels', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
+  for (let i = 0; i < 2; i++) {
+    const car = new VehiclePhysics('sedan'); car.reset(i * 6, 0, 0, () => ({ height: 0, grip: 1 }));
+    car.wheelAngle = i + 0.5; car.steering = i ? -0.2 : 0.1;
+    traffic.entries.push({ id: String(i), car, routeId: 'root', distance: 0, direction: 1, cruise: 15, lane: 0, offset: 0, signal: 0, cooldown: 0 });
+  }
+  renderer.update({ x: 0, z: 0 }, 0);
+  const bodies = scene.children.filter(o => o.name.includes(':near-')) as InstancedMesh[];
+  expect(bodies).toHaveLength(1);
+  const motion = bodies[0].geometry.getAttribute('trafficMotion') as InstancedBufferAttribute;
+  expect(motion).toBeDefined();
+  traffic.entries.forEach(({ car }, i) => {
+    expect(motion.getX(i)).toBeCloseTo(car.wheelAngle);
+    expect(motion.getY(i)).toBeCloseTo(Math.tan(car.steering) / car.wheelbase);
+  });
+  expect(motion.updateRanges).toEqual([{ start: 0, count: 4 }]);
+  const before = [...motion.array]; renderer.update({ x: 0, z: 0 }, 0); expect([...motion.array]).toEqual(before);
   renderer.dispose();
 });
 

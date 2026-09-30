@@ -110,7 +110,7 @@ describe('BridgeMesh', () => {
     const { terrain, bridges, corridor } = fixture(), scene = new Scene();
     const mesh = new BridgeMesh(scene);
     mesh.update(bridges, corridor, terrain, 1, 0, 0, true);
-    expect(scene.children).toHaveLength(13);
+    expect(scene.children).toHaveLength(15);
     expect(mesh.drains.count).toBeGreaterThan(0);
     expect(mesh.drains.material).toBe(mesh.details.material);
     expect(mesh.railings.count).toBeGreaterThan(mesh.parapets.count);

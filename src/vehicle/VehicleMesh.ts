@@ -15,7 +15,7 @@ import type { CraneSystems } from './CraneSystems';
 import { VehicleDisplay } from './VehicleDisplay';
 import { fleetBody } from './FleetBody';
 import { vehicleFinish } from './VehicleFinish';
-import { sideLampPositions, vehicleReflectors } from './VehicleSafety';
+import { compactSideLights, sideLampPositions, sideMarkerX, vehicleReflectors } from './VehicleSafety';
 import { reflectiveMaterial } from '../render/ReflectiveMaterial';
 import { SprinklerSpray } from './SprinklerSpray';
 import { cabinFridge } from './CabinFridge';
@@ -157,7 +157,7 @@ export class VehicleMesh {
       block(0.35, 0.035, 0.035, 0, 0, 0, metal, this.steering);
       for (const side of [-1, 1]) block(0.3, 0.16, 0.04, side * profile.width * 0.35, 0.05, profile.length / 2 + 0.025, this.tail);
     } else this.buildBody(block, paint, trim, metal, glass, leather, lamp, kit);
-    vehicleDetails(profile, this.chassis, kit);
+    vehicleDetails(profile, this.chassis, kit, this.rideHeight);
     fleetBody(profile, this.chassis, kit, this.fittings, this.rideHeight);
     vehicleFinish(profile, this.chassis, kit, this.rideHeight);
     const fridge = cabinFridge(profile, this.chassis, kit);
@@ -241,9 +241,14 @@ export class VehicleMesh {
     for (const side of [-1, 1]) {
       const signal = this.material(0xa96b20, 0.3); signal.emissive.setHex(0xff9b19); signal.emissiveIntensity = 0;
       this.signals.push(signal);
-      const bike = profile.shape === 'motorcycle', x = side * profile.width * (bike ? 0.29 : 0.42);
-      for (const end of [-1, 1]) block(bike ? 0.08 : 0.18, 0.08, 0.05, x, bike ? 0.31 : 0.19, bike && end < 0 ? -0.87 : end * (profile.chassisLength / 2 + 0.035), signal);
-      if (!bike) block(0.04, 0.075, 0.16, side * (profile.width / 2 + 0.02), 0.15, -profile.chassisLength / 2 + 0.75, signal);
+      const bike = profile.shape === 'motorcycle', compact = compactSideLights(profile);
+      const x = side * profile.width * (bike ? 0.29 : profile.shape === 'roadster' ? 0.36 : 0.42);
+      for (const end of [-1, 1]) {
+        const y = bike ? 0.31 : compact ? -0.1 : 0.19, z = bike && end < 0 ? -0.87 : end * (profile.chassisLength / 2 + 0.035);
+        if (compact) panel(0.22, 0.12, 0.055, x, y, z - end * 0.017, trim);
+        block(bike ? 0.08 : 0.18, 0.08, 0.05, x, y, z, signal);
+      }
+      if (!bike && !compact) block(0.04, 0.075, 0.16, side * (profile.width / 2 + 0.02), 0.15, -profile.chassisLength / 2 + 0.75, signal);
     }
     const tireWidth = profile.shape === 'motorcycle' ? 0.15 : profile.width > 2.3 ? 0.3 : 0.24;
     const tireShape = this.geometry(tireGeometry(profile.radius, tireWidth));
@@ -254,6 +259,7 @@ export class VehicleMesh {
     const coil = this.geometry(new TubeGeometry(new CatmullRomCurve3(Array.from({ length: 65 }, (_, i) => new Vector3(Math.cos(i * Math.PI / 4) * 0.065, i / 64, Math.sin(i * Math.PI / 4) * 0.065))), 64, 0.012, 4, false));
     const addWheels = (points: readonly WheelPoint[], parent: Group, output: WheelMesh[]) => { for (const point of points) {
       const pivot = new Group(), spin = new Group(); pivot.add(spin); parent.add(pivot);
+      pivot.name = point.steer ? 'wheel-steer' : 'wheel-fixed'; spin.name = 'wheel-spin';
       pivot.position.set(point.x, 0, -point.along);
       const tire = new Mesh(tireShape, rubber), rim = new Mesh(rimShape, metal), brake = new Mesh(brakeShape, metal);
       tire.rotation.z = rim.rotation.z = Math.PI / 2; tire.castShadow = true; spin.add(tire, rim);
@@ -377,10 +383,10 @@ export class VehicleMesh {
         reflector.receiveShadow = true; parent.add(reflector);
       }
       if (profile.shape !== 'motorcycle') for (const side of [-1, 1]) for (const z of sideLampPositions(profile, part)) {
-        const x = side * (profile.width / 2 + 0.027);
-        block(0.035, 0.22, 0.25, side * (profile.width / 2 + 0.005), 0.1, z, trim, parent);
-        block(0.04, 0.07, 0.18, x, 0.06, z, this.sideLamp, parent);
-        block(0.045, 0.07, 0.14, x, 0.145, z, this.signals[side < 0 ? 0 : 1], parent);
+        const compact = compactSideLights(profile, part), mount = sideMarkerX(profile, z), x = side * (mount + 0.025);
+        panel(0.045, compact ? 0.1 : 0.22, compact ? 0.2 : 0.25, side * (mount + 0.005), compact ? -0.1 : 0.1, z, trim, parent);
+        block(0.025, compact ? 0.052 : 0.07, compact ? 0.09 : 0.18, x, compact ? -0.1 : 0.06, z - (compact ? 0.043 : 0), this.sideLamp, parent);
+        block(0.028, compact ? 0.052 : 0.07, compact ? 0.065 : 0.14, x, compact ? -0.1 : 0.145, z + (compact ? 0.045 : 0), this.signals[side < 0 ? 0 : 1], parent);
       }
       const rear = trailer ? trailer.length - trailer.front : profile.chassisLength / 2;
       for (const side of profile.shape === 'motorcycle' ? [0] : [-1, 1]) {
@@ -630,9 +636,9 @@ export class VehicleMesh {
       }
       for (let z = cabFront + cabLength / 2; z < cabBack - 0.2; z += cabLength)
         block(0.07, roof - sill, 0.075, side * (w / 2 - 0.07), (roof + sill) / 2, z, trim);
-      const doorEnd = passenger ? cabCenter : cabBack - 0.08;
-      block(0.012, sill + 0.46, 0.014, side * (w / 2 + 0.015), (sill - 0.46) / 2, doorEnd, trim);
-      if (passenger) block(0.016, 0.018, Math.max(0.4, doorEnd - cabFront), side * (w / 2 + 0.018), -0.39, (doorEnd + cabFront) / 2, trim);
+      const doorEnd = doorBack + 0.035;
+      block(0.012, sill + 0.22, 0.014, side * (w / 2 + 0.003), (sill - 0.22) / 2, doorEnd, trim);
+      if (passenger) block(0.016, 0.018, Math.max(0.4, doorEnd - cabFront), side * (w / 2 - 0.002), -0.225, (doorEnd + cabFront) / 2, trim);
       if (!passenger) {
         for (const y of [-0.43, -0.6]) block(0.22, 0.055, 0.3, side * (w / 2 + 0.035), y, cabStepZ(p), metal);
       }

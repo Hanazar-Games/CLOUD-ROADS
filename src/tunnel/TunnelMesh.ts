@@ -11,6 +11,8 @@ import type { TunnelSpan } from './TunnelDetector';
 import { tunnelSignalSamples } from './TunnelLayout';
 import { createTerrainMaterial } from '../terrain/TerrainMaterial';
 import { reflectiveMaterial } from '../render/ReflectiveMaterial';
+import { NearbyDetails } from '../render/NearbyDetails';
+import { emergencyCabinetGeometry } from '../render/InfrastructureGeometry';
 
 type Point = [number, number, number];
 export interface TunnelLamp { x: number; y: number; z: number }
@@ -48,6 +50,7 @@ export class TunnelMesh {
   readonly equipment = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ roughness: 0.72 }), 100000);
   readonly fans = new InstancedMesh(fanGeometry(), new MeshStandardMaterial({ vertexColors: true, metalness: 0.6, roughness: 0.5, side: DoubleSide }), 2048);
   readonly lampPositions: TunnelLamp[] = [];
+  readonly cabinetDetails: NearbyDetails;
   private readonly profile;
   private readonly biomes;
   private version = -1;
@@ -59,6 +62,7 @@ export class TunnelMesh {
 
   constructor(scene: Scene, seed: string, options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.profile = roadProfile(options);
+    this.cabinetDetails = new NearbyDetails(scene, emergencyCabinetGeometry(), 'tunnel-emergency-cabinets', 32);
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.cover.material.side = DoubleSide;
     this.lining.material.onBeforeCompile = shader => {
@@ -70,8 +74,11 @@ export class TunnelMesh {
         float band = 1.0 - smoothstep(0.12, 0.15, abs(vTunnelUv.y - 0.95));
         float tiled = 1.0 - smoothstep(2.75, 3.0, vTunnelUv.y);
         float tileJoint = 1.0 - smoothstep(0.006, 0.006 + max(fwidth(vTunnelUv.y), 0.006), abs(mod(vTunnelUv.y + 0.2, 0.4) - 0.2));
+        float bond = mod(floor(vTunnelUv.y / 0.4), 2.0) * 0.4;
+        float verticalJoint = 1.0 - smoothstep(0.004, 0.004 + max(fwidth(vTunnelUv.x), 0.006), abs(mod(vTunnelUv.x + bond + 0.4, 0.8) - 0.4));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.58, 0.62, 0.59), tiled * 0.6);
-        diffuseColor.rgb *= 1.0 - tileJoint * tiled * 0.13;
+        diffuseColor.rgb *= 1.0 - max(tileJoint, verticalJoint) * tiled * 0.13;
+        diffuseColor.rgb *= 1.0 - 0.08 * (1.0 - smoothstep(0.25, 0.75, vTunnelUv.y));
         diffuseColor.rgb *= 1.0 - joint * 0.35;
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.48, 0.31, 0.075), band * 0.7);
       `);
@@ -94,6 +101,7 @@ export class TunnelMesh {
       this.spanKey = spanKey;
       this.anchorX = spans[0]?.start.position.x ?? 0;
       this.anchorZ = spans[0]?.start.position.z ?? 0;
+      this.cabinetDetails.clear(this.anchorX, this.anchorZ);
       const lining: number[] = [], cover: number[] = [], portals: number[] = [], ribs: number[] = [];
       const coverIndices: number[] = [], coverVertices = new Map<Point, number>();
       const coverQuad = (a: Point, b: Point, c: Point, d: Point) => {
@@ -116,6 +124,7 @@ export class TunnelMesh {
         ...this.profile.centers.flatMap(center => [center - half - 0.01, ...arch.map(([x]) => center + x), center + half + 0.01]),
         this.profile.outerHalfWidth + 4, 50, 80, 120, 160])].sort((a, b) => a - b);
       for (const span of spans) {
+        const uvStart = Math.floor(span.start.distance / 4800) * 4800;
         const rows = span.samples.filter((sample, i) => i === 0 || i === span.samples.length - 1
           || Math.floor(sample.distance / (Math.abs(sample.curvature) > 0.01 ? 4 : 8)) !== Math.floor(span.samples[i - 1].distance / (Math.abs(sample.curvature) > 0.01 ? 4 : 8)));
         const extents = new Map<RoadSample, number[]>();
@@ -174,7 +183,7 @@ export class TunnelMesh {
               const [ax, ay] = arch[j - 1], [bx, by] = arch[j];
               quad(lining, this.point(previous, center + ax, ay), this.point(previous, center + bx, by),
                 this.point(sample, center + ax, ay), this.point(sample, center + bx, by));
-              const a = previous.distance, b = sample.distance;
+              const a = previous.distance - uvStart, b = sample.distance - uvStart;
               uv.push(a, ay, a, by, b, ay, a, by, b, by, b, ay);
               const normal = (point: RoadSample, x: number, y: number): Point => {
                 let nx = x / (half * half), ny = Math.max(0, y - 4.2) / (3.4 * 3.4);
@@ -216,6 +225,7 @@ export class TunnelMesh {
           if (i > 0 && Math.floor(sample.distance / 96) !== Math.floor(rows[i - 1].distance / 96)) {
             for (const center of this.profile.centers) {
               this.box(sample, center + half - 0.22, 1.4, 0.35, 1.3, 0.65, 0xac3935);
+              this.cabinetDetails.addRoad(sample, center + half - 0.4, 1.4, -1);
               this.box(sample, center - half + 0.17, 2.2, 0.22, 0.4, 1.2, 0x46b78b);
               for (const offset of [-1.65, 1.65]) {
                 const position = this.point(sample, center + offset, 6.45);
@@ -300,8 +310,12 @@ export class TunnelMesh {
         mesh.geometry = geometry;
       }
       for (const mesh of [this.lights, this.reflectors, this.equipment, this.fans]) {
+        mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        if (mesh.instanceColor) {
+          mesh.instanceColor.clearUpdateRanges(); mesh.instanceColor.addUpdateRange(0, mesh.count * 3);
+          mesh.instanceColor.needsUpdate = true;
+        }
         if (mesh.count) mesh.computeBoundingSphere();
       }
     }
@@ -329,6 +343,7 @@ export class TunnelMesh {
   }
 
   dispose(): void {
+    this.cabinetDetails.dispose();
     for (const mesh of [this.lining, this.cover, this.portals, this.ribs, this.lights, this.reflectors, this.equipment, this.fans]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
     this.lights.dispose(); this.reflectors.dispose(); this.equipment.dispose(); this.fans.dispose();
   }

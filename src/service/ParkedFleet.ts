@@ -15,6 +15,9 @@ export class ParkedFleet {
   private readonly cars = new Map<string, VehiclePhysics>();
   private generated: ParkedEntry[] = [];
   private extras: readonly ParkedEntry[] = [];
+  runningVehicles(): { id: string; car: VehiclePhysics }[] {
+    return [...this.returned.values()].filter(({ car }) => car.ignition !== 'off').map(({ entry, car }) => ({ id: entry.id, car }));
+  }
   constructor(private readonly seed: string, private readonly gravity = 9.81) {}
   sync(sites: readonly ServiceArea[], extras: readonly ParkedEntry[] = this.extras): void {
     const signature = sites.map(s => `${s.sample.routeId}:${s.id}:${s.ground.pads[0]?.x}:${s.ground.pads[0]?.z}`).join('|');

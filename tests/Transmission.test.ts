@@ -2,15 +2,50 @@ import { expect, it } from 'vitest';
 import { Transmission } from '../src/vehicle/Transmission';
 import { vehicleProfiles } from '../src/vehicle/VehicleConfig';
 
-it('releases engine load and RPM progressively while retaining wheel coupling', () => {
+it('releases launch clutch slip progressively while retaining wheel coupling', () => {
   const box = new Transmission(vehicleProfiles.sedan); box.mode = 'manual';
-  for (let i = 0; i < 120; i++) box.update(1 / 120, 4, 1);
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 2, 1);
   const loaded = box.rpm;
-  box.update(1 / 120, 4, 0);
+  box.update(1 / 120, 2, 0);
   expect(box.rpm).toBeGreaterThan(loaded - 150);
-  for (let i = 0; i < 120; i++) box.update(1 / 120, 4, 0);
+  for (let i = 0; i < 120; i++) box.update(1 / 120, 2, 0);
   expect(box.rpm).toBeLessThan(loaded - 150);
-  expect(box.rpm).toBeGreaterThan(box.idle * 2);
+  expect(box.rpm).toBeGreaterThan(box.idle * 1.5);
+});
+
+it('locks cruise RPM to the wheels instead of adding throttle-dependent slip in a held gear', () => {
+  const box = new Transmission(vehicleProfiles.sedan); box.mode = 'manual'; box.gear = 4;
+  const speed = box.maxSpeed * 0.4;
+  for (let i = 0; i < 50; i++) box.update(0.1, speed, 1);
+  const loaded = box.rpm;
+  for (let i = 0; i < 50; i++) box.update(0.1, speed, 0);
+  expect(box.rpm).toBeCloseTo(loaded, 0); expect(box.fuelCut).toBe(true);
+  box.update(0.1, speed, 0.5); expect(box.fuelCut).toBe(false);
+});
+
+it('holds the gear through a brief lift, coasts up after sustained release, and retains the gear under braking', () => {
+  const coast = new Transmission(vehicleProfiles.sedan), braking = new Transmission(vehicleProfiles.sedan), speed = coast.maxSpeed * 0.27;
+  for (let i = 0; i < 80; i++) { coast.update(0.1, speed, 1); braking.update(0.1, speed, 1); }
+  const gear = coast.gear;
+  for (let i = 0; i < 20; i++) coast.update(0.01, speed, 0);
+  expect(coast.gear).toBe(gear);
+  for (let i = 0; i < 50; i++) { coast.update(0.1, speed, 0); braking.update(0.1, speed, -1); }
+  expect(coast.gear).toBeGreaterThan(gear); expect(braking.gear).toBe(gear);
+});
+
+it('makes engine inertia, shift strategy and engine braking independently tunable', () => {
+  const slow = new Transmission(vehicleProfiles.sedan), fast = new Transmission(vehicleProfiles.sedan);
+  slow.configure({ inertia: 2 }); fast.configure({ inertia: 0.5 });
+  slow.update(0.1, 0, 1); fast.update(0.1, 0, 1); expect(fast.rpm).toBeGreaterThan(slow.rpm + 100);
+  slow.configure({ shiftPoint: 1.15 }); fast.configure({ shiftPoint: 0.8 }); slow.reset(); fast.reset();
+  for (let i = 0; i < 80; i++) { slow.update(0.1, slow.maxSpeed * 0.14, 1); fast.update(0.1, fast.maxSpeed * 0.14, 1); }
+  expect(fast.gear).toBeGreaterThan(slow.gear);
+  const brake = new Transmission(vehicleProfiles.sedan); brake.mode = 'manual'; brake.gear = 3;
+  for (let i = 0; i < 40; i++) brake.update(0.1, 16, 0);
+  const baseline = brake.engineBrake; brake.configure({ engineBraking: 2 }); expect(brake.engineBrake).toBeCloseTo(baseline * 2);
+  brake.configure({ engineBraking: 0 }); expect(brake.engineBrake).toBe(0);
+  brake.configure({ inertia: NaN, shiftSpeed: 100, coastRpm: -1 });
+  expect(brake.tuning.inertia).toBe(1); expect(brake.tuning.shiftSpeed).toBe(1.5); expect(brake.tuning.coastRpm).toBe(0.3);
 });
 
 it('does not treat forward braking as accelerator load and responds to reverse throttle', () => {
@@ -40,8 +75,24 @@ it('automatically upshifts with hysteresis and reduces RPM after a shift', () =>
   expect(box.gear).toBe(2);
   expect(box.rpm).toBeLessThan(rpm);
   for (let i = 0; i < 30; i++) box.update(0.1, 8, 0);
-  expect(box.gear).toBe(2);
-  box.update(0, 40, 1); expect(box.gear).toBe(2);
+  expect(box.gear).toBeGreaterThan(2);
+  const coastGear = box.gear;
+  box.update(0, 40, 1); expect(box.gear).toBe(coastGear);
+});
+
+it.each(['sedan', 'truck8', 'supercar', 'motorcycle'] as const)('settles %s into a stable unloaded cruise, then returns to idle at rest', kind => {
+  const box = new Transmission(vehicleProfiles[kind]), speed = box.maxSpeed * 0.27;
+  for (let i = 0; i < 80; i++) box.update(0.1, speed, 1);
+  const loaded = box.rpm, gear = box.gear;
+  box.update(1 / 120, speed, 0); expect(box.rpm).toBeGreaterThan(loaded * 0.9);
+  for (let i = 0; i < 60; i++) box.update(0.1, speed, 0);
+  expect(box.rpm).toBeLessThan(loaded * 0.75); expect(box.gear).toBeGreaterThan(gear);
+  expect(box.rpm).toBeGreaterThan(box.idle);
+  const shifts = box.shifts;
+  for (let i = 0; i < 60; i++) box.update(0.1, speed, 0);
+  expect(box.shifts).toBe(shifts);
+  for (let i = 0; i < 60; i++) box.update(0.1, 0, 0);
+  expect(box.rpm).toBeCloseTo(box.idle); expect(box.gear).toBe(1);
 });
 
 it('supports manual gears, protects against over-revving and interrupts torque', () => {

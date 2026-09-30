@@ -1,13 +1,16 @@
 import type { RoadSample } from './RoadSegment';
 import type { WorldOptions } from '../world/WorldOptions';
 import { hashSeed } from '../world/WorldSeed';
+import type { ServiceArea } from '../service/ServicePlanner';
+
+type Access = Pick<ServiceArea, 'start' | 'end' | 'mergeEnd' | 'accessSide' | 'accessWindows'>;
 
 interface ProtectionContext {
   seed: string;
   options: Readonly<WorldOptions>;
   bridges: readonly { start: RoadSample; end: RoadSample }[];
   tunnels: readonly { start: RoadSample; end: RoadSample }[];
-  services: readonly { start: number; end: number; mergeEnd?: number; accessSide?: number }[];
+  services: readonly Access[];
 }
 
 export function hasBridgeScreen(seed: string, sample: RoadSample, options: Readonly<WorldOptions>): boolean {
@@ -25,9 +28,10 @@ export function hasRoadBarrier(context: ProtectionContext, sample: RoadSample, s
   return hashSeed(`${context.seed}:guardrail:${Math.floor(distance / 160)}:${side}`) % 4 !== 0;
 }
 
-export function isServiceAccess(options: Readonly<WorldOptions>, services: readonly { start: number; end: number; mergeEnd?: number; accessSide?: number }[], distance: number, side: number): boolean {
-  return services.some(site => site.accessSide === side && distance >= site.start && distance <= site.end)
-    || (options.roadType === 'highway' && !options.oneWay || side > 0) && services.some(site => site.accessSide === undefined && (
+export function isServiceAccess(options: Readonly<WorldOptions>, services: readonly Access[], distance: number, side: number): boolean {
+  return services.some(site => site.accessWindows?.some(window => window.side === side && distance >= window.start && distance <= window.end))
+    || services.some(site => !site.accessWindows && site.accessSide === side && distance >= site.start && distance <= site.end)
+    || (options.roadType === 'highway' && !options.oneWay || side > 0) && services.some(site => !site.accessWindows && site.accessSide === undefined && (
     site.mergeEnd ? Math.abs(distance - (site.start + site.end) / 2) >= 155 && Math.abs(distance - (site.start + site.end) / 2) <= site.mergeEnd
       : distance >= site.start + 15 && distance <= site.start + 90 || distance >= site.end - 90 && distance <= site.end - 15));
 }

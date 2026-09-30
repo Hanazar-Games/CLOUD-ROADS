@@ -18,6 +18,7 @@ import { vehicleProfiles } from '../vehicle/VehicleConfig';
 import { WalkingSystem } from '../walking/WalkingSystem';
 import { graphicsPresets, renderPixelRatio } from './GraphicsSettings';
 import { AudioSystem, audioChannels, type MusicStyle } from '../audio/AudioSystem';
+import { engineSound } from '../audio/VehicleEngine';
 import { SettingsDialog } from '../ui/SettingsDialog';
 import { CabinDialogs } from '../ui/CabinDialogs';
 import { radioStations } from '../audio/RadioStations';
@@ -26,7 +27,7 @@ import { WorldSettings } from '../settings/WorldSettings';
 import { PresetPanel } from '../settings/PresetPanel';
 import { KeyBindingPanel } from '../settings/KeyBindingPanel';
 import { GaragePanel } from '../garage/GaragePanel';
-import { trafficScenarios } from '../traffic/TrafficSystem';
+import { trafficScenarios, trafficTuning, type TrafficTuning } from '../traffic/TrafficSystem';
 import { InteriorVolume } from '../render/InteriorVolume';
 import type { CabinLayout } from '../vehicle/CabinLayout';
 import { ShortcutDock } from '../ui/ShortcutDock';
@@ -99,15 +100,37 @@ export class Game {
     this.resize();
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
     element('audio-toggle').addEventListener('click', () => { this.audio.toggle(); this.syncAudioUI(); }, { signal: this.events.signal });
+    const audioGroups = [
+      ['mix', '整体音量', ['master', 'sfx', 'music']],
+      ['horns', '喇叭与附近车辆', ['horn', 'npc-horn', 'nearby-engine']],
+      ['powertrain', '动力与路面', ['engine', 'exhaust', 'shift', 'turbo', 'tire', 'collision']],
+      ['environment', '环境与设备', ['nature', 'weather', 'cabin', 'effects']],
+      ['music', '音乐层次', ['music-bass', 'music-melody']],
+    ] as const;
+    for (const [id, title] of audioGroups) {
+      const group = document.createElement('fieldset'); group.id = `audio-group-${id}`; group.className = 'audio-group';
+      const legend = document.createElement('legend'); legend.textContent = title; group.append(legend); element('audio-channels').append(group);
+    }
     for (const [name, field, label] of audioChannels) {
       const id = `${name}-volume`, row = document.createElement('div'), initial = Math.round(this.audio[field] * 100);
-      row.innerHTML = `<label class="speed-label" for="${id}">${label}<output id="${id}-value">${initial}%</output></label><input id="${id}" type="range" min="0" max="${['master', 'sfx', 'music'].includes(name) ? 100 : 150}" step="5" value="${initial}" />`;
-      element('audio-channels').append(row);
+      row.innerHTML = `<label class="speed-label" for="${id}">${label}<output id="${id}-value">${initial}%</output></label><input id="${id}" type="range" min="0" max="${['master', 'sfx', 'music'].includes(name) ? 100 : ['horn', 'npc-horn'].includes(name) ? 300 : 150}" step="5" value="${initial}" />`;
+      const group = audioGroups.find(([, , names]) => (names as readonly string[]).includes(name))!;
+      element(`audio-group-${group[0]}`).append(row);
       element(id).addEventListener('input', () => {
       const value = Number(element<HTMLInputElement>(id).value);
       this.audio[field] = value / 100; element(`${id}-value`).textContent = `${value}%`;
       }, { signal: this.events.signal });
     }
+    for (const [id, field] of [['horn-focus', 'hornFocus'], ['cabin-isolation', 'cabinIsolation']] as const) element(id).addEventListener('input', () => {
+      const value = Number(element<HTMLInputElement>(id).value); this.audio[field] = value / 100;
+      element(`${id}-value`).textContent = `${value}%`;
+    }, { signal: this.events.signal });
+    element('audio-mix-reset').addEventListener('click', () => {
+      for (const id of [...audioChannels.map(([name]) => `${name}-volume`), 'horn-focus', 'cabin-isolation', 'music-ducking', 'music-pace']) {
+        const input = element<HTMLInputElement>(id); input.value = input.defaultValue; input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      element('audio-preview-status').textContent = '已恢复默认混音，可试听或继续旅程。';
+    }, { signal: this.events.signal });
     element('music-style').addEventListener('change', () => { this.audio.setStyle(element<HTMLSelectElement>('music-style').value as MusicStyle); }, { signal: this.events.signal });
     element('music-ducking').addEventListener('input', () => {
       this.audio.musicDucking = Number(element<HTMLInputElement>('music-ducking').value) / 100;
@@ -123,7 +146,7 @@ export class Game {
     for (const kind of ['engine', 'shift', 'horn'] as const) element(`preview-${kind}`).addEventListener('click', () => {
       this.audioPreviewPending = this.audio.preview(kind);
       element('audio-preview-status').textContent = this.audioPreviewPending ? '正在试听 · 使用当前混音参数'
-        : `请开启声音、解除暂停，并调高总音量、全部音效及「${kind === 'horn' ? '喇叭、提示与脚步' : '发动机与换挡'}」音量。`;
+        : `请开启声音、解除暂停，并调高总音量、全部音效及「${kind === 'horn' ? '本车喇叭' : kind === 'shift' ? '发动机与换挡机械声' : '发动机'}」音量。`;
     }, { signal: this.events.signal });
     window.addEventListener('blur', () => { this.windowFocused = false; this.audio.setActive(false); }, { signal: this.events.signal });
     window.addEventListener('focus', () => { this.windowFocused = true; }, { signal: this.events.signal });
@@ -158,6 +181,18 @@ export class Game {
     }, { signal: this.events.signal });
     element('traffic-scenario').addEventListener('change', () => {
       this.world.traffic.scenario = element<HTMLSelectElement>('traffic-scenario').value as keyof typeof trafficScenarios;
+    }, { signal: this.events.signal });
+    for (const key of Object.keys(trafficTuning) as (keyof TrafficTuning)[]) element(`traffic-${key}`).addEventListener('input', () => {
+      this.world.traffic.configure({ [key]: Number(element<HTMLInputElement>(`traffic-${key}`).value) });
+      for (const name of Object.keys(trafficTuning) as (keyof TrafficTuning)[]) {
+        const value = String(this.world.traffic.tuning[name]);
+        element<HTMLInputElement>(`traffic-${name}`).value = value; element(`traffic-${name}-value`).textContent = value;
+      }
+    }, { signal: this.events.signal });
+    element('traffic-behavior-reset').addEventListener('click', () => {
+      for (const [key, [value]] of Object.entries(trafficTuning)) {
+        const input = element<HTMLInputElement>(`traffic-${key}`); input.value = String(value); input.dispatchEvent(new Event('input'));
+      }
     }, { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
@@ -197,10 +232,12 @@ export class Game {
     element('weather-kind').addEventListener('change', () => {
       const kind = element('weather-kind').querySelector<HTMLInputElement>('input:checked')!.value as WeatherKind;
       if (Object.hasOwn(weatherNames, kind)) this.weather.setKind(kind, this.paused || this.settings.open || this.releaseNotes.open || !this.input.enabled);
+      this.driving.systems.updateFog(this.weather.fogLightsNeeded);
     }, { signal: this.events.signal });
     element('fog-density').addEventListener('input', (event) => {
       const value = Number((event.target as HTMLInputElement).value);
       this.weather.setFogDensity(value / 100, this.paused || this.settings.open || this.releaseNotes.open || !this.input.enabled);
+      this.driving.systems.updateFog(this.weather.fogLightsNeeded);
       element('fog-density-value').textContent = `${value}%`;
     }, { signal: this.events.signal });
     element('fog-visibility').addEventListener('input', (event) => {
@@ -389,6 +426,7 @@ export class Game {
       this.driving.describeTuning(); this.applyGraphics(); this.customGraphics(); this.syncAudioUI();
     });
     if (this.presets.restoreStartup(new URLSearchParams(location.search).has('seed') ? this.initialSeed : undefined)) this.settings.close();
+    this.applyPerformance();
     this.loop.start();
   }
 
@@ -409,6 +447,7 @@ export class Game {
       this.world.traffic.density = Number(element<HTMLInputElement>('traffic-density').value);
       this.world.traffic.limit = Number(element<HTMLInputElement>('traffic-limit').value);
       this.world.traffic.scenario = element<HTMLSelectElement>('traffic-scenario').value as keyof typeof trafficScenarios;
+      this.world.traffic.configure(Object.fromEntries(Object.keys(trafficTuning).map(key => [key, Number(element<HTMLInputElement>(`traffic-${key}`).value)])));
       this.applyPerformance();
       this.garagePanel.apply();
       this.world.chunks.setViewRadius(this.viewRadius);
@@ -573,6 +612,8 @@ export class Game {
 
   private applyPerformance(): void {
     const value = (id: string) => Number(element<HTMLSelectElement>(id).value);
+    this.world.pavementTextures.configure(value('map-detail'), this.renderer.capabilities.getMaxAnisotropy());
+    this.world.detailLevel = value('map-detail');
     this.world.chunks.vegetation.configure({ distance: value('vegetation-lod'), density: value('distant-trees'), shadows: value('vegetation-shadows'), budget: value('vegetation-budget') });
     this.world.trafficVehicles.detailDistance = this.world.parkedVehicles.detailDistance = value('vehicle-detail-distance');
   }
@@ -625,7 +666,7 @@ export class Game {
     this.driving.systems.radioPlaying = this.audio.musicPlaying;
     this.driving.sync(Math.max(this.sky.sun.night, this.world.shelter * 0.8, this.weather.profile.rain * 0.35,
       Math.max(0, 1 - this.weather.profile.far / 800) * 0.6), this.weather.liquidRain,
-      frozen || this.access && (!document.hasFocus() || document.activeElement !== this.canvas || !this.world.roadReady) ? 0 : dt);
+      frozen || this.access && (!document.hasFocus() || document.activeElement !== this.canvas || !this.world.roadReady) ? 0 : dt, this.weather.fogLightsNeeded);
     this.walking.sync();
     if (this.access && !frozen && this.world.roadReady && !this.world.searching && document.hasFocus() && document.activeElement === this.canvas) {
       const sequence = this.access.sequence, step = sequence.step();
@@ -656,8 +697,17 @@ export class Game {
       .map(e => this.world.parkedVehicles.fleet.vehicle(e)) : [];
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
-    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter, this.weather.profile.far < 500 ? 1 : 0), anchor);
-    this.audio.update(dt, { powertrain: this.driving.car.powertrain, regeneration: this.driving.car.regenerating,
+    this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter, this.weather.profile.far < 500 ? 1 : 0), anchor, this.weather.fogLightsNeeded);
+    const cameraRight = this.camera.matrixWorld.elements;
+    const right = { x: cameraRight[0], y: cameraRight[1], z: cameraRight[2] };
+    const listener = { x: this.camera.position.x + this.world.origin.x, y: this.camera.position.y, z: this.camera.position.z + this.world.origin.z };
+    const trafficHorns = moving ? this.world.traffic.horns(listener, right) : [];
+    const runningParked = this.world.parkedVehicles.fleet.runningVehicles();
+    this.world.parkedVehicles.fogLamps.update(runningParked.filter(({ car }) => Math.hypot(car.x - listener.x, car.z - listener.z) < 1600).map(({ car }) => car), this.world.origin, this.weather.fogLightsNeeded);
+    const nearbyEngines = moving ? [...this.world.traffic.entries, ...runningParked,
+      ...this.driving.parked && !this.driving.active ? [{ id: 'player:parked', car: this.driving.car }] : []]
+      .flatMap(({ id, car }) => { const sound = engineSound(id, car, listener, right); return sound ? [sound] : []; }) : [];
+    this.audio.update(dt, { powertrain: this.driving.car.powertrain, regeneration: this.driving.car.regenerating, fuelCut: this.driving.car.transmission.fuelCut,
       atmosphere: this.world.options.terrain === 'moon' ? 0 : this.world.options.terrain === 'mars' ? 0.15 : 1, driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady ? this.driving.car.transmission.load : 0,
       shifting: this.driving.car.transmission.shifting, impact: this.driving.car.impact, scrape: this.driving.car.scrape,
@@ -665,10 +715,11 @@ export class Game {
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
       rpm: this.driving.car.engineRpm, shifts: this.driving.car.transmission.shifts, ignition: this.driving.car.ignition,
-      traffic: moving ? this.world.traffic.entries.reduce((level, e) => Math.min(1, level + Math.max(0, 1 - Math.hypot(e.car.x - anchor.x, e.car.y - anchor.y, e.car.z - anchor.z) / 70) ** 2 * (0.15 + e.car.speed / 30)), 0) : 0,
+      nearbyEngines,
       exposure: this.driving.cabinExposure, wet: this.weather.wetness, night: this.sky.sun.night,
       nature: !['moon', 'mars', 'desert', 'dunes', 'badlands', 'volcanic'].includes(this.world.options.terrain) && this.world.season.kind !== 'winter',
-      horn: this.driving.active && moving && this.input.down('KeyV'), fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
+      horn: this.driving.active && moving && this.input.down('KeyV'), vehicle: this.driving.car.kind, trafficHorns,
+      fan: this.driving.systems.hasWindows ? this.driving.systems.fan : 0,
       washer: this.driving.systems.washerSpray, motor: this.driving.systems.equipmentMotor || this.driving.operations.moving,
       supercar: this.driving.car.kind === 'supercar', braking: this.driving.car.braking, operations: this.driving.operations.events,
       tireSlip: this.driving.car.tireSlip,
@@ -681,6 +732,7 @@ export class Game {
     this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
     this.world.serviceMesh.windows.material.emissiveIntensity = this.sky.sun.night * 0.35;
     this.world.roadMesh.mesh.material.roughness = 0.95 - this.weather.wetness * 0.58;
+    this.world.serviceMesh.pavement.material.roughness = this.world.interchangeMesh.pavement.material.roughness = this.world.roadMesh.mesh.material.roughness;
     this.renderer.info.reset();
     this.clouds.render(this.renderer, this.scene, this.camera);
     this.weather.render(this.renderer, this.camera, this.clouds.target.depthTexture!);
@@ -713,7 +765,9 @@ export class Game {
         : (cargo ? c.equipment.locked : locked) ? `车辆已锁 · ${this.input.bindings.label('VehicleLock')} 解锁`
           : cargo ? `${this.input.bindings.label('CabinWalk')} · 从尾门进入${cargo.label}`
           : `${this.input.bindings.label('KeyF')} · ${nearby ? `开门驾驶${vehicleProfiles[nearby.kind].name}` : '开门回到车辆'}`;
-      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? trafficScenarios[this.world.traffic.scenario] : '交通已关闭'}`;
+      const speeds = this.world.traffic.entries.map(e => e.car.speed * 3.6);
+      element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? trafficScenarios[this.world.traffic.scenario] : '交通已关闭'}`
+        + (speeds.length ? ` · 当前 ${Math.round(Math.min(...speeds))}–${Math.round(Math.max(...speeds))} km/h` : '');
       this.garagePanel.update();
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
@@ -798,6 +852,10 @@ export class Game {
         'Garage vehicles': this.world.parkedVehicles.fleet.entries.filter(e => e.id.startsWith('garage:main:')).length,
         'Service garages': this.world.garages.length - 1,
         'NPC motion': this.world.traffic.entries.map(e => `${e.id}:${e.distance.toFixed(1)}`).join(', '),
+        'NPC horns nearby': trafficHorns.length,
+        'Nearby engine voices': Math.min(6, nearbyEngines.length),
+        'NPC cruise range': `${this.world.traffic.tuning.minSpeed}–${this.world.traffic.tuning.maxSpeed} km/h`,
+        'NPC lane changes': this.world.traffic.entries.filter(e => e.change).length,
         'Transmission': `${this.driving.car.transmission.mode} / ${this.driving.car.transmission.gear}`,
         'Window opening': this.driving.systems.windowOpen.toFixed(2),
         'Roof opening': this.driving.systems.roofOpen.toFixed(2),
@@ -817,6 +875,8 @@ export class Game {
         'Vehicle speed limit': `${(this.driving.car.maxSpeed * 3.6).toFixed(1)} km/h`,
         'Steering assist': this.driving.car.steeringAssist ? `${Math.round(this.driving.car.steeringAssistStrength * 100)}%` : 'off',
         'Drift angle': (this.driving.car.slipAngle * 180 / Math.PI).toFixed(1),
+        'Drift enabled': this.driving.car.driftEnabled ? 'on' : 'off',
+        'Turning radius': this.driving.car.turningRadius === undefined ? 'factory' : String(this.driving.car.turningRadius),
         'Lateral speed': this.driving.car.lateralSpeed.toFixed(2),
         'Tire slip': this.driving.car.tireSlip.toFixed(2),
         'Handbrake pressure': this.driving.car.handbrake.toFixed(2),

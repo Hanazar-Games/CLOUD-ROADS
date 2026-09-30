@@ -17,7 +17,7 @@
       </header>
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
-        <p id="settings-help">调整你的旅程。设置期间暂停行驶；音量可以即时试听。</p>
+        <p id="settings-help">设置期间暂停行驶，声音可即时试听。滑动调节或输入精确数值后按 Enter；Esc 取消数值编辑。需要下次保留时，到「我的预设」保存。</p>
         <div class="settings-search"><label for="settings-search">搜索设置</label><div class="settings-search-row"><input id="settings-search" type="search" placeholder="例如：转速、雨刮、音量、月球" autocomplete="off" aria-controls="settings-search-results" /><button id="settings-search-clear" type="button" disabled>清除</button></div><span id="settings-search-status" role="status"></span><div id="settings-search-results" hidden></div></div>
         <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="autopilot" aria-controls="settings-autopilot">自动驾驶</button><button type="button" data-settings-target="bindings" aria-controls="settings-bindings">快捷键</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="traffic" aria-controls="settings-traffic">NPC 交通</button><button type="button" data-settings-target="garage" aria-controls="settings-garage">地下停车场</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
@@ -39,10 +39,27 @@
           <p id="powertrain-status" class="panel-help" role="status"></p>
           <label for="transmission-mode">变速箱</label>
           <select id="transmission-mode"><option value="auto">自动换挡</option><option value="manual">手动换挡 · [ 降挡 / ] 升挡</option></select>
-          <label class="speed-label" for="engine-response">燃油转速响应 <output id="engine-response-value">100%</output></label>
+          <label class="speed-label" for="engine-response">燃油油门响应 <output id="engine-response-value">100%</output></label>
           <input id="engine-response" type="range" min="50" max="150" step="5" value="100" aria-describedby="engine-response-help" />
-          <p id="engine-response-help" class="panel-help">越高，转速跟随油门越快；松油门卸载回落，换挡平滑衔接。带挡滑行仍由车轮拖动发动机，低速才回到怠速。EV 不使用此设置。</p>
+          <p id="engine-response-help" class="panel-help">越高，油门负载建立和卸载越快；下方的转速惯性决定转速衔接速度。带挡滑行仍由车轮拖动发动机，低速才回怠速。EV 不使用此设置。</p>
           <p class="panel-help">普通乘用车与摩托车 6 挡，超跑与重型车 8 挡。手动模式由你选择前进挡；S 仍负责制动和低速倒车，危险降挡会被拒绝。</p>
+          <details class="world-options" id="engine-tuning"><summary>发动机与换挡调校</summary>
+            <p class="panel-help">带挡行驶时，转速由车速和齿比决定；低速离合衔接产生少量转速差。短暂收油保持挡位，持续收油再升挡降低巡航转速；制动时保留挡位。参数随换车保留，EV 不使用这些参数。</p>
+            <label class="speed-label" for="engine-inertia">转速惯性 <output id="engine-inertia-value">100%</output></label>
+            <input id="engine-inertia" type="range" min="50" max="200" step="5" value="100" />
+            <p class="panel-help">越高，转速升降越沉稳；越低，发动机响应越轻快。</p>
+            <label class="speed-label" for="engine-shiftSpeed">换挡衔接速度 <output id="engine-shiftSpeed-value">100%</output></label>
+            <input id="engine-shiftSpeed" type="range" min="50" max="150" step="5" value="100" />
+            <label class="speed-label" for="engine-shiftPoint">自动换挡时机 · 经济 → 运动 <output id="engine-shiftPoint-value">100%</output></label>
+            <input id="engine-shiftPoint" type="range" min="80" max="115" step="5" value="100" />
+            <p class="panel-help">越高越晚升挡；深踩油门和爬坡时主动延后升挡，低转速时降挡。</p>
+            <label class="speed-label" for="engine-coastRpm">自动挡滑行转速 · 红线比例 <output id="engine-coastRpm-value">38%</output></label>
+            <input id="engine-coastRpm" type="range" min="30" max="55" step="1" value="38" />
+            <label class="speed-label" for="engine-engineBraking">发动机制动力 <output id="engine-engineBraking-value">100%</output></label>
+            <input id="engine-engineBraking" type="range" min="0" max="200" step="5" value="100" />
+            <p class="panel-help">松油门时的带挡减速力度，0% 关闭；轮胎与空气阻力仍然存在。</p>
+            <button id="engine-tuning-reset" type="button">恢复默认发动机调校</button>
+          </details>
           <details class="world-options">
             <summary>动力与外观</summary>
             <label class="speed-label" for="vehicle-max-speed">最高速度 <output id="vehicle-max-speed-value">车型默认</output></label>
@@ -54,6 +71,12 @@
             <input id="vehicle-brake" type="range" min="50" max="150" step="5" value="100" aria-describedby="vehicle-tuning-help" />
             <label class="speed-label" for="vehicle-steering">低速转向幅度 <output id="vehicle-steering-value">100%</output></label>
             <input id="vehicle-steering" type="range" min="60" max="140" step="5" value="100" aria-describedby="vehicle-tuning-help" />
+            <label for="custom-turning-radius"><input id="custom-turning-radius" type="checkbox" /> 自定义车辆转弯半径</label>
+            <label class="speed-label" for="turning-radius">满舵转弯半径 <output id="turning-radius-value">车型默认</output></label>
+            <input id="turning-radius" type="range" min="3" max="100" step="0.5" value="12" disabled aria-describedby="turning-radius-help" />
+            <p id="turning-radius-help" class="panel-help">3–100 m，替代低速转向幅度，数值越大转弯越缓。超长底盘受最大转角限制，读数显示实际可用半径。高速辅助仍会放大半径；关闭漂移时也会按抓地力限制过快转弯。</p>
+            <label class="speed-label" for="steering-response">转向响应速度 <output id="steering-response-value">100%</output></label>
+            <input id="steering-response" type="range" min="25" max="200" step="5" value="100" />
             <label for="steering-assist"><input id="steering-assist" type="checkbox" checked /> 随速度增大转弯半径</label>
             <label class="speed-label" for="steering-assist-strength">高速转向辅助强度 <output id="steering-assist-strength-value">100%</output></label>
             <input id="steering-assist-strength" type="range" min="25" max="200" step="5" value="100" aria-describedby="vehicle-tuning-help" />
@@ -64,6 +87,8 @@
           </details>
           <details class="world-options">
             <summary>漂移与抓地力</summary>
+            <label for="drift-enabled"><input id="drift-enabled" type="checkbox" checked /> 允许漂移</label>
+            <p class="panel-help">关闭后立即消除侧滑，手刹仅减速与驻车，雨雪和低抓地力也不会甩尾。湿滑地面仍延长刹车距离并限制过弯速度，设置随换车保留。</p>
             <label class="speed-label" for="road-grip">路面抓地力 <output id="road-grip-value">100%</output></label>
             <input id="road-grip" type="range" min="25" max="150" step="5" value="100" aria-describedby="drift-help" />
             <label class="speed-label" for="handbrake-strength">手刹强度 <output id="handbrake-strength-value">100%</output></label>
@@ -112,6 +137,7 @@
 <div class="world-options">          <label for="vehicle-lights">车灯 · L 切换</label>
           <select id="vehicle-lights" aria-describedby="vehicle-lights-help"></select>
           <label><input id="vehicle-fog-lights" type="checkbox" /> 前后雾灯 · {FogLights}</label>
+          <p class="panel-help">进入浓雾或大雾时自动开启，也可手动切换；驶出雾区后恢复自动状态。NPC 与未熄火的停放车辆同步开启雾灯。</p>
           <p class="panel-help">低位宽幅暖色前雾灯、红色后雾灯。大雾建议近光配雾灯，远光不会穿透浓雾。长车侧灯随车灯亮起，侧面转向灯同步闪烁。</p>
           <label class="speed-label" for="light-power">车灯亮度 <output id="light-power-value">100%</output></label>
           <input id="light-power" type="range" min="25" max="200" step="5" value="100" />
@@ -156,9 +182,32 @@
           <p class="panel-help">拥堵在附近主路逐步形成，密度和数量上限仍由上方控制。选择正常通行可解除排队；暂停时车流冻结。</p>
           <p class="panel-help">目标数量 = 上限 × 密度；0% 关闭交通，默认上限 24 辆，最多 120 辆。按安全车距逐步生成，窄路上实际数量可能低于目标。高数量增加 CPU 负载。NPC 停稳后靠近车门按 F 可接管。</p>
           <p id="traffic-status" class="panel-help" aria-live="polite">正在等待道路</p>
+          <details class="world-options"><summary>驾驶行为与礼让</summary>
+            <label class="slider-label" for="traffic-minSpeed">最低巡航速度 · km/h <output id="traffic-minSpeed-value">30</output></label>
+            <input id="traffic-minSpeed" type="range" min="10" max="200" step="1" value="30" />
+            <label class="slider-label" for="traffic-maxSpeed">最高巡航速度 · km/h <output id="traffic-maxSpeed-value">110</output></label>
+            <input id="traffic-maxSpeed" type="range" min="10" max="200" step="1" value="110" />
+            <p class="panel-help">每位司机在范围内选择不同的巡航速度；上下限相同即统一目标速度，受各车型极速限制。弯道、跟车和拥堵仍会减速。同向多车道路段可安全向左超车，超车后择机回右侧。</p>
+            <label class="slider-label" for="traffic-headway">跟车时间 · 秒 <output id="traffic-headway-value">1.8</output></label>
+            <input id="traffic-headway" type="range" min="0.8" max="4" step="0.1" value="1.8" />
+            <label class="slider-label" for="traffic-gap">停车间距 · m <output id="traffic-gap-value">3</output></label>
+            <input id="traffic-gap" type="range" min="1" max="12" step="0.5" value="3" />
+            <label class="slider-label" for="traffic-acceleration">起步加速度 · m/s² <output id="traffic-acceleration-value">1.5</output></label>
+            <input id="traffic-acceleration" type="range" min="0.5" max="3" step="0.1" value="1.5" />
+            <label class="slider-label" for="traffic-braking">最大减速度 · m/s² <output id="traffic-braking-value">5</output></label>
+            <input id="traffic-braking" type="range" min="1" max="7" step="0.5" value="5" />
+            <label class="slider-label" for="traffic-laneChanges">变道频率倍率 · 0 关闭 <output id="traffic-laneChanges-value">1</output></label>
+            <input id="traffic-laneChanges" type="range" min="0" max="2" step="0.1" value="1" />
+            <label class="slider-label" for="traffic-hornDelay">拥堵鸣笛等待 · 秒 <output id="traffic-hornDelay-value">2.5</output></label>
+            <input id="traffic-hornDelay" type="range" min="1" max="20" step="0.5" value="2.5" />
+            <label class="slider-label" for="traffic-hornCooldown">鸣笛最短间隔 · 秒 <output id="traffic-hornCooldown-value">7</output></label>
+            <input id="traffic-hornCooldown" type="range" min="3" max="30" step="1" value="7" />
+            <p class="panel-help">即时作用于附近车流。弯道、行人、前车和制动距离仍优先限制速度；关闭变道后已开始的变道会安全完成。不同司机保留少量鸣笛耐心差异。</p>
+            <button id="traffic-behavior-reset" type="button">恢复默认驾驶行为</button>
+          </details>
         </section>
 <section class="settings-category" id="settings-garage" aria-labelledby="heading-garage"><h3 id="heading-garage">地下停车场</h3>
-          <p class="panel-help">每个世界保留独立 B1–B5 车库；部分服务区另有接通地面停车区的 B1–B3 车库。附近服务区加载后可在下方选择，长方形楼层由直线折返双向坡道连接，坡度最高约 11%。独立车库有主路匝道入口。按车位尺寸分配小车、客车与半挂；所有停放车辆均可按 F 开门上车、{Ignition} 点火驾驶。</p>
+          <p class="panel-help">独立 B1–B5 车库由双层互通连接主路：四条方向匝道、上层横向连桥与两侧进出入口，可从主路两个方向进出。系统检查坡度和净空，入口附近的隧道会留出露天接驳段。部分服务区另有 B1–B3 车库；地下楼层以直线折返双向坡道连接，坡度最高约 11%。按车位尺寸停放小车、客车与半挂，按 F 开门上车、{Ignition} 点火驾驶。</p>
           <label for="garage-loading">楼层加载方式</label><select id="garage-loading"><option value="floor">逐层加载 · 预加载相邻层</option><option value="all">全部楼层加载</option></select>
           <p class="panel-help">逐层模式减少远处楼层细节和车辆的渲染；基础楼板与外墙持续保留。全部模式加载附近车库的所有楼层细节及停放车辆，占用更多内存。</p>
           <label class="slider-label" for="garage-light">车库照明亮度 <output id="garage-light-value">100%</output></label>
@@ -203,7 +252,7 @@
             <label for="road-one-way"><input id="road-one-way" type="checkbox" /> 单向通行 · NPC 只沿同一方向行驶</label>
             <label id="road-lanes-label" for="road-lanes">总车道数</label>
             <select id="road-lanes"><option value="1">1 车道</option><option value="2" selected>2 车道</option><option value="3">3 车道</option><option value="4">4 车道</option></select>
-            <p class="panel-help">山路与大道最多 4 条总车道；双向时各占一半。高速每向 1–3 条。增加车道时自动补足最小路宽；同向多车道允许 NPC 安全变道。</p>
+            <p class="panel-help">山路与大道最多 4 条总车道；双向时各占一半。高速每向 1–3 条。增加车道时自动补足最小路宽；NPC 会提前打灯绕过慢车，有安全空隙时低速换道，超车后择机靠右。持续受阻会间歇鸣笛，喇叭音量可在声音设置中单独调整。</p>
             <label class="speed-label" for="highway-radius">高速主线最小转弯半径 <output id="highway-radius-value">200 m</output></label>
             <input id="highway-radius" type="range" min="50" max="2000" step="10" value="200" disabled aria-describedby="highway-radius-help" />
             <p id="highway-radius-help" class="panel-help">仅高速生效，50–2000 米；越大弯道越舒展，实际半径可以更大。五档蜿蜒均受约束，全直道保持不转弯。匝道独立设计；点击应用后重新生成。</p>
@@ -302,9 +351,9 @@
           <p id="render-scale-help" class="panel-help">200% 为宽高各两倍，像素量为 100% 的四倍；文字保持清晰。超出显卡尺寸限制时自动缩减，实际分辨率显示在下方。</p>
           <label for="frame-limit">帧率上限</label>
           <select id="frame-limit"><option value="30">30 FPS · 节能</option><option value="60" selected>60 FPS</option><option value="90">90 FPS</option><option value="120">120 FPS</option><option value="144">144 FPS</option><option value="165">165 FPS</option><option value="240">240 FPS</option><option value="0">不限帧率 · 跟随屏幕刷新率</option></select>
-          <label for="map-detail">近景植被细节</label>
-          <select id="map-detail" aria-describedby="map-detail-help"><option value="0">轻量 · 身边花草</option><option value="1" selected>标准 · 近景树冠与花草</option><option value="2">丰富 · 扩大精细植被范围</option></select>
-          <p id="map-detail-help" class="panel-help">即时调整精细树冠、草叶和野花的显示范围。植被随地貌与季节变化；远景树木继续保留。</p>
+          <label for="map-detail">道路与近景细节</label>
+          <select id="map-detail" aria-describedby="map-detail-help"><option value="0">轻量 · 简化路面与花草</option><option value="1" selected>标准 · 高清路面与近景植被</option><option value="2">丰富 · 精细路面与更远植被</option></select>
+          <p id="map-detail-help" class="panel-help">标准与丰富模式使用 2K 路面与微凹凸，并分别显示 80 / 160 米内的伸缩缝、格栅、消防柜和服务区细节。轻量模式保留主体，使用小纹理并关闭微凹凸及这些小部件；切换即时生效。</p>
           <label for="vegetation-lod">植被精度距离</label><select id="vegetation-lod"><option value="0.5">50% · 更早使用简模</option><option value="0.75">75%</option><option value="1" selected>100%</option><option value="1.5">150%</option></select>
           <label for="distant-trees">远景树木保留量</label><select id="distant-trees"><option value="0">关闭远景树木</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="1" selected>100%</option></select>
           <label for="vegetation-shadows">植被投影范围</label><select id="vegetation-shadows"><option value="0">关闭</option><option value="1" selected>仅精细近景</option><option value="2">近景与中景</option></select>
@@ -329,6 +378,12 @@
           <summary>声音与音乐</summary>
           <button id="audio-toggle" type="button" aria-pressed="false">开启声音</button>
           <div class="audio-grid" id="audio-channels"></div>
+          <p class="panel-help">按住鸣笛键（默认 V）持续鸣笛。本车与 NPC 喇叭支持 0–300%，默认增强；小车双音、摩托高音、重卡气喇叭随车型变化。鸣笛时可压低音乐与环境声，让喇叭更突出。</p>
+          <label class="speed-label" for="horn-focus">鸣笛时背景声音压低 <output id="horn-focus-value">70%</output></label>
+          <input id="horn-focus" type="range" min="0" max="100" step="5" value="70" />
+          <label class="speed-label" for="cabin-isolation">关窗后车厢隔音 <output id="cabin-isolation-value">78%</output></label>
+          <input id="cabin-isolation" type="range" min="0" max="100" step="1" value="78" />
+          <p class="panel-help">隔音越高，驾驶舱内的风声、环境与附近发动机声越轻；开窗、开门和敞篷会逐渐恢复外部声音。</p>
           <label for="radio-station">车载电台 · 数字 1–9 / 0 对应频道 1–10</label><select id="radio-station"></select><p class="panel-help">选择频道开启声音；十个频道采用不同调性、节奏与音色的程序音乐。</p>
           <label for="music-style">音乐氛围</label>
           <select id="music-style"><option value="ambient">山间漫游 · 舒缓</option><option value="night">夜行电台 · 低音</option><option value="motion">逐光公路 · 轻快</option></select>
@@ -338,6 +393,7 @@
           <input id="music-ducking" type="range" min="0" max="80" step="5" value="35" />
           <p class="panel-help">加速或发生接触时，为发动机与路面声音留出空间；松油门后音乐渐渐恢复。0% 关闭，喇叭提示仍会短暂压低音乐。</p>
           <div class="actions road-actions"><button id="preview-engine" type="button">试听发动机</button><button id="preview-shift" type="button">试听换挡</button><button id="preview-horn" type="button">试听喇叭</button></div>
+          <button id="audio-mix-reset" type="button">恢复默认混音</button>
           <p id="audio-preview-status" class="panel-help" role="status">先开启声音，再选择试听。</p>
           <p id="audio-status" class="panel-help" role="status">声音未开启</p>
           <p class="panel-help">发动机随车型、转速与换挡变化；湿路胎噪、风雨、日间鸟声与夜间虫鸣分层混音。开窗、敞篷和隧道改变听感。音源由程序合成，设有输出压缩保护；暂停、公告和窗口失焦时静音，设置页允许试听，混音参数可存入预设。</p>
@@ -356,7 +412,7 @@
         <label for="preset-list">本机预设与导入预览</label><select id="preset-list" aria-describedby="preset-summary"><option value="">尚无预设</option></select>
         <p id="preset-summary" class="panel-help"></p>
         <div class="actions"><button id="preset-apply" type="button" disabled>应用预设并返回起点</button><button id="preset-delete" type="button" disabled>删除所选本机预设</button></div>
-        <label for="preset-import">导入 JSON 预设</label><button id="preset-import-open" type="button" aria-controls="preset-import">选择 JSON 文件…</button><input id="preset-import" type="file" accept=".json,application/json" hidden />
+        <label for="preset-import-open">导入 JSON 预设</label><button id="preset-import-open" type="button" aria-controls="preset-import">选择 JSON 文件…</button><input id="preset-import" type="file" accept=".json,application/json" hidden />
         <p class="panel-help">导入后先预览，再点击应用；应用会重新生成世界并返回起点。若要保留导入的预设，请应用后点击保存。同名保存会更新原预设。最多 32 个本机预设，单个 JSON 不超过 64 KB；清除网站数据会移除本机预设，可先导出备份。</p>
         <p class="panel-help">本版预设包含车道数与单向通行；早期预设需重新配置并保存，浏览器中的旧数据不会被覆盖。</p>
         <p id="preset-status" role="status" class="panel-help" aria-live="polite"></p>

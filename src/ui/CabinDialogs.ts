@@ -25,6 +25,9 @@ export class CabinDialogs {
       dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); }, options);
       dialog.addEventListener('beforetoggle', this.clear, options);
     }
+    this.vehicle.addEventListener('click', event => {
+      if (this.vehicle.open && event.target instanceof Element && event.target.closest('button')) this.syncVehicle();
+    }, options);
   }
   showSeats(floor = this.driving.cabin.standing ? this.driving.cabinWalk.floor : this.driving.cabin.selected.floor): void {
     if (!this.driving.active) { this.showMenu(); element('menu-status').textContent = this.bindings.format('先进入车辆，再按 P 选择座位。'); return; }
@@ -61,6 +64,9 @@ export class CabinDialogs {
     element('menu-status').textContent = '当前快捷键 · 设置 → 快捷键中修改。Esc 关闭弹窗；拖动鼠标观察，双击锁定鼠标。'; this.show(this.menu);
   }
   showVehicle(): void {
+    this.syncVehicle(); this.show(this.vehicle);
+  }
+  private syncVehicle(): void {
     this.driving.describeEquipment();
     const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';
     element('vehicle-panel-title').textContent = p.name;
@@ -79,7 +85,6 @@ export class CabinDialogs {
     element<HTMLButtonElement>('panel-walk').disabled = !active || car.motionSpeed > 0.1 || this.driving.operations.accessing
       || (cabin.standing ? !this.driving.cabinWalk.nearestSeat(cabin) : !this.driving.cabinWalk.layouts.some(l => l.entry === 'cabin'));
     element('panel-walk').textContent = `${cabin.standing ? '就近坐下' : '车内离座'} · ${this.bindings.label('CabinWalk')}`;
-    this.show(this.vehicle);
   }
   private show(dialog: HTMLDialogElement): void {
     if (document.pointerLockElement) document.exitPointerLock();

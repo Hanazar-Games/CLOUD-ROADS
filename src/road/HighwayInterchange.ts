@@ -2,6 +2,8 @@ import type { RoadSample } from './RoadSegment';
 import { roadProfile } from './RoadProfile';
 import type { WorldOptions } from '../world/WorldOptions';
 import type { ServiceAccessPoint, ServiceGround } from '../service/ServiceTerrain';
+import { accessQuads } from './SurfaceRibbon';
+import { exposedBarriers } from './RampBarrier';
 
 export interface InterchangePort { u: number; v: number; direction: number }
 export interface InterchangeRamp {
@@ -35,9 +37,13 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
     for (let d = 6; d <= 60; d += 6) curve.push({ u: last.u + Math.sin(to * Math.PI / 2) * d, v: last.v + Math.cos(to * Math.PI / 2) * d });
     const distances = [0];
     for (let i = 1; i < curve.length; i++) distances.push(distances[i - 1] + Math.hypot(curve[i].u - curve[i - 1].u, curve[i].v - curve[i - 1].v));
-    const length = distances.at(-1)!, low = from % 2 ? upperHeight : center.position.y, high = to % 2 ? upperHeight : center.position.y;
+    const entryEnd = curve.findIndex(p => Math.abs(from % 2 ? p.v : p.u) > profile.outerHalfWidth + 4.3);
+    let exitStart = curve.length - 1;
+    while (exitStart > entryEnd && Math.abs(to % 2 ? curve[exitStart].v : curve[exitStart].u) <= profile.outerHalfWidth + 4.3) exitStart--;
+    const climbStart = distances[entryEnd], length = distances[exitStart] - climbStart;
+    const low = from % 2 ? upperHeight : center.position.y, high = to % 2 ? upperHeight : center.position.y;
     const points = curve.map((point, i): ServiceAccessPoint => {
-      const t = distances[i] / length, grade = (high - low) * 6 * t * (1 - t) / length;
+      const t = Math.max(0, Math.min(1, (distances[i] - climbStart) / length)), grade = (high - low) * 6 * t * (1 - t) / length;
       const before = curve[Math.max(0, i - 1)], after = curve[Math.min(curve.length - 1, i + 1)];
       const du = after.u - before.u, dv = after.v - before.v, scale = Math.hypot(du, dv);
       const x = center.position.x + Math.cos(center.heading) * point.u + Math.sin(center.heading) * point.v;
@@ -47,18 +53,28 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
         slopeZ: grade * (Math.sin(center.heading) * du - Math.cos(center.heading) * dv) / scale };
     });
     for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1], b = points[i], length = Math.hypot(b.x - a.x, b.z - a.z);
+      const a = points[i - 1], b = points[i];
       ground.access.push({ a, b });
-      const nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
-      for (const side of [-1, 1]) {
-        const offset = (p: ServiceAccessPoint) => ({ x: p.x + nx * side * 3.9, y: p.y + (p.slopeX * nx + p.slopeZ * nz) * side * 3.9, z: p.z + nz * side * 3.9 });
-        const ra = offset(a), rb = offset(b), u = ((ra.x + rb.x) / 2 - center.position.x) * Math.cos(center.heading) + ((ra.z + rb.z) / 2 - center.position.z) * Math.sin(center.heading);
-        const v = ((ra.x + rb.x) / 2 - center.position.x) * Math.sin(center.heading) - ((ra.z + rb.z) / 2 - center.position.z) * Math.cos(center.heading), y = (ra.y + rb.y) / 2;
-        if (Math.abs(u) < profile.outerHalfWidth + 1 && Math.abs(y - center.position.y) < 2 || Math.abs(v) < profile.outerHalfWidth + 1 && Math.abs(y - upperHeight) < 2) continue;
-        ground.barriers.push({ a: ra, b: rb });
-      }
     }
     ramps.push({ from, to, turn, points, entry: { ...curve[0], direction: from }, exit: { ...curve.at(-1)!, direction: to } });
   }
+  const rims = accessQuads(ground.access, 0.2), rails = rims.flatMap(q => [{ a: q.leftA, b: q.leftB }, { a: q.rightA, b: q.rightB }]);
+  const point = (u: number, v: number, y: number): ServiceAccessPoint => ({
+    x: center.position.x + Math.cos(center.heading) * u + Math.sin(center.heading) * v,
+    z: center.position.z + Math.sin(center.heading) * u - Math.cos(center.heading) * v,
+    y, halfWidth: profile.outerHalfWidth + 0.3, slopeX: 0, slopeZ: 0,
+  });
+  const main = accessQuads([
+    { a: point(0, -1100, center.position.y), b: point(0, 1100, center.position.y) },
+    { a: point(-1100, 0, upperHeight), b: point(1100, 0, upperHeight) },
+  ]);
+  // Replace the removed main-road rail only outside the actual merge pavement.
+  for (const ramp of ramps) for (const port of [ramp.entry, ramp.exit]) {
+    const upper = port.direction % 2, offset = Math.sign(upper ? port.v : port.u) * (profile.outerHalfWidth + 0.3);
+    const along = upper ? port.u : port.v;
+    const p = (d: number) => upper ? point(d, offset, upperHeight) : point(offset, d, center.position.y);
+    rails.push({ a: p(along - 176), b: p(along + 176) });
+  }
+  ground.barriers = exposedBarriers(rails, [...rims, ...main]);
   return { id, center, upperHeight, ramps, ground };
 }

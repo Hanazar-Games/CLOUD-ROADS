@@ -115,7 +115,9 @@ test('shows the current release, archives the previous baseline and isolates dia
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-release="current"]')).toContainText(version);
-  await expect(dialog.locator('[data-release="current"]')).toContainText('细节精修 · 地被分级与渲染减负');
+  await expect(dialog.locator('[data-release="current"]')).toContainText('行驶与声场 · 道路细节回归');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.61');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('细节精修 · 地被分级与渲染减负');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.60');
   await expect(dialog.locator('[data-release="history"]')).toContainText('车内漫步 · 新手快捷键与照明');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.59');
@@ -263,7 +265,7 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   expect(Number(await page.locator('[data-metric="Allocated meshes"]').textContent())).toBe(289);
-  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('8');
+  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('10');
   expect(errors).toEqual([]);
 });
 

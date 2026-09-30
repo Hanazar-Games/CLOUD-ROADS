@@ -20,7 +20,7 @@ test('finds controls directly, keeps tuning across models and fits a small setti
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/?seed=POWERTRAIN-053'); await openSettings(page);
   const search = page.locator('#settings-search'), results = page.locator('#settings-search-results');
-  await search.fill('转速'); await expect(results).toContainText('燃油转速响应');
+  await search.fill('燃油油门响应'); await expect(results).toContainText('燃油油门响应');
   await search.press('Enter'); await expect(page.locator('#engine-response')).toBeFocused();
   await page.locator('#engine-response').fill('125'); await expect(page.locator('#engine-response-value')).toHaveText('125%');
   await page.locator('#vehicle-kind').selectOption('truck8'); await expect(page.locator('#engine-response')).toHaveValue('125');
