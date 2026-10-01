@@ -4,6 +4,7 @@ import { DEFAULT_OPTIONS, type TerrainKind, type WorldOptions } from '../world/W
 import { MountainRanges } from './MountainRanges';
 import { planetHeight } from './PlanetTerrain';
 import { mountainIncision } from './MountainErosion';
+import { stratifiedHeight } from './RockStrata';
 
 export class HeightFunction {
   readonly noise: Noise;
@@ -65,7 +66,9 @@ export class HeightFunction {
       const t = Math.max(0, Math.min(1, (ridge - 0.22) / 0.58));
       const towers = t * t * (3 - 2 * t);
       const washes = this.noise.ridged(wx / 180 + 37, wz / 650 - 81, 2);
-      return 320 + macro * 0.2 + towers * (650 + (region + 1) * 230) - washes * basin * 55 + medium * 0.24 + detail * 0.2;
+      const bedrock = 320 + macro * 0.2 + towers * (650 + (region + 1) * 230);
+      return stratifiedHeight(bedrock, 72 + (region + 1) * 20, towers * 0.72)
+        - washes * basin * 55 + medium * 0.24 + detail * 0.2;
     }
     if (this.terrain === 'karst') {
       const t = Math.max(0, Math.min(1, (this.noise.sample(wx / 840, wz / 1100) + 0.25) / 0.85));
@@ -88,7 +91,8 @@ export class HeightFunction {
       const t = Math.max(0, Math.min(1, (mesa - 0.26 - region * 0.09) / (0.42 + basin * 0.16)));
       const dunes = Math.sin(wx / 115 + this.noise.sample(wx / 700, wz / 700) * 3 + wz / 330) * 22;
       const gullies = this.noise.ridged(wx / 240, wz / 650, 2);
-      return 220 + macro * 0.24 + t * t * (3 - 2 * t) * (850 + (region + 1) * 240)
+      const bedrock = 220 + macro * 0.24 + t * t * (3 - 2 * t) * (850 + (region + 1) * 240);
+      return stratifiedHeight(bedrock, 80 + (region + 1) * 24, t * 0.78)
         + medium * 0.2 + dunes * (1 - t) + detail * 0.15 - gullies * basin * (1 - t) * 70;
     }
     const guide = this.ranges.sample(z), lateral = Math.abs(x - guide.x);

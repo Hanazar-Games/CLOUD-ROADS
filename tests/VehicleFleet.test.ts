@@ -1,4 +1,4 @@
-import { Box3, Mesh, Scene, Vector3 } from 'three';
+import { Box3, Mesh, Raycaster, Scene, Vector3 } from 'three';
 import { expect, it } from 'vitest';
 import { vehicleProfiles, suspensionLevels, suspensionTuning } from '../src/vehicle/VehicleConfig';
 import { VehiclePhysics, type SurfaceSampler } from '../src/vehicle/VehiclePhysics';
@@ -6,6 +6,20 @@ import { VehicleMesh } from '../src/vehicle/VehicleMesh';
 import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 
 const flat: SurfaceSampler = () => ({ height: 0, grip: 1 });
+
+it('supports the expedition rack on its roof and keeps equipment behind the windshield', () => {
+  const p = vehicleProfiles.expedition6, scene = new Scene(), mesh = new VehicleMesh(scene, p);
+  const roof = p.height - p.radius - p.rest + 9.81 / suspensionTuning(3, p).spring - 0.4;
+  scene.updateMatrixWorld(true);
+  const ray = new Raycaster(new Vector3(0, roof + 0.5, -1.2), new Vector3(0, -1, 0), 0, 0.55);
+  expect(ray.intersectObject(mesh.chassis)).toHaveLength(0);
+  for (const x of [-p.width / 2 + 0.28, p.width / 2 - 0.28]) for (const z of [-0.15, p.length / 2 - 0.75]) {
+    ray.set(new Vector3(x, roof + 0.13, z), new Vector3(0, -1, 0));
+    const hits = ray.intersectObject(mesh.chassis);
+    expect(hits.length).toBeGreaterThan(0); expect(hits[0].distance).toBeLessThan(0.08);
+  }
+  mesh.dispose(); expect(scene.children).toHaveLength(0);
+});
 const drive = (car: VehiclePhysics, seconds: number, steer = 0, throttle = 1, surface = flat, fps = 60) => {
   car.ignition = 'running';
   for (let i = 0; i < seconds * fps; i++) car.update(1 / fps, { throttle, steer, handbrake: false }, surface);

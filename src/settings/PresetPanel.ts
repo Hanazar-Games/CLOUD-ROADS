@@ -22,6 +22,8 @@ export class PresetPanel {
   private imported?: SettingsPreset;
   private entries: SettingsPreset[] = [];
   private importVersion = 0;
+  private restoring = false;
+  get applying(): boolean { return this.restoring; }
 
   constructor(private readonly snapshot: () => { seed: string; world: WorldOptions; factorySpeed: boolean },
     private readonly loadWorld: (preset: SettingsPreset) => void, private readonly finish: (preset: SettingsPreset) => void) {
@@ -76,20 +78,23 @@ export class PresetPanel {
   }
 
   private apply(preset: SettingsPreset): void {
-    this.loadWorld(preset);
-    for (const id of [...controls, ...graphics]) {
-      const node = element<HTMLInputElement | HTMLSelectElement | HTMLFieldSetElement>(id), value = preset.settings[id];
-      if (node instanceof HTMLFieldSetElement) {
-        for (const radio of node.querySelectorAll<HTMLInputElement>('input[type=radio]')) radio.checked = radio.value === value;
-      } else if (node instanceof HTMLInputElement && node.type === 'checkbox') node.checked = value as boolean;
-      else node.value = String(value);
-      if (controls.includes(id)) node.dispatchEvent(new Event(node instanceof HTMLFieldSetElement || node instanceof HTMLSelectElement || node.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
-    }
-    for (const id of toggles) {
-      const node = element<HTMLButtonElement>(id);
-      if ((node.getAttribute('aria-pressed') === 'true') !== preset.settings[id] && !node.disabled) node.click();
-    }
-    this.finish(preset);
+    this.restoring = true;
+    try {
+      this.loadWorld(preset);
+      for (const id of [...controls, ...graphics]) {
+        const node = element<HTMLInputElement | HTMLSelectElement | HTMLFieldSetElement>(id), value = preset.settings[id];
+        if (node instanceof HTMLFieldSetElement) {
+          for (const radio of node.querySelectorAll<HTMLInputElement>('input[type=radio]')) radio.checked = radio.value === value;
+        } else if (node instanceof HTMLInputElement && node.type === 'checkbox') node.checked = value as boolean;
+        else node.value = String(value);
+        if (controls.includes(id)) node.dispatchEvent(new Event(node instanceof HTMLFieldSetElement || node instanceof HTMLSelectElement || node.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
+      }
+      for (const id of toggles) {
+        const node = element<HTMLButtonElement>(id);
+        if ((node.getAttribute('aria-pressed') === 'true') !== preset.settings[id] && !node.disabled) node.click();
+      }
+      this.finish(preset);
+    } finally { this.restoring = false; }
   }
 
   private capture(): SettingsPreset {

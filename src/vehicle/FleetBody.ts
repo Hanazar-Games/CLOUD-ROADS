@@ -2,6 +2,7 @@ import type { Group } from 'three';
 import type { VehicleProfile } from './VehicleConfig';
 import type { VehicleDetailKit } from './VehicleDetails';
 import type { VehicleFittings } from './VehicleFittings';
+import { expeditionEquipment } from './ExpeditionEquipment';
 
 export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKit, fittings: VehicleFittings, rideHeight: number): void {
   if (!p.body) return;
@@ -33,12 +34,15 @@ export function fleetBody(p: VehicleProfile, parent: Group, kit: VehicleDetailKi
     block(w * 0.8, 0.018, 0.04, 0, top - 0.15, -0.5, metal, parent);
     block(0.42, 0.035, 1.1, 0, top + 0.005, 0.8, glass, parent);
   } else if (p.body === 'expedition') {
-    block(w - 0.25, 0.08, p.length - 2.2, 0, top + 0.04, 0.5, trim, parent);
-    for (const side of [-1, 1]) block(0.06, 0.18, p.length - 2.3, side * (w / 2 - 0.17), top + 0.13, 0.5, metal, parent);
-    for (const z of [-1.1, 1.1]) block(w - 0.32, 0.18, 0.06, 0, top + 0.13, z, metal, parent);
-    panel(0.9, 0.32, 0.75, -0.35, top + 0.24, 0.5, paint, parent);
-    for (const x of [-0.64, -0.06]) block(0.035, 0.33, 0.76, x, top + 0.24, 0.5, trim, parent);
+    expeditionEquipment(p, parent, kit, top);
     const spare = cylinder(p.radius, 0.23, 0, 0.45, end + 0.03, trim, parent); spare.rotation.x = Math.PI / 2;
+    const rim = cylinder(p.radius * 0.59, 0.025, 0, 0.45, end + 0.151, metal, parent); rim.rotation.x = Math.PI / 2;
+    const hub = cylinder(p.radius * 0.2, 0.055, 0, 0.45, end + 0.16, trim, parent); hub.rotation.x = Math.PI / 2;
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      const lug = cylinder(0.02, 0.027, Math.sin(a) * p.radius * 0.37, 0.45 + Math.cos(a) * p.radius * 0.37, end + 0.17, trim, parent);
+      lug.rotation.x = Math.PI / 2;
+    }
     block(w + 0.08, 0.14, 0.18, 0, -0.2, -end - 0.03, metal, parent);
   } else if (p.body === 'schoolbus' || p.body === 'shuttle') {
     for (const side of [-1, 1]) for (const y of [0.26, 0.42]) block(0.045, 0.045, p.length - 0.6, side * w / 2, y, 0, trim, parent);

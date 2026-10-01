@@ -1,4 +1,4 @@
-import { BoxGeometry, Color, CylinderGeometry, Float32BufferAttribute, TorusGeometry, type BufferGeometry } from 'three';
+import { BoxGeometry, CatmullRomCurve3, Color, CylinderGeometry, Float32BufferAttribute, TorusGeometry, TubeGeometry, Vector3, type BufferGeometry } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 class Parts {
@@ -71,6 +71,23 @@ export function chargerDetailGeometry(): BufferGeometry {
   p.box(0.047, 0.012, 0.12, 0.02, -0.385, 0, 0xa9bdb9);
   for (let y = -0.48; y > -0.68; y -= 0.035) p.box(0.02, 0.01, 0.4, 0.013, y, 0, 0x546c70);
   p.add(new CylinderGeometry(0.027, 0.027, 0.03, 12).rotateZ(Math.PI / 2).translate(0.03, -0.39, 0.24), 0xc64b3e);
+  for (const side of [-1, 1]) {
+    const cable = new CatmullRomCurve3([
+      new Vector3(-0.15, -0.25, side * 0.385), new Vector3(-0.2, -0.82, side * 0.4),
+      new Vector3(-0.19, -1.03, side * 0.405), new Vector3(-0.18, -1.1, side * 0.45),
+      new Vector3(-0.16, -1.1, side * 0.52), new Vector3(-0.14, -1.03, side * 0.56),
+      new Vector3(-0.09, -0.13, side * 0.51),
+    ]);
+    p.add(new TubeGeometry(cable, 32, 0.022, 6, false), 0x253237);
+    p.box(0.15, 0.1, 0.115, -0.07, 0.045, side * 0.51, 0x304c51);
+    p.add(new BoxGeometry(0.06, 0.18, 0.075).rotateZ(0.18).translate(-0.075, -0.08, side * 0.51), 0x304c51);
+    p.box(0.014, 0.12, 0.06, 0.012, -0.045, side * 0.51, 0x536d70);
+    p.box(0.08, 0.016, 0.06, -0.022, -0.1, side * 0.51, 0x536d70);
+    p.add(new CylinderGeometry(0.03, 0.033, 0.06, 8).rotateZ(Math.PI / 2).translate(0.025, 0.04, side * 0.51), 0x94b7b5);
+    p.box(0.027, 0.045, 0.07, 0.018, 0.105, side * 0.51, 0x65c9ad);
+    for (const y of [-0.18, -0.15, -0.12])
+      p.add(new CylinderGeometry(0.029, 0.029, 0.016, 6).translate(-0.09, y, side * 0.51), 0x435457);
+  }
   return p.finish();
 }
 

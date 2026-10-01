@@ -1,6 +1,24 @@
 import { Scene } from 'three';
 import { expect, it } from 'vitest';
 import { VegetationMesh } from '../src/vegetation/VegetationMesh';
+import { plantGeometry } from '../src/vegetation/PlantGeometry';
+
+it('keeps sculpted pine branches indexed, bounded and cheaper at each distance tier', () => {
+  const counts: number[] = [];
+  for (const detail of ['near', 'middle', 'distant'] as const) {
+    const geometry = plantGeometry('pine', detail);
+    geometry.computeBoundingBox(); const bounds = geometry.boundingBox!;
+    expect(Math.max(-bounds.min.x, bounds.max.x, -bounds.min.z, bounds.max.z)).toBeLessThan(4.7);
+    expect(bounds.max.y).toBeLessThan(14); expect(bounds.min.y).toBeGreaterThan(-0.35);
+    for (const name of ['position', 'normal', 'color']) expect(Array.from(geometry.getAttribute(name).array).every(Number.isFinite)).toBe(true);
+    const positions = geometry.getAttribute('position');
+    expect(Array.from(geometry.index!.array).every(i => i < positions.count)).toBe(true);
+    expect(geometry.groups).toHaveLength(0); counts.push(geometry.index!.count / 3); geometry.dispose();
+  }
+  expect(counts[0]).toBeLessThan(500);
+  expect(counts[1]).toBeLessThan(counts[0] * 0.4);
+  expect(counts[2]).toBeLessThan(counts[1] * 0.4);
+});
 
 it('budgets vegetation changes without dropping queued chunks and reduces distant geometry', () => {
   const scene = new Scene(), vegetation = new VegetationMesh(scene);

@@ -2,6 +2,19 @@ import { expect, it } from 'vitest';
 import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { vehicleProxy } from '../src/vehicle/VehicleProxy';
 import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
+import { vehicleReflectors } from '../src/vehicle/VehicleSafety';
+
+it('keeps expedition side reflectors attached when switching to the distant body', () => {
+  const p = vehicleProfiles.expedition6, parts = vehicleProxy('expedition6'), material = new MeshBasicMaterial({ side: DoubleSide });
+  const mesh = new Mesh(parts[0], material), retro = parts[0].getAttribute('retroMask');
+  try {
+    for (const mark of vehicleReflectors(p).filter(mark => mark.w < 0.04)) {
+      const side = Math.sign(mark.x), origin = new Vector3(side * (p.width / 2 + 0.08), mark.y, mark.z);
+      const hits = new Raycaster(origin, new Vector3(-side, 0, 0), 0, 0.16).intersectObject(mesh);
+      expect(hits.some(hit => retro.getX(hit.face!.a) === 0), 'distant reflectors need a body backing').toBe(true);
+    }
+  } finally { parts.forEach(part => part.dispose()); material.dispose(); }
+});
 
 it.each(Object.keys(vehicleProfiles) as VehicleKind[])('preserves %s dimensions and trailer parts in a bounded distant model', kind => {
   const profile = vehicleProfiles[kind], geometries = vehicleProxy(kind);

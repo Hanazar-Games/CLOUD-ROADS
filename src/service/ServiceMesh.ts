@@ -402,10 +402,6 @@ export class ServiceMesh {
       box(-62, a, 1.1, 0.8, 2.2, 0.75, 0xe0e8df);
       box(-61.57, a, 1.5, 0.07, 0.55, 0.55, 0x1d4349);
       box(-61.52, a, 1.5, 0.035, 0.35, 0.36, 0x62cdb5);
-      for (const side of [-1, 1]) {
-        box(-61.7, a + side * 0.5, 0.9, 0.08, 1.15, 0.08, 0x28373b);
-        box(-61.55, a + side * 0.5, 1.43, 0.24, 0.14, 0.12, 0x28373b);
-      }
       this.box(this.markings, pad, -54.1 * pad.side, a, 0.039, 0.17, 0.02, 2.8, 0x6fd2ba, true);
       this.box(this.lights, pad, -57 * pad.side, a, 4.43, 2, 0.06, 0.18, 0xffffff);
     }

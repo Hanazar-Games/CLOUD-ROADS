@@ -8,6 +8,8 @@ import { serviceTarget } from '../service/ServiceSchedule';
 import { StructurePlanner } from './StructurePlanner';
 import { junctionApproach, junctionLead, junctionsEnabled, junctionTarget } from './JunctionSchedule';
 import { landmarkTarget, planLandmark } from './LandmarkBridge';
+import { roadFrame } from './RoadFrame';
+import { roadProfile } from './RoadProfile';
 
 export interface RoadTerrain { sample(x: number, z: number): number; route?(z: number): MountainGuide | undefined }
 const clamp = (value: number, limit: number): number => Math.max(-limit, Math.min(limit, value));
@@ -17,11 +19,13 @@ export class RoadGenerator {
   private readonly noise: Noise;
   private readonly terrain: RoadTerrain;
   private readonly structures: StructurePlanner;
+  private readonly halfWidth: number;
 
   constructor(private readonly seed: string, terrain: RoadTerrain | undefined = undefined, private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS, origin?: RoadControlPoint) {
     this.terrain = terrain ?? new HeightFunction(seed, options.terrain, options.roadType, options);
     this.noise = new Noise(hashSeed(`${seed}:road`));
     this.structures = new StructurePlanner(this.terrain, options);
+    this.halfWidth = roadProfile(options).outerHalfWidth;
     this.start = origin ?? { position: { x: 128, y: this.terrain.sample(128, 128) + 1, z: 128 }, heading: 0, grade: 0, distance: 0, width: options.roadWidth, bank: 0, nextMountain: 600 };
     if (!origin && absoluteElevation(options)) this.start.position.y = this.initialAscent() ? options.altitudeMin : options.altitudeMax;
   }
@@ -154,12 +158,14 @@ export class RoadGenerator {
       if (Math.abs(heading - this.start.heading) > 1) continue;
       const grades = new Set([this.nextGrade(start, this.desiredGrade(start, heading)),
         ...(absoluteElevation(this.options) ? [] : [-1, -0.5, 0, 0.5, 1].map(grade => this.nextGrade(start, grade * gradeLimit)))]);
+      const heights: number[] = [];
       for (const grade of grades) {
         const segment = new RoadSegment(start, heading, grade);
         let terrainCost = 0, cliffCost = 0;
-        for (const t of [0.25, 0.5, 0.75, 1]) {
+        for (const [i, t] of [0.25, 0.5, 0.75, 1].entries()) {
           const point = segment.sample(t);
-          const gap = point.position.y - this.terrain.sample(point.position.x, point.position.z);
+          const natural = heights[i] ??= this.terrain.sample(point.position.x, point.position.z);
+          const gap = point.position.y - natural;
           terrainCost += Math.min(Math.abs(gap - 1), 1000) / 40;
           cliffCost += Math.max(0, gap - 100) / 1500;
         }
@@ -204,10 +210,15 @@ export class RoadGenerator {
   }
 
   private earthworkCost(segment: RoadSegment): number {
+    if (this.options.terrainFollow === 0) return 0;
     let cost = 0;
     for (const t of [0.5, 1]) {
-      const p = segment.sample(t).position, gap = p.y - this.terrain.sample(p.x, p.z);
-      cost += Math.max(0, gap - this.options.bridgeHeight) / 20 + Math.abs(gap - 1) / 100;
+      const sample = segment.sample(t), p = sample.position, { right } = roadFrame(sample);
+      for (const side of [-1, 1]) {
+        const offset = side * this.halfWidth;
+        const gap = p.y + right.y * offset - this.terrain.sample(p.x + right.x * offset, p.z + right.z * offset);
+        cost += (Math.max(0, gap - this.options.bridgeHeight) / 20 + Math.abs(gap - 1) / 100) / 2;
+      }
     }
     return cost * this.options.terrainFollow;
   }

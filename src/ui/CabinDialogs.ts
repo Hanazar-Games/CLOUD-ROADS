@@ -41,7 +41,9 @@ export class CabinDialogs {
       const button = document.createElement('button'); button.type = 'button'; button.dataset.deck = String(deck);
       button.textContent = `${deck}F · ${deck === 1 ? '下层' : '上层'} ${cabin.seats.filter(s => s.floor === deck).length} 席`;
       button.setAttribute('aria-pressed', String(deck === floor)); button.setAttribute('aria-controls', 'seat-map');
-      button.addEventListener('click', () => this.showSeats(deck)); nav.append(button);
+      button.addEventListener('click', () => {
+        this.showSeats(deck); nav.querySelector<HTMLButtonElement>(`[data-deck="${deck}"]`)!.focus({ preventScroll: true });
+      }); nav.append(button);
     }
     const map = element('seat-map'); map.replaceChildren();
     for (const seat of cabin.seats.filter(s => s.floor === floor)) {
@@ -87,6 +89,7 @@ export class CabinDialogs {
     element('panel-walk').textContent = `${cabin.standing ? '就近坐下' : '车内离座'} · ${this.bindings.label('CabinWalk')}`;
   }
   private show(dialog: HTMLDialogElement): void {
+    if (dialog.open) return;
     if (document.pointerLockElement) document.exitPointerLock();
     this.close(); element<HTMLDialogElement>('explorer').close(); this.clear(); dialog.showModal();
   }

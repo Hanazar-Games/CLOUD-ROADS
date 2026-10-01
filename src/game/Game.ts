@@ -138,7 +138,7 @@ export class Game {
     }, { signal: this.events.signal });
     const radio = element<HTMLSelectElement>('radio-station');
     radio.replaceChildren(...radioStations.map((station, i) => new Option(`${i + 1} · ${station.name}`, String(i + 1))));
-    radio.addEventListener('change', () => this.tuneRadio(Number(radio.value)), { signal: this.events.signal });
+    radio.addEventListener('change', () => this.tuneRadio(Number(radio.value), !this.presets.applying), { signal: this.events.signal });
     element('music-pace').addEventListener('input', () => {
       const value = Number(element<HTMLInputElement>('music-pace').value); this.audio.musicPace = value / 100;
       element('music-pace-value').textContent = `${value}%`;
@@ -481,9 +481,9 @@ export class Game {
     element('pause').textContent = paused ? '继续探索' : '暂停探索';
   }
 
-  private tuneRadio(channel: number): void {
+  private tuneRadio(channel: number, enable = true): void {
     this.audio.tune(channel);
-    if (!this.audio.enabled) this.audio.toggle();
+    if (enable && !this.audio.enabled) this.audio.toggle();
     this.driving.systems.radioChannel = this.audio.station;
     element<HTMLSelectElement>('radio-station').value = String(this.audio.station);
     element<HTMLSelectElement>('music-style').value = this.audio.musicStyle;

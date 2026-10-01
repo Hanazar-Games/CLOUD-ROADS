@@ -17,7 +17,7 @@ export function vehicleProxy(kind: VehicleKind): BufferGeometry[] {
   const box = (width: number, height: number, length: number, x: number, y: number, z: number, paint = false, hex = 0x344450, retro = false) =>
     add(new BoxGeometry(width, height, length).translate(x, y, z), paint, hex, retro);
   const wheels = (points: readonly WheelPoint[]) => {
-    for (const wheel of new Set([points[0], points[1], ...points.slice(-2)]))
+    for (const wheel of p.body === 'expedition' ? points : new Set([points[0], points[1], ...points.slice(-2)]))
       box(p.shape === 'motorcycle' ? 0.15 : 0.24, p.radius * 2, p.radius * 1.6, wheel.x, ground + p.radius, -wheel.along, false, 0x24282a);
   };
   const merge = () => { const geometry = mergeGeometries(parts)!; parts.forEach(p => p.dispose()); parts.length = 0; return geometry; };
@@ -66,8 +66,18 @@ export function vehicleProxy(kind: VehicleKind): BufferGeometry[] {
       } else box(p.width, p.height - 0.85, cargoLength, 0, ground + 0.85 + (p.height - 0.85) / 2, (cabBack + end) / 2, true);
     }
   } else {
-    box(p.width, 0.55, p.chassisLength, 0, ground + 0.775, 0, true);
-    box(p.width * 0.83, Math.max(0.25, p.height - 1.05), p.chassisLength * 0.55, 0, ground + 1.05 + Math.max(0.25, p.height - 1.05) / 2, 0);
+    if (p.body === 'expedition') {
+      const roof = ground + p.height - 0.4, back = end - 0.5, cabFront = -0.8, cabBack = end - 0.12;
+      box(p.width, 0.53, p.chassisLength, 0, -0.085, 0, true);
+      box(p.width * 0.9, roof - 0.18, cabBack - cabFront, 0, (roof + 0.18) / 2, (cabBack + cabFront) / 2);
+      box(p.width - 0.4, 0.08, back + 0.4, 0, roof + 0.1, (back - 0.4) / 2);
+      box(0.9, 0.27, 0.75, -0.35, roof + 0.245, 0.5, true);
+      box(1.4, 0.27, 1.2, 0.15, roof + 0.245, 1.78, true);
+      add(new CylinderGeometry(p.radius, p.radius, 0.23, 8).rotateX(Math.PI / 2).translate(0, 0.45, end + 0.03), false, 0x24282a);
+    } else {
+      box(p.width, 0.55, p.chassisLength, 0, ground + 0.775, 0, true);
+      box(p.width * 0.83, Math.max(0.25, p.height - 1.05), p.chassisLength * 0.55, 0, ground + 1.05 + Math.max(0.25, p.height - 1.05) / 2, 0);
+    }
   }
   wheels(p.wheels);
   reflectors(0);

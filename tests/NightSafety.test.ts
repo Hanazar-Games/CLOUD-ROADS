@@ -32,6 +32,21 @@ it.each(Object.entries(vehicleProfiles).filter(([, p]) => p.chassisLength < 6 &&
   }
 });
 
+it.each(['expedition6', 'limousine'] as const)('mounts %s side reflectors against solid bodywork', kind => {
+  const p = vehicleProfiles[kind], model = new VehicleMesh(new Scene(), p), solid: Mesh[] = [];
+  model.chassis.updateMatrixWorld(true);
+  model.chassis.traverse(object => {
+    if (object instanceof Mesh && !Array.isArray(object.material) && object.material.name === 'vehicle-paint') solid.push(object);
+  });
+  try {
+    for (const mark of vehicleReflectors(p).filter(mark => mark.w < 0.04)) for (const end of [-0.45, 0, 0.45]) for (const edge of [-0.45, 0.45]) {
+      const side = Math.sign(mark.x), origin = new Vector3(side * (p.width / 2 + 0.08), mark.y + edge * mark.h, mark.z + end * mark.l);
+      const hits = new Raycaster(origin, new Vector3(-side, 0, 0), 0, 0.16).intersectObjects(solid, false);
+      expect(hits.length, `reflector at ${origin.toArray()} needs bodywork behind it`).toBeGreaterThan(0);
+    }
+  } finally { model.dispose(); }
+});
+
 it.each(['roadster', 'supercar'] as const)('mounts %s corner indicators against solid bodywork', kind => {
   const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile);
   model.chassis.updateMatrixWorld(true);

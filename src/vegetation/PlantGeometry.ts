@@ -24,6 +24,20 @@ function crown(radius: number, color: string): BufferGeometry {
   return geometry;
 }
 
+function pineTier(radius: number, height: number, color: string): BufferGeometry {
+  const geometry = new ConeGeometry(radius, height, 16), position = geometry.getAttribute('position');
+  const colors = new Float32Array(position.count * 3), base = new Color(color), tint = new Color();
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i), y = position.getY(i), z = position.getZ(i), angle = Math.atan2(x, z);
+    const branch = Math.cos(angle * 8), reach = 0.87 + branch * 0.13;
+    const edge = Math.hypot(x, z) > radius * 0.5;
+    position.setXYZ(i, x * reach, y + (edge ? height * (0.065 - branch * 0.045) : 0), z * reach);
+    tint.copy(base).multiplyScalar(edge ? 0.8 + branch * 0.12 : y > 0 ? 1.08 : 0.68).toArray(colors, i * 3);
+  }
+  geometry.setAttribute('color', new BufferAttribute(colors, 3)); geometry.computeVertexNormals();
+  return geometry;
+}
+
 function leaf(height: number, width: number, bend: number, color: string): BufferGeometry {
   const vertices: number[] = [], indices: number[] = [], colors: number[] = [], base = new Color(color);
   for (let row = 0; row < 3; row++) {
@@ -87,8 +101,8 @@ export function plantGeometry(kind: Plant, detail: 'near' | 'middle' | 'distant'
     pieces = [colored(new CylinderGeometry(0.17, 0.46, 10.5, 6).translate(0, 5.25, 0), '#716048')];
     for (let i = 0; i < 6; i++) {
       const angle = i * 2.4;
-      pieces.push(colored(new ConeGeometry(3.4 - i * 0.46, 3.8 - i * 0.17, 7 - i % 2)
-        .rotateY(angle).translate(Math.sin(angle) * 0.25, 4.5 + i * 1.5, Math.cos(angle) * 0.25), i % 3 === 0 ? '#486741' : i % 3 === 1 ? '#638451' : '#76935e'));
+      pieces.push(pineTier(3.4 - i * 0.46, 3.8 - i * 0.17, ['#486741', '#5b7b49', '#718d58'][Math.floor(i / 2)])
+        .rotateY(angle).translate(Math.sin(angle) * 0.25, 4.5 + i * 1.5, Math.cos(angle) * 0.25));
       if (i < 3) pieces.push(colored(new CylinderGeometry(0.045, 0.12, 2.8, 4).rotateZ(-0.95).rotateY(angle)
         .translate(Math.cos(angle) * 0.85, 3.3 + i * 1.4, -Math.sin(angle) * 0.85), '#77634b'));
       if (i < 4) pieces.push(colored(new ConeGeometry(0.85 - i * 0.1, 2, 5).scale(1, 1, 0.8).rotateZ(0.25).rotateY(angle)

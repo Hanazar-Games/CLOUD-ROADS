@@ -1,4 +1,4 @@
-import { BoxGeometry, Matrix4, Scene, Vector3 } from 'three';
+import { BoxGeometry, Matrix4, Mesh, MeshStandardMaterial, Raycaster, Scene, Vector3 } from 'three';
 import { expect, it, vi } from 'vitest';
 import { NearbyDetails } from '../src/render/NearbyDetails';
 import { expansionJointGeometry, drainGrateGeometry, emergencyCabinetGeometry, chargerDetailGeometry } from '../src/render/InfrastructureGeometry';
@@ -43,11 +43,27 @@ it('keeps road hardware flush and wall equipment inside the existing fixture foo
     expect(Array.from(geometry.getAttribute('position').array).every(Number.isFinite)).toBe(true);
     geometry.dispose();
   }
-  for (const [geometry, height, length] of [[emergencyCabinetGeometry(), 1.3, 0.65], [chargerDetailGeometry(), 1.1, 0.7]] as const) {
+  for (const [geometry, height, length] of [[emergencyCabinetGeometry(), 1.3, 0.65]] as const) {
     geometry.computeBoundingBox(); const size = geometry.boundingBox!.getSize(new Vector3());
     expect(size.x).toBeLessThan(0.12); expect(size.y).toBeLessThanOrEqual(height); expect(size.z).toBeLessThanOrEqual(length);
     expect(geometry.groups).toHaveLength(0); geometry.dispose();
   }
+});
+
+it('hangs charging cables above the ground, outside the screen and clear of vehicle bays', () => {
+  const geometry = chargerDetailGeometry(), material = new MeshStandardMaterial(), mesh = new Mesh(geometry, material);
+  geometry.computeBoundingBox(); const bounds = geometry.boundingBox!;
+  expect(bounds.min.y).toBeGreaterThan(-1.3); expect(bounds.max.y).toBeLessThan(0.5);
+  expect(bounds.min.x).toBeGreaterThan(-0.35); expect(bounds.max.x).toBeLessThan(0.1);
+  expect(Math.max(-bounds.min.z, bounds.max.z)).toBeLessThan(0.6);
+  expect(geometry.index!.count / 3).toBeLessThan(1500); expect(geometry.groups).toHaveLength(0);
+  for (const side of [-1, 1]) {
+    const ray = new Raycaster(new Vector3(0.5, -1.1, side * 0.49), new Vector3(-1, 0, 0), 0, 1);
+    expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);
+    ray.set(new Vector3(0.5, -0.7, side * 0.49), new Vector3(-1, 0, 0));
+    expect(ray.intersectObject(mesh)).toHaveLength(0);
+  }
+  geometry.dispose(); material.dispose();
 });
 
 it.each([-1, 1])('aligns details with bank and grade without reflecting the geometry (facing %s)', facing => {

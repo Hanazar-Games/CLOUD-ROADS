@@ -14,7 +14,7 @@ import { RoadGenerator } from '../src/road/RoadGenerator';
 describe('landscape and road choices', () => {
   it('generates distinct, deterministic terrain shapes and climates', () => {
     const heights = new Set<number>();
-    for (const terrain of ['alpine', 'forest', 'desert', 'dunes'] as const) {
+    for (const terrain of ['alpine', 'forest', 'desert', 'dunes', 'badlands'] as const) {
       const height = new HeightFunction('choices', terrain);
       const copy = new HeightFunction('choices', terrain);
       heights.add(height.sample(128, 128));
@@ -26,7 +26,7 @@ describe('landscape and road choices', () => {
         expect(Math.abs(y - height.sample(x + 0.01, x * 0.37))).toBeLessThan(0.1);
       }
     }
-    expect(heights.size).toBe(4);
+    expect(heights.size).toBe(5);
     const desert = new BiomeSystem('choices', 'desert').sample(128, 128, 1000, 1);
     expect(desert.kind).toBe('desert');
     expect(desert.weights.desert).toBeGreaterThan(0.8);
@@ -34,8 +34,8 @@ describe('landscape and road choices', () => {
     expect(Object.values(desert.weights).reduce((a, b) => a + b)).toBeCloseTo(1);
   });
 
-  it('keeps desert and forest chunk borders identical across LODs', () => {
-    for (const terrain of ['forest', 'desert', 'dunes'] as const) {
+  it('keeps forest, desert and badlands chunk borders identical across LODs', () => {
+    for (const terrain of ['forest', 'desert', 'dunes', 'badlands'] as const) {
       const generator = new TerrainGenerator('choices', { ...DEFAULT_OPTIONS, terrain });
       const a = generator.generate(-1, 0, 64), b = generator.generate(0, 0, 8);
       const edge = (data: typeof a, x: number) => {
