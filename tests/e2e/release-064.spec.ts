@@ -23,12 +23,14 @@ test('shows the new announcement and preserves the previous release in history',
   const changelog = readFileSync(new URL('../../CHANGELOG.md', import.meta.url), 'utf8');
   const notes = (text: string) => text.split('\n').filter(line => line.startsWith('- ')).map(line => line.slice(2));
   const current = notes(changelog.split('## 历史公告')[0]);
-  const previous = notes(changelog.split('### 0.1.63 — ')[1].split('\n### ')[0]);
+  const history = changelog.split('## 历史公告')[1].split('\n### ')[1];
+  const previous = notes(history), previousVersion = history.split(' — ')[0];
+  const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
   await page.goto('/?seed=RELEASE-064'); await page.locator('#release-open').click();
-  await expect(page.locator('#release-current h3')).toContainText('v0.1.64');
+  await expect(page.locator('#release-current h3')).toHaveText(`v${version} · ${changelog.match(/^## 当前版本：[^—]+— (.+)$/m)![1]}`);
   await expect(page.locator('#release-current li')).toHaveText(current);
-  await expect(page.locator('#release-history article').first().locator('h3')).toContainText('v0.1.63');
+  await expect(page.locator('#release-history article').first().locator('h3')).toContainText(`v${previousVersion}`);
   await expect(page.locator('#release-history article').first().locator('li')).toHaveText(previous);
-  await page.screenshot({ path: info.outputPath('release-064.png') });
+  await page.screenshot({ path: info.outputPath('release-current.png') });
   await page.keyboard.press('Escape'); await expect(page.locator('#release-open')).toBeFocused();
 });

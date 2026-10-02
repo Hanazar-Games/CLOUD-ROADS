@@ -17,7 +17,7 @@ export class InputManager {
       if (!this.enabled || event.isComposing || event.metaKey || event.altKey || event.defaultPrevented) return;
       const code = this.bindings.resolve(event.code, event.shiftKey);
       if (!code) return;
-      const action = ['KeyP', 'KeyM', 'Pause', 'PauseToggle', 'Debug', 'Panel', 'Settings'].includes(code);
+      const action = ['KeyP', 'KeyM', 'Pause', 'PauseToggle', 'Debug', 'Panel', 'Settings', 'Roadbook'].includes(code);
       if (event.target !== canvas && event.target !== document.body
         && (!action || !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable], dialog'))) return;
       event.preventDefault();

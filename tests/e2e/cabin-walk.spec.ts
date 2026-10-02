@@ -109,8 +109,8 @@ test('keeps both double-decker floors walkable and updates custom leave-seat sho
   await page.keyboard.down('KeyS'); await page.waitForTimeout(1300); await page.keyboard.up('KeyS');
   await expect.poll(async () => (await position(page))[2]).toBeGreaterThan(initial[2] + 0.7);
   await page.screenshot({ path: info.outputPath('upper-deck.png') });
-  await (await control(page, page.locator('[data-binding="CabinWalk"]'))).click(); await page.keyboard.press('Shift+KeyR'); await closeSettings(page);
+  await (await control(page, page.locator('[data-binding="CabinWalk"]'))).click(); await page.keyboard.press('Shift+KeyE'); await closeSettings(page);
   await page.keyboard.press('KeyP'); await page.locator('[data-deck="1"]').click(); await page.locator('[data-seat="driver"]').click();
-  await expect(page.locator('#shortcut-items [data-action="CabinWalk"] kbd')).toHaveText('Shift+R');
-  await page.keyboard.press('Shift+KeyR'); await expect(metric(page, 'Cabin walking')).toHaveText('saloon');
+  await expect(page.locator('#shortcut-items [data-action="CabinWalk"] kbd')).toHaveText('Shift+E');
+  await page.keyboard.press('Shift+KeyE'); await expect(metric(page, 'Cabin walking')).toHaveText('saloon');
 });

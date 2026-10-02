@@ -36,8 +36,8 @@ test('rebinds operations, handles conflicts and shifted keys, persists and reset
   await expect(page.locator('[data-binding="Autopilot"]')).toHaveText('F9');
   await page.locator('[data-binding="KeyL"]').click(); await page.keyboard.press('F9');
   await expect(page.locator('#bindings-status')).toContainText('占用'); await page.keyboard.press('Escape');
-  await page.locator('[data-binding="Refill"]').click(); await page.keyboard.press('Shift+KeyR');
-  await expect(page.locator('[data-binding="Refill"]')).toHaveText('Shift+R');
+  await page.locator('[data-binding="Refill"]').click(); await page.keyboard.press('Shift+KeyE');
+  await expect(page.locator('[data-binding="Refill"]')).toHaveText('Shift+E');
   await page.locator('[data-binding="Ignition"]').click(); await page.keyboard.press('Shift+KeyZ');
   await expect(page.locator('[data-binding="Ignition"]')).toHaveText('Shift+Z');
   await closeSettings(page); await page.keyboard.press('Shift+KeyZ');

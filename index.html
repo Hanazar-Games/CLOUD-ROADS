@@ -13,7 +13,7 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="menu-open" type="button" aria-haspopup="dialog">菜单 · M</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="roadbook-open" type="button" aria-haspopup="dialog" aria-controls="roadbook-dialog">路书</button><button id="menu-open" type="button" aria-haspopup="dialog">菜单 · M</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
@@ -516,13 +516,38 @@
         </div></div>
         <div class="settings-footer"><span id="settings-context">参数即时生效 · 下次保留请保存预设</span><button id="settings-presets-shortcut" type="button">保存 / 预设 <span aria-hidden="true">→</span></button></div>
       </dialog>
+      <dialog id="roadbook-dialog" class="cabin-dialog" aria-labelledby="roadbook-title" aria-describedby="roadbook-status">
+        <header><div><p class="eyebrow">JOURNEY / ROADBOOK</p><h2 id="roadbook-title">旅途路书</h2></div><button type="button" data-close autofocus>返回旅程 · Esc</button></header>
+        <p id="roadbook-context"></p>
+        <div class="roadbook-toolbar"><div class="actions" role="group" aria-label="路书预览距离"><button type="button" data-roadbook-range="1000" aria-pressed="false">1 km</button><button type="button" data-roadbook-range="3000" aria-pressed="true">3 km</button><button type="button" data-roadbook-range="5000" aria-pressed="false">5 km</button></div><button id="roadbook-reverse" type="button" aria-pressed="false">反向查看</button></div>
+        <div class="roadbook-scroll">
+          <p id="roadbook-status" role="status"></p>
+          <p id="roadbook-empty">沿山路继续前行，下一段风景即将展开。</p>
+          <div id="roadbook-content" hidden>
+            <dl class="roadbook-stats"><div><dt>当前道路海拔</dt><dd id="roadbook-altitude"></dd></div><div><dt>当前方向坡度</dt><dd id="roadbook-grade"></dd></div><div><dt>预览段累计升降</dt><dd id="roadbook-climb"></dd></div><div><dt>预览段最大坡度</dt><dd id="roadbook-steepest"></dd></div></dl>
+            <div class="roadbook-overview">
+              <section class="roadbook-map-card" aria-label="路线概览">
+                <div class="roadbook-caption"><span>下一段风景</span><span id="roadbook-chainage"></span></div>
+                <svg id="roadbook-map" viewBox="0 0 480 312" role="img" aria-label="路线图"><defs><pattern id="roadbook-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 H 0 V 24" fill="none" stroke="#79e5ed" stroke-opacity=".07" /></pattern></defs><rect width="480" height="312" fill="url(#roadbook-grid)"/><g id="roadbook-map-route"></g></svg>
+                <p class="roadbook-map-help">↑ 当前查看方向朝上 · 白色箭头为道路定位点</p>
+              </section>
+              <section class="roadbook-next" aria-labelledby="roadbook-next-title"><h3 id="roadbook-next-title">沿途地标 <span>距离按路程计算</span></h3><ol id="roadbook-places"></ol><p id="roadbook-no-places">这一段留给沿途风景。继续前行，路书会随道路更新。</p></section>
+            </div>
+            <section class="roadbook-elevation" aria-labelledby="roadbook-elevation-title"><div class="roadbook-caption"><h3 id="roadbook-elevation-title">山路起伏</h3><div class="roadbook-legend"><span>公路</span><span>桥梁</span><span>隧道</span></div></div>
+              <svg id="roadbook-profile" viewBox="0 0 920 140" role="img" aria-label="海拔剖面"><path d="M52 26 H892 M52 67 H892 M52 108 H892" class="roadbook-gridline"/><g id="roadbook-profile-route"></g><g class="roadbook-axis"><text id="roadbook-profile-high" x="4" y="29"></text><text id="roadbook-profile-low" x="4" y="111"></text><text x="52" y="132">此处</text><text id="roadbook-profile-mid" x="472" y="132" text-anchor="middle"></text><text id="roadbook-profile-end" x="892" y="132" text-anchor="end"></text></g></svg>
+              <p id="roadbook-profile-summary"></p>
+            </section>
+          </div>
+        </div>
+        <p class="roadbook-footer">阅读时旅程暂停 · 仅显示当前支路已加载的路线，驶入其他支路后更新 · 请以实际道路标线为准</p>
+      </dialog>
       <dialog id="seat-dialog" class="cabin-dialog" aria-labelledby="seat-title">
         <header><h2 id="seat-title">选择座位</h2><button type="button" data-close>返回旅程 · Esc</button></header>
         <p id="seat-status" role="status"></p><button id="seat-walk" type="button">车内离座 · {CabinWalk}</button><div id="seat-decks" class="actions" role="group" aria-label="选择客车楼层" hidden></div><div class="seat-scroll"><p class="seat-front">↑ 车头 · 点击座位就坐</p><div id="seat-map" role="group" aria-label="车辆座位地图"></div></div>
       </dialog>
       <dialog id="controls-menu" class="cabin-dialog" aria-labelledby="menu-title">
         <header><h2 id="menu-title">旅程操作</h2><button type="button" data-close>返回旅程 · Esc</button></header>
-        <p id="menu-status" role="status"></p><div class="actions"><button id="menu-settings" type="button">设置</button><button id="menu-seats" type="button">选择座位 · P</button><button id="menu-pause" type="button">暂停 / 继续 · {PauseToggle}</button></div>
+        <p id="menu-status" role="status"></p><div class="actions"><button id="menu-roadbook" type="button">旅途路书 · {Roadbook}</button><button id="menu-settings" type="button">设置</button><button id="menu-seats" type="button">选择座位 · P</button><button id="menu-pause" type="button">暂停 / 继续 · {PauseToggle}</button></div>
         <div class="shortcut-scroll"><table class="shortcut-table"><caption>全部快捷键 · 弹窗内不响应驾驶按键</caption><thead><tr><th>模式</th><th>按键</th><th>操作</th></tr></thead><tbody id="shortcut-list"></tbody></table></div>
       </dialog>
       <dialog id="vehicle-panel" class="cabin-dialog" aria-labelledby="vehicle-panel-title">

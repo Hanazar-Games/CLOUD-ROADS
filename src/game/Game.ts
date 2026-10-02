@@ -21,6 +21,7 @@ import { AudioSystem, audioChannels, type MusicStyle } from '../audio/AudioSyste
 import { engineSound } from '../audio/VehicleEngine';
 import { SettingsDialog } from '../ui/SettingsDialog';
 import { CabinDialogs } from '../ui/CabinDialogs';
+import { RoadbookPanel } from '../ui/RoadbookPanel';
 import { radioStations } from '../audio/RadioStations';
 import { seasonNames, type Season } from '../season/SeasonState';
 import { WorldSettings } from '../settings/WorldSettings';
@@ -59,6 +60,7 @@ export class Game {
   private readonly driving: DrivingSystem;
   private readonly walking: WalkingSystem;
   private readonly cabinDialogs: CabinDialogs;
+  private readonly roadbook: RoadbookPanel;
   private readonly keyBindingPanel: KeyBindingPanel;
   private readonly garagePanel: GaragePanel;
   private paused = false;
@@ -82,10 +84,23 @@ export class Game {
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world, () => this.walking?.active ? this.walking.person : undefined);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world, () => this.driving.parked ? this.driving.car : undefined);
+    this.roadbook = new RoadbookPanel(() => {
+      const w = this.world, car = this.driving.car, person = this.walking.person;
+      const anchor = this.driving.active ? car : this.walking.active ? person
+        : { x: this.camera.position.x + w.origin.x, y: this.camera.position.y, z: this.camera.position.z + w.origin.z };
+      const current = w.roadReady ? w.road.nearest(anchor.x, anchor.z) : undefined;
+      const nearby = current && Math.hypot(anchor.x - current.position.x, anchor.z - current.position.z) < w.options.roadWidth * 2 + 8
+        && Math.abs(anchor.y - current.position.y) < 15;
+      return { source: { samples: w.road.samples, bridges: w.bridges, tunnels: w.tunnels, services: w.services, passes: w.passes,
+        junctions: w.network.junctions.filter(j => j.route === w.network.active.id) }, revision: w.network.version, current,
+        heading: this.driving.active ? car.heading + (car.speed < -0.1 ? Math.PI : 0) : this.walking.active ? person.heading : -this.camera.rotation.y,
+        context: `${terrainNames[w.options.terrain]} · ${w.season.extraterrestrial ? '低重力远行' : `${seasonNames[w.season.kind]} · ${weatherNames[this.weather.kind]}`}`,
+        location: nearby ? '当前道路' : '附近主线路线（非匝道或车库内部）' };
+    });
     this.cabinDialogs = new CabinDialogs(this.driving, () => this.input.clear(), () => this.setPaused(!this.paused), category => {
       this.settings.show();
       if (category) document.querySelector<HTMLButtonElement>(`[data-settings-target="${category}"]`)!.click();
-    }, this.input.bindings);
+    }, this.input.bindings, () => this.roadbook.update(true));
     this.keyBindingPanel = new KeyBindingPanel(this.input);
     this.shortcutDock = new ShortcutDock(this.input.bindings);
     this.garagePanel = new GaragePanel(() => this.world, point => {
@@ -159,6 +174,7 @@ export class Game {
       if (code === 'KeyM') this.cabinDialogs.showMenu();
       if (code === 'KeyP') this.cabinDialogs.showSeats();
       if (code === 'Panel') this.cabinDialogs.showVehicle();
+      if (code === 'Roadbook') this.cabinDialogs.showRoadbook();
       if (code === 'Settings') this.settings.show();
       if (!this.paused && !this.releaseNotes.open && !this.settings.open && !this.cabinDialogs.open) {
         if (/^Digit\d$/.test(code) && this.driving.active) this.tuneRadio(Number(code.slice(5)) || 10);
@@ -793,6 +809,7 @@ export class Game {
       element('traffic-status').textContent = `附近 ${this.world.traffic.entries.length} 辆 / 目标 ${this.world.traffic.targetCount} 辆 · ${this.world.traffic.density ? trafficScenarios[this.world.traffic.scenario] : '交通已关闭'}`
         + (speeds.length ? ` · 当前 ${Math.round(Math.min(...speeds))}–${Math.round(Math.max(...speeds))} km/h` : '');
       this.garagePanel.update();
+      this.roadbook.update();
       if (!this.driving.active) element('drive-toggle').textContent = boardable ? '回到车辆' : this.driving.parked ? '重新放置车辆' : '开始驾驶';
       const season = this.world.season, roadHeight = this.world.roadSample?.position.y ?? y;
       const snow = season.snow(roadHeight);
@@ -1001,6 +1018,7 @@ export class Game {
     this.keyBindingPanel.dispose();
     this.presets.dispose(); this.worldSettings.dispose();
     this.cabinDialogs.dispose();
+    this.roadbook.dispose();
     this.settings.dispose();
     this.audio.dispose();
     this.loop.stop();

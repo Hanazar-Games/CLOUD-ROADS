@@ -12,7 +12,9 @@ it('uses Backquote ignition and conflict-free ordinary keys for all default acti
   expect(keys.resolve('KeyJ', true)).toBe('VehicleLock');
   expect(keys.resolve('KeyU', true)).toBe('Fridge');
   expect(keys.resolve('KeyO', true)).toBe('CabinWalk');
-  keys.bind('Ignition', 'Shift+KeyR'); expect(keys.format('{Ignition} 点火')).toBe('Shift+R 点火');
+  expect(keys.resolve('KeyR', true)).toBe('Roadbook');
+  expect(keys.format('旅途路书 · {Roadbook}')).toBe('旅途路书 · Shift+R');
+  keys.bind('Ignition', 'Shift+KeyZ'); expect(keys.format('{Ignition} 点火')).toBe('Shift+Z 点火');
 });
 
 it('rebinds actions, rejects conflicts and restores defaults', () => {

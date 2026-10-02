@@ -12,7 +12,7 @@ export function availableShortcuts(s: ShortcutContext): { id: string; label: str
   const keys = new Map<string, string>();
   const add = (...ids: string[]) => ids.forEach(id => keys.set(id, bindingActions.find(a => a[0] === id)?.[3] ?? id));
   const label = (id: string, text: string) => keys.set(id, text);
-  add('KeyM', 'Settings', 'Panel', 'PauseToggle', 'Pause', 'Debug');
+  add('KeyM', 'Settings', 'Panel', 'Roadbook', 'PauseToggle', 'Pause', 'Debug');
   if (!s.paused && s.ready !== false) {
     add('Audio');
     const outside = s.mode === 'flight' || s.mode === 'walking';

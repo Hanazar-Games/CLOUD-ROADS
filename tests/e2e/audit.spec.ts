@@ -5,6 +5,7 @@ import { HeightFunction } from '../../src/terrain/HeightFunction';
 import { readFileSync } from 'node:fs';
 
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
+const releaseTitle = readFileSync(new URL('../../CHANGELOG.md', import.meta.url), 'utf8').match(/^## 当前版本：[^—]+— (.+)$/m)![1];
 
 test('stops held movement when focus leaves the canvas and consumes flight shortcuts', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
@@ -115,7 +116,7 @@ test('shows the current release, archives the previous baseline and isolates dia
   const dialog = page.getByRole('dialog', { name: '版本公告' });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-release="current"]')).toContainText(version);
-  await expect(dialog.locator('[data-release="current"]')).toContainText('岩地远行 · 模型精修与交互回归');
+  await expect(dialog.locator('[data-release="current"]')).toContainText(releaseTitle);
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.62');
   await expect(dialog.locator('[data-release="history"]')).toContainText('行驶与声场 · 道路细节回归');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.61');

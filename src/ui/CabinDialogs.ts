@@ -7,12 +7,14 @@ export class CabinDialogs {
   private readonly seats = element<HTMLDialogElement>('seat-dialog');
   private readonly menu = element<HTMLDialogElement>('controls-menu');
   private readonly vehicle = element<HTMLDialogElement>('vehicle-panel');
+  private readonly roadbook = element<HTMLDialogElement>('roadbook-dialog');
   private readonly events = new AbortController();
-  get open(): boolean { return this.seats.open || this.menu.open || this.vehicle.open; }
-  constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: (category?: string) => void, private readonly bindings: KeyBindings) {
+  get open(): boolean { return this.seats.open || this.menu.open || this.vehicle.open || this.roadbook.open; }
+  constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: (category?: string) => void, private readonly bindings: KeyBindings, private readonly refreshRoadbook: () => void) {
     const options = { signal: this.events.signal };
     element('seat-open').addEventListener('click', () => this.showSeats(), options);
     element('menu-open').addEventListener('click', () => this.showMenu(), options);
+    for (const id of ['roadbook-open', 'menu-roadbook']) element(id).addEventListener('click', () => this.showRoadbook(), options);
     element('menu-pause').addEventListener('click', () => { pause(); this.close(); }, options);
     element('menu-settings').addEventListener('click', () => { this.close(); settings(); }, options);
     element('menu-seats').addEventListener('click', () => this.showSeats(), options);
@@ -20,7 +22,7 @@ export class CabinDialogs {
     element('panel-seats').addEventListener('click', () => this.showSeats(), options);
     element('panel-shortcuts').addEventListener('click', () => this.showMenu(), options);
     for (const category of ['driving', 'equipment']) element(`panel-${category}`).addEventListener('click', () => { this.close(); settings(category); }, options);
-    for (const dialog of [this.seats, this.menu, this.vehicle]) {
+    for (const dialog of [this.seats, this.menu, this.vehicle, this.roadbook]) {
       dialog.querySelector('button[data-close]')!.addEventListener('click', () => this.close(), options);
       dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); }, options);
       dialog.addEventListener('beforetoggle', this.clear, options);
@@ -68,6 +70,9 @@ export class CabinDialogs {
   showVehicle(): void {
     this.syncVehicle(); this.show(this.vehicle);
   }
+  showRoadbook(): void {
+    this.refreshRoadbook(); this.show(this.roadbook);
+  }
   private syncVehicle(): void {
     this.driving.describeEquipment();
     const { car, cabin, systems: s, active } = this.driving, p = car.profile, glass = p.shape !== 'motorcycle';
@@ -94,7 +99,7 @@ export class CabinDialogs {
     this.close(); element<HTMLDialogElement>('explorer').close(); this.clear(); dialog.showModal();
   }
   close(): void {
-    this.clear(); this.seats.close(); this.menu.close(); this.vehicle.close();
+    this.clear(); this.seats.close(); this.menu.close(); this.vehicle.close(); this.roadbook.close();
     if (!document.querySelector('dialog[open]') && !element('world').inert) element('world').focus();
   }
   dispose(): void { this.close(); this.events.abort(); }
