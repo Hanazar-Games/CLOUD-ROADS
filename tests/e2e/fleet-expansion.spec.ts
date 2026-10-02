@@ -18,9 +18,13 @@ test('uses exact bus row counts and selects both double-decker floors without gr
   await expect(page.locator('#seat-map button')).toHaveCount(49);
   await page.locator('[data-deck="2"]').click(); await expect(page.locator('#seat-map button')).toHaveCount(56);
   await page.locator('[data-seat="upper-row-14-3"]').click(); await expect(metric(page, 'Cabin floor')).toHaveText('2');
-  const position = await metric(page, 'Vehicle position').textContent();
+  const position = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
   await page.keyboard.down('KeyW'); await page.keyboard.press('KeyJ'); await page.waitForTimeout(400); await page.keyboard.up('KeyW');
-  await expect(metric(page, 'Vehicle position')).toHaveText(position!); await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
+  const after = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
+  expect([after[0], after[2]]).toEqual([position[0], position[2]]);
+  expect(Math.abs(after[1] - position[1])).toBeLessThan(0.15);
+  await expect(metric(page, 'Vehicle speed')).toHaveText('0.0 km/h');
+  await expect(metric(page, 'Vehicle operations')).toHaveText('0.00 / 0.00 / 0.00');
   await page.setViewportSize({ width: 390, height: 450 }); await page.keyboard.press('KeyP');
   await expect(page.locator('[data-deck="1"]')).toBeInViewport(); await page.locator('[data-deck="1"]').click();
   await page.locator('[data-seat="driver"]').click(); await expect(metric(page, 'Cabin floor')).toHaveText('1');

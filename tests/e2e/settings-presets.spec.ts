@@ -2,7 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { ignite, closeSettings, openSettings } from './settings';
 
-const category = async (page: Page, name: string) => { await openSettings(page); await page.locator(`[data-settings-target="${name}"]`).click(); };
+const category = async (page: Page, name: string) => {
+  await openSettings(page); await page.locator(`[data-settings-target="${name}"]`).click();
+  const expand = page.locator(`#settings-${name} [data-settings-expand]`); if (await expand.count()) await expand.click();
+};
 const metric = (page: Page, name: string) => page.locator(`[data-metric="${name}"]`);
 
 test('rejects reversed active ranges while allowing a return to natural terrain after invalid drafts', async ({ page }) => {
@@ -55,8 +58,9 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await category(page, 'weather'); await page.locator('#weather-rain').check();
   await category(page, 'audio'); await page.locator('#music-ducking').fill('65'); await page.locator('#collision-volume').fill('40');
   await category(page, 'world'); await page.locator('#mountain-density').fill('125');
-  await category(page, 'graphics'); await page.locator('#vegetation-lod').selectOption('0.5');
-  await page.locator('#distant-trees').selectOption('0.25'); await page.locator('#vehicle-detail-distance').selectOption('120');
+  await category(page, 'graphics'); await page.locator('#vegetation-lod').fill('50');
+  await page.locator('#distant-trees').fill('25'); await page.locator('#vehicle-detail-distance').fill('120');
+  for (const [id, value] of [['tree-density', '45'], ['ground-density', '20'], ['flower-density', '65'], ['rock-density', '35'], ['detail-distance', '175'], ['frame-limit', '3']]) await page.locator(`#${id}`).fill(value);
   await category(page, 'traffic'); await page.locator('#traffic-scenario').selectOption('stopgo');
   await category(page, 'presets'); await page.locator('#preset-name').fill('雨中山路'); await page.locator('#preset-save').click();
   await expect(page.locator('#preset-status')).toContainText('已保存');
@@ -65,10 +69,13 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(14); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(16); expect(saved.settings['road-grip']).toBe(45);
   expect(saved.settings['engine-response']).toBe(125); expect(saved.settings['music-ducking']).toBe(65); expect(saved.settings['collision-volume']).toBe(40);
-  expect(saved.settings['vegetation-lod']).toBe('0.5'); expect(saved.settings['distant-trees']).toBe('0.25');
-  expect(saved.settings['vehicle-detail-distance']).toBe('120'); expect(saved.settings['traffic-scenario']).toBe('stopgo');
+  expect(saved.settings['vegetation-lod']).toBe(50); expect(saved.settings['distant-trees']).toBe(25);
+  expect(saved.settings['vehicle-detail-distance']).toBe(120); expect(saved.settings['traffic-scenario']).toBe('stopgo');
+  expect(saved.settings['tree-density']).toBe(45); expect(saved.settings['ground-density']).toBe(20);
+  expect(saved.settings['flower-density']).toBe(65); expect(saved.settings['rock-density']).toBe(35);
+  expect(saved.settings['detail-distance']).toBe(175); expect(saved.settings['frame-limit']).toBe(3);
   expect(saved.settings['handbrake-strength']).toBe(75); expect(saved.settings['countersteer-assist']).toBe(35);
   await page.reload(); await category(page, 'presets');
   await expect(page.locator('#preset-list option')).toHaveText(['雨中山路']);

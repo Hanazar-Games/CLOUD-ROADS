@@ -104,9 +104,11 @@ export class DrivingSurface {
       const height = ribbonHeight(this.accessRibbons[i], x, z);
       if (height !== undefined) add(height + 0.015);
     }
+    const height = this.world.groundHeight(x, z, reference === undefined ? ceiling : Math.min(ceiling, reference + 9));
+    const terrain = { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
+    if (reference !== undefined && height <= ceiling && height < reference + 9) surfaces.push(terrain);
     if (surfaces.length) return reference === undefined ? surfaces[0] : surfaces.reduce((best, s) => Math.abs(s.height - reference) < Math.abs(best.height - reference) ? s : best);
-    const height = this.world.groundHeight(x, z);
-    return { height, grip: (0.58 - this.wet * 0.24) * (this.world.season?.grip(height) ?? 1) };
+    return terrain;
   }
 
   spawn(x: number, z: number, vehicle: VehicleProfile = vehicleProfiles.roadster): { x: number; z: number; heading: number; trailerHeadings: number[] } | undefined {
@@ -161,6 +163,7 @@ export class DrivingSurface {
     if (this.level !== undefined && this.world.services.some(site => crossoverShelter(site.ground.crossover, x, this.level!, z) > 0.5)) return true;
     const route = this.route(x, z), sample = route.road.nearest(x, z);
     return !!sample && Math.hypot(x - sample.position.x, z - sample.position.z) < this.profile.outerHalfWidth + 1
+      && (this.level === undefined || this.level < sample.position.y + 9)
       && route.tunnels.some(span => sample.distance >= span.start.distance - margin && sample.distance <= span.end.distance + margin);
   }
 
@@ -312,7 +315,7 @@ export class DrivingSurface {
     if (!this.profile.centers.some(center => Math.abs(lateral - center) < this.profile.halfWidth + 0.4)) continue;
     const { normal } = roadFrame(sample), road = sample.position.y - (normal.x * dx + normal.z * dz) / normal.y;
     if (feet < road - 0.15 && route.bridges.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) ceiling = Math.min(ceiling, road - 3);
-    if (feet >= road - 0.15 && route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) ceiling = Math.min(ceiling, road + 4.5);
+    if (feet >= road - 0.15 && feet < road + 7.6 && route.tunnels.some(span => sample.distance >= span.start.distance && sample.distance <= span.end.distance)) ceiling = Math.min(ceiling, road + 4.5);
     }
     return ceiling;
   }

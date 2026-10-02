@@ -4,11 +4,11 @@ import { ignite, control } from './settings';
 test('applies graphics controls immediately and retains them after reloading a world', async ({ page }) => {
   await page.goto('/?seed=CLOUD-ROAD-001');
   await (await control(page, page.locator('#graphics-preset'))).selectOption('economy');
-  await expect(page.locator('#render-scale')).toHaveValue('0.65');
+  await expect(page.locator('#render-scale')).toHaveValue('65');
   await expect(page.locator('#shadows')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#cloud-toggle')).toHaveAttribute('aria-pressed', 'false');
-  await (await control(page, page.locator('#render-scale'))).selectOption('0.5');
-  await (await control(page, page.locator('#frame-limit'))).selectOption('30');
+  await (await control(page, page.locator('#render-scale'))).fill('50');
+  await (await control(page, page.locator('#frame-limit'))).fill('0');
   await expect(page.locator('#graphics-preset')).toHaveValue('custom');
   const width = await page.locator('#world').evaluate(canvas => (canvas as HTMLCanvasElement).width);
   const expected = await page.evaluate(() => Math.floor(innerWidth * Math.min(devicePixelRatio, 1.5) * 0.5));
@@ -19,17 +19,17 @@ test('applies graphics controls immediately and retains them after reloading a w
   await expect(page.locator('[data-metric="Frame limit"]')).toHaveText('30');
   await expect(page.locator('[data-metric="Scene samples"]')).toHaveText('0');
   await (await control(page, page.locator('#graphics-preset'))).selectOption('quality');
-  await expect(page.locator('#frame-limit')).toHaveValue('30');
-  await expect(page.locator('#antialiasing')).toHaveValue('4');
-  await (await control(page, page.locator('#render-scale'))).selectOption('0.75'); await (await control(page, page.locator('#shadow-quality'))).selectOption('1024');
+  await expect(page.locator('#frame-limit')).toHaveValue('0');
+  await expect(page.locator('#antialiasing')).toHaveValue('3');
+  await (await control(page, page.locator('#render-scale'))).fill('75'); await (await control(page, page.locator('#shadow-quality'))).fill('1');
   await page.locator('#world').evaluate(canvas => {
     const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
     extension.loseContext(); setTimeout(() => extension.restoreContext(), 500);
   });
   await expect(page.locator('#error')).toContainText('图形上下文暂时丢失');
   await expect(page.locator('#error')).toBeHidden();
-  await expect(page.locator('#render-scale')).toHaveValue('0.75');
-  await expect(page.locator('#shadow-quality')).toHaveValue('1024');
+  await expect(page.locator('#render-scale')).toHaveValue('75');
+  await expect(page.locator('#shadow-quality')).toHaveValue('1');
   await expect(page.locator('[data-metric="Scene samples"]')).toHaveText('4');
 });
 

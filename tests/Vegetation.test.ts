@@ -60,11 +60,12 @@ describe('streamed vegetation', () => {
     expect(species.has(6)).toBe(true);
     expect(new Set(Array.from({ length: far.length / 7 }, (_, i) => far[i * 7 + 5]))).not.toContain(6);
   });
-  it('keeps plants out of the restored mountain cover around tunnels', () => {
+  it('keeps natural plants on the mountain above tunnels', () => {
     const generator = new TerrainGenerator('plants', { ...DEFAULT_OPTIONS, terrain: 'forest' });
     const point = { x: 128, y: 800, z: -256, nx: 0, ny: 1, nz: 0, ground: 1, tunnel: true };
     const data = generator.generate(0, 0, 64, [{ a: point, b: { ...point, z: 512 } }]);
-    expect(data.vegetation).toHaveLength(0);
+    expect(data.vegetation.length).toBeGreaterThan(0);
+    expect(data.vegetation).toEqual(generator.generate(0, 0, 64).vegetation);
   });
   it.each(['forest', 'desert', 'dunes'] as const)('plants deterministic %s vegetation on rendered terrain and outside the road', (terrain) => {
     const options = { ...DEFAULT_OPTIONS, terrain, roadType: 'highway' as const, roadWidth: 10 };

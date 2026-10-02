@@ -473,7 +473,8 @@ export class VehicleMesh {
       body.rotation.set(t.pitch, 0, t.roll, 'YXZ');
       this.syncWheels(wheels, t.wheels, t.y, t.pitch, t.roll, car);
     }
-    this.steering.rotation.z = -car.steering * 2;
+    if (car.kind === 'motorcycle') this.steering.rotation.y = -car.steering;
+    else this.steering.rotation.z = -car.steering * 2;
     const on = systems.beam !== 'off', high = systems.beam === 'high';
     this.tail.emissiveIntensity = car.braking ? 2 : on ? 0.75 : 0;
     this.lamp.emissiveIntensity = on ? high ? 3 : 1.8 : 0;
@@ -521,22 +522,26 @@ export class VehicleMesh {
     const p = this.profile, w = p.width, length = p.chassisLength, nose = -length / 2, top = p.height - this.rideHeight;
     const { panel } = kit;
     if (p.shape === 'motorcycle') {
+      this.steering.name = 'motorcycle-steering';
+      const axle = p.wheels.find(w => w.steer)!.along;
+      this.steering.position.set(0, 0.62, -axle); this.chassis.add(this.steering);
+      const handle: Block = (w, h, l, x, y, z, material = metal) => block(w, h, l, x, y - 0.62, z + axle, material, this.steering);
       block(0.27, 0.3, 0.55, 0, -0.12, 0, metal);
       const tank = panel(0.43, 0.32, 0.62, 0, 0.25, -0.16); tank.rotation.x = -0.12;
       panel(0.35, 0.13, 0.65, 0, 0.33, 0.39, leather);
       block(0.35, 0.12, 0.34, 0, 0.21, 0.9);
       block(0.3, 0.12, 0.35, 0, -0.22, -0.85);
       for (const side of [-1, 1]) {
-        const fork = block(0.045, 0.8, 0.055, side * 0.14, -0.05, -0.65, metal); fork.rotation.x = -0.25;
+        const fork = handle(0.045, 0.8, 0.055, side * 0.14, -0.05, -0.65, metal); fork.rotation.x = -0.25;
         const frame = block(0.04, 0.07, 1, side * 0.17, -0.1, 0.1, trim); frame.rotation.x = -0.35;
         block(0.14, 0.05, 0.2, side * 0.29, -0.23, 0.2, metal);
         block(0.13, 0.12, 0.66, side * 0.2, -0.25, 0.55, trim);
-        block(0.17, 0.05, 0.065, side * 0.31, 0.61, -0.48, trim);
-        block(0.02, 0.21, 0.02, side * 0.3, 0.73, -0.5, metal);
-        block(0.14, 0.09, 0.03, side * 0.32, 0.84, -0.5, metal);
+        handle(0.17, 0.05, 0.065, side * 0.31, 0.61, -0.48, trim);
+        handle(0.02, 0.21, 0.02, side * 0.3, 0.73, -0.5, metal);
+        handle(0.14, 0.09, 0.03, side * 0.32, 0.84, -0.5, metal);
       }
-      block(0.65, 0.035, 0.045, 0, 0.62, -0.48, metal);
-      block(0.18, 0.08, 0.16, 0, 0.63, -0.59, trim);
+      handle(0.65, 0.035, 0.045, 0, 0.62, -0.48, metal);
+      handle(0.18, 0.08, 0.16, 0, 0.63, -0.59, trim);
       block(0.2, 0.065, 0.025, 0, 0.26, 1.06, this.tail);
       return;
     }

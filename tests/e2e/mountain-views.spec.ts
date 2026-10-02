@@ -15,7 +15,7 @@ test('changes viewing distance in place, streams repeated passes and preserves s
   const home = await metric('Coordinates').textContent();
   await expect(metric('Mountain stage')).toHaveText('山谷');
   for (const radius of [6, 16, 8]) {
-    await (await control(page, page.locator('#view-distance'))).selectOption(String(radius));
+    await (await control(page, page.locator('#view-distance'))).fill(String([6, 8, 12, 16].indexOf(radius)));
     await expect(metric('Target chunks')).toHaveText(String((radius * 2 + 1) ** 2));
     await ready();
     await expect(metric('Active chunks')).toHaveText(String((radius * 2 + 1) ** 2));
@@ -36,12 +36,12 @@ test('changes viewing distance in place, streams repeated passes and preserves s
   await (await control(page, page.locator('#pass-view'))).click();
   await (await control(page, page.locator('#home'))).click(); await ready();
   await expect(metric('Coordinates')).toHaveText(home!);
-  await (await control(page, page.locator('#view-distance'))).selectOption('6');
+  await (await control(page, page.locator('#view-distance'))).fill('0');
   await (await control(page, page.locator('#terrain-kind'))).selectOption('forest');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await ready();
   await expect(page.locator('#pass-view')).toBeDisabled();
-  await expect(page.locator('#view-distance')).toHaveValue('6');
+  await expect(page.locator('#view-distance')).toHaveValue('0');
   await expect(metric('Active chunks')).toHaveText('169');
   await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);

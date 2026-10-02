@@ -14,6 +14,7 @@ const KINDS = ['pine', 'cactus', 'broadleaf', 'shrub', 'rock', 'grass', 'pine', 
 const distantLayer = (layer: number) => layer >= 6 && layer <= 8 || layer === 13;
 const detailLevel = (layer: number) => distantLayer(layer) ? 'distant' : layer >= 14 ? 'middle' : 'near';
 const deciduous = (layer: number) => KINDS[layer] === 'broadleaf' || KINDS[layer] === 'autumn';
+interface VegetationSettings { distance: number; density: number; shadows: number; budget: number; trees: number; ground: number; flowers: number; rocks: number }
 
 export class VegetationMesh {
   private readonly materials = KINDS.map(() => new MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
@@ -25,26 +26,37 @@ export class VegetationMesh {
   private readonly batches = new Map<string, PlantBatch>();
   private readonly chunks = new Map<string, PlantChunk>();
   private readonly dirty = new Set<PlantChunk>();
+  private pendingOrder: PlantChunk[] = [];
+  private orderDirty = false;
+  private readonly work: PlantChunk[] = [];
   private readonly changed = new Set<PlantBatch>();
   private readonly matrix = new Matrix4();
   private readonly color = new Color();
   private centerX = 0; private centerZ = 0;
   enabled = true;
   private detailSetting = 1;
-  private settings = { distance: 1, density: 1, shadows: 2, budget: Infinity };
+  private settings: VegetationSettings = { distance: 1, density: 1, shadows: 2, budget: Infinity, trees: 1, ground: 1, flowers: 1, rocks: 1 };
   get pending(): number { return this.dirty.size; }
 
-  configure(settings: { distance: number; density: number; shadows: number; budget: number }): void {
+  configure(settings: Partial<VegetationSettings>): void {
     if (Object.entries(settings).some(([key, value]) => !Number.isFinite(value) || value < 0 || key === 'distance' && value < 0.5 || key === 'budget' && value < 1)) return;
-    if (Object.entries(settings).every(([key, value]) => this.settings[key as keyof typeof settings] === value)) return;
-    this.settings = { distance: Math.min(1.5, settings.distance), density: Math.min(1, settings.density), shadows: Math.min(2, settings.shadows), budget: Math.min(32, Math.floor(settings.budget)) };
-    for (const chunk of this.chunks.values()) this.dirty.add(chunk);
+    let rebuild = false;
+    for (const key of Object.keys(settings) as (keyof VegetationSettings)[]) {
+      const raw = settings[key]!;
+      const value = key === 'budget' ? Math.min(32, Math.floor(raw)) : Math.min(key === 'distance' ? 1.5 : key === 'shadows' ? 2 : 1, raw);
+      rebuild ||= key !== 'budget' && key !== 'shadows' && this.settings[key] !== value;
+      this.settings[key] = value;
+    }
+    if (rebuild) {
+      for (const chunk of this.chunks.values()) this.dirty.add(chunk);
+      this.orderDirty = true;
+    }
   }
 
   setDetailLevel(level: number): void {
     if (![0, 1, 2].includes(level) || level === this.detailSetting) return;
     this.detailSetting = level;
-    for (const chunk of this.chunks.values()) this.dirty.add(chunk);
+    this.queueDetailChanges();
   }
 
   private get meadowRadius(): number { return (MEADOW_DETAIL_RADIUS + this.detailSetting - 1) * this.settings.distance; }
@@ -56,7 +68,7 @@ export class VegetationMesh {
     if (this.season !== season) this.materials.forEach((material, layer) => seasonMaterial(material, season,
       deciduous(layer) ? 'foliage' : KINDS[layer] === 'pine' ? 'evergreen' : ['grass', 'meadow', 'shrub'].includes(KINDS[layer]) ? 'grass' : 'structure'));
     this.season = season;
-    this.materials[4].color.set(season.terrain === 'moon' ? '#c2c6ce' : season.terrain === 'mars' ? '#c77d56' : '#ffffff');
+    for (const layer of [4, 19]) this.materials[layer].color.set(season.terrain === 'moon' ? '#c2c6ce' : season.terrain === 'mars' ? '#c77d56' : '#ffffff');
     for (const batch of this.batches.values()) {
       const geometry = this.geometry(batch.layer);
       if (batch.mesh.geometry !== geometry) { batch.mesh.geometry = geometry; batch.mesh.computeBoundingSphere(); }
@@ -86,20 +98,25 @@ export class VegetationMesh {
   setChunk(key: string, x: number, z: number, plants: Float32Array): void {
     this.removeChunk(key);
     const chunk: PlantChunk = { x, z, plants, entries: [], ring: -1, near: false, fine: false };
-    this.chunks.set(key, chunk); this.dirty.add(chunk);
+    this.chunks.set(key, chunk); this.dirty.add(chunk); this.orderDirty = true;
   }
 
   removeChunk(key: string): void {
     const chunk = this.chunks.get(key);
     if (!chunk) return;
-    this.removeInstances(chunk); this.dirty.delete(chunk); this.chunks.delete(key);
+    this.removeInstances(chunk); this.dirty.delete(chunk); this.chunks.delete(key); this.orderDirty = true;
   }
 
   setViewCenter(x: number, z: number): void {
     if (x === this.centerX && z === this.centerZ) return;
     this.centerX = x; this.centerZ = z;
+    this.queueDetailChanges();
+  }
+
+  private queueDetailChanges(): void {
     for (const chunk of this.chunks.values()) if (this.detail(chunk) !== chunk.ring || this.within(chunk, this.meadowRadius) !== chunk.near
       || this.within(chunk, this.fineRadius) !== chunk.fine) this.dirty.add(chunk);
+    this.orderDirty = true;
   }
 
   private within(chunk: PlantChunk, radius: number): boolean {
@@ -153,7 +170,12 @@ export class VegetationMesh {
   }
 
   update(originX: number, originZ: number): void {
-    const work = [...this.dirty].sort((a, b) => Math.hypot(a.x - this.centerX, a.z - this.centerZ) - Math.hypot(b.x - this.centerX, b.z - this.centerZ)).slice(0, this.settings.budget);
+    if (this.orderDirty) {
+      const distance = (chunk: PlantChunk) => (chunk.x - this.centerX) ** 2 + (chunk.z - this.centerZ) ** 2;
+      this.pendingOrder = [...this.dirty].sort((a, b) => distance(a) - distance(b)).reverse(); this.orderDirty = false;
+    }
+    const work = this.work; work.length = 0;
+    while (this.pendingOrder.length && work.length < this.settings.budget) work.push(this.pendingOrder.pop()!);
     for (const chunk of work) this.removeInstances(chunk);
     for (const chunk of work) {
       this.dirty.delete(chunk);
@@ -161,7 +183,15 @@ export class VegetationMesh {
       if (chunk.ring === 3) continue;
       for (let i = 0; i < chunk.plants.length; i += 7) {
         const kind = chunk.plants[i + 5], far = chunk.ring === 2;
-        if (far && ((Math.imul(chunk.x * 4096 + Math.floor(chunk.plants[i]), 374761393) ^ Math.imul(chunk.z * 4096 + Math.floor(chunk.plants[i + 2]), 668265263)) >>> 0) / 4294967296 >= this.settings.density) continue;
+        const density = kind <= 2 || kind === 10 ? this.settings.trees * (far ? this.settings.density : 1)
+          : kind === 5 ? this.settings.rocks : kind === 8 || kind === 9 ? this.settings.flowers : this.settings.ground;
+        if (density < 1) {
+          if (!density) continue;
+          let hash = Math.imul(chunk.x * CHUNK_SIZE + Math.floor(chunk.plants[i]), 374761393)
+            ^ Math.imul(chunk.z * CHUNK_SIZE + Math.floor(chunk.plants[i + 2]), 668265263) ^ Math.imul(kind + 1, 1274126177);
+          hash = Math.imul(hash ^ hash >>> 13, 1274126177);
+          if (((hash ^ hash >>> 16) >>> 0) / 4294967296 >= density) continue;
+        }
         if ((kind >= 7 && kind <= 9 && !chunk.near) || (chunk.ring > 0 && kind >= 3 && kind !== 10) || (far && !distantPlant(chunk.x * CHUNK_SIZE + chunk.plants[i], chunk.z * CHUNK_SIZE + chunk.plants[i + 2]))) continue;
         const ground = kind <= 4 ? 3 : kind - 1;
         const layer = kind === 10 ? far ? 13 : chunk.fine ? 12 : 17 : kind >= 7 ? kind + 2 : far ? 6 + kind : kind <= 2 ? chunk.fine ? kind : 14 + kind : chunk.fine ? ground : ground + 15;
@@ -190,10 +220,12 @@ export class VegetationMesh {
       batch.mesh.castShadow = this.settings.shadows > 0 && (batch.layer < 5 || batch.layer === 12 || this.settings.shadows === 2 && batch.layer >= 14 && batch.layer < 20);
       batch.mesh.position.set(batch.x - originX, 0, batch.z - originZ); batch.mesh.visible = this.visible(batch.layer);
     }
+    work.length = 0;
   }
 
   dispose(): void {
     this.chunks.clear(); this.dirty.clear(); this.changed.clear();
+    this.pendingOrder.length = this.work.length = 0;
     for (const { mesh } of this.batches.values()) { mesh.removeFromParent(); mesh.dispose(); }
     this.batches.clear();
     [...this.geometries, ...this.bare, ...this.blossom].forEach(geometry => geometry?.dispose());

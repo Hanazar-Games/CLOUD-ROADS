@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeSettings, openSettings } from '../e2e/settings';
+import { closeSettings, control, openSettings } from '../e2e/settings';
 import { readFileSync } from 'node:fs';
 
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -18,7 +18,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
     await openSettings(page);
     await page.locator('[data-settings-target="graphics"]').click();
     await page.locator('#graphics-preset').selectOption('economy');
-    await page.locator('#view-distance').selectOption('8');
+    await (await control(page, page.locator('#view-distance'))).fill('1');
     await page.locator('[data-settings-target="explore"]').click();
     await page.locator('#vegetation-toggle').click();
     await closeSettings(page);

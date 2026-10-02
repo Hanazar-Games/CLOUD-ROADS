@@ -25,7 +25,8 @@ it('grows deterministic dense grass and wildflowers beside the road, rooted in t
   const desert = generateVegetation('meadow', 0, 0, 64, positions, corridor, new BiomeSystem('meadow', 'desert'));
   for (let i = 5; i < desert.length; i += 7) expect(desert[i]).toBeLessThan(7);
   const tunnel = new RoadCorridor([{ a: { ...a, tunnel: true }, b: { ...b, tunnel: true } }]);
-  expect(generateVegetation('meadow', 0, 0, 64, positions, tunnel, biomes)).toHaveLength(0);
+  expect(generateVegetation('meadow', 0, 0, 64, positions, tunnel, biomes))
+    .toEqual(generateVegetation('meadow', 0, 0, 64, positions, new RoadCorridor([]), biomes));
 });
 
 it('streams flower details near the player, releases them farther away and restores them after a rebase', () => {

@@ -13,6 +13,11 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 const approach = (value: number, target: number, delta: number) => value + clamp(target - value, -delta, delta);
 const angle = (value: number) => Math.atan2(Math.sin(value), Math.cos(value));
 const wheel = (): WheelState => ({ height: 0, compression: 0, grounded: true });
+export const steeringTuning = {
+  directness: [0, 0, 1], returnSpeed: [1.2, 0.25, 3], reversalSpeed: [1.25, 0.5, 2.5],
+  leanResponse: [1, 0.5, 2], leanLimit: [40, 20, 50], countersteer: [0.65, 0, 1],
+} as const;
+export type SteeringTuning = { -readonly [K in keyof typeof steeringTuning]: number };
 
 export class VehiclePhysics {
   readonly profile: Readonly<VehicleProfile>;
@@ -39,6 +44,8 @@ export class VehiclePhysics {
   private allowDrift = true;
   turningRadius?: number;
   steeringResponse = 1;
+  readonly steeringTuning = Object.fromEntries(Object.entries(steeringTuning).map(([key, [value]]) => [key, value])) as SteeringTuning;
+  private progressiveSteering = 0;
   speedLimit?: number;
   steeringAssist = true;
   steeringAssistStrength = 1;
@@ -101,6 +108,12 @@ export class VehiclePhysics {
     this.ignitionTime = this.powertrain === 'ev' ? 0.15 : this.profile.mass > 4000 ? 1.25 : 0.75;
   }
   get maxSpeed(): number { return this.speedLimit ?? this.profile.maxSpeed; }
+  configureSteering(values: Partial<SteeringTuning>): void {
+    for (const key of Object.keys(steeringTuning) as (keyof SteeringTuning)[]) {
+      const value = values[key], [, min, max] = steeringTuning[key];
+      if (value !== undefined && Number.isFinite(value)) this.steeringTuning[key] = clamp(value, min, max);
+    }
+  }
   get steeringLock(): number {
     const config = this.profile, stability = this.kind === 'motorcycle' ? 8 : Math.min(8, this.gravity * config.width / (2 * config.cg) * 0.7);
     const speed = this.motionSpeed * Math.sqrt(clamp(this.steeringAssistStrength, 0.25, 2));
@@ -121,6 +134,7 @@ export class VehiclePhysics {
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
     this.transmission.reset(); this.trailerBrake = this.regenerating = false;
     this.parked = true; this.braking = false; this.saveMotion();
+    this.progressiveSteering = this.steering;
   }
   wheelSteering(point: WheelPoint): number {
     const curvature = Math.tan(this.steering) / this.wheelbase;
@@ -139,6 +153,7 @@ export class VehiclePhysics {
     this.impact = this.scrape = 0;
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
     this.speed = this.lateralSpeed = this.steering = this.pitch = this.roll = this.wheelAngle = this.rearWheelAngle = 0;
+    this.progressiveSteering = 0;
     this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
     this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.parked = true; this.braking = this.jackknifed = this.regenerating = this.trailerBrake = false;
@@ -300,9 +315,29 @@ export class VehiclePhysics {
     const correction = this.motionSpeed > 3 ? slide * clamp(this.countersteerAssist, 0, 1) * Math.sign(this.speed || 1) : 0;
     const countersteering = input.steer * slide * Math.sign(this.speed || 1) > 0;
     const mechanicalLock = this.mechanicalLock;
-    const targetSteer = clamp(clamp(input.steer, -1, 1) * (countersteering ? mechanicalLock : steeringLock) + correction, -mechanicalLock, mechanicalLock);
-    this.steering = approach(this.steering, targetSteer,
-      config.steerRate * clamp(this.steeringResponse, 0.25, 2) * (countersteering ? 1 : Math.max(0.08, Math.min(1, (steeringLock + Math.abs(correction)) / config.steer))) * STEP);
+    const bike = this.kind === 'motorcycle';
+    const targetSteer = clamp(clamp(input.steer, -1, 1) * (countersteering && !bike ? mechanicalLock : steeringLock) + (bike ? 0 : correction), -mechanicalLock, mechanicalLock);
+    const tuning = this.steeringTuning;
+    const response = Math.abs(input.steer) < 0.001 ? tuning.returnSpeed
+      : targetSteer * this.progressiveSteering < 0 ? tuning.reversalSpeed : 1;
+    this.progressiveSteering = approach(this.progressiveSteering, targetSteer,
+      config.steerRate * clamp(this.steeringResponse, 0.25, 2) * response
+      * (countersteering ? 1 : Math.max(0.08, Math.min(1, (steeringLock + Math.abs(correction)) / config.steer))) * STEP);
+    this.steering = this.progressiveSteering * (1 - tuning.directness) + targetSteer * tuning.directness;
+    let riding = 0, leanLimit = 0, desiredLean = 0;
+    if (bike) {
+      const blend = clamp((this.speed - 3) / 5, 0, 1);
+      riding = blend * blend * (3 - 2 * blend) * (1 - this.handbrake);
+      const lateralBudget = Math.sqrt(Math.max(0, (this.gravity * grip * 0.75) ** 2 - this.longitudinalAcceleration ** 2));
+      leanLimit = Math.min(tuning.leanLimit * Math.PI / 180, Math.atan(lateralBudget / this.gravity));
+      desiredLean = -clamp(Math.atan(this.speed ** 2 * Math.tan(this.steering) / (this.wheelbase * this.gravity)), -leanLimit, leanLimit);
+      // At road speed the rider initiates lean with a short opposite steering input.
+      const balanced = Math.atan(-Math.tan(this.roll) * this.gravity * this.wheelbase / Math.max(1, this.speed ** 2));
+      const initiation = (desiredLean - this.roll) * 0.045 * tuning.countersteer;
+      const balanceYaw = -Math.tan(this.roll) * this.gravity / Math.max(3, this.speed);
+      const balanceCorrection = clamp((balanceYaw - this.yawRate) * 0.12, -0.12, 0.12);
+      this.steering = clamp(this.steering * (1 - riding) + (balanced + initiation + balanceCorrection) * riding + correction, -mechanicalLock, mechanicalLock);
+    }
     this.longitudinalAcceleration = (this.speed - oldSpeed) / STEP + slopeForce;
     const lateralAcceleration = this.updateTires(contacts, rearLoad, brakingGrip, parking, rearOnly);
     this.x += (Math.sin(this.heading) * this.speed + Math.cos(this.heading) * this.lateralSpeed) * STEP;
@@ -321,12 +356,15 @@ export class VehiclePhysics {
     }
     this.vy += lift * STEP; this.y += this.vy * STEP;
     this.pitchVelocity += (pitchForce / this.pitchInertia + (this.longitudinalAcceleration - slopeForce) * config.cg * 0.22 / Math.max(1, this.pitchInertia) - this.pitchVelocity * 2) * STEP;
-    if (this.kind === 'motorcycle') {
-      const lean = -Math.atan(lateralAcceleration / this.gravity);
-      this.rollVelocity += ((lean - this.roll) * 45 - this.rollVelocity * 13) * STEP;
+    if (bike) {
+      const grounded = this.wheels.some(w => w.grounded);
+      const gripLean = -clamp(Math.atan(lateralAcceleration / this.gravity), -leanLimit, leanLimit);
+      const lean = grounded ? desiredLean * riding + gripLean * (1 - riding) : this.roll;
+      this.rollVelocity += ((lean - this.roll) * 45 * tuning.leanResponse ** 2 - this.rollVelocity * 13 * tuning.leanResponse) * STEP;
     } else this.rollVelocity += (rollForce / this.rollInertia + lateralAcceleration * config.cg * 0.3 - this.rollVelocity * 3) * STEP;
     this.pitch = clamp(this.pitch + this.pitchVelocity * STEP, -0.65, 0.65);
-    this.roll = clamp(this.roll + this.rollVelocity * STEP, -0.7, 0.7);
+    const rollLimit = bike ? tuning.leanLimit * Math.PI / 180 : 0.7;
+    this.roll = clamp(this.roll + this.rollVelocity * STEP, -rollLimit, rollLimit);
     const floor = Math.max(...next.map((c, i) => c.height + config.radius + config.rest - config.travel
       - vehicleOffset(config.wheels[i].x, config.wheels[i].along, this.pitch, this.roll).y));
     if (this.y < floor) { this.y = floor; this.vy = Math.max(0, this.vy); }

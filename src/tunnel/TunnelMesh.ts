@@ -120,45 +120,19 @@ export class TunnelMesh {
       const arch: [number, number][] = [[-half, -0.2], [-half, 4.2]];
       for (let i = 1; i <= 24; i++) arch.push([-half * Math.cos(i * Math.PI / 24), 4.2 + Math.sin(i * Math.PI / 24) * 3.4]);
       arch.push([half, -0.2]);
-      const columns = [...new Set([-160, -120, -80, -50, -this.profile.outerHalfWidth - 4,
+      const columns = [...new Set([-this.profile.outerHalfWidth - 2,
         ...this.profile.centers.flatMap(center => [center - half - 0.01, ...arch.map(([x]) => center + x), center + half + 0.01]),
-        this.profile.outerHalfWidth + 4, 50, 80, 120, 160])].sort((a, b) => a - b);
+        this.profile.outerHalfWidth + 2])].sort((a, b) => a - b);
+      const surface = (x: number, z: number) => corridor.height(x, z, terrain.sample(x, z), true);
+      const terrainTop = (x: number, z: number) => {
+        const gx = Math.floor(x / 4) * 4, gz = Math.floor(z / 4) * 4, tx = (x - gx) / 4, tz = (z - gz) / 4;
+        const a = surface(gx, gz), b = surface(gx + 4, gz), c = surface(gx, gz + 4), d = surface(gx + 4, gz + 4);
+        return tx + tz <= 1 ? a + (b - a) * tx + (c - a) * tz : d + (c - d) * (1 - tx) + (b - d) * (1 - tz);
+      };
       for (const span of spans) {
         const uvStart = Math.floor(span.start.distance / 4800) * 4800;
         const rows = span.samples.filter((sample, i) => i === 0 || i === span.samples.length - 1
           || Math.floor(sample.distance / (Math.abs(sample.curvature) > 0.01 ? 4 : 8)) !== Math.floor(span.samples[i - 1].distance / (Math.abs(sample.curvature) > 0.01 ? 4 : 8)));
-        const extents = new Map<RoadSample, number[]>();
-        const edge = this.profile.outerHalfWidth + 4;
-        for (const sample of rows) extents.set(sample, [-1, 1].map(side => {
-          for (let offset = edge + 4; offset <= 160; offset += 4) {
-            const p = this.point(sample, offset * side, 0);
-            if (corridor.distance(p[0] + this.anchorX, p[2] + this.anchorZ, offset) < offset * 0.75) return offset - 4;
-          }
-          return 160;
-        }));
-        const coverOffset = (sample: RoadSample, offset: number) => {
-          const extent = extents.get(sample)![offset < 0 ? 0 : 1];
-          return Math.sign(offset) * (Math.min(edge, Math.abs(offset)) + Math.max(0, Math.abs(offset) - edge) * (extent - edge) / (160 - edge));
-        };
-        const top = (sample: RoadSample, offset: number): { point: Point; raised: boolean } => {
-          const extent = extents.get(sample)![offset < 0 ? 0 : 1];
-          offset = coverOffset(sample, offset);
-          const blend = Math.max(0, 1 - Math.max(0, Math.abs(offset) - edge) / Math.max(1, extent - edge));
-          const setback = 12 * blend * ((span.openStart ? 0 : Math.max(0, 1 - (sample.distance - span.start.distance) / 80) ** 2)
-            - (span.openEnd ? 0 : Math.max(0, 1 - (span.end.distance - sample.distance) / 80) ** 2));
-          const p = this.point(sample, offset, 0, setback);
-          const natural = terrain.sample(p[0] + this.anchorX, p[2] + this.anchorZ);
-          const ground = corridor.height(p[0] + this.anchorX, p[2] + this.anchorZ, natural);
-          const approach = Math.min(1, span.openStart ? 1 : (sample.distance - span.start.distance) / 80,
-            span.openEnd ? 1 : (span.end.distance - sample.distance) / 80);
-          const entrance = Math.abs(offset) <= edge ? Math.max(ground, p[1] + 9.5) : ground;
-          const roof = Math.abs(offset) <= edge ? Math.max(natural, p[1] + 9.5) : natural;
-          const portal = ground + (entrance - ground) * blend;
-          const restore = approach * approach * (3 - 2 * approach);
-          p[1] = portal + (roof - portal) * restore - 0.01 * (1 - blend);
-          return { point: p, raised: p[1] > ground + 0.1 };
-        };
-        const tops = rows.map(sample => columns.map(offset => top(sample, offset)));
         for (let i = 0; i < rows.length; i++) {
           const sample = rows[i];
           if (i > 0) {
@@ -192,10 +166,6 @@ export class TunnelMesh {
                 return [frame.right.x * nx + frame.normal.x * ny, frame.right.y * nx + frame.normal.y * ny, frame.right.z * nx + frame.normal.z * ny];
               };
               quad(liningNormals, normal(previous, ax, ay), normal(previous, bx, by), normal(sample, ax, ay), normal(sample, bx, by));
-            }
-            for (let j = 1; j < columns.length; j++) {
-              const corners = [tops[i - 1][j - 1], tops[i - 1][j], tops[i][j - 1], tops[i][j]];
-              if (corners.some(corner => corner.raised)) coverQuad(corners[0].point, corners[1].point, corners[2].point, corners[3].point);
             }
           }
           const entrance = span.entrance ?? (span.openStart ? -Infinity : span.start.distance);
@@ -250,7 +220,6 @@ export class TunnelMesh {
           if (sample === span.start ? span.openStart : span.openEnd) continue;
           const end = sample === span.end ? 1 : -1;
           const bottom = (offset: number): Point => {
-            offset = coverOffset(sample, offset);
             for (const center of this.profile.centers) {
               const x = offset - center;
               if (Math.abs(x) <= half + 0.0001) return this.point(sample, offset, 4.2 + Math.sqrt(Math.max(0, 1 - (x / half) ** 2)) * 3.4);
@@ -259,8 +228,12 @@ export class TunnelMesh {
             p[1] = corridor.height(p[0] + this.anchorX, p[2] + this.anchorZ, terrain.sample(p[0] + this.anchorX, p[2] + this.anchorZ)) - 0.4;
             return p;
           };
-          const row = tops[sample === span.start ? 0 : tops.length - 1];
-          for (let j = 1; j < columns.length; j++) if (row[j - 1].raised || row[j].raised) coverQuad(bottom(columns[j - 1]), bottom(columns[j]), row[j - 1].point, row[j].point);
+          const row = columns.map(offset => {
+            const base = bottom(offset), top: Point = [...base];
+            top[1] = Math.max(base[1], terrainTop(top[0] + this.anchorX, top[2] + this.anchorZ));
+            return { base, top };
+          });
+          for (let j = 1; j < row.length; j++) coverQuad(row[j - 1].base, row[j].base, row[j - 1].top, row[j].top);
           for (const center of this.profile.centers) for (let j = 1; j < arch.length; j++) {
             const [ax, ay] = arch[j - 1], [bx, by] = arch[j];
             const outerHeight = (height: number) => height < 0 ? height : height + 0.85;

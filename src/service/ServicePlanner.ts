@@ -5,7 +5,7 @@ import { roadFrame } from '../road/RoadFrame';
 import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from './ServiceSchedule';
-import { padPoint, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
+import { padPoint, padQuad, type ServiceAccessPoint, type ServiceGround, type ServicePad } from './ServiceTerrain';
 import { PARK_HALF_WIDTH, PARK_HALF_LENGTH } from './ServiceParking';
 import { serviceCrossover } from './ServiceCrossover';
 import { serviceFacility, type ServiceFacility } from './ServiceArchitecture';
@@ -14,7 +14,7 @@ import { Garage, GARAGE_APRON } from '../garage/Garage';
 import { connectGarage } from '../garage/GarageAccess';
 import { TunnelDetector, type TunnelSpan } from '../tunnel/TunnelDetector';
 import { accessQuads } from '../road/SurfaceRibbon';
-import { exposedBarriers } from '../road/RampBarrier';
+import { exposedBarriers, roadBarrierQuads } from '../road/RampBarrier';
 
 export interface ServiceArea { id: number; sample: RoadSample; start: number; end: number; ground: ServiceGround; facility?: ServiceFacility; garages?: Garage[]; mergeEnd?: number; accessSide?: number; accessWindows?: { start: number; end: number; side: number }[] }
 
@@ -111,9 +111,14 @@ export class ServicePlanner {
             const parking = padPoint(pad, -side * (pad.halfWidth - 6), along);
             const x = road.x + (parking.x - road.x) * blend, z = road.z + (parking.z - road.z) * blend;
             const separation = Math.abs((x - point.position.x) * Math.cos(point.heading) + (z - point.position.z) * Math.sin(point.heading)) - this.profile.outerHalfWidth;
-            const settle = Math.max(0, Math.min(1, (separation - 6 - (merging ? this.profile.laneWidth : 0)) / 12)), vertical = settle * settle * (3 - 2 * settle);
+            const localX = (x - pad.x) * Math.cos(pad.heading) + (z - pad.z) * Math.sin(pad.heading);
+            const localAlong = (x - pad.x) * Math.sin(pad.heading) - (z - pad.z) * Math.cos(pad.heading);
+            const padDistance = Math.max(Math.abs(localX) - pad.halfWidth, Math.abs(localAlong) - pad.halfLength);
+            const settle = Math.max(0, Math.min(1, Math.max((separation - 6 - (merging ? this.profile.laneWidth : 0)) / 12,
+              1 - (padDistance - 5) / 12)));
+            const vertical = settle * settle * (3 - 2 * settle);
             const roadY = point.position.y - (normal.x * (x - point.position.x) + normal.z * (z - point.position.z)) / normal.y;
-            points.push({ x, y: roadY + (parking.y - roadY) * vertical, z,
+            points.push({ x, y: roadY + (pad.y + pad.grade * localAlong - roadY) * vertical, z,
               slopeX: -normal.x / normal.y * (1 - vertical) + Math.sin(pad.heading) * pad.grade * vertical,
               slopeZ: -normal.z / normal.y * (1 - vertical) - Math.cos(pad.heading) * pad.grade * vertical });
           }
@@ -125,13 +130,12 @@ export class ServicePlanner {
         }))) || [...access, ...auxiliary?.access ?? []].some(({ a, b }) => [a, b].some(p => p.y - this.terrain.sample(p.x, p.z) > 5));
         const barriers: ServiceGround['barriers'] = [];
         if (elevated) {
-          const rampIndex = new RoadIndex(access);
           for (const pad of pads) {
             for (const side of [-1, 1]) for (let along = -pad.halfLength; along < pad.halfLength; along += 4) {
               const a = padPoint(pad, side * pad.halfWidth, along), b = padPoint(pad, side * pad.halfWidth, Math.min(pad.halfLength, along + 4));
-              if (!rampIndex.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 4.2)) barriers.push({ a, b });
+              barriers.push({ a, b });
             }
-            for (const along of [-pad.halfLength, pad.halfLength]) barriers.push({ a: padPoint(pad, -pad.side * (pad.halfWidth - 11), along), b: padPoint(pad, pad.side * pad.halfWidth, along) });
+            for (const along of [-pad.halfLength, pad.halfLength]) barriers.push({ a: padPoint(pad, -pad.halfWidth, along), b: padPoint(pad, pad.halfWidth, along) });
           }
         }
         if (elevated || merging) {
@@ -148,27 +152,16 @@ export class ServicePlanner {
         }
         if (merging) {
           const merge = auxiliary!;
-          const joined = exposedBarriers([...barriers, ...merge.barriers], [...accessQuads(access, 0.2), ...accessQuads(merge.access, 0.25)]);
-          barriers.splice(0, barriers.length, ...joined); access.push(...merge.access);
+          barriers.push(...merge.barriers); access.push(...merge.access);
         }
         site = { id, sample, facility, mergeEnd: merging ? MERGE_END : undefined, start: sample.distance - 245, end: sample.distance + 245, ground: { pads, access, elevated, barriers } };
         if (this.profile.centers.length === 2) site.ground.crossover = serviceCrossover(this.seed, id, pads,
           samples.filter(p => Math.abs(p.distance - target) <= SERVICE_SEARCH_RADIUS), this.profile.outerHalfWidth, access);
-        if (site.ground.crossover) {
-          const cross = site.ground.crossover, index = new RoadIndex(cross.access), accessIndex = new RoadIndex(access);
-          cross.barriers = cross.barriers.filter(({ a, b }) => {
-            const nearest = accessIndex.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 8);
-            if (!nearest) return true;
-            const edge = access[nearest.index], width = (edge.a.halfWidth ?? 3.5) + 0.5;
-            return nearest.distanceSquared > width ** 2 || Math.abs(edge.a.y + (edge.b.y - edge.a.y) * nearest.t - (a.y + b.y) / 2) > 2;
-          });
-          site.ground.barriers = barriers.filter(({ a, b }) => {
-            const nearest = index.nearest((a.x + b.x) / 2, (a.z + b.z) / 2, 4.5);
-            if (!nearest) return true;
-            const edge = cross.access[nearest.index], y = edge.a.y + (edge.b.y - edge.a.y) * nearest.t;
-            return Math.abs(y - (a.y + b.y) / 2) > 2;
-          });
-        }
+        const cross = site.ground.crossover;
+        const surfaces = [...pads.map(padQuad), ...accessQuads(access, 0.2), ...accessQuads(cross?.access ?? [], 0.3),
+          ...roadBarrierQuads(samples.filter(p => Math.abs(p.distance - sample.distance) < MERGE_END + 32), this.profile.outerHalfWidth + 0.3)];
+        site.ground.barriers = exposedBarriers(barriers, surfaces);
+        if (cross) cross.barriers = exposedBarriers(cross.barriers, surfaces);
         if (facility === 'garage' && !elevated) {
           site.garages = pads.flatMap(pad => {
             const heading = pad.heading - pad.side * Math.PI / 2;

@@ -2,6 +2,8 @@ import { element } from '../debug/DebugUI';
 import { audioChannels } from '../audio/AudioSystem';
 import { trafficTuning } from '../traffic/TrafficSystem';
 import { transmissionTuning } from '../vehicle/Transmission';
+import { steeringTuning } from '../vehicle/VehiclePhysics';
+import { graphicsControls as graphics } from '../game/GraphicsSettings';
 import { roadNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
 import { parsePreset, PresetStore, PRESET_MAX_BYTES, type SettingRules, type SettingsPreset } from './SettingsPreset';
 
@@ -11,8 +13,8 @@ const controls = ['vehicle-kind', 'hud-style', 'beginner-mode', 'vehicle-energy'
   'vehicle-lights', 'light-power', 'light-range', 'vehicle-wipers', 'vehicle-windows', 'cabin-fan', 'fog-visibility', 'fridge-temperature',
   'traffic-density', 'traffic-limit', 'traffic-scenario', 'garage-density', 'garage-kind', 'garage-paint', 'garage-loading', 'garage-light', 'season-kind', 'weather-kind', 'fog-density', 'daylight', 'frame-limit', 'radio-station', 'music-style', 'music-pace', 'speed',
   ...Object.keys(trafficTuning).map(key => `traffic-${key}`), ...Object.keys(transmissionTuning).map(key => `engine-${key}`),
+  ...Object.keys(steeringTuning).map(key => `steering-${key}`),
   ...audioChannels.map(([name]) => `${name}-volume`), 'horn-focus', 'cabin-isolation', 'vehicle-fog-lights'];
-const graphics = ['render-scale', 'shadow-quality', 'antialiasing', 'view-distance', 'map-detail', 'cloud-quality', 'vegetation-lod', 'distant-trees', 'vegetation-shadows', 'vegetation-budget', 'vehicle-detail-distance'];
 const toggles = ['vegetation-toggle', 'cloud-toggle', 'lights-toggle', 'audio-toggle', 'cabin-light', 'ambient-light', 'vehicle-roof', 'vehicle-fridge'];
 
 export class PresetPanel {
@@ -105,7 +107,7 @@ export class PresetPanel {
         : node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
-    const preset = { format: 'cloud-roads-preset', version: 14, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
+    const preset = { format: 'cloud-roads-preset', version: 16, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
     return parsePreset(JSON.stringify(preset), this.rules);
   }
   private async importFile(): Promise<void> {

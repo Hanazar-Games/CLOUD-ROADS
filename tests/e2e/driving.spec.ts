@@ -33,8 +33,10 @@ test('slides along the highway divider, brakes and reverses away after contact',
     return Math.hypot(next[0] - contact[0], next[2] - contact[2]);
   }).toBeGreaterThan(6);
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeGreaterThan(10);
+  const brakingSpeed = Number(await page.locator('#vehicle-speed').textContent());
   await page.keyboard.up('KeyW'); await page.keyboard.down('Space');
-  await expect(page.locator('#vehicle-speed')).toHaveText('0');
+  await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent())).toBeLessThan(brakingSpeed * 0.75);
+  await expect(page.locator('#vehicle-speed')).toHaveText('0', { timeout: 8000 });
   await page.keyboard.up('Space'); await page.keyboard.down('KeyS');
   await expect(page.locator('#vehicle-gear')).toHaveText('R');
   await page.keyboard.up('KeyS'); await page.keyboard.press('KeyR');

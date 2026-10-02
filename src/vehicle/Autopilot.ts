@@ -123,7 +123,8 @@ export class Autopilot {
     }
     this.targetKmh = target * 3.6;
     if (target * 3.6 < this.settings.minKmh && this.status === '沿当前路线巡航') this.status = '弯道 / 坡道 · 低于最低巡航偏好';
-    const look = clamp(5 + car.speed * (0.45 + comfort * 0.04) + car.wheelbase * 0.3, 6, 25);
+    const leanTime = car.kind === 'motorcycle' ? 0.45 / car.steeringTuning.leanResponse : 0;
+    const look = clamp(5 + car.speed * (0.45 + comfort * 0.04 + leanTime) + car.wheelbase * 0.3, 6, leanTime ? 40 : 25);
     const point = sampleAt(near.distance + this.direction * Math.min(look, Math.max(0, remaining - 0.1))) ?? near;
     const dx = point.position.x + Math.cos(point.heading) * this.offset - car.x, dz = point.position.z + Math.sin(point.heading) * this.offset - car.z;
     const cross = dx * Math.cos(car.heading) + dz * Math.sin(car.heading);

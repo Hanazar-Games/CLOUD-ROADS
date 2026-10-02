@@ -62,7 +62,7 @@ test('leaves a parked vehicle on a high bridge with F and boards it without rese
 test('keeps lightweight antialiasing and cloud detail through resizing and context restoration', async ({ page }) => {
   const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
   await page.goto('/?seed=CLOUD-ROAD-001'); await expect(metric('Road ready')).toHaveText('yes');
-  await (await control(page, page.locator('#antialiasing'))).selectOption('1'); await (await control(page, page.locator('#cloud-quality'))).selectOption('12');
+  await (await control(page, page.locator('#antialiasing'))).fill('1'); await (await control(page, page.locator('#cloud-quality'))).fill('12');
   await expect(metric('Scene samples')).toHaveText('0'); await expect(metric('FXAA')).toHaveText('on');
   await expect(metric('Cloud steps')).toHaveText('12'); await page.setViewportSize({ width: 1100, height: 720 });
   await page.locator('#world').evaluate(canvas => {
@@ -71,7 +71,7 @@ test('keeps lightweight antialiasing and cloud detail through resizing and conte
   });
   await expect(page.locator('#error')).toBeVisible(); await expect(page.locator('#error')).toBeHidden();
   await expect(metric('FXAA')).toHaveText('on'); await expect(metric('Cloud steps')).toHaveText('12');
-  await (await control(page, page.locator('#antialiasing'))).selectOption('0'); await expect(metric('FXAA')).toHaveText('off');
+  await (await control(page, page.locator('#antialiasing'))).fill('0'); await expect(metric('FXAA')).toHaveText('off');
   await (await control(page, page.locator('#graphics-preset'))).selectOption('quality');
   await expect(metric('Scene samples')).toHaveText('4'); await expect(metric('Cloud steps')).toHaveText('28');
 });

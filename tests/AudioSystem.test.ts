@@ -48,6 +48,25 @@ it.each(['player', 'traffic'])('keeps music at full level when muted %s horns ar
   expect(mix.musicDuck).toBeGreaterThan(0.99); audio.dispose();
 });
 
+it.each(['sfx', 'engine', 'collision'] as const)('does not duck music for muted %s driving sounds', async muted => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.musicDucking = 0.8;
+  if (muted === 'sfx') audio.sfxVolume = 0;
+  else if (muted === 'engine') audio.engineVolume = 0;
+  else audio.collisionVolume = 0;
+  audio.toggle(); await Promise.resolve();
+  const state = { ...idle, driving: true, throttle: muted === 'collision' ? 0 : 1, impact: muted === 'engine' ? 0 : 12 };
+  const mix = audio as unknown as { musicDuck: number };
+  for (let i = 0; i < 40; i++) audio.update(0.1, state);
+  expect(mix.musicDuck).toBe(1);
+  audio.sfxVolume = audio.engineVolume = audio.collisionVolume = 1;
+  for (let i = 0; i < 40; i++) audio.update(0.1, state);
+  expect(mix.musicDuck).toBeLessThan(0.3);
+  audio.sfxVolume = 0;
+  for (let i = 0; i < 40; i++) audio.update(0.1, state);
+  expect(mix.musicDuck).toBeGreaterThan(0.99); audio.dispose();
+});
+
 it('provides stronger horns with adjustable priority, exhaust voicing and independent shift volume', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();

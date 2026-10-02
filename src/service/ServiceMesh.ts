@@ -7,10 +7,12 @@ import type { RoadTerrain } from '../road/RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
 import { serviceArchitecture, type ServiceArchitecture } from './ServiceArchitecture';
 import { parkingSlots } from './ServiceParking';
-import { chargingBays, chargingPosts, chargingPostColumns } from './ServiceAmenities';
+import { chargingBays, chargingPosts, chargingPostColumns, fuelCanopyColumns, fuelPumpRows } from './ServiceAmenities';
 import { serviceDetails } from './ServiceDetails';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
 import { accessQuads } from '../road/SurfaceRibbon';
+import { appendRibbonSlab } from '../road/RibbonGeometry';
+import { exposedBarriers } from '../road/RampBarrier';
 import type { RoadCorridor } from '../road/RoadCorridor';
 import { createPavementMaterial } from '../road/PavementMaterial';
 import type { PavementTextures } from '../road/PavementTextures';
@@ -32,6 +34,7 @@ function roofGeometry(): BufferGeometry {
 export class ServiceMesh {
   private readonly materialOrigin = new Vector2();
   readonly structures = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.materialOrigin), 8000);
+  readonly decks = new Mesh(new BufferGeometry(), this.structures.material);
   readonly railings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xaebdc0, metalness: 0.6, roughness: 0.45 }), 16000);
   private readonly pavementOrigin = new Vector2();
   readonly pavement: Mesh<BufferGeometry, MeshStandardMaterial>;
@@ -58,10 +61,11 @@ export class ServiceMesh {
     this.picnicDetails = new NearbyDetails(scene, picnicDetailGeometry(), 'service-picnic-details', 24);
     this.picnicDetails.mesh.material.metalness = 0; this.picnicDetails.mesh.material.roughness = 0.9;
     addRetroreflection(this.markings.material);
-    for (const mesh of [this.pavement, ...this.batches]) {
+    for (const mesh of [this.pavement, this.decks, ...this.batches]) {
       mesh.visible = false; mesh.receiveShadow = true; mesh.castShadow = mesh === this.buildings || mesh === this.roofs || mesh === this.landscaping || mesh === this.treeTrunks || mesh === this.structures;
       scene.add(mesh);
     }
+    this.decks.castShadow = true;
     for (const mesh of this.batches) mesh.count = 0;
   }
 
@@ -74,7 +78,8 @@ export class ServiceMesh {
       this.pavementOrigin.set(this.anchorX % 40, this.anchorZ % 40);
       this.lampPositions.length = 0;
       for (const mesh of this.batches) mesh.count = 0;
-      const data: number[] = [];
+      const data: number[] = [], decks: number[] = [];
+      const anchor = { x: this.anchorX, z: this.anchorZ };
       const vertex = (point: ServicePoint, height = 0): Point => [point.x - this.anchorX, point.y + height, point.z - this.anchorZ];
       for (const site of sites) {
         const underpass = new RoadIndex(site.ground.crossover?.kind === 'under' ? site.ground.crossover.access : []);
@@ -86,7 +91,7 @@ export class ServiceMesh {
             for (let x = -Math.floor((pad.halfWidth - 12) / 32) * 32; x < pad.halfWidth; x += 32) this.column(pad, x, along, -2);
           }
         }
-        const ribbons = accessQuads(site.ground.access);
+        const ribbons = accessQuads(site.ground.access), rims = accessQuads(site.ground.access, 0.3);
         for (const [index, { a, b }] of site.ground.access.entries()) {
           const length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
           const aw = a.halfWidth ?? 3.5, bw = b.halfWidth ?? 3.5;
@@ -96,7 +101,7 @@ export class ServiceMesh {
           const insidePad = site.ground.pads.some(pad => Math.abs((a.x - pad.x) * Math.cos(pad.heading) + (a.z - pad.z) * Math.sin(pad.heading)) < pad.halfWidth
             && Math.abs((a.x - pad.x) * Math.sin(pad.heading) - (a.z - pad.z) * Math.cos(pad.heading)) < pad.halfLength);
           if (!insidePad) {
-            this.edge(this.structures, a, b, Math.max(aw, bw) * 2 + 0.6, 1.4, -0.75, (a.slopeX + b.slopeX) / 2 * nx + (a.slopeZ + b.slopeZ) / 2 * nz);
+            appendRibbonSlab(decks, q, rims[index], anchor, 1.4);
             if (site.ground.elevated && !underpass.nearest(a.x, a.z, 7) && index % 8 === 4
               && !corridor?.crossesBelow({ ...site.sample, position: a, routeId: 'service-access', distance: index * 4 }, 12))
               this.column({ ...site.ground.pads[0], x: a.x, y: a.y, z: a.z, heading: 0, grade: 0 }, 0, 0, -1.45);
@@ -133,7 +138,7 @@ export class ServiceMesh {
           this.edge(this.markings, point(-3, 0), end, 0.2, 0.025, 0.045);
           for (const wing of [-1, 1]) this.edge(this.markings, point(1.3, (distance > 400 ? -0.8 : 0) + wing * 0.65), end, 0.18, 0.025, 0.045);
         }
-        if (site.ground.crossover) this.crossover(site.ground.crossover, site.ground.pads[0], data, vertex);
+        if (site.ground.crossover) this.crossover(site.ground.crossover, site.ground.pads[0], data, decks, vertex);
         const rails = [...site.ground.barriers, ...site.ground.crossover?.barriers ?? []], joins = new Map<string, number>();
         const key = (p: ServicePoint) => `${Math.round(p.x * 10)},${Math.round(p.y * 10)},${Math.round(p.z * 10)}`;
         for (const rail of rails) for (const p of [rail.a, rail.b]) joins.set(key(p), (joins.get(key(p)) ?? 0) + 1);
@@ -156,10 +161,12 @@ export class ServiceMesh {
           }
         }
       }
-      const geometry = new BufferGeometry();
-      geometry.setAttribute('position', new Float32BufferAttribute(data, 3));
-      geometry.computeVertexNormals(); geometry.computeBoundingSphere();
-      this.pavement.geometry.dispose(); this.pavement.geometry = geometry;
+      for (const [mesh, positions] of [[this.pavement, data], [this.decks, decks]] as const) {
+        const geometry = new BufferGeometry();
+        geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+        geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+        mesh.geometry.dispose(); mesh.geometry = geometry;
+      }
       for (const mesh of this.batches) {
         mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true;
@@ -168,24 +175,21 @@ export class ServiceMesh {
       }
     }
     this.materialOrigin.set(originX % 4096, originZ % 4096);
-    for (const mesh of [this.pavement, ...this.batches]) {
+    for (const mesh of [this.pavement, this.decks, ...this.batches]) {
       mesh.position.set(this.anchorX - originX, 0, this.anchorZ - originZ);
       mesh.visible = sites.length > 0;
     }
     this.landscaping.visible = this.treeTrunks.visible = sites.length > 0 && vegetation;
   }
 
-  private crossover(cross: ServiceCrossover, pad: ServicePad, data: number[], vertex: (p: ServicePoint, lift?: number) => Point): void {
-    const points = [cross.access[0].a, ...cross.access.map(e => e.b)];
-    const rims = points.map((p, i) => {
-      const a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)], length = Math.hypot(b.x - a.x, b.z - a.z);
-      return [-1, 1].map(side => ({ x: p.x + (a.z - b.z) / length * 3.5 * side, y: p.y, z: p.z + (b.x - a.x) / length * 3.5 * side }));
-    });
+  private crossover(cross: ServiceCrossover, pad: ServicePad, data: number[], decks: number[], vertex: (p: ServicePoint, lift?: number) => Point): void {
+    const ribbons = accessQuads(cross.access), rims = accessQuads(cross.access, 0.6);
     for (const [i, { a, b }] of cross.access.entries()) {
-      quad(data, vertex(rims[i][0], 0.015), vertex(rims[i][1], 0.015), vertex(rims[i + 1][0], 0.015), vertex(rims[i + 1][1], 0.015));
+      const q = ribbons[i];
+      quad(data, vertex(q.leftA, 0.015), vertex(q.rightA, 0.015), vertex(q.leftB, 0.015), vertex(q.rightB, 0.015));
       const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz), nx = -dz / length, nz = dx / length;
       const shift = (p: ServicePoint, x: number) => ({ x: p.x + nx * x, y: p.y, z: p.z + nz * x });
-      this.edge(this.structures, a, b, 8.2, 1.2, -0.65);
+      appendRibbonSlab(decks, q, rims[i], { x: this.anchorX, z: this.anchorZ }, 1.2);
       for (const side of [-1, 1]) {
         this.edge(this.markings, shift(a, side * 3.2), shift(b, side * 3.2), 0.15, 0.02, 0.04);
         this.edge(this.markings, shift(a, side * 0.12), shift(b, side * 0.12), 0.1, 0.02, 0.04, 0, 0xf0ca71);
@@ -237,12 +241,13 @@ export class ServiceMesh {
       this.box(this.buildings, pad, x * pad.side, along, y, w, h, l, color, followGrade);
     const facade = architecture === 'courtyard' ? 0xc7ac86 : architecture === 'lodge' ? 0x8c7357 : 0xc1cbd0;
     box(0, 0, -0.8, pad.halfWidth * 2, 1.3, pad.halfLength * 2, 0x7e827b, true);
-    for (const x of [-pad.halfWidth, pad.halfWidth]) {
-      if (x > 0 && site.garages?.some(g => g.id.endsWith(`:${pad.side}`))) {
-        for (const a of [-1, 1]) box(x, a * (pad.halfLength + 32) / 2, 0.14, 0.35, 0.28, pad.halfLength - 32, 0xb8b6a5, true);
-      } else box(x, 0, 0.14, 0.35, 0.28, pad.halfLength * 2, 0xb8b6a5, true);
-    }
-    for (const along of [-pad.halfLength, pad.halfLength]) box(5.5, along, 0.14, pad.halfWidth * 2 - 11, 0.28, 0.35, 0xb8b6a5, true);
+    const curbs = [-1, 1].flatMap(side => [
+      { a: padPoint(pad, side * pad.halfWidth, -pad.halfLength), b: padPoint(pad, side * pad.halfWidth, pad.halfLength) },
+      { a: padPoint(pad, -pad.halfWidth, side * pad.halfLength), b: padPoint(pad, pad.halfWidth, side * pad.halfLength) },
+    ]);
+    const access = [...site.ground.access, ...site.ground.crossover?.access ?? [], ...site.garages?.flatMap(g => g.ground.access) ?? []];
+    for (const { a, b } of exposedBarriers(curbs, accessQuads(access, 0.5)))
+      this.edge(this.buildings, a, b, 0.35, 0.28, 0.14, 0, 0xb8b6a5);
     box(15, 28, 0.25, 23, 0.8, 32, 0x98978d, true);
     box(15, 28, 2.8, 22, 5, 30, facade);
     const roofColor = architecture === 'courtyard' ? 0x9b6244 : 0x35594f;
@@ -285,8 +290,8 @@ export class ServiceMesh {
     box(14, -38, 5.6, 26, 0.55, 23, 0x427b72, true);
     box(14, -38, 5.94, 26.6, 0.15, 23.6, 0xd5ded4, true);
     for (const along of [-49.6, -26.4]) box(14, along, 5.63, 26.5, 0.3, 0.12, 0xe4b45d);
-    for (const x of [3, 25]) for (const along of [-47, -29]) box(x, along, 2.8, 0.4, 5.6, 0.4, 0xadb4a8);
-    for (const along of [-43, -33]) {
+    for (const [x, along] of fuelCanopyColumns) box(x, along, 2.8, 0.4, 5.6, 0.4, 0xadb4a8);
+    for (const along of fuelPumpRows) {
       box(14, along, 0.15, 3.8, 0.3, 2.2, 0xb6b9ab);
       for (const x of [13, 15]) {
         box(x, along, 1.1, 0.7, 1.7, 0.65, 0xe0d9c5);
@@ -536,6 +541,7 @@ export class ServiceMesh {
 
   dispose(): void {
     this.chargerDetails.dispose(); this.picnicDetails.dispose();
+    this.decks.removeFromParent(); this.decks.geometry.dispose();
     for (const mesh of [this.pavement, ...this.batches]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); }
     for (const mesh of this.batches) mesh.dispose();
   }

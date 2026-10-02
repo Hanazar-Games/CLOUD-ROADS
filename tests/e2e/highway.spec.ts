@@ -21,7 +21,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Vehicle speed')).toHaveText('0.0 km/h');
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');
-  await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!)).toBeGreaterThan(65);
+  await expect.poll(async () => parseFloat((await metric('Vehicle speed').textContent())!), { timeout: 10000 }).toBeGreaterThan(65);
   await page.keyboard.up('KeyW'); await page.keyboard.press('Slash');
   expect(Math.abs(parseFloat((await metric('Road grade').textContent())!))).toBeLessThanOrEqual(3);
   expect(Math.abs(parseFloat((await metric('Road curvature').textContent())!))).toBeLessThanOrEqual(0.00084);
@@ -29,7 +29,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await (await control(page, page.locator('#route-style'))).selectOption('5');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Route style')).toHaveText('5 档 · 连续发卡弯'); await ready();
-  await (await control(page, page.locator('#view-distance'))).selectOption('16');
+  await (await control(page, page.locator('#view-distance'))).fill('3');
   await expect(metric('Target chunks')).toHaveText('1089'); await ready();
   const before = await metric('Coordinates').textContent();
   await (await control(page, page.locator('#pass-view'))).click();

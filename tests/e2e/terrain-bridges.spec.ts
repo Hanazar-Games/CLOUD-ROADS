@@ -18,7 +18,7 @@ test('renders continuous concrete bridges and elevated services through distant 
   await (await control(page, page.locator('#terrain-kind'))).selectOption('desert');
   await (await control(page, page.locator('#road-type'))).selectOption('highway');
   await (await control(page, page.locator('#route-style'))).selectOption('5');
-  await (await control(page, page.locator('#view-distance'))).selectOption('16');
+  await (await control(page, page.locator('#view-distance'))).fill('3');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Route style')).toHaveText('5 档 · 连续发卡弯'); await ready();
   await expect(metric('Active chunks')).toHaveText('1089');

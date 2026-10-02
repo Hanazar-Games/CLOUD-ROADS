@@ -7,6 +7,7 @@ export class TerrainChunk {
   readonly mesh: Mesh<BufferGeometry, MeshStandardMaterial>;
   x = 0;
   z = 0;
+  private excavated = false;
 
   constructor(readonly cells: TerrainCells, material: MeshStandardMaterial) {
     const geometry = new BufferGeometry();
@@ -25,6 +26,14 @@ export class TerrainChunk {
   apply(request: ChunkRequest, data: TerrainData, originX: number, originZ: number): void {
     this.x = request.x;
     this.z = request.z;
+    if (data.indices || this.excavated) {
+      this.mesh.geometry.dispose();
+      this.mesh.geometry = new BufferGeometry();
+      for (const name of ['position', 'normal', 'color'])
+        this.mesh.geometry.setAttribute(name, new BufferAttribute(new Float32Array(data.positions.length), 3).setUsage(DynamicDrawUsage));
+      this.mesh.geometry.setIndex(new BufferAttribute(data.indices ?? createTerrainLayout(this.cells).indices, 1));
+      this.excavated = !!data.indices;
+    }
     for (const [name, array] of [['position', data.positions], ['normal', data.normals], ['color', data.colors]] as const) {
       const attribute = this.mesh.geometry.getAttribute(name) as BufferAttribute;
       attribute.set(array);

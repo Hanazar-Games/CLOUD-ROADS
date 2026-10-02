@@ -18,7 +18,7 @@ test('renders a full four-way highway interchange and exposes traffic and distan
   await page.locator('#world-options button[type="submit"]').click();
   await (await control(page, page.locator('#time-preset'))).selectOption('0');
   await page.locator('#fog-density').fill('50');
-  await (await control(page, page.locator('#view-distance'))).selectOption('16');
+  await (await control(page, page.locator('#view-distance'))).fill('3');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
   await (await control(page, page.locator('#junction-view'))).click();
   await expect(metric('Interchange ramps')).toHaveText('8', { timeout: 60000 });
@@ -29,8 +29,8 @@ test('renders a full four-way highway interchange and exposes traffic and distan
   await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 60000 });
   await (await control(page, page.locator('#cloud-toggle'))).click();
   await sceneShot(page, { path: info.outputPath('full-interchange.png') });
-  for (const [id, value] of [['vegetation-lod', '0.5'], ['distant-trees', '0.25'], ['vegetation-shadows', '0'], ['vegetation-budget', '1'], ['vehicle-detail-distance', '120']]) {
-    await (await control(page, page.locator(`#${id}`))).selectOption(value);
+  for (const [id, value] of [['vegetation-lod', '50'], ['distant-trees', '25'], ['vegetation-shadows', '0'], ['vegetation-budget', '1'], ['vehicle-detail-distance', '120']]) {
+    await (await control(page, page.locator(`#${id}`))).fill(value);
     await expect(page.locator(`#${id}`)).toHaveValue(value);
   }
   for (const [value, label] of [['busy', '缓慢车流'], ['queue', '排队拥堵'], ['stopgo', '走走停停'], ['normal', '正常通行']]) {

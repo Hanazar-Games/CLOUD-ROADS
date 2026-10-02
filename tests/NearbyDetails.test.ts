@@ -35,6 +35,49 @@ it('rebases without uploading transforms, rebuilds after streaming and releases 
   details.dispose(); expect(geometry).toHaveBeenCalledOnce(); expect(material).toHaveBeenCalledOnce();
 });
 
+it('changes optional detail distance at rest without exceeding its instance budget', () => {
+  const scene = new Scene(), details = new NearbyDetails(scene, new BoxGeometry(), 'range-details', 3), camera = { x: 0, y: 0, z: 0 };
+  for (const x of [20, 60, 110, 150]) details.add(new Matrix4().makeTranslation(x, 0, 0));
+  details.update(camera, 0, 0, 1, true, 0.5); expect(details.mesh.count).toBe(1);
+  details.update(camera, 0, 0, 1, true, 2); expect(details.mesh.count).toBe(3);
+  details.update(camera, 0, 0, 1, true, 0); expect(details.mesh.count).toBe(0); expect(details.mesh.visible).toBe(false);
+  details.update(camera, 0, 0, 1, true, 1); expect(details.mesh.count).toBe(2);
+  details.dispose();
+});
+
+it('keeps transforms on the GPU while camera movement leaves the same closest fixtures visible', () => {
+  const details = new NearbyDetails(new Scene(), new BoxGeometry(), 'stationary-fixtures', 2);
+  for (const x of [-20, 20, 400]) details.add(new Matrix4().makeTranslation(x, 0, 0));
+  details.update({ x: -5, y: 0, z: 0 }, 0, 0, 1);
+  const version = details.mesh.instanceMatrix.version;
+  details.update({ x: 5, y: 0, z: 0 }, 0, 0, 1);
+  expect(details.mesh.count).toBe(2); expect(details.mesh.instanceMatrix.version).toBe(version);
+  details.update({ x: 400, y: 0, z: 0 }, 0, 0, 1);
+  expect(details.mesh.count).toBe(1); expect(details.mesh.instanceMatrix.version).toBeGreaterThan(version);
+  details.dispose();
+});
+
+it('finds the nearest fixtures across cells, negative coordinates, heights and streamed replacements', () => {
+  const details = new NearbyDetails(new Scene(), new BoxGeometry(), 'indexed-fixtures', 5), matrix = new Matrix4();
+  const points = Array.from({ length: 1500 }, (_, i) => ({ x: i * 13 - 5000, y: i % 7 * 23, z: i % 11 * 19 - 90 }));
+  details.clear(8000, -12000);
+  for (const p of points) details.add(new Matrix4().makeTranslation(p.x, p.y, p.z));
+  for (const x of [-4800, -65, 0, 3300]) {
+    const camera = { x: x + 8000, y: 50, z: -12001 };
+    details.update(camera, 8192, -12288, 2, true, 2);
+    const expected = points.map(p => ({ p, distance: (p.x - x) ** 2 + (p.y - 50) ** 2 + (p.z + 1) ** 2 }))
+      .filter(p => p.distance < 320 ** 2).sort((a, b) => a.distance - b.distance).slice(0, 5).map(({ p }) => `${p.x},${p.y},${p.z}`);
+    const actual = Array.from({ length: details.mesh.count }, (_, i) => {
+      details.mesh.getMatrixAt(i, matrix); return `${matrix.elements[12]},${matrix.elements[13]},${matrix.elements[14]}`;
+    });
+    expect(new Set(actual)).toEqual(new Set(expected));
+  }
+  details.clear(0, 0); details.add(new Matrix4().makeTranslation(-1, 0, -1));
+  details.update({ x: 0, y: 0, z: 0 }, 0, 0, 1);
+  expect(details.mesh.count).toBe(1); details.mesh.getMatrixAt(0, matrix); expect(matrix.elements[12]).toBe(-1);
+  details.dispose();
+});
+
 it('keeps road hardware flush and wall equipment inside the existing fixture footprints', () => {
   for (const geometry of [expansionJointGeometry(10.4), drainGrateGeometry()]) {
     geometry.computeBoundingBox();

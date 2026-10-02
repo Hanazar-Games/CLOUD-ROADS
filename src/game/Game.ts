@@ -9,14 +9,14 @@ import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
 import { randomSeed, startingSeed } from '../world/WorldSeed';
-import { CHUNK_SIZE, VIEW_RADII, VIEW_RADIUS } from '../world/ChunkPlanner';
+import { CHUNK_SIZE, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { absoluteElevation, roadNames, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
 import { roadLayout } from '../road/RoadProfile';
 import { DrivingSystem } from '../vehicle/DrivingSystem';
 import { VehicleAccess } from '../vehicle/VehicleAccess';
 import { vehicleProfiles } from '../vehicle/VehicleConfig';
 import { WalkingSystem } from '../walking/WalkingSystem';
-import { graphicsPresets, renderPixelRatio } from './GraphicsSettings';
+import { graphicsControls, graphicsLabel, graphicsPosition, graphicsPresets, graphicsValue, renderPixelRatio } from './GraphicsSettings';
 import { AudioSystem, audioChannels, type MusicStyle } from '../audio/AudioSystem';
 import { engineSound } from '../audio/VehicleEngine';
 import { SettingsDialog } from '../ui/SettingsDialog';
@@ -67,6 +67,9 @@ export class Game {
   private contextLost = false;
   private viewRadius = VIEW_RADIUS;
   private renderScale = 1;
+  private graphicsTimer?: ReturnType<typeof setTimeout>;
+  private graphicsPending = false;
+  private graphicsResources = false;
   private readonly audio = new AudioSystem();
   private audioPreviewPending = false;
   private windowFocused = true;
@@ -253,7 +256,7 @@ export class Game {
       this.canvas.focus();
     }, { signal: this.events.signal });
     element('shadows').addEventListener('click', () => {
-      element<HTMLSelectElement>('shadow-quality').value = this.sky.light.castShadow ? '0' : '2048';
+      element<HTMLInputElement>('shadow-quality').value = this.sky.light.castShadow ? '0' : '2';
       this.applyGraphics(); this.customGraphics();
       this.canvas.focus();
     }, { signal: this.events.signal });
@@ -286,26 +289,25 @@ export class Game {
       element('vegetation-toggle').setAttribute('aria-pressed', String(vegetation.enabled));
       this.canvas.focus();
     }, { signal: this.events.signal });
-    element('view-distance').addEventListener('change', () => {
-      const radius = Number(element<HTMLSelectElement>('view-distance').value);
-      if (!VIEW_RADII.some(value => value === radius)) return;
-      this.viewRadius = radius;
-      this.world.chunks.setViewRadius(radius);
-      this.camera.far = Math.max(7000, radius * CHUNK_SIZE * 2);
-      this.camera.updateProjectionMatrix();
-      this.customGraphics();
-    }, { signal: this.events.signal });
     element('graphics-preset').addEventListener('change', () => {
       const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
       if (!preset) return;
-      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail], ['cloud-quality', preset.cloudSteps], ['vegetation-lod', preset.lod], ['distant-trees', preset.trees], ['vegetation-shadows', preset.plantShadows], ['vegetation-budget', preset.budget], ['vehicle-detail-distance', preset.vehicles]] as const)
-        element<HTMLSelectElement>(id).value = String(value);
+      for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail], ['cloud-quality', preset.cloudSteps], ['vegetation-lod', preset.lod], ['distant-trees', preset.trees], ['vegetation-shadows', preset.plantShadows], ['vegetation-budget', preset.budget], ['vehicle-detail-distance', preset.vehicles],
+        ['tree-density', preset.foliage], ['ground-density', preset.ground], ['flower-density', preset.flowers], ['rock-density', preset.rocks], ['detail-distance', preset.details]] as const)
+        element<HTMLInputElement>(id).value = String(graphicsPosition(id, value));
       this.setClouds(preset.clouds); this.applyGraphics();
     }, { signal: this.events.signal });
-    for (const id of ['render-scale', 'shadow-quality', 'antialiasing', 'map-detail', 'cloud-quality', 'vegetation-lod', 'distant-trees', 'vegetation-shadows', 'vegetation-budget', 'vehicle-detail-distance']) element(id).addEventListener('change', () => {
-      this.applyGraphics(); this.customGraphics();
+    for (const id of graphicsControls) {
+      element(id).addEventListener('input', () => {
+        this.syncGraphicsLabels(); this.customGraphics(); this.graphicsPending = true;
+        this.graphicsResources ||= ['render-scale', 'shadow-quality', 'antialiasing', 'view-distance', 'cloud-quality'].includes(id);
+        clearTimeout(this.graphicsTimer); this.graphicsTimer = setTimeout(() => this.flushGraphics(), 150);
+      }, { signal: this.events.signal });
+      element(id).addEventListener('change', () => this.flushGraphics(), { signal: this.events.signal });
+    }
+    element('frame-limit').addEventListener('input', () => {
+      this.loop.setFrameLimit(this.graphicsSetting('frame-limit')); this.syncGraphicsLabels();
     }, { signal: this.events.signal });
-    element('frame-limit').addEventListener('change', () => this.loop.setFrameLimit(Number(element<HTMLSelectElement>('frame-limit').value)), { signal: this.events.signal });
     element('cloud-toggle').addEventListener('click', () => this.customGraphics(), { signal: this.events.signal });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { this.audio.setActive(false); this.loop.stop(); }
@@ -426,12 +428,13 @@ export class Game {
       this.driving.describeTuning(); this.applyGraphics(); this.customGraphics(); this.syncAudioUI();
     });
     if (this.presets.restoreStartup(new URLSearchParams(location.search).has('seed') ? this.initialSeed : undefined)) this.settings.close();
-    this.applyPerformance();
+    this.applyGraphics();
     this.loop.start();
   }
 
   private loadSeed(seed: string, options: Readonly<WorldOptions> = this.world.options): boolean {
     if (this.contextLost) return false;
+    this.flushGraphics();
     this.settings.close();
     try {
       const world = new World(this.scene, seed, options);
@@ -454,7 +457,6 @@ export class Game {
       this.clouds.setSeed(seed);
       this.world.chunks.setWireframe(this.wireframe);
       this.world.chunks.vegetation.enabled = element('vegetation-toggle').getAttribute('aria-pressed') === 'true';
-      this.world.chunks.vegetation.setDetailLevel(Number(element<HTMLSelectElement>('map-detail').value));
       this.world.roadDebug.enabled = element('road-debug').getAttribute('aria-pressed') === 'true';
       this.world.furniture.enabled = element('lights-toggle').getAttribute('aria-pressed') === 'true';
       element<HTMLInputElement>('seed').value = seed;
@@ -610,19 +612,41 @@ export class Game {
       : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音' : this.audio.state === 'running' ? '声音已开启' : '声音已暂停');
   }
 
+  private graphicsSetting(id: string): number { return graphicsValue(id, Number(element<HTMLInputElement>(id).value)); }
+
+  private syncGraphicsLabels(): void {
+    for (const id of [...graphicsControls, 'frame-limit']) {
+      const node = element<HTMLInputElement>(id), label = graphicsLabel(id, Number(node.value));
+      element(`${id}-value`).textContent = label; node.setAttribute('aria-valuetext', label);
+    }
+  }
+
+  private flushGraphics(): void {
+    clearTimeout(this.graphicsTimer); this.graphicsTimer = undefined;
+    if (!this.graphicsPending) return;
+    this.graphicsPending = false;
+    if (this.graphicsResources) this.applyGraphics(); else this.applyPerformance();
+    this.graphicsResources = false;
+  }
+
   private applyPerformance(): void {
-    const value = (id: string) => Number(element<HTMLSelectElement>(id).value);
+    const value = (id: string) => this.graphicsSetting(id);
     this.world.pavementTextures.configure(value('map-detail'), this.renderer.capabilities.getMaxAnisotropy());
     this.world.detailLevel = value('map-detail');
-    this.world.chunks.vegetation.configure({ distance: value('vegetation-lod'), density: value('distant-trees'), shadows: value('vegetation-shadows'), budget: value('vegetation-budget') });
+    this.world.detailDistance = value('detail-distance') / 100;
+    this.world.chunks.vegetation.setDetailLevel(value('map-detail'));
+    this.world.chunks.vegetation.configure({ distance: value('vegetation-lod'), density: value('distant-trees'), shadows: value('vegetation-shadows'), budget: value('vegetation-budget'),
+      trees: value('tree-density') / 100, ground: value('ground-density') / 100, flowers: value('flower-density') / 100, rocks: value('rock-density') / 100 });
     this.world.trafficVehicles.detailDistance = this.world.parkedVehicles.detailDistance = value('vehicle-detail-distance');
   }
 
   private applyGraphics(): void {
+    clearTimeout(this.graphicsTimer); this.graphicsTimer = undefined; this.graphicsPending = this.graphicsResources = false;
+    this.syncGraphicsLabels(); this.loop.setFrameLimit(this.graphicsSetting('frame-limit'));
     this.applyPerformance();
-    this.renderScale = Number(element<HTMLSelectElement>('render-scale').value);
-    this.world.chunks.vegetation.setDetailLevel(Number(element<HTMLSelectElement>('map-detail').value));
-    const size = Number(element<HTMLSelectElement>('shadow-quality').value);
+    const scale = this.graphicsSetting('render-scale'), resized = scale !== this.renderScale;
+    this.renderScale = scale;
+    const size = Math.min(this.graphicsSetting('shadow-quality'), this.renderer.capabilities.maxTextureSize);
     this.sky.light.castShadow = size > 0;
     this.renderer.shadowMap.enabled = size > 0;
     if (size && this.sky.light.shadow.mapSize.x !== size) {
@@ -630,14 +654,14 @@ export class Game {
       this.sky.light.shadow.mapSize.set(size, size);
     }
     element('shadows').setAttribute('aria-pressed', String(size > 0));
-    const antialias = Number(element<HTMLSelectElement>('antialiasing').value), samples = antialias > 1 ? Math.min(antialias, this.renderer.capabilities.maxSamples) : 0;
+    const antialias = this.graphicsSetting('antialiasing'), samples = antialias > 1 ? Math.min(antialias, this.renderer.capabilities.maxSamples) : 0;
     this.clouds.material.uniforms.antialias.value = antialias > 0;
-    this.clouds.material.uniforms.cloudSteps.value = Number(element<HTMLSelectElement>('cloud-quality').value);
+    this.clouds.material.uniforms.cloudSteps.value = this.graphicsSetting('cloud-quality');
     if (this.clouds.target.samples !== samples) { this.clouds.target.dispose(); this.clouds.target.samples = samples; }
-    this.viewRadius = Number(element<HTMLSelectElement>('view-distance').value);
+    this.viewRadius = this.graphicsSetting('view-distance');
     this.world.chunks.setViewRadius(this.viewRadius);
     this.camera.far = Math.max(7000, this.viewRadius * CHUNK_SIZE * 2);
-    this.resize();
+    if (resized) this.resize(); else this.camera.updateProjectionMatrix();
   }
 
   private update(dt: number): void {
@@ -827,8 +851,8 @@ export class Game {
         'Prefetched chunks': stats.prefetched, 'Preloading chunks': stats.preloading,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
-        'Render scale': `${Math.round(this.renderScale * 100)}%`, 'Frame limit': element<HTMLSelectElement>('frame-limit').value,
-        'Map detail': element<HTMLSelectElement>('map-detail').value,
+        'Render scale': `${Math.round(this.renderScale * 100)}%`, 'Frame limit': this.graphicsSetting('frame-limit'),
+        'Map detail': this.world.detailLevel,
         'Scene samples': this.clouds.target.samples,
         'FXAA': this.clouds.material.uniforms.antialias.value ? 'on' : 'off', 'Cloud steps': this.clouds.material.uniforms.cloudSteps.value,
         'Valley crossings': this.world.crossings.map(site => site.kind).join(', ') || 'none',
@@ -972,6 +996,7 @@ export class Game {
   }
 
   dispose(): void {
+    clearTimeout(this.graphicsTimer);
     this.garagePanel.dispose();
     this.keyBindingPanel.dispose();
     this.presets.dispose(); this.worldSettings.dispose();

@@ -88,6 +88,23 @@ it.each(Object.keys(vehicleProfiles) as VehicleKind[])('keeps %s on a curved roa
   expect(Math.abs((car.x - near.position.x) * Math.cos(near.heading) + (car.z - near.position.z) * Math.sin(near.heading) - 3)).toBeLessThan(1.2);
 });
 
+it.each([[0, 0.5], [1, 0.5], [0, 2], [1, 2]])('anticipates motorcycle lean with directness %s and response %s', (directness, leanResponse) => {
+  const options = { ...DEFAULT_OPTIONS, roadWidth: 12, maxGrade: 0, elevationMode: 'fixed' as const, altitudeMin: 100, altitudeMax: 100 };
+  const road = new RoadSpine('PILOT-CURVE', { sample: () => 100 }, options);
+  while (!road.advanceToDistance(1800)) { /* Load the test curve. */ }
+  const p = road.segments[1].start, car = new VehiclePhysics('motorcycle'), auto = new Autopilot(), routes = [{ id: 'root', road }];
+  car.configureSteering({ directness, leanResponse, leanLimit: 20 });
+  car.reset(p.position.x + Math.cos(p.heading) * 3, p.position.z + Math.sin(p.heading) * 3, p.heading, ground); car.ignition = 'running';
+  auto.configure({ mode: 'full', comfort: 4, minKmh: 20, maxKmh: 65 }); expect(auto.engage(car, routes, options)).toBe(true);
+  let deviation = 0;
+  for (let i = 0; i < 2400; i++) {
+    car.update(1 / 60, auto.update(1 / 60, car, routes, [], manual, 1), ground);
+    const near = road.nearest(car.x, car.z)!;
+    deviation = Math.max(deviation, Math.abs((car.x - near.position.x) * Math.cos(near.heading) + (car.z - near.position.z) * Math.sin(near.heading) - 3));
+  }
+  expect(auto.active, auto.status).toBe(true); expect(car.trip).toBeGreaterThan(100); expect(deviation).toBeLessThan(1.5);
+});
+
 it('continues across the root/back seam in the permitted one-way direction', () => {
   const options = { ...DEFAULT_OPTIONS, roadWidth: 5, oneWay: true, roadLanes: 1, routeStyle: 0 as const, maxGrade: 0,
     elevationMode: 'fixed' as const, altitudeMin: 100, altitudeMax: 100 };

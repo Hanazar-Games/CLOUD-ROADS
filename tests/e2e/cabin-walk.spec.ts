@@ -95,7 +95,7 @@ test('walks a camper, keeps all hints reachable on a small screen and saves begi
   await expect(dock).toBeHidden();
   await (await control(page, page.locator('#preset-name'))).fill('Cabin walk');
   await page.locator('#preset-save').click();
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cloud-roads.presets.v14')!)[0]);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cloud-roads.presets.v16')!)[0]);
   expect(saved.settings['beginner-mode']).toBe(false);
 });
 

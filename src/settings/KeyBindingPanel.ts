@@ -12,7 +12,7 @@ export class KeyBindingPanel {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode as Text;
-      if (node.parentElement?.closest('script, style, #release-notes, #shortcut-list, #binding-list, option')) continue;
+      if (node.parentElement?.closest('script, style, #release-notes, #shortcut-list, #binding-list, #settings-help, option')) continue;
       const text = node.data;
       if (input.bindings.format(text) !== text || /(?<![A-Za-z0-9])(?:F[2-8]|[A-Z]|Space)(?![A-Za-z0-9])/.test(text)) this.hints.push({ node, text, rendered: text });
     }

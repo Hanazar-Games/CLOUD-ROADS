@@ -26,7 +26,11 @@ export async function control(page: Page, locator: Locator): Promise<Locator> {
   if (inside) {
     await openSettings(page);
     const category = await locator.evaluate(node => node.closest('.settings-category')?.id.replace('settings-', ''));
-    if (category) await page.locator(`[data-settings-target="${category}"]`).click();
+    if (category) {
+      await page.locator(`[data-settings-target="${category}"]`).click();
+      const expand = page.locator(`#settings-${category} [data-settings-expand]`);
+      if (await expand.count()) await expand.click();
+    }
   } else await closeSettings(page);
   await locator.scrollIntoViewIfNeeded();
   return locator;

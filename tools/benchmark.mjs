@@ -10,6 +10,9 @@ try {
     if (!await page.locator('#explorer').evaluate(node => node.open)) await page.locator('#controls-toggle').click();
     const category = await locator.evaluate(node => node.closest('.settings-category')?.id.replace('settings-', ''));
     if (category) await page.locator(`[data-settings-target="${category}"]`).click();
+    await locator.evaluate(node => {
+      for (let group = node.closest('details'); group; group = group.parentElement.closest('details')) group.open = true;
+    });
     return locator;
   };
   const closeSettings = async () => {
@@ -20,13 +23,16 @@ try {
   await page.goto(process.argv.slice(2).find(arg => /^https?:/.test(arg)) || 'http://127.0.0.1:5173/?seed=CLOUD-ROAD-001');
   for (const [flag, id] of [['quality', 'graphics-preset'], ['scale', 'render-scale'], ['fps', 'frame-limit'], ['season', 'season-kind']]) {
     const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
-    if (value) await (await control(id)).selectOption(value);
+    if (!value) continue;
+    if (flag === 'scale') await (await control(id)).fill(String(Number(value) * 100));
+    else if (flag === 'fps') await (await control(id)).fill(String([30, 60, 90, 120, 144, 165, 240, 0].indexOf(Number(value))));
+    else await (await control(id)).selectOption(value);
   }
   for (const [flag, id] of [['traffic', 'traffic-density'], ['npc-limit', 'traffic-limit']]) {
     const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
     if (value) await (await control(id)).fill(value);
   }
-  if (process.argv.includes('--far')) await (await control('view-distance')).selectOption('16');
+  if (process.argv.includes('--far')) await (await control('view-distance')).fill('3');
   await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
   await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
   const route = process.argv.find(arg => arg.startsWith('--route='))?.slice(8);

@@ -4,6 +4,7 @@ import { ignite, closeSettings, openSettings } from './settings';
 test('applies highway radius and retains it through new worlds and road type changes', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT'); await openSettings(page);
   await page.locator('[data-settings-target="world"]').click();
+  await page.locator('#settings-world [data-settings-expand]').click();
   await expect(page.locator('#highway-radius')).toBeDisabled();
   await page.locator('#road-type').selectOption('highway'); await page.locator('#highway-radius').fill('800');
   await page.locator('#route-style').selectOption('5'); await page.locator('#terrain-kind').selectOption('meadow');
@@ -21,6 +22,7 @@ test('applies highway radius and retains it through new worlds and road type cha
 test('limits speed, configures steering assistance and restores per-vehicle defaults', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT'); await openSettings(page);
   await page.locator('[data-settings-target="driving"]').click();
+  await page.locator('#settings-driving [data-settings-expand]').click();
   await expect(page.locator('#steering-assist')).toBeChecked();
   await page.locator('#vehicle-max-speed').fill('40'); await page.locator('#steering-assist-strength').fill('150');
   await page.locator('#steering-assist').uncheck(); await expect(page.locator('#steering-assist-strength')).toBeDisabled();

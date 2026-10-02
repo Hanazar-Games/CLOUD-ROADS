@@ -48,6 +48,7 @@ export interface GroundSample {
 
 export class World {
   detailLevel = 1;
+  detailDistance = 1;
   readonly pavementTextures = new PavementTextures();
   readonly season: SeasonState;
   readonly origin = new FloatingOrigin();
@@ -214,7 +215,7 @@ export class World {
     this.interchangeMesh.update(this.network.junctions.flatMap(j => j.interchange ? [j.interchange] : []), this.origin, this.corridor, this.height);
     for (const details of [this.bridgeMesh.jointDetails, this.bridgeMesh.drainDetails, this.tunnelMesh.cabinetDetails,
       this.crossingMesh.tunnels.cabinetDetails, this.serviceMesh.chargerDetails, this.serviceMesh.picnicDetails])
-      details.update({ x, y: camera.position.y, z }, this.origin.x, this.origin.z, this.detailLevel, nearRoute);
+      details.update({ x, y: camera.position.y, z }, this.origin.x, this.origin.z, this.detailLevel, nearRoute, this.detailDistance);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.interchange || j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
     if (explore && this.scout) this.advanceServiceView(camera);
@@ -445,7 +446,10 @@ export class World {
       p.y + right.y * offset + normal.y * height, p.z + right.z * offset + normal.z * height - this.origin.z);
   }
 
-  groundHeight(x: number, z: number): number { return this.corridor.height(x, z, this.height.sample(x, z)); }
+  groundHeight(x: number, z: number, ceiling = Infinity): number {
+    const natural = this.height.sample(x, z), surface = this.corridor.height(x, z, natural, true);
+    return surface <= ceiling ? surface : this.corridor.height(x, z, natural);
+  }
 
   sampleGround(x: number, z: number): GroundSample {
     const y = this.groundHeight(x, z);
@@ -468,14 +472,14 @@ export class World {
       for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
         const x = startX + dx * 128, z = startZ + dz * 128;
-        const ground = this.corridor.height(x, z, this.height.sample(x, z));
+        const ground = this.groundHeight(x, z);
         if (ground > altitude - 80) continue;
         camera.position.set(x - this.origin.x, altitude, z - this.origin.z);
         let heading = 0, lowest = Infinity;
         for (let direction = 0; direction < 8; direction++) {
           const angle = direction * Math.PI / 4;
           const px = x + Math.sin(angle) * 400, pz = z - Math.cos(angle) * 400;
-          const ahead = this.corridor.height(px, pz, this.height.sample(px, pz));
+          const ahead = this.groundHeight(px, pz);
           if (ahead < lowest) { lowest = ahead; heading = angle; }
         }
         return { heading, pitch: 0.08 };
@@ -491,7 +495,7 @@ export class World {
     if (!turn) return undefined;
     const sample = turn.sample(0.5);
     const x = sample.position.x - Math.sin(sample.heading) * 140, z = sample.position.z + Math.cos(sample.heading) * 140;
-    const ground = this.corridor.height(x, z, this.height.sample(x, z));
+    const ground = this.groundHeight(x, z);
     const y = Math.max(sample.position.y + 140, ground + 80);
     camera.position.set(x - this.origin.x, y, z - this.origin.z);
     return { heading: sample.heading, pitch: -Math.atan2(y - sample.position.y, 140) };
@@ -504,7 +508,7 @@ export class World {
     if (!span) return undefined;
     const sample = span.samples[Math.floor(span.samples.length / 2)];
     const distance = Math.max(180, Math.min(550, (span.end.distance - span.start.distance) * 0.7));
-    const ground = (x: number, z: number) => this.corridor.height(x, z, this.height.sample(x, z));
+    const ground = (x: number, z: number) => this.groundHeight(x, z);
     const viewpoints = [-1, 1].flatMap(side => [-Math.PI / 4, 0, Math.PI / 4].map(turn => {
       const angle = sample.heading + turn;
       const x = sample.position.x + Math.cos(angle) * distance * side, z = sample.position.z + Math.sin(angle) * distance * side;

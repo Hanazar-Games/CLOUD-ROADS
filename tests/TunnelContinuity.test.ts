@@ -1,5 +1,6 @@
 import { Matrix4, Raycaster, Scene, Vector3 } from 'three';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { RoadCorridor } from '../src/road/RoadCorridor';
@@ -52,17 +53,17 @@ it.each([false, true])('restores natural shoulders without digging pits or filli
   const { samples, terrain: hill } = fixture(2000);
   const terrain = { sample: (x: number, z: number) => valley && Math.abs(x) > 20 ? 80 : hill.sample(x, z) };
   const spans = new TunnelDetector(terrain).detect(samples, []);
-  const scene = new Scene(), mesh = new TunnelMesh(scene, 'mountain-cover');
-  mesh.update(spans, RoadCorridor.fromSamples(samples, [], undefined, spans), terrain, 1, 0, 0, true);
-  const vertices = mesh.cover.geometry.getAttribute('position');
+  const corridor = RoadCorridor.fromSamples(samples, [], undefined, spans), generator = new TerrainGenerator('mountain-cover');
+  vi.spyOn(generator.height, 'sample').mockImplementation(terrain.sample);
+  const vertices = generator.generate(0, -4, 64, corridor.forChunk(0, -4)).positions;
   let checked = 0;
-  for (let i = 0; i < vertices.count; i++) {
-    const z = vertices.getZ(i) + spans[0].start.position.z, x = vertices.getX(i);
+  for (let i = 0; i < vertices.length; i += 3) {
+    const z = vertices[i + 2] - 1024, x = vertices[i];
     if (z < -700 && z > -1300 && Math.abs(x) >= 10 && Math.abs(x) <= 50) {
-      expect(vertices.getY(i)).toBeCloseTo(terrain.sample(x, z), 1); checked++;
+      expect(vertices[i + 1]).toBeCloseTo(terrain.sample(x, z), 1); checked++;
     }
   }
-  expect(checked).toBeGreaterThan(0); mesh.dispose();
+  expect(checked).toBeGreaterThan(0); vi.restoreAllMocks();
 });
 
 it('places denser entrance and exit fixtures, persistent side reflectors and approach lamps', () => {

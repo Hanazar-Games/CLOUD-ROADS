@@ -15,7 +15,6 @@ test('retains tuning, paint and detailed vegetation across vehicle, world and gr
   await (await control(page, page.locator('#max-grade'))).fill('0');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 30_000 });
-  await (await control(page, page.getByText('动力与外观', { exact: true }))).click();
   await (await control(page, page.locator('#vehicle-power'))).fill('125');
   await (await control(page, page.locator('#vehicle-brake'))).fill('75');
   await (await control(page, page.locator('#vehicle-steering'))).fill('120');
@@ -35,12 +34,12 @@ test('retains tuning, paint and detailed vegetation across vehicle, world and gr
     }
   }
   await expect(page.locator('#vehicle-summary')).toContainText('938 kW / 1275 马力');
-  await (await control(page, page.locator('#map-detail'))).selectOption('2');
-  await (await control(page, page.locator('#render-scale'))).selectOption('2');
+  await (await control(page, page.locator('#map-detail'))).fill('2');
+  await (await control(page, page.locator('#render-scale'))).fill('200');
   await expect(page.locator('#graphics-preset')).toHaveValue('custom');
   await expect(page.locator('#graphics-status')).toContainText('1920 × 1200 · 200%');
   for (const cap of ['90', '120', '144', '165', '240', '0']) {
-    await (await control(page, page.locator('#frame-limit'))).selectOption(cap);
+    await (await control(page, page.locator('#frame-limit'))).fill(String(['30', '60', '90', '120', '144', '165', '240', '0'].indexOf(cap)));
     await expect(metric('Frame limit')).toHaveText(cap);
   }
   await (await control(page, page.locator('#seed'))).fill('FLEET-DETAIL');
@@ -66,6 +65,6 @@ test('retains tuning, paint and detailed vegetation across vehicle, world and gr
   await expect(page.locator('#vehicle-steering-value')).toHaveText('100%');
   await (await control(page, page.locator('#graphics-preset'))).selectOption('economy');
   await expect(metric('Map detail')).toHaveText('0');
-  await expect(page.locator('#frame-limit')).toHaveValue('0');
+  await expect(page.locator('#frame-limit')).toHaveValue('7');
   expect(errors).toEqual([]);
 });

@@ -15,7 +15,7 @@ export function roadBarrierQuads(samples: readonly RoadSample[], halfWidth: numb
   return rims.slice(1).map(([leftB, rightB], i) => ({ leftA: rims[i][0], rightA: rims[i][1], leftB, rightB }));
 }
 
-function covered(rail: ServiceBarrier, a: ServicePoint, b: ServicePoint, c: ServicePoint, clearance: number): [number, number] | undefined {
+function covered(rail: ServiceBarrier, a: ServicePoint, b: ServicePoint, c: ServicePoint, clearance: number, diagonal: number): [number, number] | undefined {
   const bx = b.x - a.x, bz = b.z - a.z, cx = c.x - a.x, cz = c.z - a.z, det = bx * cz - bz * cx;
   if (Math.abs(det) < 1e-9) return;
   const coordinates = (p: ServicePoint) => {
@@ -30,8 +30,8 @@ function covered(rail: ServiceBarrier, a: ServicePoint, b: ServicePoint, c: Serv
     if (b > a) lo = Math.max(lo, t); else hi = Math.min(hi, t);
     return hi > lo;
   };
-  // Strict interior: a rail lying on its own pavement rim must survive.
-  for (let i = 0; i < 3; i++) if (!clip(start[i], end[i], 1e-8)) return;
+  // Keep outer rims, but include the internal diagonal shared by the two triangles.
+  for (let i = 0; i < 3; i++) if (!clip(start[i], end[i], i === diagonal ? -1e-8 : 1e-8)) return;
   if (!clip(start[3], end[3], -clearance) || !clip(-start[3], -end[3], -clearance)) return;
   return [lo, hi];
 }
@@ -46,8 +46,8 @@ export function exposedBarriers(rails: readonly ServiceBarrier[], surfaces: read
     const { a, b } = rail, ranges: [number, number][] = [];
     for (const i of index.within(Math.min(a.x, b.x), Math.min(a.z, b.z), Math.max(a.x, b.x), Math.max(a.z, b.z))) {
       const q = surfaces[i];
-      for (const tri of [[q.leftA, q.rightA, q.leftB], [q.rightA, q.rightB, q.leftB]]) {
-        const range = covered(rail, tri[0], tri[1], tri[2], clearance);
+      for (const [triangle, tri] of [[q.leftA, q.rightA, q.leftB], [q.rightA, q.rightB, q.leftB]].entries()) {
+        const range = covered(rail, tri[0], tri[1], tri[2], clearance, triangle === 0 ? 2 : 0);
         if (range) ranges.push(range);
       }
     }

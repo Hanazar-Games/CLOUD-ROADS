@@ -19,6 +19,12 @@ it('keeps stacked roads protected and preserves rails on a shared outer edge', (
   }
 });
 
+it('removes a fence on the internal triangle diagonal of a driveable junction', () => {
+  const covers = accessQuads([{ a: point(0, -10), b: point(0, 10) }]);
+  const q = covers[0];
+  expect(exposedBarriers([{ a: q.rightA, b: q.leftB }], covers)).toEqual([]);
+});
+
 it('joins both ramp boundaries at a junction without a gap or a fence across the driving surface', () => {
   const quads = accessQuads([{ a: point(-8, 0), b: point(8, 0) }, { a: point(0, -8), b: point(0, 8) }]);
   const rails = exposedBarriers(quads.flatMap(q => [{ a: q.leftA, b: q.leftB }, { a: q.rightA, b: q.rightB }]), quads);

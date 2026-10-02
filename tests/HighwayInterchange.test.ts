@@ -118,7 +118,7 @@ it('connects all four approaches to both crossing directions with continuous one
     const hit = ray.intersectObject(model.pavement)[0];
     expect(hit?.point.y).toBeCloseTo((a.y + b.y) / 2 + 0.015, 2);
   }
-  expect(scene.children).toHaveLength(4);
+  expect(scene.children).toHaveLength(5);
   model.update([], origin, corridor, { sample: () => 60 }); expect(scene.children.every(o => !o.visible)).toBe(true);
   model.dispose(); expect(scene.children).toHaveLength(0);
 });

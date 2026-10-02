@@ -81,7 +81,7 @@ it('keeps streamed tunnel interiors roofed without rendering false portals or co
   expect(ray.intersectObjects([mesh.lining, mesh.cover, mesh.equipment])).toHaveLength(0);
   ray.set(new Vector3(0, 203, (span.start.position.z + span.end.position.z) / 2), new Vector3(0, 1, 0));
   expect(ray.intersectObject(mesh.lining).length).toBeGreaterThan(0);
-  expect(ray.intersectObject(mesh.cover).length).toBeGreaterThan(0);
+  expect(mesh.cover.geometry.getAttribute('position').count).toBe(0);
   mesh.dispose();
 });
 
@@ -136,10 +136,10 @@ it.each(['mountain', 'highway'] as const)('keeps the full carriageway clear thro
   mesh.dispose();
 });
 
-it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof and buried cover without obstructing travel', roadType => {
+it.each(['mountain', 'highway'] as const)('builds open %s portals and a real roof without obstructing travel', roadType => {
   const options = { ...DEFAULT_OPTIONS, roadType, roadWidth: 10 }, samples = route();
   const spans = new TunnelDetector(hill, options).detect(samples, []);
-  const corridor = RoadCorridor.fromSamples(samples, [], options), scene = new Scene();
+  const corridor = RoadCorridor.fromSamples(samples, [], options, spans), scene = new Scene();
   const mesh = new TunnelMesh(scene, 'tunnel', options);
   mesh.update(spans, corridor, hill, 1, 0, 0, true);
   scene.updateMatrixWorld(true);
@@ -155,11 +155,11 @@ it.each(['mountain', 'highway'] as const)('builds open %s portals, a real roof a
   const roof = ray.intersectObject(mesh.lining)[0];
   expect(roof).toBeDefined();
   expect(roof.point.y).toBeGreaterThan(206);
-  expect(ray.intersectObject(mesh.cover)[0]).toBeDefined();
-  ray.set(new Vector3(roadProfile(options).outerHalfWidth + 3, 203, startZ + 20), new Vector3(0, 0, -1));
+  expect(ray.intersectObject(mesh.cover)).toHaveLength(0);
+  ray.set(new Vector3(roadProfile(options).outerHalfWidth + 1, 203, startZ + 20), new Vector3(0, 0, -1));
   const shoulder = ray.intersectObject(mesh.cover)[0];
   expect(shoulder).toBeDefined();
-  expect(Math.abs(shoulder.face!.normal.y)).toBeGreaterThan(0.2);
+  expect(Math.abs(shoulder.face!.normal.z)).toBeGreaterThan(0.9);
   expect(mesh.lights.count).toBeGreaterThan(0);
   expect(mesh.equipment.count).toBeGreaterThan(mesh.lights.count);
   const geometry = mesh.cover.geometry;

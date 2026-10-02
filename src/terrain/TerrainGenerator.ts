@@ -6,12 +6,14 @@ import { BiomeSystem, createBiomeSample } from '../biome/BiomeSystem';
 import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { generateVegetation } from '../vegetation/VegetationGenerator';
 import type { ServiceGround } from '../service/ServiceTerrain';
+import { excavateTunnelMouths } from './TunnelExcavation';
 
 export interface TerrainData {
   positions: Float32Array<ArrayBuffer>;
   normals: Float32Array<ArrayBuffer>;
   colors: Float32Array<ArrayBuffer>;
   vegetation: Float32Array<ArrayBuffer>;
+  indices?: Uint32Array<ArrayBuffer>;
 }
 
 const layouts = { 8: createTerrainLayout(8), 16: createTerrainLayout(16), 64: createTerrainLayout(64) };
@@ -33,7 +35,7 @@ export class TerrainGenerator {
     const colors = new Float32Array(length);
     const corridor = new RoadCorridor(road, this.options, services);
     const biome = createBiomeSample();
-    const height = (x: number, z: number) => corridor.height(x, z, this.height.sample(x, z));
+    const height = (x: number, z: number) => corridor.height(x, z, this.height.sample(x, z), true);
     for (let i = 0; i < coordinates.length / 2; i++) {
       const x = cx * CHUNK_SIZE + coordinates[i * 2];
       const z = cz * CHUNK_SIZE + coordinates[i * 2 + 1];
@@ -51,6 +53,7 @@ export class TerrainGenerator {
       this.biomes.sample(x, z, y, 4 / magnitude, biome);
       colors.set(biome.color, offset);
     }
-    return { positions, normals, colors, vegetation: generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity) };
+    const vegetation = generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity);
+    return excavateTunnelMouths({ positions, normals, colors, vegetation }, layouts[cells].indices, road, this.options, cx * CHUNK_SIZE, cz * CHUNK_SIZE);
   }
 }

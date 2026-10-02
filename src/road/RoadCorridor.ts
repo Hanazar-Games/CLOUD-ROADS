@@ -14,6 +14,8 @@ const RADIUS = 64;
 
 export class RoadCorridor {
   private readonly index: RoadIndex;
+  private readonly surfaceEdges: readonly CorridorEdge[];
+  private readonly surfaceIndex: RoadIndex;
   private readonly signatures = new Map<string, string>();
   readonly roadHalfWidth: number;
   private readonly bedHalfWidth: number;
@@ -21,6 +23,8 @@ export class RoadCorridor {
 
   constructor(readonly edges: readonly CorridorEdge[], options: Readonly<WorldOptions> = DEFAULT_OPTIONS, services: readonly ServiceGround[] = []) {
     this.index = new RoadIndex(edges);
+    this.surfaceEdges = edges.filter(({ a, b }) => !a.tunnel || !b.tunnel);
+    this.surfaceIndex = this.surfaceEdges.length === edges.length ? this.index : new RoadIndex(this.surfaceEdges);
     this.roadHalfWidth = roadProfile(options).outerHalfWidth;
     this.bedHalfWidth = this.roadHalfWidth + 6.8;
     this.services = new ServiceTerrain(services);
@@ -62,8 +66,8 @@ export class RoadCorridor {
 
   serviceCover(x: number, z: number): boolean { return this.services.contains(x, z); }
 
-  distance(x: number, z: number, radius: number): number {
-    const nearest = this.index.nearest(x, z, radius);
+  distance(x: number, z: number, radius: number, surface = false): number {
+    const nearest = (surface ? this.surfaceIndex : this.index).nearest(x, z, radius);
     return nearest ? Math.sqrt(nearest.distanceSquared) : Infinity;
   }
 
@@ -84,14 +88,17 @@ export class RoadCorridor {
     return !!nearest && !!(this.edges[nearest.index].a.tunnel || this.edges[nearest.index].b.tunnel);
   }
 
-  height(x: number, z: number, natural: number): number {
-    let nearest = this.index.nearest(x, z, RADIUS);
+  height(x: number, z: number, natural: number, aboveGround = false): number {
+    const indexTree = aboveGround ? this.surfaceIndex : this.index, edges = aboveGround ? this.surfaceEdges : this.edges;
+    let nearest = indexTree.nearest(x, z, RADIUS);
     if (!nearest) return Math.min(natural + 5, this.services.height(x, z, natural, Infinity, this.roadHalfWidth));
-    const selected = this.edges[nearest.index];
+    const selected = edges[nearest.index];
+    if (aboveGround && (nearest.t === 0 && selected.a.tunnel || nearest.t === 1 && selected.b.tunnel))
+      return Math.min(natural + 5, this.services.height(x, z, natural, Infinity, this.roadHalfWidth));
     if (selected.a.ground < 0.5 && nearest.distanceSquared < this.bedHalfWidth ** 2) {
       let lowest = selected.a.y + (selected.b.y - selected.a.y) * nearest.t;
-      for (const index of this.index.within(x - this.bedHalfWidth, z - this.bedHalfWidth, x + this.bedHalfWidth, z + this.bedHalfWidth)) {
-        const { a, b } = this.edges[index];
+      for (const index of indexTree.within(x - this.bedHalfWidth, z - this.bedHalfWidth, x + this.bedHalfWidth, z + this.bedHalfWidth)) {
+        const { a, b } = edges[index];
         if (a.routeId === selected.a.routeId) continue;
         const dx = b.x - a.x, dz = b.z - a.z;
         const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz || 1)));
@@ -99,7 +106,7 @@ export class RoadCorridor {
         if (height < lowest && distanceSquared < this.bedHalfWidth ** 2) { nearest = { index, t, distanceSquared }; lowest = height; }
       }
     }
-    const { index, t, distanceSquared } = nearest, { a, b } = this.edges[index];
+    const { index, t, distanceSquared } = nearest, { a, b } = edges[index];
     const roadHalfWidth = a.halfWidth ?? this.roadHalfWidth, bedHalfWidth = roadHalfWidth + 6.8;
     const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
     const nx = a.nx + (b.nx - a.nx) * t, ny = a.ny + (b.ny - a.ny) * t, nz = a.nz + (b.nz - a.nz) * t;

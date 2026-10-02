@@ -271,7 +271,10 @@ export class AudioSystem {
     const sounding = (state.horn || preview && this.previewKind === 'horn') && this.hornVolume > 0;
     const nearbyHorn = state.trafficHorns.some(horn => horn.volume * this.npcHornVolume * state.atmosphere > 0.1);
     const priority = this.sfxVolume > 0 ? (sounding ? 1 : nearbyHorn ? 0.6 : 0) * Math.max(0, Math.min(1, this.hornFocus)) : 0;
-    const duck = Math.min(1 - priority * 0.95, 1 - Math.max(0, Math.min(0.8, this.musicDucking)) * (state.driving ? Math.max(this.load, Math.min(1, state.impact / 8)) : 0));
+    const engineDemand = this.engineVolume > 0 && state.ignition !== 'off' ? this.load : 0;
+    const impactDemand = this.collisionVolume > 0 ? Math.max(0, Math.min(1, state.impact / 8)) : 0;
+    const duck = Math.min(1 - priority * 0.95, 1 - Math.max(0, Math.min(0.8, this.musicDucking))
+      * (state.driving && this.sfxVolume > 0 ? Math.max(engineDemand, impactDemand) : 0));
     this.ambienceDuck += (1 - priority * 0.65 - this.ambienceDuck) * (1 - Math.exp(-Math.max(0, dt) * (priority ? 15 : 3)));
     this.musicDuck += (duck - this.musicDuck) * (1 - Math.exp(-Math.max(0, dt) * (duck < this.musicDuck ? 8 : 1.8)));
     const ev = state.powertrain === 'ev';

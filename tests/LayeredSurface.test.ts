@@ -5,8 +5,25 @@ import { Garage } from '../src/garage/Garage';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { type ServiceAccessPoint } from '../src/service/ServiceTerrain';
 import { accessQuads, ribbonHeight } from '../src/road/SurfaceRibbon';
+import { RoadCorridor } from '../src/road/RoadCorridor';
 
 const point = (x: number, y: number, z: number): ServiceAccessPoint => ({ x, y, z, slopeX: 0, slopeZ: 0, halfWidth: 8 });
+
+it('supports walking above a tunnel while keeping the underground road and ceiling separate', () => {
+  const road = new RoadSpine('tunnel-layers', { sample: () => 100 });
+  while (!road.update(0)) { /* build */ }
+  const tunnels = [{ start: road.samples[0], end: road.samples.at(-1)!, samples: road.samples, openStart: true, openEnd: true }];
+  const corridor = RoadCorridor.fromSamples(road.samples, [], DEFAULT_OPTIONS, tunnels);
+  const surface = new DrivingSurface({ seed: 'tunnel-layers', options: DEFAULT_OPTIONS, road, tunnels, bridges: [], services: [],
+    groundHeight: (x, z, ceiling = Infinity) => ceiling >= 200 ? 200 : corridor.height(x, z, 200) });
+  const sample = road.samples[100], { x, y, z } = sample.position;
+  expect(surface.sample(x, z, y + 0.5).height).toBeCloseTo(y);
+  expect(surface.sample(x, z, 200.5).height).toBe(200);
+  expect(surface.ceiling(x, z, 200)).toBe(Infinity);
+  expect(surface.ceiling(x, z, y)).toBeCloseTo(y + 4.5);
+  surface.level = 200; expect(surface.inTunnel(x, z)).toBe(false);
+  surface.level = y; expect(surface.inTunnel(x, z)).toBe(true);
+});
 
 it('selects the deck above a garage instead of snapping down onto its roof', () => {
   const garage = new Garage('layers', { x: 1000, y: 100, z: 0 });

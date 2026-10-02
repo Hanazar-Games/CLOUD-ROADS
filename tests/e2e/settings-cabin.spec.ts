@@ -69,6 +69,7 @@ test('shifts automatically, allows manual shifts and blocks roof motion at speed
   await page.keyboard.up('KeyW'); await page.keyboard.press('BracketRight');
   await expect(page.locator('[data-metric="Transmission"]')).toHaveText(/manual \/ [23]/);
   await openSettings(page); await page.locator('[data-settings-target="equipment"]').click();
+  await page.locator('#settings-equipment [data-settings-expand]').click();
   await expect(page.locator('#vehicle-roof')).toBeDisabled(); await expect(page.locator('#washer-refill')).toBeDisabled();
   await closeSettings(page); await page.keyboard.press('KeyR');
   await expect(page.locator('#vehicle-gear')).toHaveText('P');
@@ -83,6 +84,7 @@ test('keeps every settings category usable in a short narrow window', async ({ p
     const content = await page.locator('#settings-content').boundingBox();
     expect(heading!.y - content!.y).toBeGreaterThanOrEqual(0);
     expect(heading!.y - content!.y).toBeLessThanOrEqual(24);
+    const expand = page.locator(`#settings-${category} [data-settings-expand]`); if (await expand.count()) await expand.click();
     await page.locator(`#${id}`).scrollIntoViewIfNeeded(); await expect(page.locator(`#${id}`)).toBeInViewport();
     await expect(page.locator('#settings-close')).toBeInViewport();
   }
@@ -93,6 +95,7 @@ test('previews layered audio and suspends when the master is muted', async ({ pa
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=FLEET-FLAT'); await openSettings(page);
   await page.locator('[data-settings-target="audio"]').click();
+  await page.locator('#settings-audio [data-settings-expand]').click();
   await expect(page.locator('#audio-channels input[type=range]')).toHaveCount(18);
   await expect(page.locator('#audio-channels input[type=number]')).toHaveCount(18);
   await page.locator('#audio-toggle').click();

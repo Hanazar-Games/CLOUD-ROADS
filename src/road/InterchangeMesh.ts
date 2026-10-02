@@ -6,6 +6,7 @@ import type { RoadTerrain } from './RoadGenerator';
 import { createConcreteMaterial } from '../bridge/ConcreteMaterial';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
 import { accessQuads } from './SurfaceRibbon';
+import { appendRibbonSlab } from './RibbonGeometry';
 import { createPavementMaterial } from './PavementMaterial';
 import type { PavementTextures } from './PavementTextures';
 
@@ -14,6 +15,7 @@ export class InterchangeMesh {
   readonly pavement: Mesh<BufferGeometry, MeshStandardMaterial>;
   private readonly concreteOrigin = new Vector2();
   readonly decks = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.concreteOrigin), 12000);
+  readonly slabs = new Mesh(new BufferGeometry(), this.decks.material);
   readonly rails = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa6b2b8, metalness: 0.6, roughness: 0.48 }), 20000);
   readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xeee9d6, roughness: 0.85 }), 12000);
   private readonly matrix = new Matrix4();
@@ -25,7 +27,8 @@ export class InterchangeMesh {
     this.pavement = new Mesh(new BufferGeometry(), createPavementMaterial(this.pavementOrigin, textures));
     addRetroreflection(this.markings.material);
     this.pavement.name = 'interchange-ramp-pavement';
-    for (const mesh of [this.pavement, this.decks, this.rails, this.markings]) { mesh.visible = false; mesh.receiveShadow = true; scene.add(mesh); }
+    for (const mesh of [this.pavement, this.slabs, this.decks, this.rails, this.markings]) { mesh.visible = false; mesh.receiveShadow = true; scene.add(mesh); }
+    this.slabs.castShadow = true;
     this.decks.castShadow = this.rails.castShadow = true;
   }
 
@@ -37,16 +40,16 @@ export class InterchangeMesh {
       this.x = plans[0]?.center.position.x ?? 0; this.z = plans[0]?.center.position.z ?? 0;
       this.pavementOrigin.set(this.x % 40, this.z % 40);
       this.decks.count = this.rails.count = this.markings.count = 0;
-      const positions: number[] = [];
+      const positions: number[] = [], slabs: number[] = [];
       for (const plan of plans) {
-        const ribbons = accessQuads(plan.ground.access);
+        const ribbons = accessQuads(plan.ground.access), rims = accessQuads(plan.ground.access, 0.25);
         let ribbon = 0;
         for (const ramp of plan.ramps) for (let i = 1; i < ramp.points.length; i++) {
           const a = ramp.points[i - 1], b = ramp.points[i], length = Math.hypot(b.x - a.x, b.z - a.z), nx = (a.z - b.z) / length, nz = (b.x - a.x) / length;
           const side = (p: typeof a, offset: number) => ({ x: p.x + nx * offset, y: p.y + (p.slopeX * nx + p.slopeZ * nz) * offset, z: p.z + nz * offset });
-          const { leftA, rightA, leftB, rightB } = ribbons[ribbon++];
+          const q = ribbons[ribbon], { leftA, rightA, leftB, rightB } = q;
           for (const p of [leftA, rightA, leftB, rightA, rightB, leftB]) positions.push(p.x - this.x, p.y + 0.015, p.z - this.z);
-          this.edge(this.decks, a, b, 7.9, 1.4, -0.75);
+          appendRibbonSlab(slabs, q, rims[ribbon++], { x: this.x, z: this.z }, 1.4);
           for (const offset of [-3.3, 3.3]) if (i > 14 && i < ramp.points.length - 14 || i % 3 === 0)
             this.edge(this.markings, side(a, offset), side(b, offset), 0.12, 0.02, 0.04);
           if (i % 24 === 12) {
@@ -77,15 +80,17 @@ export class InterchangeMesh {
           }
         }
       }
-      this.pavement.geometry.dispose(); this.pavement.geometry = new BufferGeometry();
-      this.pavement.geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-      this.pavement.geometry.computeVertexNormals(); this.pavement.geometry.computeBoundingSphere();
+      for (const [mesh, data] of [[this.pavement, positions], [this.slabs, slabs]] as const) {
+        mesh.geometry.dispose(); mesh.geometry = new BufferGeometry();
+        mesh.geometry.setAttribute('position', new Float32BufferAttribute(data, 3));
+        mesh.geometry.computeVertexNormals(); mesh.geometry.computeBoundingSphere();
+      }
       for (const mesh of [this.decks, this.rails, this.markings]) {
         mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
         mesh.instanceMatrix.needsUpdate = true; if (mesh.count) mesh.computeBoundingSphere();
       }
     }
-    for (const mesh of [this.pavement, this.decks, this.rails, this.markings]) { mesh.position.set(this.x - origin.x, 0, this.z - origin.z); mesh.visible = plans.length > 0; }
+    for (const mesh of [this.pavement, this.slabs, this.decks, this.rails, this.markings]) { mesh.position.set(this.x - origin.x, 0, this.z - origin.z); mesh.visible = plans.length > 0; }
   }
 
   private edge(mesh: InstancedMesh, a: ServicePoint, b: ServicePoint, width: number, height: number, lift: number): void {
@@ -98,6 +103,7 @@ export class InterchangeMesh {
   }
 
   dispose(): void {
+    this.slabs.removeFromParent(); this.slabs.geometry.dispose();
     for (const mesh of [this.pavement, this.decks, this.rails, this.markings]) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose(); if (mesh instanceof InstancedMesh) mesh.dispose(); }
   }
 }

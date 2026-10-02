@@ -2,6 +2,7 @@ import type { RoadSample } from '../road/RoadSegment';
 import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
 import { hashSeed } from '../world/WorldSeed';
 import { padPoint, type ServiceAccessPoint, type ServiceCrossover, type ServicePad } from './ServiceTerrain';
+import { accessQuads } from '../road/SurfaceRibbon';
 
 export function serviceCrossover(seed: string, id: number, pads: ServicePad[], samples: readonly RoadSample[], outerWidth: number,
   connections: readonly RoadEdge<ServiceAccessPoint>[]): ServiceCrossover | undefined {
@@ -47,13 +48,13 @@ export function serviceCrossover(seed: string, id: number, pads: ServicePad[], s
     if (Math.abs(p.y - y) > 0.6 && Math.abs(p.y - y) < 6) return;
   }
   const barriers: ServiceCrossover['barriers'] = [];
-  for (const { a, b } of access) {
-    const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+  const rims = accessQuads(access, 0.3);
+  for (const [i, { a, b }] of access.entries()) {
     // Leave the existing parking aisle and access fork open.
     if (Math.min(Math.hypot(a.x - points[0].x, a.z - points[0].z), Math.hypot(a.x - points.at(-1)!.x, a.z - points.at(-1)!.z)) < 48) continue;
-    for (const side of [-1, 1]) barriers.push({
-      a: { x: a.x - dz / length * side * 3.8, y: a.y, z: a.z + dx / length * side * 3.8 },
-      b: { x: b.x - dz / length * side * 3.8, y: b.y, z: b.z + dx / length * side * 3.8 },
+    const q = rims[i];
+    for (const [start, end] of [[q.leftA, q.leftB], [q.rightA, q.rightB]]) barriers.push({
+      a: start, b: end,
       height: kind === 'under' && Math.abs(a.y - deck) < 0.01 && Math.abs(b.y - deck) < 0.01 ? 10.5 : 1.5,
     });
   }

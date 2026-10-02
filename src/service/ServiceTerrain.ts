@@ -1,5 +1,5 @@
 import { RoadIndex, type RoadEdge } from '../road/RoadIndex';
-import { accessQuads, ribbonHeight } from '../road/SurfaceRibbon';
+import { accessQuads, ribbonHeight, type SurfaceQuad } from '../road/SurfaceRibbon';
 
 export interface ServicePoint { x: number; y: number; z: number }
 export interface ServiceAccessPoint extends ServicePoint { slopeX: number; slopeZ: number; halfWidth?: number; merge?: boolean; side?: number; direction?: number }
@@ -12,6 +12,11 @@ const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); r
 export function padPoint(pad: ServicePad, x: number, along: number, height = 0): ServicePoint {
   return { x: pad.x + Math.cos(pad.heading) * x + Math.sin(pad.heading) * along,
     y: pad.y + pad.grade * along + height, z: pad.z + Math.sin(pad.heading) * x - Math.cos(pad.heading) * along };
+}
+
+export function padQuad(pad: ServicePad): SurfaceQuad {
+  return { leftA: padPoint(pad, -pad.halfWidth, -pad.halfLength), rightA: padPoint(pad, pad.halfWidth, -pad.halfLength),
+    leftB: padPoint(pad, -pad.halfWidth, pad.halfLength), rightB: padPoint(pad, pad.halfWidth, pad.halfLength) };
 }
 
 export function crossoverShelter(cross: ServiceCrossover | undefined, x: number, y: number, z: number): number {

@@ -104,7 +104,7 @@ test('keeps walking controls reachable in a short narrow window', async ({ page 
   await page.goto('/?seed=CLOUD-ROAD-001'); await start(page);
   await toggleSettings(page);
   await (await control(page, page.locator('[data-settings-target="explore"]'))).click();
-  await expect(page.getByText('右上角「开始步行」进入第一人称', { exact: false })).toBeVisible();
+  await expect(await control(page, page.getByText('右上角「开始步行」进入第一人称', { exact: false }))).toBeVisible();
   await (await control(page, page.locator('#walk-toggle'))).click();
   await expect(metric(page, 'Travel mode')).toHaveText('flight');
 });

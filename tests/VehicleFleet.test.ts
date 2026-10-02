@@ -7,6 +7,19 @@ import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 
 const flat: SurfaceSampler = () => ({ height: 0, grip: 1 });
 
+it('turns motorcycle handlebars and forks with its front wheel while keeping the chassis separate', () => {
+  const scene = new Scene(), car = new VehiclePhysics('motorcycle'), mesh = new VehicleMesh(scene, car.profile), systems = new VehicleSystems();
+  car.reset(0, 0, 0, flat);
+  const handlebars = mesh.chassis.getObjectByName('motorcycle-steering')!;
+  expect(handlebars).toBeDefined(); expect(handlebars.children.length).toBeGreaterThan(0);
+  for (const steer of [-0.3, 0, 0.3]) {
+    car.steering = steer; mesh.sync(car, { x: 0, z: 0 }, systems);
+    expect(handlebars.rotation.y).toBeCloseTo(-car.wheelSteering(car.profile.wheels[0]));
+    expect(mesh.chassis.rotation.y).toBe(0);
+  }
+  mesh.dispose(); expect(scene.children).toHaveLength(0);
+});
+
 it('supports the expedition rack on its roof and keeps equipment behind the windshield', () => {
   const p = vehicleProfiles.expedition6, scene = new Scene(), mesh = new VehicleMesh(scene, p);
   const roof = p.height - p.radius - p.rest + 9.81 / suspensionTuning(3, p).spring - 0.4;
