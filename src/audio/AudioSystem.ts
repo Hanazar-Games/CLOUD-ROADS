@@ -113,11 +113,13 @@ export class AudioSystem {
   private lastOperation = 0;
   private lastShift = 0;
   private previewTime = 0;
+  private previewRequested = false;
   private previewKind = '';
   private readonly voices: OscillatorNode[] = [];
   private readonly sources: AudioScheduledSourceNode[] = [];
   private active = true;
   private transitioning = false;
+  private activationBlocked = false;
   private disposed = false;
   private time = 0;
   private musicTime = 0;
@@ -129,12 +131,14 @@ export class AudioSystem {
   private targets = new WeakMap<AudioParam, number>();
 
   get state(): string { return this.error ? 'unavailable' : this.context?.state ?? 'locked'; }
+  get awaitingActivation(): boolean { return this.enabled && !this.error && (!this.context || this.activationBlocked); }
   get testing(): boolean { return this.testRequested || this.testUntil > (this.context?.currentTime ?? 0); }
   get musicPlaying(): boolean {
     return this.audible && !this.disposed && this.state === 'running' && this.masterVolume > 0 && this.musicVolume > 0;
   }
   get previewing(): boolean {
-    return this.previewTime > 0 && this.audible && this.state === 'running' && this.sfxVolume > 0 && this.masterVolume > 0
+    return (this.previewRequested || this.previewTime > 0 && this.state === 'running') && this.enabled && this.active && !this.disposed && !this.error
+      && this.sfxVolume > 0 && this.masterVolume > 0
       && (this.previewKind === 'horn' ? this.hornVolume : this.engineVolume * (this.previewKind === 'shift' ? this.shiftVolume : 1)) > 0;
   }
 
@@ -164,26 +168,33 @@ export class AudioSystem {
   toggle(): void {
     if (this.disposed) return;
     this.enabled = !this.enabled;
-    if (this.enabled && !this.context) {
-      if (!this.openContext()) return;
-    }
+    if (this.enabled) { this.error = ''; this.unlock(); }
+    this.sync();
+  }
+
+  unlock(): void {
+    if (this.disposed || !this.enabled || this.context && !this.activationBlocked) return;
+    if (typeof navigator !== 'undefined' && navigator.userActivation?.isActive === false) return;
+    this.activationBlocked = false;
+    if (!this.context && !this.openContext()) return;
     this.sync();
   }
 
   recover(): void {
     if (this.disposed) return;
-    this.releaseContext(); this.enabled = true;
+    this.releaseContext(); this.enabled = true; this.error = '';
     if (this.masterVolume <= 0) this.masterVolume = 0.85;
     if (this.sfxVolume <= 0) this.sfxVolume = 0.8;
     if (this.musicVolume <= 0) this.musicVolume = 0.3;
     this.onDiagnostic?.('info', 'User requested audio recovery; muted main buses restored.');
-    if (this.openContext()) this.sync();
+    this.unlock();
   }
 
   testSound(): boolean {
     if (this.disposed || !this.active || this.masterVolume <= 0 || this.testVolume <= 0) return false;
     this.enabled = true;
-    if (!this.context && !this.openContext()) return false;
+    this.unlock();
+    if (!this.context || this.activationBlocked) return false;
     this.stopTest(); this.testRequested = true; this.sync(); return !this.error;
   }
 
@@ -228,6 +239,7 @@ export class AudioSystem {
     if (!context || this.disposed || this.error) return;
     if (context.state === 'closed') { this.fail('音频设备已关闭，请点击强制开启声音重建。'); return; }
     const now = context.currentTime;
+    if (!this.previewing) { this.previewRequested = false; this.previewTime = 0; }
     if (!this.enabled || !this.active || this.masterVolume <= 0 || this.testVolume <= 0) this.stopTest();
     const audible = this.enabled && this.active && this.masterVolume > 0 && (this.sfxVolume > 0 || this.musicVolume > 0 || this.testing);
     if (this.audible !== audible) {
@@ -254,14 +266,23 @@ export class AudioSystem {
     }
     this.limiter!.release.value = Math.max(0.05, Math.min(1, this.limiterRelease));
     this.startTest();
-    if (this.transitioning || context.state === (audible ? 'running' : 'suspended')) return;
+    if (this.previewRequested && context.state === 'running') {
+      this.previewRequested = false; this.previewTime = 1.2;
+      if (this.previewKind === 'shift') this.pulse(this.shiftGain!, 0.13 * this.engineVolume * this.shiftVolume, 0.045);
+    }
+    if (this.transitioning || audible && this.activationBlocked || context.state === (audible ? 'running' : 'suspended')) return;
     this.transitioning = true;
     const previous = context.state;
     this.transitionTimer = setTimeout(() => {
       if (this.context === context) this.fail('音频设备响应超时，请点击强制开启声音重试。');
     }, 4000);
     const failed = (error: unknown) => {
-      if (this.context === context && !this.disposed) this.fail('音频恢复失败，请点击强制开启声音重试。', error);
+      if (this.context !== context || this.disposed) return;
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        clearTimeout(this.transitionTimer); this.transitioning = false; this.activationBlocked = true; this.stopTest();
+        this.previewRequested = false; this.previewTime = 0;
+        this.onDiagnostic?.('warn', 'Audio is waiting for a page click or key press.');
+      } else this.fail('音频恢复失败，请点击强制开启声音重试。', error);
     };
     try { void (audible ? context.resume() : context.suspend()).then(() => {
       if (this.context !== context || this.disposed) return;
@@ -456,12 +477,13 @@ export class AudioSystem {
   }
 
   preview(kind: 'engine' | 'shift' | 'horn'): boolean {
-    this.previewTime = 0;
-    if (!this.audible || this.state !== 'running' || this.sfxVolume <= 0 || this.masterVolume <= 0
+    this.previewTime = 0; this.previewRequested = false;
+    if (this.disposed || !this.active || this.error || this.sfxVolume <= 0 || this.masterVolume <= 0
       || (kind === 'horn' ? this.hornVolume : this.engineVolume * (kind === 'shift' ? this.shiftVolume : 1)) <= 0) return false;
-    this.previewTime = 1.2; this.previewKind = kind;
-    if (kind === 'shift') this.pulse(this.shiftGain!, 0.13 * this.engineVolume * this.shiftVolume, 0.045);
-    return true;
+    this.enabled = true; this.unlock();
+    if (!this.context || this.activationBlocked) return false;
+    this.previewRequested = true; this.previewKind = kind; this.sync();
+    return !this.error;
   }
 
   private pulse(channel: GainNode, level: number, decay: number): void {
@@ -478,8 +500,8 @@ export class AudioSystem {
   }
 
   private releaseContext(): void {
-    clearTimeout(this.transitionTimer); this.transitioning = false; this.stopTest();
-    this.audible = false; this.previewTime = 0;
+    clearTimeout(this.transitionTimer); this.transitioning = false; this.activationBlocked = false; this.stopTest();
+    this.audible = false; this.previewTime = 0; this.previewRequested = false;
     this.playerHorn?.dispose(); this.npcHorns.forEach(slot => slot.voice.dispose()); this.npcHorns.length = 0;
     this.nearbyEngines.forEach(slot => slot.voice.dispose()); this.nearbyEngines.length = 0;
     this.playerHorn = undefined;

@@ -124,6 +124,10 @@ export class Game {
     this.resize();
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
     this.audio.onDiagnostic = (level, message) => runtimeLog.write(level, 'audio', message);
+    for (const type of ['click', 'keydown']) window.addEventListener(type, event => {
+      if (!event.isTrusted || !this.audio.awaitingActivation) return;
+      this.refreshAudioFocus(); this.audio.unlock(); this.syncAudioUI();
+    }, { signal: this.events.signal });
     element('audio-toggle').addEventListener('click', () => { this.refreshAudioFocus(); this.audio.toggle(); this.syncAudioUI(); }, { signal: this.events.signal });
     element('audio-recover').addEventListener('click', () => {
       this.refreshAudioFocus(); this.audio.recover();
@@ -194,9 +198,13 @@ export class Game {
       element('music-pace-value').textContent = `${value}%`;
     }, { signal: this.events.signal });
     for (const kind of ['engine', 'shift', 'horn'] as const) element(`preview-${kind}`).addEventListener('click', () => {
+      this.refreshAudioFocus();
       this.audioPreviewPending = this.audio.preview(kind);
       element('audio-preview-status').textContent = this.audioPreviewPending ? '正在试听 · 使用当前混音参数'
-        : `请开启声音、解除暂停，并调高总音量、全部音效及「${kind === 'horn' ? '本车喇叭' : kind === 'shift' ? '发动机与换挡机械声' : '发动机'}」音量。`;
+        : this.audio.error || (this.paused ? '游戏已暂停 · 解除暂停后恢复声音'
+          : this.audio.awaitingActivation ? '声音设置已保留 · 点击页面或按键后开启声音'
+            : `请调高总音量、全部音效及「${kind === 'horn' ? '本车喇叭' : kind === 'shift' ? '发动机与换挡机械声' : '发动机'}」音量。`);
+      this.syncAudioUI();
     }, { signal: this.events.signal });
     window.addEventListener('blur', () => { this.windowFocused = false; this.audio.setActive(false); }, { signal: this.events.signal });
     window.addEventListener('focus', () => { this.windowFocused = true; }, { signal: this.events.signal });
@@ -662,14 +670,15 @@ export class Game {
     }
     if (this.audioPreviewPending && !this.audio.previewing) {
       this.audioPreviewPending = false;
-      element('audio-preview-status').textContent = '试听已结束 · 可调整混音参数后再次试听。';
+      element('audio-preview-status').textContent = this.audio.error || '试听已结束 · 可调整混音参数后再次试听。';
     }
     element('audio-toggle').setAttribute('aria-pressed', String(this.audio.enabled));
     element('audio-toggle').textContent = this.audio.error ? '重试开启声音' : this.audio.enabled ? '静音' : '开启声音';
     element('audio-status').textContent = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.masterVolume <= 0 ? '总音量为零'
       : this.audio.testing ? '正在测试输出声道' : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音'
         : this.paused ? '游戏已暂停 · 解除暂停后恢复声音' : document.hidden || !this.windowFocused || !document.hasFocus() ? '窗口未激活 · 返回游戏后恢复声音'
-          : this.audio.state === 'running' ? '声音已开启' : this.audio.state === 'suspended' ? '声音已暂停或等待浏览器授权 · 可点击强制开启声音' : `音频状态：${this.audio.state}`);
+          : this.audio.awaitingActivation ? '声音设置已保留 · 点击页面或按键后开启声音'
+            : this.audio.state === 'running' ? '声音已开启' : this.audio.state === 'suspended' ? '声音已暂停或等待浏览器授权 · 可点击强制开启声音' : `音频状态：${this.audio.state}`);
   }
 
   private refreshAudioFocus(): void {

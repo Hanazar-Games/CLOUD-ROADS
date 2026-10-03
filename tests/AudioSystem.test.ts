@@ -31,6 +31,101 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it.each(['engine', 'shift', 'horn'] as const)('enables audio from a %s preview and waits for resume before playing', async kind => {
+  const context = new AudioContextStub();
+  let resume!: () => void;
+  context.resume = () => new Promise<void>(resolve => { resume = () => { context.state = 'running'; resolve(); }; });
+  vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem();
+  try {
+    expect(audio.preview(kind)).toBe(true); expect(audio.enabled).toBe(true); expect(audio.previewing).toBe(true);
+    const shift = (audio as unknown as { shiftGain: ReturnType<typeof gain> }).shiftGain;
+    expect(shift.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    audio.update(2, idle); expect(audio.previewing).toBe(true);
+    resume(); await Promise.resolve(); audio.update(0.1, { ...idle, ignition: 'off' });
+    expect(audio.previewing).toBe(true);
+    if (kind === 'shift') expect(shift.gain.linearRampToValueAtTime).toHaveBeenCalledWith(expect.any(Number), expect.any(Number));
+    audio.update(1.3, idle); expect(audio.previewing).toBe(false);
+  } finally { audio.dispose(); }
+});
+
+it.each(['pause', 'mute', 'volume', 'dispose'] as const)('cancels a queued preview on %s instead of playing it after resume', async action => {
+  const context = new AudioContextStub();
+  let resume!: () => void;
+  context.resume = () => new Promise<void>(resolve => { resume = () => { context.state = 'running'; resolve(); }; });
+  vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem();
+  try {
+    expect(audio.preview('shift')).toBe(true);
+    const shift = (audio as unknown as { shiftGain: ReturnType<typeof gain> }).shiftGain;
+    if (action === 'pause') audio.setActive(false);
+    else if (action === 'mute') audio.toggle();
+    else if (action === 'volume') { audio.sfxVolume = 0; audio.update(0, idle); }
+    else audio.dispose();
+    resume(); await Promise.resolve();
+    expect(audio.previewing).toBe(false); expect(shift.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+  } finally { audio.dispose(); }
+});
+
+it('defers saved audio until activation without timing out or discarding the mix', async () => {
+  vi.useFakeTimers();
+  const activation = { isActive: false, hasBeenActive: false };
+  vi.stubGlobal('navigator', { userActivation: activation });
+  const context = new AudioContextStub(), create = vi.fn(function () { return context; });
+  vi.stubGlobal('AudioContext', create);
+  const audio = new AudioSystem(); audio.engineVolume = 0.4; audio.musicVolume = 0;
+  try {
+    audio.toggle();
+    for (let i = 0; i < 30; i++) audio.update(0.1, idle);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(create).not.toHaveBeenCalled(); expect(audio.enabled).toBe(true); expect(audio.error).toBe('');
+    activation.isActive = activation.hasBeenActive = true;
+    audio.unlock(); await Promise.resolve();
+    expect(create).toHaveBeenCalledOnce(); expect(audio.state).toBe('running');
+    expect(audio.engineVolume).toBe(0.4); expect(audio.musicVolume).toBe(0);
+    audio.unlock(); expect(create).toHaveBeenCalledOnce();
+  } finally { audio.dispose(); vi.useRealTimers(); }
+});
+
+it('does not unlock audio after the user cancels a pending enable', () => {
+  const activation = { isActive: false };
+  vi.stubGlobal('navigator', { userActivation: activation });
+  const create = vi.fn(function () { return new AudioContextStub(); }); vi.stubGlobal('AudioContext', create);
+  const audio = new AudioSystem();
+  try {
+    audio.toggle(); audio.toggle(); activation.isActive = true; audio.unlock();
+    expect(audio.enabled).toBe(false); expect(create).not.toHaveBeenCalled();
+  } finally { audio.dispose(); }
+});
+
+it.each(['recover', 'testSound'] as const)('defers %s without activation and ignores gestures after disposal', async action => {
+  const activation = { isActive: false };
+  vi.stubGlobal('navigator', { userActivation: activation });
+  const create = vi.fn(function () { return new AudioContextStub(); }); vi.stubGlobal('AudioContext', create);
+  const audio = new AudioSystem();
+  audio[action](); await Promise.resolve();
+  expect(create).not.toHaveBeenCalled(); expect(audio.awaitingActivation).toBe(true);
+  audio.dispose(); activation.isActive = true; audio.unlock();
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('waits for another gesture after an autoplay rejection without retrying every frame', async () => {
+  vi.useFakeTimers();
+  const context = new AudioContextStub();
+  const resume = vi.spyOn(context, 'resume').mockRejectedValueOnce(new DOMException('Activation required', 'NotAllowedError'));
+  vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem();
+  try {
+    audio.toggle(); await Promise.resolve(); await Promise.resolve();
+    expect(audio.enabled).toBe(true); expect(audio.error).toBe('');
+    for (let i = 0; i < 30; i++) audio.update(0.1, idle);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(audio.enabled).toBe(true); expect(audio.awaitingActivation).toBe(true);
+    expect(resume).toHaveBeenCalledOnce(); expect(context.state).toBe('suspended');
+    audio.unlock(); await Promise.resolve(); expect(audio.state).toBe('running');
+  } finally { audio.dispose(); vi.useRealTimers(); }
+});
+
 it('recovers from a failed resume without losing a nonzero mix', async () => {
   const failed = new AudioContextStub(), recovered = new AudioContextStub();
   failed.resume = async () => { throw new Error('device lost'); };
@@ -389,8 +484,7 @@ it('fades service ambience with distance and honors the nature volume and pause'
 it('uses one output limiter and refuses preview while muted or inactive', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem();
-  expect(audio.preview('shift')).toBe(false);
-  audio.toggle(); await Promise.resolve();
+  expect(audio.preview('shift')).toBe(true); await Promise.resolve();
   expect(context.compressors).toBe(1);
   expect(audio.preview('shift')).toBe(true);
   audio.setActive(false); await Promise.resolve(); expect(audio.preview('horn')).toBe(false);
