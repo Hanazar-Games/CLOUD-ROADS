@@ -1,13 +1,18 @@
 import { defineConfig } from '@playwright/test';
 import config from './playwright.config';
 
-export default defineConfig(config, {
+export default defineConfig({
+  ...config,
   testDir: './tests/pages',
   timeout: process.env.CI ? 180_000 : 120_000,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
+    ...config.use,
     baseURL: 'http://127.0.0.1:4319/CLOUD-ROADS/',
     viewport: process.env.CI ? { width: 320, height: 240 } : { width: 640, height: 360 },
     launchOptions: { args: [...config.use!.launchOptions!.args!, '--autoplay-policy=document-user-activation-required'] },
+    screenshot: 'only-on-failure',
+    trace: { mode: 'retain-on-failure', screenshots: false, snapshots: false, sources: false },
   },
   webServer: {
     command: 'npm run preview -- --port 4319 --strictPort --base /CLOUD-ROADS/',

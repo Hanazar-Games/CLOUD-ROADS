@@ -31,6 +31,16 @@ jobs:
       - run: npm test -- --maxWorkers=2
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pages
+        id: pages_tests
+      - name: Upload Pages failure diagnostics
+        if: ${{ failure() && steps.pages_tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pages-test-failure
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
