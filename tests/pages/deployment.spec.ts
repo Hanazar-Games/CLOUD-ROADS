@@ -12,12 +12,16 @@ test('loads built scripts, styles, workers and the world under the Pages project
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
     if (/\.(js|css)(\?|$)/.test(response.url())) assets.push(new URL(response.url()).pathname);
   });
-  await page.goto('./?seed=CLOUD-ROAD-001');
   // Keep software rendering affordable while verifying the full terrain window.
-  await (await control(page, page.locator('#graphics-preset'))).selectOption('economy');
-  await (await control(page, page.locator('#view-distance'))).fill('3');
-  await (await control(page, page.locator('#vegetation-toggle'))).click();
-  await closeSettings(page);
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+    const preset = document.querySelector<HTMLSelectElement>('#graphics-preset')!;
+    preset.value = 'economy'; preset.dispatchEvent(new Event('change', { bubbles: true }));
+    const distance = document.querySelector<HTMLInputElement>('#view-distance')!;
+    distance.value = '3'; distance.dispatchEvent(new Event('input', { bubbles: true }));
+    distance.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('#vegetation-toggle')!.click();
+  }, { once: true }));
+  await page.goto('./?seed=CLOUD-ROAD-001');
   const resources = await page.locator('script[src], link[rel="stylesheet"]').evaluateAll(nodes =>
     nodes.map(node => node.getAttribute('src') ?? node.getAttribute('href')));
   expect(resources.length).toBeGreaterThanOrEqual(2);
@@ -32,10 +36,13 @@ test('loads built scripts, styles, workers and the world under the Pages project
   await closeSettings(page);
   await expect.poll(async () => Number(await page.locator('[data-metric="Tree canopies"]').textContent()), { timeout: 15_000 }).toBeGreaterThan(2000);
   await page.screenshot();
+  await (await control(page, page.locator('#graphics-preset'))).selectOption('minimal');
+  await closeSettings(page);
+  await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('49');
   await page.locator('#world').focus(); await page.keyboard.press('Slash');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
   await (await control(page, page.locator('#season-kind'))).selectOption('winter');
-  await (await control(page, page.locator('#weather-rain'))).check();
+  await page.locator('#weather-rain').check();
   await expect(page.locator('[data-metric="Season"]')).toHaveText('冬季');
   await expect(page.locator('[data-metric="Snow visible"]')).toHaveText('yes');
   await expect(page.locator('[data-metric="Rain visible"]')).toHaveText('no');
