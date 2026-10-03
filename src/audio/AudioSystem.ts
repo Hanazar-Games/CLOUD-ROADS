@@ -112,7 +112,7 @@ export class AudioSystem {
   private lastBrake = false;
   private lastOperation = 0;
   private lastShift = 0;
-  private previewTime = 0;
+  private previewUntil = 0;
   private previewRequested = false;
   private previewKind = '';
   private readonly voices: OscillatorNode[] = [];
@@ -137,7 +137,7 @@ export class AudioSystem {
     return this.audible && !this.disposed && this.state === 'running' && this.masterVolume > 0 && this.musicVolume > 0;
   }
   get previewing(): boolean {
-    return (this.previewRequested || this.previewTime > 0 && this.state === 'running') && this.enabled && this.active && !this.disposed && !this.error
+    return (this.previewRequested || this.previewUntil > (this.context?.currentTime ?? 0) && this.state === 'running') && this.enabled && this.active && !this.disposed && !this.error
       && this.sfxVolume > 0 && this.masterVolume > 0
       && (this.previewKind === 'horn' ? this.hornVolume : this.engineVolume * (this.previewKind === 'shift' ? this.shiftVolume : 1)) > 0;
   }
@@ -239,14 +239,14 @@ export class AudioSystem {
     if (!context || this.disposed || this.error) return;
     if (context.state === 'closed') { this.fail('音频设备已关闭，请点击强制开启声音重建。'); return; }
     const now = context.currentTime;
-    if (!this.previewing) { this.previewRequested = false; this.previewTime = 0; }
+    if (!this.previewing) { this.previewRequested = false; this.previewUntil = 0; }
     if (!this.enabled || !this.active || this.masterVolume <= 0 || this.testVolume <= 0) this.stopTest();
     const audible = this.enabled && this.active && this.masterVolume > 0 && (this.sfxVolume > 0 || this.musicVolume > 0 || this.testing);
     if (this.audible !== audible) {
       this.audible = audible;
       this.master!.gain.cancelScheduledValues(now); this.master!.gain.setValueAtTime(0, now); this.targets.delete(this.master!.gain);
       if (!audible) {
-        this.previewTime = 0;
+        this.previewUntil = 0;
         if (this.retuneAt !== undefined) {
           this.retuneAt = now;
           this.program!.gain.cancelScheduledValues(now); this.program!.gain.setValueAtTime(0, now);
@@ -266,9 +266,9 @@ export class AudioSystem {
     }
     this.limiter!.release.value = Math.max(0.05, Math.min(1, this.limiterRelease));
     this.startTest();
-    if (this.previewRequested && context.state === 'running') {
-      this.previewRequested = false; this.previewTime = 1.2;
-      if (this.previewKind === 'shift') this.pulse(this.shiftGain!, 0.13 * this.engineVolume * this.shiftVolume, 0.045);
+    if (this.previewRequested && this.previewKind === 'shift' && context.state === 'running') {
+      this.previewRequested = false; this.previewUntil = now + 1.2;
+      this.pulse(this.shiftGain!, 0.13 * this.engineVolume * this.shiftVolume, 0.045);
     }
     if (this.transitioning || audible && this.activationBlocked || context.state === (audible ? 'running' : 'suspended')) return;
     this.transitioning = true;
@@ -280,7 +280,7 @@ export class AudioSystem {
       if (this.context !== context || this.disposed) return;
       if (error instanceof Error && error.name === 'NotAllowedError') {
         clearTimeout(this.transitionTimer); this.transitioning = false; this.activationBlocked = true; this.stopTest();
-        this.previewRequested = false; this.previewTime = 0;
+        this.previewRequested = false; this.previewUntil = 0;
         this.onDiagnostic?.('warn', 'Audio is waiting for a page click or key press.');
       } else this.fail('音频恢复失败，请点击强制开启声音重试。', error);
     };
@@ -359,7 +359,8 @@ export class AudioSystem {
       if (this.targets.get(parameter) === value) return;
       this.targets.set(parameter, value); parameter.setTargetAtTime(value, now, smooth);
     };
-    const preview = this.previewing; this.previewTime = preview ? Math.max(0, this.previewTime - dt) : 0;
+    if (this.previewRequested) { this.previewRequested = false; this.previewUntil = now + 1.2; }
+    const preview = this.previewing;
     const speed = Math.min(110, Math.abs(state.speed));
     const motorSpeed = preview && this.previewKind === 'engine' ? 6 + Math.sin(this.time * 3) * 5 : speed;
     const cabin = state.cockpit ? 1 - Math.max(0, Math.min(1, this.cabinIsolation)) * (1 - state.exposure) : 1;
@@ -477,7 +478,7 @@ export class AudioSystem {
   }
 
   preview(kind: 'engine' | 'shift' | 'horn'): boolean {
-    this.previewTime = 0; this.previewRequested = false;
+    this.previewUntil = 0; this.previewRequested = false;
     if (this.disposed || !this.active || this.error || this.sfxVolume <= 0 || this.masterVolume <= 0
       || (kind === 'horn' ? this.hornVolume : this.engineVolume * (kind === 'shift' ? this.shiftVolume : 1)) <= 0) return false;
     this.enabled = true; this.unlock();
@@ -501,7 +502,7 @@ export class AudioSystem {
 
   private releaseContext(): void {
     clearTimeout(this.transitionTimer); this.transitioning = false; this.activationBlocked = false; this.stopTest();
-    this.audible = false; this.previewTime = 0; this.previewRequested = false;
+    this.audible = false; this.previewUntil = 0; this.previewRequested = false;
     this.playerHorn?.dispose(); this.npcHorns.forEach(slot => slot.voice.dispose()); this.npcHorns.length = 0;
     this.nearbyEngines.forEach(slot => slot.voice.dispose()); this.nearbyEngines.length = 0;
     this.playerHorn = undefined;

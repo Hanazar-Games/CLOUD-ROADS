@@ -471,7 +471,7 @@ NPC 与停车车辆共用加载预算，附近基础模型优先，精模分步�
 试听换挡	Preview shifting	変速音を試聴
 试听喇叭	Preview horn	警笛を試聴
 恢复默认混音	Reset audio mix	ミックスを初期化
-先开启声音，再选择试听。	Enable sound, then choose a preview.	サウンドを有効にしてから試聴を選びます。
+选择一种声音即可开启试听，使用当前混音参数。	Choose a sound to enable audio and preview it with the current mix.	音を選ぶとサウンドが有効になり、現在のミックス設定で試聴できます。
 发动机随车型、转速与换挡变化；湿路胎噪、风雨、日间鸟声与夜间虫鸣分层混音。开窗、敞篷和隧道改变听感。音源由程序合成，设有输出压缩保护；暂停、公告和窗口失焦时静音，设置页允许试听，混音参数可存入预设。	Engine sound follows vehicle, RPM and shifting, layered with wet tires, weather, birds and insects. Windows, roof and tunnels change acoustics. Synthesized audio uses output compression. Pause, release notes and loss of focus mute audio; settings allow previews. Mixes can be saved as presets.	車種、回転数、変速に連動した音に、濡れたタイヤ、天候、鳥、虫の音を重ねます。窓、ルーフ、トンネルで音響が変化。合成音に出力圧縮を使用し、一時停止・更新情報・非アクティブ時は消音。設定中は試聴でき、ミックスを保存できます。
 记录音频恢复、世界加载、图形异常与脚本错误。日志仅在本次页面内存中保留，刷新后清空，不会自动上传。导出包含当前世界与性能指标，便于复现问题。	Records audio recovery, world loading, graphics and script errors in page memory only. Refresh clears it; nothing is uploaded automatically. Exports include world and performance data for reproducing issues.	音声復旧、ワールド読込、描画・スクリプトの異常をページ内メモリに記録。更新で消去され、自動送信しません。書き出しには再現用のワールドと性能情報を含みます。
 记录运行日志	Record runtime logs	実行ログを記録

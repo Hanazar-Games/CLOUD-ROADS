@@ -469,7 +469,7 @@ Preview engine	엔진 미리듣기	Probar motor
 Preview shifting	변속 미리듣기	Probar cambio de marcha
 Preview horn	경적 미리듣기	Probar bocina
 Reset audio mix	오디오 믹스 초기화	Restablecer mezcla
-Enable sound, then choose a preview.	소리를 켠 뒤 미리듣기를 선택하세요.	Activa el sonido y elige una prueba.
+Choose a sound to enable audio and preview it with the current mix.	소리를 선택하면 오디오가 켜지고 현재 믹스 설정으로 미리듣기가 시작됩니다.	Elige un sonido para activar el audio y escucharlo con la mezcla actual.
 Engine sound follows vehicle, RPM and shifting, layered with wet tires, weather, birds and insects. Windows, roof and tunnels change acoustics. Synthesized audio uses output compression. Pause, release notes and loss of focus mute audio; settings allow previews. Mixes can be saved as presets.	엔진음은 차종, RPM과 변속을 따르고 젖은 타이어, 날씨, 새와 곤충 소리가 더해집니다. 창문, 지붕과 터널에 따라 음향이 바뀝니다. 합성 오디오는 출력 압축을 사용합니다. 일시정지, 업데이트 소식과 포커스 상실은 음소거하며 설정에서는 미리듣기가 가능합니다. 믹스는 프리셋에 저장됩니다.	El motor sigue vehículo, RPM y cambios, junto a neumáticos mojados, clima, aves e insectos. Ventanas, techo y túneles cambian la acústica. Audio sintetizado con compresión. Pausa, notas y pérdida de foco silencian; ajustes permiten pruebas. La mezcla se guarda en preajustes.
 Records audio recovery, world loading, graphics and script errors in page memory only. Refresh clears it; nothing is uploaded automatically. Exports include world and performance data for reproducing issues.	오디오 복구, 월드 로딩, 그래픽과 스크립트 오류를 페이지 메모리에만 기록합니다. 새로고침하면 지워지며 자동 업로드하지 않습니다. 내보내기에는 재현용 월드·성능 데이터가 포함됩니다.	Registra recuperación de audio, carga, gráficos y errores solo en memoria. Recargar borra; no se sube nada automáticamente. La exportación incluye mundo y rendimiento para reproducir problemas.
 Record runtime logs	실행 로그 기록	Registrar eventos de ejecución

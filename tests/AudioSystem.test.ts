@@ -31,6 +31,34 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it.each(['engine', 'shift', 'horn'] as const)('ends a %s preview on audio time even when rendering barely advances', async kind => {
+  const context = new AudioContextStub(); context.currentTime = 10;
+  vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem();
+  try {
+    audio.preview(kind); await Promise.resolve(); audio.update(0.05, { ...idle, ignition: 'off' });
+    expect(audio.previewing).toBe(true);
+    context.currentTime += 1.3;
+    audio.update(0.05, { ...idle, ignition: 'off' });
+    expect(audio.previewing).toBe(false);
+    expect(context.gains[3].gain.value).toBe(0);
+  } finally { audio.dispose(); }
+});
+
+it.each(['engine', 'horn'] as const)('starts the %s preview duration when the first audio update can play it', async kind => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem();
+  try {
+    audio.preview(kind); await Promise.resolve(); context.currentTime = 3;
+    audio.update(0.05, { ...idle, ignition: 'off' });
+    expect(audio.previewing).toBe(true);
+    const nodes = audio as unknown as { engineGain: ReturnType<typeof gain>; playerHorn: HornVoice };
+    expect((kind === 'engine' ? nodes.engineGain : nodes.playerHorn.level).gain.value).toBeGreaterThan(0);
+    context.currentTime = 4.3; audio.update(0.05, { ...idle, ignition: 'off' });
+    expect(audio.previewing).toBe(false);
+  } finally { audio.dispose(); }
+});
+
 it.each(['engine', 'shift', 'horn'] as const)('enables audio from a %s preview and waits for resume before playing', async kind => {
   const context = new AudioContextStub();
   let resume!: () => void;
@@ -45,7 +73,7 @@ it.each(['engine', 'shift', 'horn'] as const)('enables audio from a %s preview a
     resume(); await Promise.resolve(); audio.update(0.1, { ...idle, ignition: 'off' });
     expect(audio.previewing).toBe(true);
     if (kind === 'shift') expect(shift.gain.linearRampToValueAtTime).toHaveBeenCalledWith(expect.any(Number), expect.any(Number));
-    audio.update(1.3, idle); expect(audio.previewing).toBe(false);
+    context.currentTime += 1.3; audio.update(0.05, idle); expect(audio.previewing).toBe(false);
   } finally { audio.dispose(); }
 });
 
@@ -517,8 +545,8 @@ it('rejects previews of muted sound groups and reports completion and interrupti
   audio.engineVolume = 1;
   expect(audio.preview('engine')).toBe(true); expect(audio.previewing).toBe(true);
   expect(audio.preview('horn')).toBe(false); expect(audio.previewing).toBe(false);
-  audio.preview('engine');
-  audio.update(1.3, idle); expect(audio.previewing).toBe(false);
+  audio.preview('engine'); audio.update(0, idle);
+  context.currentTime += 1.3; audio.update(0.05, idle); expect(audio.previewing).toBe(false);
   audio.preview('engine'); audio.engineVolume = 0; audio.update(0.1, idle);
   expect(audio.previewing).toBe(false);
   audio.hornVolume = 1; audio.preview('horn'); audio.setActive(false);
