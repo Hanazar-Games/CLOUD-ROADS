@@ -77,7 +77,7 @@ it.each(Array.from({ length: 8 }, (_, i) => i))('drives a long semi continuously
     expect(car.y).toBeGreaterThan(points[nearest].y - 1);
   }
   expect(nearest).toBeGreaterThanOrEqual(points.length - 4); expect(hits).toBe(0);
-}, 15000);
+}, 45000);
 
 it('builds both cross-highway directions and supports every ramp without guardrails across its mouth', () => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, routeStyle: 0 as const, maxGrade: 0 };

@@ -20,7 +20,7 @@ for (const kind of ['engine', 'shift', 'horn']) test(`starts ${kind} preview dir
       }
     };
   });
-  await page.goto('/?seed=AUDIO-PREVIEW');
+  await page.goto('./?seed=AUDIO-PREVIEW');
   for (const id of ['music', 'weather', 'nature']) await (await control(page, page.locator(`#${id}-volume`))).fill('0');
   await expect(page.locator('#audio-toggle')).toHaveAttribute('aria-pressed', 'false');
   const level = () => page.evaluate(() => {
@@ -41,7 +41,7 @@ for (const kind of ['engine', 'shift', 'horn']) test(`starts ${kind} preview dir
 });
 
 for (const gesture of ['keyboard', 'click']) test(`restores startup audio after a real ${gesture} gesture and emits sound`, async ({ page, browser }) => {
-  await page.goto('/?seed=AUDIO-ACTIVATION');
+  await page.goto('./?seed=AUDIO-ACTIVATION');
   await (await control(page, page.locator('#audio-toggle'))).click();
   await (await control(page, page.locator('#preset-name'))).fill('Audio startup');
   await page.locator('#startup-save').click();
