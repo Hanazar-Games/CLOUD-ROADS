@@ -93,7 +93,7 @@ export class RoadMesh {
           uv.setXY(index, offset, sample.distance - cycleStart);
           exposure.setX(index, 1 - cover);
         }
-        if (centers.length === 2 && i > 0 && sample.opening === undefined) {
+        if (centers.length === 2 && i > 0) {
           const previous = spine.samples[i - 1];
           const length = sample.distance - previous.distance + 0.08;
           const scale = Math.hypot(1, sample.grade);

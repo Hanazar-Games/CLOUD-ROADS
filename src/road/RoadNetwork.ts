@@ -10,9 +10,11 @@ import { roadProfile } from './RoadProfile';
 import { INTERCHANGE_EXTENT, crossroadsEnabled, junctionInterval, junctionLead, junctionsEnabled, junctionTail } from './JunctionSchedule';
 import { highwayInterchange, type HighwayInterchange } from './HighwayInterchange';
 import { crossroadSite } from './CrossroadSite';
+import { junctionProtection } from './JunctionProtection';
+import type { ServiceGround } from '../service/ServiceTerrain';
 
 export interface JunctionRamp { id: string; sample: RoadSample; direction: 'left' | 'right' | 'return' }
-export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack' | 'crossroads'; exits: string[]; ramps: JunctionRamp[]; interchange?: HighwayInterchange }
+export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack' | 'crossroads'; exits: string[]; ramps: JunctionRamp[]; interchange?: HighwayInterchange; protection?: ServiceGround }
 interface RouteDefinition { id: string; seed: string; origin?: RoadControlPoint; prefix: RoadSegment[]; parent?: RouteDefinition; openings?: RoadSpine['openings']; opposite?: string }
 export interface NetworkRoute {
   id: string; seed: string; road: RoadSpine; definition: RouteDefinition;
@@ -69,7 +71,7 @@ export class RoadNetwork {
       route.ready = preview ? route.road.advanceToDistance(route.road.generator.start.distance + 800)
         : route.road.update(route.road.coordinate(x, z), active ? 4 : 2, active ? halo : Math.min(1600, halo));
       if (active || route.id === 'back' && this.active.id === 'root' && current && current.distance < 400) ready &&= route.ready;
-      if (route.ready && route.version !== route.road.version) this.refresh(route);
+      if (route.version !== route.road.version) this.refresh(route);
     }
     if (this.active.ready) this.planJunctions(x, z);
     const parentRoute = parent && this.cache.get(parent.id);
@@ -201,9 +203,11 @@ export class RoadNetwork {
         const start = prefix.at(-1)!.end;
         const child = this.add({ id, seed: id, origin: { ...start, junction: undefined, elevated: undefined, nextMountain: start.distance + 600 }, prefix, parent: route.definition });
         child.road.openings.splice(0, 1, { start: 0, end: 280, side: -1 }); child.road.version++;
+        this.refresh(child);
         if (!route.road.openings.some(range => range.start === entry.distance - 12)) route.road.openings.push({ start: entry.distance - 12, end: entry.distance + 280, side: 1 });
       }
       if (existing) this.junctions.splice(this.junctions.indexOf(existing), 1);
+      junction.protection = junctionProtection(junction, this.routes, this.options);
       this.junctions.push(junction); route.road.version++; this.version++;
     }
   }

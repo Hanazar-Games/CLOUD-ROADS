@@ -6,6 +6,16 @@ import { RoadSpine } from '../src/road/RoadSpine';
 import { ROAD_SAMPLES, RoadSegment } from '../src/road/RoadSegment';
 
 describe('RoadMesh', () => {
+  it('keeps the median guarded when an elevated highway opens its outer ramp connections', () => {
+    const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const }, spine = new RoadSpine('median-exit', { sample: () => 100 }, options);
+    spine.segments.push(new RoadSegment(spine.generator.start, 0, 0));
+    spine.openings.push({ start: 0, end: 1000, side: 0 }); spine.version++;
+    const scene = new Scene(), mesh = new RoadMesh(scene, options);
+    mesh.update(spine, 0, 0, true);
+    expect(mesh.barriers.count).toBe((spine.samples.length - 1) * 2);
+    expect(mesh.barriers.visible).toBe(true); mesh.dispose();
+  });
+
   it('gives highway barriers a wider foot and a narrow crown within the reserved median', () => {
     const scene = new Scene(), road = new RoadMesh(scene, { ...DEFAULT_OPTIONS, roadType: 'highway' });
     const positions = road.barriers.geometry.getAttribute('position');

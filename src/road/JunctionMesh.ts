@@ -5,6 +5,7 @@ import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
 import type { WorldOptions } from '../world/WorldOptions';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
+import type { ServicePoint } from '../service/ServiceTerrain';
 
 export class JunctionMesh {
   readonly parts = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0.15 }), 8192);
@@ -29,6 +30,15 @@ export class JunctionMesh {
       this.x = junctions[0]?.sample.position.x ?? 0; this.z = junctions[0]?.sample.position.z ?? 0;
       this.parts.count = this.markings.count = 0;
       const width = this.profile.outerHalfWidth;
+      for (const junction of junctions) for (const { a, b } of junction.protection?.barriers ?? []) {
+        this.edge(a, b, 0.25, 0.22, 0.11, 0xbfc2bf);
+        for (const height of [0.6, 1.15]) this.edge(a, b, 0.14, 0.18, height, 0x84959c);
+        const posts = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 4));
+        for (let i = 0; i <= posts; i++) {
+          const t = i / posts, p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+          this.edge(p, { ...p, z: p.z + 0.12 }, 0.14, 1.4, 0.7, 0x84959c);
+        }
+      }
       for (const junction of junctions.filter(j => !j.interchange && j.kind !== 'crossroads')) for (const ramp of junction.ramps) {
         const road = routes.find(route => route.id === junction.route)?.road;
         const branch = routes.find(route => route.id === ramp.id)?.road;
@@ -116,6 +126,17 @@ export class JunctionMesh {
       }
     }
     for (const mesh of [this.parts, this.markings]) { mesh.position.set(this.x - originX, 0, this.z - originZ); mesh.visible = mesh.count > 0; }
+  }
+
+  private edge(a: ServicePoint, b: ServicePoint, width: number, height: number, lift: number, color: number): void {
+    const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz);
+    if (length < 1e-8) return;
+    if (this.parts.count >= this.parts.instanceMatrix.count) throw new Error('Junction protection capacity exceeded');
+    const overlap = 1 + 0.04 / length;
+    this.matrix.set(-dz / length * width, 0, dx * overlap, (a.x + b.x) / 2 - this.x,
+      0, height, (b.y - a.y) * overlap, (a.y + b.y) / 2 + lift,
+      dx / length * width, 0, dz * overlap, (a.z + b.z) / 2 - this.z, 0, 0, 0, 1);
+    this.parts.setMatrixAt(this.parts.count, this.matrix); this.parts.setColorAt(this.parts.count++, this.color.setHex(color));
   }
 
   private box(mesh: InstancedMesh, sample: RoadSample, offset: number, height: number, width: number, tall: number, length: number, color = 0xeeeedd, turn = 0, along = 0, roll = 0): void {

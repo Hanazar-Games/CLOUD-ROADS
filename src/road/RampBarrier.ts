@@ -6,11 +6,11 @@ import { roadFrame } from './RoadFrame';
 
 const mix = (a: ServicePoint, b: ServicePoint, t: number): ServicePoint => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t });
 
-export function roadBarrierQuads(samples: readonly RoadSample[], halfWidth: number): SurfaceQuad[] {
+export function roadBarrierQuads(samples: readonly RoadSample[], halfWidth: number, center = 0): SurfaceQuad[] {
   const rims = samples.map(sample => {
     const right = roadFrame(sample).right;
-    return [-1, 1].map(side => ({ x: sample.position.x + right.x * side * halfWidth,
-      y: sample.position.y + right.y * side * halfWidth, z: sample.position.z + right.z * side * halfWidth }));
+    return [-1, 1].map(side => ({ x: sample.position.x + right.x * (center + side * halfWidth),
+      y: sample.position.y + right.y * (center + side * halfWidth), z: sample.position.z + right.z * (center + side * halfWidth) }));
   });
   return rims.slice(1).map(([leftB, rightB], i) => ({ leftA: rims[i][0], rightA: rims[i][1], leftB, rightB }));
 }

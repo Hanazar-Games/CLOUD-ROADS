@@ -57,8 +57,8 @@ export class InterchangeMesh {
           const q = ribbons[ribbon], { leftA, rightA, leftB, rightB } = q;
           for (const p of [leftA, rightA, leftB, rightA, rightB, leftB]) positions.push(p.x - this.x, p.y + 0.015, p.z - this.z);
           appendRibbonSlab(slabs, q, rims[ribbon++], { x: this.x, z: this.z }, 1.4);
-          for (const offset of [-3.3, 3.3]) if (i > 14 && i < ramp.points.length - 14 || i % 3 === 0)
-            this.edge(this.markings, side(a, offset), side(b, offset), 0.12, 0.02, 0.04);
+          for (const sign of [-1, 1]) if (i > 14 && i < ramp.points.length - 14 || i % 3 === 0)
+            this.edge(this.markings, side(a, sign * ((a.halfWidth ?? 3.7) - 0.4)), side(b, sign * ((b.halfWidth ?? 3.7) - 0.4)), 0.12, 0.02, 0.04);
           if (i % 24 === 12) {
             const along = (d: number, offset = 0) => ({ x: a.x + (b.x - a.x) / length * d + nx * offset, y: a.y + (b.y - a.y) / length * d, z: a.z + (b.z - a.z) / length * d + nz * offset });
             this.edge(this.markings, along(-2), along(2), 0.18, 0.02, 0.045);

@@ -57,7 +57,8 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
       const du = after.u - before.u, dv = after.v - before.v, scale = Math.hypot(du, dv);
       const x = center.position.x + Math.cos(center.heading) * point.u + Math.sin(center.heading) * point.v;
       const z = center.position.z + Math.sin(center.heading) * point.u - Math.cos(center.heading) * point.v;
-      return { x, z, y: start + (end - start) * t * t * (3 - 2 * t), halfWidth: 3.7,
+      const taper = Math.min(1, distances[i] / 60, (distances.at(-1)! - distances[i]) / 60);
+      return { x, z, y: start + (end - start) * t * t * (3 - 2 * t), halfWidth: 2.2 + 1.5 * taper * taper * (3 - 2 * taper),
         slopeX: grade * (Math.cos(center.heading) * du + Math.sin(center.heading) * dv) / scale,
         slopeZ: grade * (Math.sin(center.heading) * du - Math.cos(center.heading) * dv) / scale };
     });
@@ -72,6 +73,12 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
     ramps.push({ from, to, turn, points, entry: port(0, entryEnd, from), exit: port(curve.length - 1, exitStart, to) });
   }
   const rims = accessQuads(ground.access, 0.2), rails = rims.flatMap(q => [{ a: q.leftA, b: q.leftB }, { a: q.rightA, b: q.rightB }]);
+  let edge = 0;
+  for (const ramp of ramps) {
+    const first = rims[edge]; edge += ramp.points.length - 1;
+    const last = rims[edge - 1];
+    rails.push({ a: first.leftA, b: first.rightA }, { a: last.leftB, b: last.rightB });
+  }
   const point = (u: number, v: number, y: number): ServiceAccessPoint => ({
     x: center.position.x + Math.cos(center.heading) * u + Math.sin(center.heading) * v,
     z: center.position.z + Math.sin(center.heading) * u - Math.cos(center.heading) * v,

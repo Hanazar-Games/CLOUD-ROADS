@@ -44,6 +44,7 @@ import { GarageMesh } from '../garage/GarageMesh';
 import { placeRoadGarage } from '../garage/GarageAccess';
 import { PavementTextures } from '../road/PavementTextures';
 import { CollisionEffects } from '../vehicle/CollisionEffects';
+import { roadRenderWindows } from '../road/RoadRenderWindow';
 
 export interface GroundSample {
   height: number;
@@ -108,6 +109,9 @@ export class World {
   private readonly forward = new Vector3();
   private corridor = new RoadCorridor([]);
   private corridorVersion = -1;
+  private networkVersion = -1;
+  private renderX = Infinity;
+  private renderZ = Infinity;
   private garageEntrance?: ServiceArea;
   private garagePlacementVersion = -1;
 
@@ -180,9 +184,9 @@ export class World {
         this.garageEntrance = placeRoadGarage(this.garage, route.road.samples, this.height, roadProfile(this.options).outerHalfWidth, route.services, crossings.flatMap(site => site.samples.map(p => p.position)));
         if (this.garageEntrance) break;
       }
-      if (this.garageEntrance) this.corridorVersion = -1;
+      if (this.garageEntrance) this.networkVersion = -1;
     }
-    if (this.roadReady && this.corridorVersion !== this.network.version) {
+    if (this.roadReady && (this.networkVersion !== this.network.version || Math.hypot(position.x - this.renderX, position.z - this.renderZ) > 128)) {
       const entrance = this.garageEntrance;
       if (entrance?.accessWindows) {
         const route = this.network.routes.find(r => r.id === (entrance.sample.routeId ?? 'root'));
@@ -203,7 +207,8 @@ export class World {
         }
       }
       this.passes = passes;
-      this.corridorVersion = this.network.version;
+      this.networkVersion = this.network.version; this.corridorVersion++;
+      this.renderX = position.x; this.renderZ = position.z;
       this.prepareRoutes(position.x, position.z);
     }
     this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
@@ -267,22 +272,10 @@ export class World {
   }
 
   private prepareRoutes(x: number, z: number): void {
-    const routes = [this.network.active, ...this.network.routes.filter(route => route !== this.network.active && route.ready).sort((a, b) => {
-      const distance = (road: RoadSpine) => { const p = road.nearest(x, z)!.position; return Math.hypot(p.x - x, p.z - z); };
-      return distance(a.road) - distance(b.road);
-    })];
+    const windows = roadRenderWindows(this.network.routes, this.network.active, x, z);
     this.renderRoutes = []; this.renderSamples = []; this.renderBridges = []; this.renderTunnels = []; this.renderServices = [];
     const corridors: RoadCorridor[] = [];
-    let remaining = 256;
-    const signalNearby = this.network.junctions.some(j => j.kind === 'crossroads' && Math.hypot(j.sample.position.x - x, j.sample.position.z - z) < 1000);
-    for (const [i, route] of routes.entries()) {
-      if (!remaining) break;
-      const nearest = route.road.nearest(x, z)!, all = route.road.segments;
-      const at = Math.max(0, all.findIndex(s => s.end.distance >= nearest.distance));
-      const budget = signalNearby ? i === 0 ? 128 : Math.min(64, Math.floor(remaining / (routes.length - i))) : i === 0 ? 192 : 64;
-      const count = Math.min(remaining, budget), first = Math.max(0, Math.min(all.length - count, at - Math.floor(count / 3)));
-      const segments = all.slice(first, first + count);
-      if (!segments.length) continue;
+    for (const { route, segments } of windows) {
       const min = segments[0].start.distance, max = segments.at(-1)!.end.distance;
       const samples = route.road.samples.filter(p => p.distance >= min - 1e-6 && p.distance <= max + 1e-6);
       const bridges = route.bridges.flatMap(span => {
@@ -300,7 +293,6 @@ export class World {
       this.renderRoutes.push({ id: route.id, source: { version: this.corridorVersion, samples, segments }, services, tunnels });
       this.renderSamples.push(...samples); this.renderBridges.push(...bridges); this.renderTunnels.push(...tunnels); this.renderServices.push(...services);
       corridors.push(RoadCorridor.fromSamples(samples, bridges, this.options, tunnels, services.map(site => site.ground)));
-      remaining -= segments.length;
     }
     const garages = this.renderServices.flatMap(site => site.garages ?? []);
     for (const [garage, mesh] of this.serviceGarages) if (!garages.includes(garage)) { mesh.dispose(); this.serviceGarages.delete(garage); }
@@ -309,7 +301,9 @@ export class World {
     const interchanges = this.network.junctions.filter(j => j.interchange).map(j => ({ id: -1, sample: j.sample, start: j.distance - INTERCHANGE_EXTENT, end: j.distance + INTERCHANGE_EXTENT, ground: j.interchange!.ground }));
     const garageAccess = this.garages.map(garage => garage === this.garage && this.garageEntrance ? this.garageEntrance
       : { id: -3, sample: this.road.samples[0], start: -Infinity, end: -Infinity, ground: garage.ground });
-    this.connections = [...interchanges, ...garageAccess];
+    const protection = this.network.junctions.filter(j => j.protection).map(j => ({ id: -4, sample: j.sample, start: j.distance - 24,
+      end: j.ramps.at(-1)!.sample.distance + 304, ground: j.protection! }));
+    this.connections = [...interchanges, ...protection, ...garageAccess];
     const grounds = [...this.renderServices.filter(site => site !== this.garageEntrance).map(site => site.ground), ...this.connections.map(site => site.ground)];
     this.renderServices.push(...garageAccess.filter(site => !this.renderServices.includes(site)));
     this.corridor = new RoadCorridor(corridors.flatMap(corridor => corridor.edges), this.options, grounds);

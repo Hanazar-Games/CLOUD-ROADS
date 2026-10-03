@@ -12,6 +12,24 @@ import { InterchangeMesh } from '../src/road/InterchangeMesh';
 import { RoadCorridor } from '../src/road/RoadCorridor';
 import { roadProfile } from '../src/road/RoadProfile';
 import { INTERCHANGE_EXTENT, junctionLead } from '../src/road/JunctionSchedule';
+import { accessQuads } from '../src/road/SurfaceRibbon';
+
+it('tapers each ramp endpoint entirely onto its receiving carriageway without exposed dead ends', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
+  const center = new RoadSegment(new RoadGenerator('taper', { sample: () => 100 }, options).start, 0, 0).sample(0);
+  const plan = highwayInterchange('taper', center, options), width = roadProfile(options).outerHalfWidth;
+  for (const ramp of plan.ramps) {
+    const quads = accessQuads(ramp.points.slice(1).map((b, i) => ({ a: ramp.points[i], b })));
+    for (const [direction, points] of [[ramp.from, [quads[0].leftA, quads[0].rightA]],
+      [ramp.to, [quads.at(-1)!.leftB, quads.at(-1)!.rightB]]] as const) for (const p of points) {
+      const dx = p.x - center.position.x, dz = p.z - center.position.z;
+      const lateral = direction % 2 ? dx * Math.sin(center.heading) - dz * Math.cos(center.heading)
+        : dx * Math.cos(center.heading) + dz * Math.sin(center.heading);
+      expect(Math.abs(lateral)).toBeLessThanOrEqual(width);
+      expect(Math.abs(lateral)).toBeGreaterThanOrEqual(2);
+    }
+  }
+});
 
 it.each([-0.4, 0.4])('finishes leveling a %s grade before any highway merge', grade => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, maxGrade: 0.4 };
