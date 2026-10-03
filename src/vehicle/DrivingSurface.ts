@@ -11,6 +11,7 @@ import { serviceObstacles } from '../service/ServiceAmenities';
 import { vehicleSupport } from './VehicleSolids';
 import { accessQuads, ribbonHeight } from '../road/SurfaceRibbon';
 import { RoadDeckSurface } from '../road/RoadDeckSurface';
+import { collideVehicles } from './VehicleContact';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage' | 'garages' | 'connections'>>
   & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
@@ -211,6 +212,16 @@ export class DrivingSurface {
 
   readonly constrain = (car: VehiclePhysics, previousX: number, previousZ: number, dt = 1 / 60): boolean => {
     const before = car.bodies(previousX, previousZ, true);
+    let vehicleHit = false;
+    for (const entry of this.world.traffic?.entries ?? []) vehicleHit = collideVehicles(car, entry.car, previousX, previousZ) || vehicleHit;
+    const fleet = this.world.parkedVehicles?.fleet;
+    for (const entry of fleet?.entries ?? []) {
+      const reach = vehicleProfiles[entry.kind].length + car.profile.length + 2;
+      if (entry.x < Math.min(car.x, previousX) - reach || entry.x > Math.max(car.x, previousX) + reach
+        || entry.z < Math.min(car.z, previousZ) - reach || entry.z > Math.max(car.z, previousZ) + reach
+        || entry.y > car.y + car.profile.height + 2 || entry.y + vehicleProfiles[entry.kind].height + 2 < car.y) continue;
+      vehicleHit = collideVehicles(car, fleet!.vehicle(entry), previousX, previousZ) || vehicleHit;
+    }
     let hit = false;
     for (let pass = 0; pass < 5; pass++) {
       const bodies = car.bodies();
@@ -234,11 +245,11 @@ export class DrivingSurface {
       if (!hit) { car.restoreHeading(this.sample); hit = true; continue; }
       car.slideMotion(correctionX, correctionZ, correctionX / depth, correctionZ / depth, pass === 1 ? Math.min(0.1, Math.max(0, dt)) : 0, this.sample);
     }
-    return hit;
+    return hit || vehicleHit;
   };
 
   private constrainBody(car: { x: number; y: number; z: number }, previousX: number, previousZ: number, width: number, ride: number, height: number): boolean {
-    if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride, height)) return true;
+    if (this.constrainService(car, previousX, previousZ, width + 0.08, car.y - ride, height, false)) return true;
     return this.constrainRoad(car, previousX, previousZ, width + 0.06, car.y - ride, height);
   }
 
@@ -349,11 +360,11 @@ export class DrivingSurface {
     this.barrierIndex = new RoadIndex(this.barriers);
   }
 
-  private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75): boolean {
+  private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75, vehicles = true): boolean {
     this.refreshServices();
-    let hit = this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet, height) ?? false;
+    let hit = vehicles && (this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet, height) ?? false);
     for (const garage of this.garages) hit = garage.constrain(body, previousX, previousZ, radius, feet, height) || hit;
-    hit = (this.world.traffic?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
+    hit = vehicles && (this.world.traffic?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
     for (const site of this.sites) for (const pad of site.ground.pads) {
       if (pad.x < Math.min(body.x, previousX) - 150 || pad.x > Math.max(body.x, previousX) + 150
         || pad.z < Math.min(body.z, previousZ) - 150 || pad.z > Math.max(body.z, previousZ) + 150) continue;

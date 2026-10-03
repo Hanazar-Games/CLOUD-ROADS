@@ -804,12 +804,15 @@ export class Game {
     const obstacles = this.world.traffic.density ? this.world.parkedVehicles.fleet.entries.filter(e => (e.slot < 0 || !e.id.startsWith('garage:')) && Math.hypot(e.x - anchor.x, e.z - anchor.z) < 1500)
       .map(e => this.world.parkedVehicles.fleet.vehicle(e)) : [];
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
+    this.world.traffic.wet = this.weather.wetness;
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
     this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter, this.weather.profile.far < 500 ? 1 : 0), anchor, this.weather.fogLightsNeeded);
     this.world.modelLoads.pump();
     const cameraRight = this.camera.matrixWorld.elements;
     const right = { x: cameraRight[0], y: cameraRight[1], z: cameraRight[2] };
     const listener = { x: this.camera.position.x + this.world.origin.x, y: this.camera.position.y, z: this.camera.position.z + this.world.origin.z };
+    this.world.collisionEffects.update(moving ? dt : 0, [this.driving.car, ...this.world.traffic.entries.map(entry => entry.car)],
+      listener, this.world.origin, this.driving.car.gravity);
     const trafficHorns = moving ? this.world.traffic.horns(listener, right) : [];
     const runningParked = this.world.parkedVehicles.fleet.runningVehicles();
     this.world.parkedVehicles.fogLamps.update(runningParked.filter(({ car }) => Math.hypot(car.x - listener.x, car.z - listener.z) < 1600).map(({ car }) => car), this.world.origin, this.weather.fogLightsNeeded);
@@ -820,6 +823,7 @@ export class Game {
       atmosphere: this.world.options.terrain === 'moon' ? 0 : this.world.options.terrain === 'mars' ? 0.15 : 1, driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady ? this.driving.car.transmission.load : 0,
       shifting: this.driving.car.transmission.shifting, impact: this.driving.car.impact, scrape: this.driving.car.scrape,
+      nearbyImpact: moving ? this.world.collisionEffects.soundImpact : 0,
       mass: this.driving.car.profile.mass, motorcycle: this.driving.car.profile.shape === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
@@ -954,6 +958,8 @@ export class Game {
         'Engine response': this.driving.car.transmission.response.toFixed(2), 'Impact speed': this.driving.car.impact.toFixed(2),
         'Ignition': this.driving.car.ignition,
         'NPC vehicles': this.world.traffic.entries.length,
+        'NPC impacts': this.world.traffic.entries.filter(entry => entry.car.impact > 0.5).length,
+        'Collision particles': this.world.collisionEffects.mesh.count,
         'NPC density': `${this.world.traffic.density}%`,
         'Traffic scenario': this.world.traffic.scenario,
         'Interchange ramps': this.world.network.junctions.reduce((count, j) => count + (j.interchange?.ramps.length ?? 0), 0),

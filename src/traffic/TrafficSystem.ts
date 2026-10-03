@@ -10,6 +10,8 @@ import { constrainVehicle } from '../service/ServiceCollision';
 import { vehicleSupport } from '../vehicle/VehicleSolids';
 import type { HornSound } from '../audio/VehicleHorn';
 import type { TrafficSignals } from './TrafficSignals';
+import { followingSpeed, laneBlend, laneChangeDuration } from './TrafficAwareness';
+import { collideVehicles } from '../vehicle/VehicleContact';
 
 export const MAX_TRAFFIC = 120;
 export const trafficTuning = {
@@ -25,11 +27,14 @@ interface Driver { patience: number; waiting: number; horn: number; quiet: numbe
 export interface TrafficEntry {
   id: string; car: VehiclePhysics; routeId: string; distance: number; direction: number; cruise: number;
   lane: number; offset: number; signal: number; cooldown: number;
-  change?: { lane: number; from: number; elapsed: number };
+  change?: { lane: number; elapsed: number; duration: number };
 }
 
 export class TrafficSystem {
   signals?: TrafficSignals;
+  wet = 0;
+  surfaceGrip: (height: number, sheltered: boolean) => number = () => 1;
+  private readonly motion = new Map<VehiclePhysics, { speed: number; acceleration: number }>();
   readonly tuning = Object.fromEntries(Object.entries(trafficTuning).map(([key, [value]]) => [key, value])) as TrafficTuning;
   configure(values: Partial<TrafficTuning>): void {
     for (const key of Object.keys(trafficTuning) as (keyof TrafficTuning)[]) {
@@ -68,7 +73,7 @@ export class TrafficSystem {
   get limit(): number { return this.capacity; }
   set limit(value: number) { if (Number.isFinite(value)) this.capacity = Math.round(Math.max(12, Math.min(MAX_TRAFFIC, value))); }
   get targetCount(): number { return Math.ceil(this.amount / 100 * this.capacity); }
-  clear(): void { this.entries.length = 0; this.spawnTime = 0; this.routes = []; this.queues.clear(); this.drivers.clear(); }
+  clear(): void { this.entries.length = 0; this.spawnTime = 0; this.routes = []; this.queues.clear(); this.drivers.clear(); this.motion.clear(); }
   take(id: string): VehiclePhysics | undefined {
     const index = this.entries.findIndex(e => e.id === id);
     if (index < 0 || this.entries[index].car.motionSpeed > 0.1) return;
@@ -132,6 +137,12 @@ export class TrafficSystem {
     // Substeps keep a fast vehicle from passing through a narrow obstacle.
     const steps = Math.ceil(dt / (1 / 60));
     const obstacles = [...parked, ...this.entries.map(entry => entry.car)];
+    const present = new Set(obstacles);
+    for (const car of this.motion.keys()) if (!present.has(car)) this.motion.delete(car);
+    for (const car of obstacles) {
+      const before = this.motion.get(car), acceleration = before ? Math.max(-12, Math.min(5, (car.speed - before.speed) / dt)) : 0;
+      this.motion.set(car, { speed: car.speed, acceleration: before ? before.acceleration + (acceleration - before.acceleration) * (1 - Math.exp(-dt * 8)) : 0 });
+    }
     for (let step = 0; step < steps; step++) for (const entry of this.entries) {
       const route = routes.find(r => r.id === entry.routeId)!;
       this.advance(entry, route, dt / steps, obstacles, walker);
@@ -164,6 +175,7 @@ export class TrafficSystem {
     const hitchX = x + Math.sin(heading) * (p.trailers?.[0].hitchAlong ?? 0), hitchZ = z - Math.cos(heading) * (p.trailers?.[0].hitchAlong ?? 0);
     const trailerHeading = Math.atan2(hitchX - rear.position.x - rearRight.x * offset, rear.position.z + rearRight.z * offset - hitchZ);
     const wheel = car.wheelAngle, rearWheel = car.rearWheelAngle, trip = car.trip, speed = car.speed;
+    const { impact, scrape, collision, lateralSpeed, yawRate, tireSlip } = car;
     car.gravity = surfaceGravity(this.options.terrain);
     car.reset(x, z, heading, (px, pz) => {
       const nearRear = p.trailers?.length && Math.hypot(px - rear.position.x, pz - rear.position.z) < Math.hypot(px - sample.position.x, pz - sample.position.z);
@@ -171,6 +183,7 @@ export class TrafficSystem {
       return { height: ground.position.y - (up.x * (px - ground.position.x) + up.z * (pz - ground.position.z)) / up.y, grip: 1 };
     }, true, p.trailers?.length ? [trailerHeading] : [], true);
     car.wheelAngle = wheel; car.rearWheelAngle = rearWheel; car.trip = trip; car.speed = speed; car.parked = false; car.ignition = 'running';
+    Object.assign(car, { impact, scrape, collision, lateralSpeed, yawRate, tireSlip });
     car.steering = Math.atan(sample.curvature * entry.direction * car.wheelbase);
     return true;
   }
@@ -201,7 +214,8 @@ export class TrafficSystem {
         && Math.hypot(car.x - j.sample.position.x, car.z - j.sample.position.z) < this.signals!.stopOffset + car.profile.length + 10)
       || walker && Math.hypot(car.x - walker.x, car.z - walker.z) < 60
       || [...parked, ...this.entries.map(e => e.car)].some(other => Math.abs(other.y - car.y) < 7
-        && Math.hypot(other.x - car.x, other.z - car.z) < 35 + other.profile.length + car.profile.length)) return;
+        && Math.hypot(other.x - car.x, other.z - car.z) < 35 + other.profile.length + car.profile.length)
+      || !this.laneClear(entry, route, lane.index, [...parked, ...this.entries.map(e => e.car)])) return;
     this.entries.push(entry);
   }
 
@@ -209,9 +223,13 @@ export class TrafficSystem {
     const sample = this.sample(route, entry.distance)!;
     const heading = sample.heading + (entry.direction < 0 ? Math.PI : 0), offset = this.laneOffset(entry, lane);
     const right = roadFrame(sample).right, x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;
+    const grip = this.grip(entry, route), duration = laneChangeDuration(entry.car.profile.length, grip) + 1.5;
+    const braking = Math.min(this.tuning.braking, entry.car.gravity * grip * 0.9);
     for (const other of obstacles) {
       if (other === entry.car) continue;
-      const rearGap = Math.max(8, other.motionSpeed * 2 + Math.max(0, other.motionSpeed - entry.car.speed) * (entry.car.profile.length > 8 ? 7 : 5.5));
+      const rearSpeed = other.motionSpeed + Math.max(0, this.motion.get(other)?.acceleration ?? 0) * 2;
+      const closing = Math.max(0, rearSpeed - entry.car.speed);
+      const rearGap = Math.max(8, rearSpeed * 2 + closing * duration, closing * this.tuning.headway + closing ** 2 / (2 * braking));
       if (Math.hypot(other.x - x, other.z - z) > Math.max(180, rearGap + other.profile.length + entry.car.profile.length)) continue;
       for (const body of other.bodies()) {
         if (Math.abs(body.y - entry.car.y) > Math.max(3, other.profile.height)) continue;
@@ -222,12 +240,38 @@ export class TrafficSystem {
         const width = Math.abs(Math.cos(angle)) * other.profile.width / 2 + Math.abs(Math.sin(angle)) * length;
         if (lateral > width + entry.car.profile.width / 2 + 0.45) continue;
         const clearance = Math.abs(along) - Math.abs(Math.cos(angle)) * length - Math.abs(Math.sin(angle)) * other.profile.width / 2 - entry.car.profile.length / 2;
-        if (clearance < (along >= 0 ? Math.max(6, entry.car.speed * 2.5) : rearGap)) return false;
+        const frontSpeed = Math.max(0, other.speed * Math.cos(angle));
+        const frontGap = Math.max(6, entry.car.speed * 2.5, (entry.car.speed ** 2 - frontSpeed ** 2) / (2 * braking) + entry.car.speed * 0.4);
+        if (clearance < (along >= 0 ? frontGap : rearGap)) return false;
       }
     }
     return !this.entries.some(other => other !== entry && other.change && other.routeId === entry.routeId && other.direction === entry.direction
       && Math.abs(other.distance - entry.distance) < 25 + Math.max(other.car.speed, entry.car.speed) * 3
       && (other.change.lane === lane || other.lane === lane));
+  }
+
+  private grip(entry: TrafficEntry, route: NetworkRoute): number {
+    const sheltered = route.tunnels.some(span => entry.distance > span.start.distance && entry.distance < span.end.distance);
+    return Math.max(0.15, Math.min(1.5, (1 - Math.max(0, Math.min(1, this.wet)) * 0.38)
+      * this.surfaceGrip(entry.car.y, sheltered) * entry.car.gripScale));
+  }
+
+  private laneFlow(entry: TrafficEntry, route: NetworkRoute, lane: number, obstacles: readonly VehiclePhysics[], braking: number): number {
+    const sample = this.sample(route, entry.distance)!, right = roadFrame(sample).right;
+    const heading = sample.heading + (entry.direction < 0 ? Math.PI : 0), offset = this.laneOffset(entry, lane);
+    const x = sample.position.x + right.x * offset, z = sample.position.z + right.z * offset;
+    const horizon = Math.max(120, entry.car.speed * 7);
+    let flow = entry.cruise, congestion = 0;
+    for (const other of obstacles) {
+      if (other === entry.car || Math.abs(other.y - entry.car.y) > Math.max(3, other.profile.height)) continue;
+      const dx = other.x - x, dz = other.z - z, along = dx * Math.sin(heading) - dz * Math.cos(heading);
+      if (along <= 0 || along > horizon || Math.abs(dx * Math.cos(heading) + dz * Math.sin(heading)) > this.profile.laneWidth * 0.5) continue;
+      const gap = along - (entry.car.profile.chassisLength + other.profile.length) / 2 - this.tuning.gap;
+      const speed = Math.max(0, other.speed * Math.cos(other.heading - heading));
+      flow = Math.min(flow, followingSpeed(gap, speed, this.motion.get(other)?.acceleration ?? 0, braking, this.tuning.headway));
+      congestion += (1 - along / horizon) * (speed < 3 ? 2 : 0.5);
+    }
+    return flow - congestion;
   }
 
   private planChange(entry: TrafficEntry, route: NetworkRoute, gap: number, leaderSpeed: number, obstacles: readonly VehiclePhysics[], walker?: Position): void {
@@ -241,20 +285,30 @@ export class TrafficSystem {
       && leaderSpeed < entry.cruise - 2;
     const candidates = this.profile.lanes.filter(lane => lane.direction === (this.options.oneWay ? 1 : entry.direction)
       && Math.abs(lane.index - entry.lane) === 1).sort((a, b) => this.laneOffset(entry, b.index) * entry.direction - this.laneOffset(entry, a.index) * entry.direction);
+    const braking = Math.min(this.tuning.braking * 0.6, entry.car.gravity * this.grip(entry, route) * 0.5);
+    const current = this.laneFlow(entry, route, entry.lane, obstacles, braking);
+    let best = current + (passing ? 1.5 : -0.5), selected: typeof candidates[number] | undefined;
     for (const lane of candidates) {
       const side = Math.sign((this.laneOffset(entry, lane.index) - entry.offset) * entry.direction);
-      if ((passing ? side > 0 : side < 0) || !this.laneClear(entry, route, lane.index, obstacles)) continue;
-      entry.change = { lane: lane.index, from: entry.offset, elapsed: 0 }; entry.signal = side;
-      return;
+      if ((!passing && side < 0) || !this.laneClear(entry, route, lane.index, obstacles)) continue;
+      const flow = this.laneFlow(entry, route, lane.index, obstacles, braking);
+      if (flow > best) { best = flow; selected = lane; }
+    }
+    if (selected) {
+      entry.change = { lane: selected.index, elapsed: 0, duration: laneChangeDuration(entry.car.profile.length, this.grip(entry, route)) };
+      entry.signal = Math.sign((this.laneOffset(entry, selected.index) - entry.offset) * entry.direction); return;
     }
     entry.cooldown = 0.7;
   }
 
   private advance(entry: TrafficEntry, route: NetworkRoute, dt: number, parked: readonly VehiclePhysics[], walker?: Position): void {
     const car = entry.car, reverse = this.reverseRoute(route);
+    const grip = this.grip(entry, route);
+    car.impact *= Math.exp(-dt * 6); car.scrape *= Math.exp(-dt * 6);
+    car.yawRate *= Math.exp(-dt * (2 + grip * 3));
     const remaining = entry.direction > 0 ? route.road.segments.at(-1)!.end.distance - entry.distance
       : reverse?.ready ? (reverse.road.segments.at(-1)?.end.distance ?? 0) + entry.distance : entry.distance - route.road.segments[0].start.distance;
-    const deceleration = Math.min(this.tuning.braking * 0.6, car.gravity * 0.5);
+    const deceleration = Math.min(this.tuning.braking * 0.6, car.gravity * grip * 0.5);
     let target = Math.min(entry.cruise, car.maxSpeed, Math.sqrt(Math.max(0, remaining - 30) * Math.min(5, deceleration * 2)));
     let queueGap = Infinity;
     if (this.scenario !== 'normal') target = Math.min(target, this.scenario === 'busy' ? 9 : 7);
@@ -272,12 +326,12 @@ export class TrafficSystem {
     for (let ahead = 0; ahead <= horizon; ahead += 25) {
       const sample = this.sample(route, entry.distance + entry.direction * ahead);
       if (sample) {
-        const safe = Math.min(Math.sqrt(Math.min(2.1, car.gravity * 0.55) / Math.max(0.00001, Math.abs(sample.curvature))),
+        const safe = Math.min(Math.sqrt(Math.min(2.1, car.gravity * grip * 0.55) / Math.max(0.00001, Math.abs(sample.curvature))),
           entry.cruise / (1 + Math.abs(sample.grade) * 3));
         target = Math.min(target, Math.sqrt(safe * safe + 2 * deceleration * Math.max(0, ahead - 25)));
       }
     }
-    let gap = Infinity, leaderSpeed = Infinity;
+    let gap = Infinity, leaderSpeed = Infinity, leaderAcceleration = 0, pedestrianGap = Infinity;
     const obstacles = parked;
     for (const other of obstacles) {
       if (other === car) continue;
@@ -292,55 +346,67 @@ export class TrafficSystem {
         if (along <= 0 || lateral > width + car.profile.width / 2 + 0.3) continue;
         const length = Math.abs(Math.cos(angle)) * (body.front - body.rear) / 2 + Math.abs(Math.sin(angle)) * other.profile.width / 2;
         const clearance = along - length - car.profile.chassisLength / 2 - this.tuning.gap;
-        if (clearance < gap) { gap = clearance; leaderSpeed = Math.max(0, other.speed * Math.cos(angle)); }
+        if (clearance < gap) { gap = clearance; leaderSpeed = Math.max(0, other.speed * Math.cos(angle)); leaderAcceleration = this.motion.get(other)?.acceleration ?? 0; }
       }
     }
     if (walker) {
       const dx = walker.x - car.x, dz = walker.z - car.z;
       const along = dx * Math.sin(car.heading) - dz * Math.cos(car.heading), lateral = Math.abs(dx * Math.cos(car.heading) + dz * Math.sin(car.heading));
       if (Math.abs(walker.y - car.y) < car.profile.height + 1 && lateral < car.profile.width / 2 + 1.5 && along > -car.profile.length)
-        gap = Math.min(gap, along - car.profile.chassisLength / 2 - 4);
+        pedestrianGap = along - car.profile.chassisLength / 2 - 4;
     }
     const signalGap = this.signals?.stopDistance(car) ?? Infinity;
-    gap = Math.min(gap, signalGap);
+    const boundary = Math.min(signalGap, pedestrianGap, queueGap);
     entry.cooldown = Math.max(0, entry.cooldown - dt * this.tuning.laneChanges);
     if ((this.signals?.approach(car)?.distance ?? Infinity) > 80) this.planChange(entry, route, gap, leaderSpeed, obstacles, walker);
-    const previousOffset = entry.offset, previousElapsed = entry.change?.elapsed ?? 0, previousHeading = car.heading, previousSteering = car.steering;
+    const previousOffset = entry.offset, previousHeading = car.heading, previousSteering = car.steering;
     if (entry.change) {
       const change = entry.change, clear = this.laneClear(entry, route, change.lane, obstacles);
       if (change.elapsed < 0.8 && !clear) {
         entry.change = undefined; entry.signal = 0; entry.cooldown = 2;
       } else {
+        const previousBlend = laneBlend(Math.max(0, Math.min(1, (change.elapsed - 0.8) / change.duration)));
         if (clear && (change.elapsed < 0.8 || car.speed > 0.3 && gap > 0.05)
           && (!walker || Math.hypot(walker.x - car.x, walker.z - car.z) > 15 + car.profile.length))
           change.elapsed += dt * (change.elapsed < 0.8 ? 1 : Math.min(1, car.speed / 6));
-        const t = Math.max(0, Math.min(1, (change.elapsed - 0.8) / (entry.car.profile.length > 8 ? 5.5 : 4)));
-        entry.offset = change.from + (this.laneOffset(entry, change.lane) - change.from) * t * t * (3 - 2 * t);
+        const t = Math.max(0, Math.min(1, (change.elapsed - 0.8) / change.duration));
+        if (clear && previousBlend < 1) entry.offset += (this.laneOffset(entry, change.lane) - entry.offset)
+          * (laneBlend(t) - previousBlend) / (1 - previousBlend);
       }
+    } else {
+      entry.offset += car.lateralSpeed * entry.direction * dt;
+      entry.offset += Math.max(-0.5 * dt, Math.min(0.5 * dt, (this.laneOffset(entry) - entry.offset) * dt * grip));
     }
-    target = Math.min(target, Math.max(0, gap) / this.tuning.headway, Math.sqrt(Math.max(0, gap) * deceleration * 2));
-    if (gap < 0.2 && car.speed < 0.2) target = 0;
-    const speed = car.speed + Math.max(-Math.min(this.tuning.braking, car.gravity * 0.9) * dt, Math.min(Math.min(this.tuning.acceleration, car.gravity * 0.8) * dt, target - car.speed));
-    const move = Math.min(speed * dt, Math.max(0, gap));
-    const before = car.bodies(), distance = entry.distance + entry.direction * move;
-    const yaw = Math.max(-0.25, Math.min(0.25, Math.atan2((entry.offset - previousOffset) * entry.direction, Math.max(0.1, move))));
+    car.lateralSpeed *= Math.exp(-dt * grip * 5);
+    const lanes = this.profile.lanes.filter(lane => lane.direction === (this.options.oneWay ? 1 : entry.direction));
+    const offsets = lanes.map(lane => this.laneOffset(entry, lane.index)), edge = (this.profile.laneWidth - car.profile.width) / 2 - 0.12;
+    entry.offset = Math.max(Math.min(...offsets) - edge, Math.min(Math.max(...offsets) + edge, entry.offset));
+    if (Number.isFinite(gap)) target = Math.min(target, followingSpeed(gap, leaderSpeed, leaderAcceleration, deceleration, this.tuning.headway));
+    target = Math.min(target, Math.max(0, boundary) / this.tuning.headway, Math.sqrt(Math.max(0, boundary) * deceleration * 2));
+    if (boundary < 0.2) target = 0;
+    if (car.impact > 0.5) target = Math.min(target, Math.max(0, car.speed));
+    const speed = Math.max(0, car.speed + Math.max(-Math.min(this.tuning.braking, car.gravity * grip * 0.9) * dt,
+      Math.min(Math.min(this.tuning.acceleration, car.gravity * grip * 0.8) * dt, target - car.speed)));
+    const move = Math.min(speed * dt, Math.max(0, boundary));
+    const previousX = car.x, previousZ = car.z, distance = entry.distance + entry.direction * move;
+    const yaw = Math.max(-0.25, Math.min(0.25, Math.atan2((entry.offset - previousOffset) * entry.direction, Math.max(0.1, move)) + car.yawRate * 0.18));
     if (!this.place(entry, route, distance, yaw)) { entry.offset = previousOffset; car.speed = 0; return; }
+    car.speed = boundary <= 0.01 ? 0 : speed < 0.02 && target < 0.02 ? 0 : speed;
+    const placedX = car.x, placedZ = car.z;
     let hit = false;
-    for (const [b, body] of car.bodies().entries()) for (let along = body.rear; along <= body.front + 0.01; along += Math.min(1, body.front - body.rear)) {
-      const point = { x: body.x + Math.sin(body.heading) * along, z: body.z - Math.cos(body.heading) * along };
-      for (const other of obstacles) if (other !== car && constrainVehicle(point, before[b].x + Math.sin(before[b].heading) * along,
-        before[b].z - Math.cos(before[b].heading) * along, car.profile.width / 2 + 0.08,
-        body.y - car.profile.radius - car.profile.rest, other, car.profile.height)) { hit = true; break; }
-      if (hit) break;
-    }
-    if (hit) { entry.offset = previousOffset; if (entry.change) entry.change.elapsed = previousElapsed; this.place(entry, route, entry.distance); }
-    else {
-      entry.distance = distance; car.trip += move; car.wheelAngle += move / car.profile.radius; car.rearWheelAngle += move / car.profile.radius;
-      if (entry.change && entry.change.elapsed >= 0.8 + (car.profile.length > 8 ? 5.5 : 4)) {
+    for (const other of obstacles) hit = collideVehicles(car, other, previousX, previousZ) || hit;
+    const sample = this.sample(route, distance)!;
+    entry.distance = distance + (car.x - placedX) * Math.sin(sample.heading) - (car.z - placedZ) * Math.cos(sample.heading);
+    entry.offset += ((car.x - placedX) * Math.cos(sample.heading) + (car.z - placedZ) * Math.sin(sample.heading)) / Math.cos(sample.bank);
+    const travel = Math.min(move, Math.hypot(car.x - previousX, car.z - previousZ));
+    car.trip += travel; car.wheelAngle += travel / car.profile.radius; car.rearWheelAngle += travel / car.profile.radius;
+    if (hit && car.impact > 0.5) { entry.change = undefined; entry.signal = 0; entry.cooldown = 4; }
+    if (!hit) {
+      if (entry.change && entry.change.elapsed >= 0.8 + entry.change.duration) {
         entry.lane = entry.change.lane; entry.change = undefined; entry.signal = 0; entry.cooldown = 4 + this.driver(entry).patience * 3;
       }
     }
-    car.speed = hit || gap <= 0.01 ? 0 : speed < 0.02 && target < 0.02 ? 0 : speed;
+    car.speed = Math.max(0, car.speed);
     const turn = Math.atan2(Math.sin(car.heading - previousHeading), Math.cos(car.heading - previousHeading));
     const steering = !hit && move > 0.0001 ? Math.max(-car.profile.steer, Math.min(car.profile.steer, Math.atan(turn * car.wheelbase / move))) : previousSteering;
     car.steering = previousSteering + (steering - previousSteering) * (1 - Math.exp(-dt * 8));

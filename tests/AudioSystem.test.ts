@@ -366,6 +366,18 @@ it('mixes contact sounds only while driving and respects their independent volum
   audio.dispose();
 });
 
+it('plays nearby crashes outside the vehicle and respects collision volume, vacuum and pause', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  const impact = () => (audio as unknown as { impactGain: ReturnType<typeof gain> }).impactGain.gain.value;
+  audio.update(0.1, { ...idle, nearbyImpact: 12 }); expect(impact()).toBeGreaterThan(0);
+  audio.collisionVolume = 0; audio.update(0.1, { ...idle, nearbyImpact: 12 }); expect(impact()).toBe(0);
+  audio.collisionVolume = 1; audio.update(0.1, { ...idle, atmosphere: 0, nearbyImpact: 12 }); expect(impact()).toBe(0);
+  audio.update(0.1, idle); expect(impact()).toBe(0);
+  audio.setActive(false); await Promise.resolve(); expect(context.state).toBe('suspended');
+  audio.dispose();
+});
+
 it('voices EV drive and regeneration without combustion idle or automatic shift effects', async () => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();

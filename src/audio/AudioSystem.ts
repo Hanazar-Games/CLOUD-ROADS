@@ -12,6 +12,7 @@ export interface SoundState {
   horn: boolean; vehicle: VehicleKind; trafficHorns: readonly HornSound[]; fan: number; washer: number; motor: boolean;
   supercar: boolean; braking: boolean; operations: number; service: number;
   ignition: 'off' | 'starting' | 'running'; nearbyEngines: readonly EngineSound[]; tireSlip: number;
+  nearbyImpact?: number;
 }
 const chords = [[130.81, 164.81, 196, 293.66], [87.31, 130.81, 174.61, 261.63], [110, 164.81, 220, 329.63], [98, 146.83, 196, 293.66]];
 const progressions = [[0, 1, 2, 3], [2, 3, 0, 1], [0, 2, 1, 3], [1, 3, 2, 0]];
@@ -396,7 +397,8 @@ export class AudioSystem {
     const slide = state.driving ? Math.max(0, Math.min(1, state.tireSlip) - 0.08) : 0;
     set(this.skidTone!.frequency, (state.mass > 4000 ? 480 : state.motorcycle ? 850 : 650) + slide * 240);
     set(this.skidGain!.gain, slide * 0.07 * (1 - state.wet * 0.55) * (0.4 + cabin * 0.6) * this.tireVolume, 0.06);
-    set(this.impactGain!.gain, state.driving ? Math.min(1, Math.max(0, state.impact) / 18) * 0.25 * this.collisionVolume * (0.5 + cabin * 0.5) : 0, 0.012);
+    const impact = Math.max(state.driving ? state.impact : 0, (state.nearbyImpact ?? 0) * state.atmosphere);
+    set(this.impactGain!.gain, Math.min(1, Math.max(0, impact) / 18) * 0.25 * this.collisionVolume * (0.5 + cabin * 0.5), 0.012);
     set(this.scrapeGain!.gain, state.driving ? Math.min(1, Math.max(0, state.scrape) / 25) * 0.07 * this.collisionVolume * (0.35 + cabin * 0.65) : 0, 0.06);
     set(this.wiperGain!.gain, state.driving && dt > 0 ? Math.min(0.07, Math.abs(state.wiper - this.lastWiper) / dt * 0.045) * this.cabinVolume : 0, 0.025);
     set(this.cabinGain!.gain, state.driving ? (state.fan * 0.009 + state.washer * 0.045 + Number(state.motor) * 0.022) * this.cabinVolume : 0);

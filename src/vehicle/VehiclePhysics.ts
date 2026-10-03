@@ -1,6 +1,7 @@
 import { suspensionTuning, vehicleOffset, vehicleProfiles, type Suspension, type VehicleKind, type VehicleProfile, type WheelPoint } from './VehicleConfig';
 import { Transmission, type Powertrain } from './Transmission';
 import { VehicleEquipment } from './VehicleEquipment';
+import type { CollisionEvent } from './VehicleContact';
 export interface VehicleInput { throttle: number; steer: number; handbrake: boolean }
 export interface SurfaceContact { height: number; grip: number }
 export type SurfaceSampler = (x: number, z: number) => SurfaceContact;
@@ -30,6 +31,7 @@ export class VehiclePhysics {
   regenerating = false;
   trailerBrake = false;
   impact = 0; scrape = 0;
+  collision?: CollisionEvent;
   speed = 0; steering = 0; pitch = 0; roll = 0; trip = 0; wheelAngle = 0;
   lateralSpeed = 0; yawRate = 0; tireSlip = 0; handbrake = 0; rearWheelAngle = 0;
   paint: number;
@@ -131,6 +133,7 @@ export class VehiclePhysics {
     this.transmission.maxSpeed = this.maxSpeed;
   }
   park(): void {
+    this.collision = undefined;
     this.reverseSelected = false;
     this.impact = this.scrape = 0;
     this.speed = this.lateralSpeed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
@@ -152,6 +155,7 @@ export class VehiclePhysics {
   }
 
   reset(x: number, z: number, heading: number, surface: SurfaceSampler, preserveTrip = false, trailerHeadings: readonly number[] = [], preservePowertrain = false): void {
+    this.collision = undefined;
     this.reverseSelected = false;
     this.impact = this.scrape = 0;
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;

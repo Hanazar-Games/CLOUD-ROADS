@@ -25,6 +25,9 @@ const explanations: Record<string, string> = {
   'road-grip': '基础路面抓地力，雨雪与路外表面会继续修正。较低更易侧滑；关闭漂移后仍抑制横向侧滑。',
   'drift-min-speed': '主动手刹漂移的最低车速，越高越不容易误触发；低于此速度仍能用手刹减速。',
   'drift-delay': '持续按住手刹多久才允许进入主动漂移，增大可避免短按导致侧滑。',
+  'traffic-headway': 'NPC 根据前车速度与减速趋势保持车距；越大越提前减速。雨雪抓地力会进一步限制刹车能力。',
+  'traffic-braking': 'NPC 最大减速度，实际值受轮胎抓地力限制。突然切入且距离不足时仍可能碰撞。',
+  'traffic-laneChanges': '控制变道意愿和冷却速度。NPC 比较相邻车道拥堵与后车接近速度，先打灯再平顺变道；0 禁止主动变道。',
 };
 
 export function parameterExplanation(input: HTMLInputElement): string {

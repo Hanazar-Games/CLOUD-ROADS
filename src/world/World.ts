@@ -43,6 +43,7 @@ import { Garage } from '../garage/Garage';
 import { GarageMesh } from '../garage/GarageMesh';
 import { placeRoadGarage } from '../garage/GarageAccess';
 import { PavementTextures } from '../road/PavementTextures';
+import { CollisionEffects } from '../vehicle/CollisionEffects';
 
 export interface GroundSample {
   height: number;
@@ -73,6 +74,7 @@ export class World {
   readonly signals: TrafficSignals;
   readonly signalMesh: SignalMesh;
   readonly trafficVehicles: TrafficVehicles;
+  readonly collisionEffects: CollisionEffects;
   readonly modelLoads = new ModelLoadQueue();
   readonly garage: Garage;
   readonly garageMesh: GarageMesh;
@@ -130,11 +132,13 @@ export class World {
     this.signals = new TrafficSignals(options); this.traffic.signals = this.signals;
     this.signalMesh = new SignalMesh(scene);
     this.trafficVehicles = new TrafficVehicles(scene, this.traffic, this.modelLoads);
+    this.collisionEffects = new CollisionEffects(scene);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
     this.junctionMesh = new JunctionMesh(scene, options);
     this.interchangeMesh = new InterchangeMesh(scene, this.pavementTextures);
     this.season = new SeasonState(options.terrain);
+    this.traffic.surfaceGrip = (height, sheltered) => this.season.grip(height, sheltered);
     this.chunks.setSeason(this.season);
     this.roadMesh.setSeason(this.season);
     for (const mesh of [this.tunnelMesh.cover, this.crossingMesh.tunnels.cover]) seasonMaterial(mesh.material, this.season, 'terrain');
@@ -561,6 +565,7 @@ export class World {
     this.roadside.dispose();
     this.serviceMesh.dispose(); this.parkedVehicles.dispose(); this.scout = undefined;
     this.trafficVehicles.dispose(); this.traffic.clear();
+    this.collisionEffects.dispose();
     this.signs.dispose();
     this.crossingMesh.dispose(); this.crossingPlanner.clear();
     this.junctionMesh.dispose();

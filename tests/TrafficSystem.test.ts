@@ -15,6 +15,69 @@ function setup(patch: Partial<WorldOptions> = {}) {
   return { traffic, network, anchor, options };
 }
 
+it('limits emergency braking by wet and seasonal road grip instead of clipping travel to the headway', () => {
+  const simulate = (grip: number) => {
+    const { traffic, network, anchor, options } = setup(); traffic.density = 1;
+    traffic.surfaceGrip = () => grip; traffic.wet = 1; traffic.configure({ laneChanges: 0, braking: 7 });
+    const lane = roadProfile(options).lanes.at(-1)!, car = new VehiclePhysics('sedan');
+    car.reset(128 + lane.offset, -22, 0, () => ({ height: 1, grip: 1 })); car.speed = 25;
+    traffic.entries.push({ id: 'wet', car, routeId: 'root', distance: 150, direction: 1, cruise: 30, lane: lane.index, offset: lane.offset, signal: 0, cooldown: 100 });
+    const obstacle = new VehiclePhysics('truck8'); obstacle.reset(car.x, car.z - 30, 0, () => ({ height: 1, grip: 1 }));
+    traffic.update(0.1, network.routes, anchor, [obstacle]);
+    return car.speed;
+  };
+  expect(simulate(0.4)).toBeGreaterThan(simulate(1) + 0.25);
+});
+
+it('transfers an unavoidable rear-end impact to the leading NPC and preserves feedback between frames', () => {
+  const { traffic, network, anchor, options } = setup(); traffic.limit = 12; traffic.density = 16;
+  traffic.configure({ laneChanges: 0 });
+  const lane = roadProfile(options).lanes.at(-1)!;
+  for (const [id, distance, speed] of [['rear', 150, 30], ['front', 157, 2]] as const) {
+    const car = new VehiclePhysics('sedan'); car.reset(128 + lane.offset, 128 - distance, 0, () => ({ height: 1, grip: 1 })); car.speed = speed; car.parked = false;
+    traffic.entries.push({ id, car, routeId: 'root', distance, direction: 1, cruise: 30, lane: lane.index, offset: lane.offset, signal: 0, cooldown: 100 });
+  }
+  for (let i = 0; i < 5; i++) traffic.update(0.05, network.routes, anchor);
+  const [rear, front] = traffic.entries;
+  expect(rear.car.collision).toBeDefined(); expect(front.car.speed).toBeGreaterThan(8);
+  expect(rear.car.speed).toBeGreaterThan(1); expect(rear.car.impact).toBeGreaterThan(1);
+  expect(front.distance).toBeGreaterThan(rear.distance + 4.5);
+  const frozen = [rear.car.x, rear.car.z, rear.car.impact];
+  traffic.update(0, network.routes, anchor); expect([rear.car.x, rear.car.z, rear.car.impact]).toEqual(frozen);
+});
+
+it('compares both adjacent queues and selects the lane with a sustained speed advantage', () => {
+  const { traffic, network, anchor, options } = setup({ roadLanes: 3, roadWidth: 12 }); traffic.density = 1;
+  const lanes = roadProfile(options).lanes.filter(lane => lane.direction === 1), lane = lanes[1];
+  const car = new VehiclePhysics('sedan'); car.reset(128 + lane.offset, -22, 0, () => ({ height: 1, grip: 1 })); car.speed = 8;
+  const entry: TrafficEntry = { id: 'queue-choice', car, routeId: 'root', distance: 150, direction: 1, cruise: 25, lane: lane.index, offset: lane.offset, signal: 0, cooldown: 0 };
+  traffic.entries.push(entry);
+  const obstacles = [[lane.offset, 35, 3], [lanes[0].offset, 65, 2], [lanes[0].offset, 90, 2]].map(([offset, ahead, speed]) => {
+    const other = new VehiclePhysics('sedan'); other.reset(128 + offset, car.z - ahead, 0, () => ({ height: 1, grip: 1 })); other.speed = speed; return other;
+  });
+  traffic.update(0.1, network.routes, anchor, obstacles);
+  expect(entry.change?.lane).toBe(lanes[2].index);
+});
+
+it('does not spawn stopped traffic inside the braking distance of a fast approaching vehicle on slippery roads', () => {
+  const { traffic, network, anchor, options } = setup({ oneWay: true, roadLanes: 1 }); traffic.density = 1;
+  traffic.wet = 1; traffic.surfaceGrip = () => 0.4;
+  const lane = roadProfile(options).lanes[0], fast = new VehiclePhysics('sedan');
+  fast.reset(128 + lane.offset, 128 - 300, 0, () => ({ height: 1, grip: 1 })); fast.speed = 30; fast.parked = false;
+  let spawned = 0;
+  for (let i = 0; i < 100; i++) {
+    traffic.clear();
+    for (let step = 0; step < 3; step++) traffic.update(0.1, network.routes, anchor, [fast]);
+    for (const { car } of traffic.entries) {
+      spawned++;
+      const ahead = fast.z - car.z;
+      if (ahead <= 0 || Math.abs(fast.x - car.x) > 1) continue;
+      expect(ahead - (fast.profile.length + car.profile.length) / 2).toBeGreaterThan(30 ** 2 / (2 * 9.81 * 0.62 * 0.4 * 0.9));
+    }
+  }
+  expect(spawned).toBeGreaterThan(0);
+});
+
 it('applies traffic tuning bounds and disables new lane changes without disabling obstacle braking', () => {
   const { traffic, network, anchor, options } = setup(); traffic.density = 1;
   traffic.configure({ headway: NaN, gap: 99, laneChanges: 0, acceleration: -1 });
@@ -144,7 +207,7 @@ it.each(['tunnel', 'pedestrian', 'stopped'])('keeps lane-change safeguards aroun
     const route = network.routes.find(r => r.id === 'root')!, sample = route.road.nearest(car.x, car.z)!;
     route.tunnels.push({ start: { ...sample, distance: 100 }, end: { ...sample, distance: 300 }, samples: [] });
   }
-  if (obstruction === 'stopped') entry.change = { lane: lane.index - 1, from: lane.offset, elapsed: 0.8 };
+  if (obstruction === 'stopped') entry.change = { lane: lane.index - 1, duration: 4, elapsed: 0.8 };
   const person = obstruction === 'pedestrian' ? { x: car.x - 3, y: car.y, z: car.z - 10 } : undefined;
   for (let i = 0; i < 80; i++) {
     traffic.update(0.1, network.routes, anchor, [truck], person);
@@ -155,21 +218,22 @@ it.each(['tunnel', 'pedestrian', 'stopped'])('keeps lane-change safeguards aroun
   else expect(entry.change).toBeUndefined();
 });
 
-it('preserves lane-change progress when an adjacent vehicle blocks the swept body', () => {
+it('separates an overlapping adjacent vehicle without advancing an unsafe lane change or stopping forward travel', () => {
   const { traffic, network, anchor, options } = setup(); traffic.density = 1;
   const lanes = roadProfile(options).lanes, lane = lanes.at(-1)!, adjacent = lanes.at(-2)!;
   const offset = (lane.offset + adjacent.offset) / 2, car = new VehiclePhysics('sedan');
   car.reset(128 + offset, -22, 0, () => ({ height: 1, grip: 1 })); car.speed = 1;
   const entry: TrafficEntry = { id: 'interrupted', car, routeId: 'root', distance: 150, direction: 1, cruise: 18,
-    lane: lane.index, offset, signal: -1, cooldown: 0, change: { lane: adjacent.index, from: lane.offset, elapsed: 2.8 } };
+    lane: lane.index, offset, signal: -1, cooldown: 0, change: { lane: adjacent.index, duration: 4, elapsed: 2.8 } };
   traffic.entries.push(entry);
   const neighbor = new VehiclePhysics('truck8');
   neighbor.reset(128 + adjacent.offset, car.z, 0, () => ({ height: 1, grip: 1 }));
   for (let i = 0; i < 20; i++) {
     traffic.update(0.1, network.routes, anchor, [neighbor]);
-    expect(entry.offset).toBeCloseTo(offset, 8);
+    expect(car.x - neighbor.x).toBeGreaterThan((car.profile.width + neighbor.profile.width) / 2 - 1e-6);
     expect(entry.change?.elapsed).toBeCloseTo(2.8, 8);
-    expect(car.speed).toBe(0);
+    expect(car.speed).toBeGreaterThan(0);
+    expect(car.impact).toBe(0);
   }
 });
 
@@ -179,13 +243,19 @@ it('holds lateral movement when a fast rear vehicle enters the destination lane 
   const offset = lane.offset + (adjacent.offset - lane.offset) * 0.05 ** 2 * (3 - 2 * 0.05);
   const car = new VehiclePhysics('sedan'); car.reset(128 + offset, -22, 0, () => ({ height: 1, grip: 1 })); car.speed = 8;
   const entry: TrafficEntry = { id: 'late-arrival', car, routeId: 'root', distance: 150, direction: 1, cruise: 18,
-    lane: lane.index, offset, signal: -1, cooldown: 0, change: { lane: adjacent.index, from: lane.offset, elapsed: 1 } };
+    lane: lane.index, offset, signal: -1, cooldown: 0, change: { lane: adjacent.index, duration: 4, elapsed: 1 } };
   traffic.entries.push(entry);
   const neighbor = new VehiclePhysics('sedan'); neighbor.reset(128 + adjacent.offset, car.z + 30, 0, () => ({ height: 1, grip: 1 })); neighbor.speed = 30;
   traffic.update(0.1, network.routes, anchor, [neighbor]);
   expect(entry.offset).toBeCloseTo(offset, 8); expect(entry.distance).toBeGreaterThan(150); expect(entry.signal).toBe(-1);
   traffic.update(0.1, network.routes, anchor);
   expect(entry.offset).toBeLessThan(offset);
+  for (let i = 0; i < 60 && entry.change; i++) {
+    const before = entry.offset; traffic.update(0.1, network.routes, anchor);
+    expect(entry.offset).toBeLessThanOrEqual(before);
+    expect(before - entry.offset).toBeLessThan(0.3);
+  }
+  expect(entry.lane).toBe(adjacent.index); expect(entry.offset).toBeCloseTo(adjacent.offset, 8);
 });
 
 it('forms a selectable queue, preserves safe spacing and releases it when normal traffic resumes', () => {

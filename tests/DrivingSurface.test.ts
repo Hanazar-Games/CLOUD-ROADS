@@ -11,6 +11,7 @@ import type { BridgeSpan } from '../src/bridge/BridgeDetector';
 import { SeasonState } from '../src/season/SeasonState';
 import { ParkedFleet } from '../src/service/ParkedFleet';
 import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
+import { TrafficSystem } from '../src/traffic/TrafficSystem';
 
 function world(highway = false) {
   const options = { ...DEFAULT_OPTIONS, roadType: highway ? 'highway' as const : 'mountain' as const };
@@ -20,6 +21,19 @@ function world(highway = false) {
 }
 
 describe('DrivingSurface', () => {
+  it('transfers a player rear impact to moving traffic instead of treating it as a wall', () => {
+    const scene = world(), traffic = new TrafficSystem('contact', scene.options);
+    const surface = new DrivingSurface({ ...scene, groundHeight: () => 100, traffic });
+    const player = new VehiclePhysics('sedan'), npc = new VehiclePhysics('sedan');
+    player.reset(1000, 0, 0, surface.sample); npc.reset(1000, -4.5, 0, surface.sample);
+    player.parked = npc.parked = false; player.speed = 20; npc.speed = 5;
+    traffic.entries.push({ id: 'contact', car: npc, routeId: 'root', distance: 0, direction: 1, cruise: 20,
+      lane: 0, offset: 0, signal: 0, cooldown: 0 });
+    expect(surface.constrain(player, 1000, 0.3)).toBe(true);
+    expect(player.speed).toBeGreaterThan(5); expect(player.speed).toBeLessThan(20);
+    expect(npc.speed).toBeGreaterThan(5); expect(npc.collision).toBe(player.collision);
+  });
+
   it('shares solid vehicle tops with walking without lifting the driving surface onto parked cars', () => {
     const scene = world(), fleet = new ParkedFleet('solid-roofs'), car = new VehiclePhysics('sedan');
     car.reset(1000, 0, 0, () => ({ height: 100, grip: 1 })); fleet.park(car);
