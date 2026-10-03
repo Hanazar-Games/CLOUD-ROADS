@@ -90,11 +90,24 @@ export class RoadSegment {
   }
 
   atDistance(distance: number): RoadSample {
-    const local = Math.max(0, Math.min(this.arc[ARC_STEPS], distance - this.start.distance));
-    let low = 0, high = 1;
-    for (let i = 0; i < 28; i++) {
+    if (distance <= this.start.distance) return this.sample(0);
+    if (distance >= this.end.distance) return this.sample(1);
+    const local = distance - this.start.distance;
+    if (this.start.grade === this.grade) return this.sample(local / this.arc[ARC_STEPS]);
+    let first = 0, last = ARC_STEPS;
+    while (last - first > 1) {
+      const middle = (first + last) >> 1;
+      if (this.arc[middle] < local) first = middle; else last = middle;
+    }
+    const a = first / ARC_STEPS, remaining = local - this.arc[first];
+    const speed = (t: number) => Math.hypot(1, this.start.grade + (this.grade - this.start.grade) * smooth(t));
+    const initialSpeed = speed(a);
+    let low = a, high = last / ARC_STEPS;
+    // Invert the same Simpson arc integral without constructing intermediate geometry.
+    for (let i = 0; i < 24; i++) {
       const t = (low + high) / 2;
-      if (this.sample(t).distance - this.start.distance < local) low = t;
+      const arc = (initialSpeed + 4 * speed((a + t) / 2) + speed(t)) * this.length * (t - a) / 6;
+      if (arc < remaining) low = t;
       else high = t;
     }
     return this.sample((low + high) / 2);
