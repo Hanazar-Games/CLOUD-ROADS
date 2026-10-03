@@ -1,6 +1,21 @@
 import { expect, it } from 'vitest';
 import { CLOUD_BASE, CLOUD_TILE, CloudField, wrapCloudCoordinate } from '../src/atmosphere/CloudField';
 
+it('opens clear-weather gaps between cloud banks and fills them gradually as cover increases', () => {
+  const field = new CloudField('weather-cover');
+  const clear: number[] = [], overcast: number[] = [];
+  for (let x = 0; x < 8192; x += 173) for (let z = 0; z < 8192; z += 257) {
+    const sample = field.sample(x, 2050, z, 0);
+    clear.push(sample.density);
+    expect(sample.region).toBe(sample.density < 0.05 ? 'between' : 'inside');
+    overcast.push(field.sample(x, 2050, z, 1).density);
+  }
+  expect(clear.filter(d => d < 0.05).length).toBeGreaterThan(clear.length * 0.2);
+  expect(clear.some(d => d > 0.6)).toBe(true);
+  expect(overcast.reduce((a, b) => a + b, 0)).toBeGreaterThan(clear.reduce((a, b) => a + b, 0) * 1.5);
+  for (let i = 0; i < clear.length; i++) expect(overcast[i]).toBeGreaterThanOrEqual(clear[i]);
+});
+
 it('reproduces seeded cloud shapes and distinguishes seeds', () => {
   const a = new CloudField('CLOUD-ROAD-001'), b = new CloudField('CLOUD-ROAD-001');
   expect(a.data).toEqual(b.data);

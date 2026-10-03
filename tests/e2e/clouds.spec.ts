@@ -9,6 +9,7 @@ test('flies safely from below clouds through fog to the cloud sea and back', asy
   const altitude = async () => Number((await metric('Coordinates').textContent())!.split(',')[1]);
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
+  await (await control(page, page.locator('#weather-overcast'))).check();
   await (await control(page, page.locator('#cloud-view'))).click();
   await expect(metric('Cloud region')).toHaveText('云下');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 20_000 });
@@ -37,6 +38,8 @@ test('flies safely from below clouds through fog to the cloud sea and back', asy
   }
   await (await control(page, page.locator('#cloud-toggle'))).click();
   await expect(metric('Cloud region')).toHaveText('关闭');
+  await (await control(page, page.locator('#weather-clear'))).check();
+  await closeSettings(page);
   await expect(metric('Fog near / far')).toHaveText('1000 / 1950 m');
   await (await control(page, page.locator('#cloud-toggle'))).click();
   await closeSettings(page);

@@ -212,6 +212,9 @@
           <label for="fridge-temperature">目标温度 <output id="fridge-temperature-value">4 °C</output></label>
           <input id="fridge-temperature" type="range" min="0" max="12" step="1" value="4" />
           <p id="fridge-status" class="equipment-status" role="status">箱内 18.0 °C · 关闭</p>
+          <div class="actions"><button id="vehicle-water" type="button">取水并喝水 · {DrinkWater}</button><button id="water-refill" type="button">补充冰水 · {RefillWater}</button></div>
+          <p id="water-status" class="equipment-status" role="status"></p>
+          <p class="panel-help">停车就座后取用 500 ml 瓶装水；开箱、拿瓶、喝水和收起约 4 秒。下车或换座会结束动作，未喝的水放回箱内。补水需停车，冷藏箱通电可保持低温。</p>
           <p class="panel-help">点火后供电，逐渐降温并恒温；熄火后停止制冷。每辆车保留自己的箱内温度，摩托车安装尾箱式冷藏箱。</p>
           <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车门、车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃、雨刮、风机和室内灯。</p>
 </details></div></section>
@@ -639,6 +642,8 @@
         <p id="vehicle-panel-equipment" class="equipment-status"></p></section>
         <section class="panel-section" aria-labelledby="panel-controls-title"><h3 id="panel-controls-title">动力与设备操作</h3>
         <div class="vehicle-panel-actions"><button id="panel-ignition" type="button">点火 · {Ignition}</button><button id="panel-lock" type="button" aria-pressed="false">锁车 · {VehicleLock}</button><button id="panel-fridge" type="button" aria-pressed="false">冷藏箱 · {Fridge}</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button><button id="panel-powertrain" type="button"></button><button id="panel-regen" type="button"></button><button id="panel-trailer-brake" type="button" hidden></button></div>
+        <div class="vehicle-panel-actions"><button id="panel-water" type="button">取水并喝水 · {DrinkWater}</button><button id="panel-water-refill" type="button">补充冰水 · {RefillWater}</button></div>
+        <p id="panel-water-status" class="equipment-status" role="status"></p>
         <p id="vehicle-panel-help" class="panel-help"></p></section>
         <details class="panel-specification"><summary>车辆规格与底盘参数</summary><dl id="vehicle-panel-specs" class="vehicle-specs"></dl></details>
         <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表设置</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div></div>

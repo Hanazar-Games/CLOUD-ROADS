@@ -32,6 +32,7 @@ export class VehicleDisplay extends DisplaySurface {
     if (car.trailerBrake) alert = 'TRAILER BRAKE ON';
     if (crane && !crane.stowed) alert = 'CRANE DEPLOYED - PARK';
     if (car.ignition !== 'running') alert = `${car.powertrain === 'ev' ? 'EV' : 'ENGINE'} ${car.ignition === 'starting' ? 'STARTING' : 'OFF'}`;
+    if (car.equipment.drinking) alert = 'DRINKING - PARK';
     if (operations && !operations.driveReady) alert = operations.accessing ? 'BOARDING - PARK' : operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
     if (crane) lines.splice(3, 3,
       `CRANE ${crane.stowed ? 'PARK' : crane.enabled ? 'ON' : 'STOW'}`,

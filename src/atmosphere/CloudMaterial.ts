@@ -58,8 +58,9 @@ export class CloudMaterial extends ShaderMaterial {
         float densityAt(vec2 point, float height) {
           vec3 field = fieldAt(point);
           float top = cloudTop + (field.g - 0.5) * cloudRelief + (field.b - 0.5) * 48.0;
+          float banks = smoothstep(mix(0.46, 0.2, weatherCover), mix(0.64, 0.4, weatherCover), field.r * 0.65 + field.g * 0.35);
           return smoothstep(cloudBase, cloudBase + 100.0, height)
-            * (1.0 - smoothstep(top - 90.0, top, height)) * (0.85 + field.r * 0.15);
+            * (1.0 - smoothstep(top - 90.0, top, height)) * banks;
         }
 
         float mistLayer(float distance, vec3 ray) {
@@ -68,8 +69,8 @@ export class CloudMaterial extends ShaderMaterial {
           vec3 a = fieldAt((mistPhase + ray.xz * reach * 0.25) * 8.0);
           vec3 b = fieldAt((mistPhase + ray.xz * reach * 0.75) * 16.0);
           float eddies = clamp((a.r + b.b - 1.0) * 2.0, -1.0, 1.0);
-          float band = sin((altitude + ray.y * reach * 0.5) * 0.035 + a.b * 6.283);
-          return 1.0 + mistStrength * (eddies * 0.12 + band * 0.06);
+          float layer = clamp(exp(-max(0.0, ray.y) * reach * 0.003), 0.45, 1.0);
+          return mix(1.0, layer * (1.0 + eddies * 0.16), mistStrength);
         }
 
         float fogAmount(float distance, vec3 ray, float mist) {

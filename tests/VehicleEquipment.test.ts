@@ -9,6 +9,36 @@ import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig'
 
 const ground = () => ({ height: 0, grip: 1 });
 
+it('takes one bottle, freezes the drinking sequence on pause and consumes water once', () => {
+  const e = new VehiclePhysics().equipment;
+  expect(e.waterBottles).toBe(6);
+  expect(e.takeWater(3, true)).toBe(false);
+  expect(e.takeWater(0, false)).toBe(false);
+  expect(e.takeWater(NaN, true)).toBe(false);
+  expect(e.takeWater(0, true)).toBe(true);
+  expect(e.takeWater(0, true)).toBe(false);
+  expect(e.waterBottles).toBe(5);
+  const phase = e.drinkTime;
+  e.update(0, false); e.update(NaN, false);
+  expect(e.drinkTime).toBe(phase);
+  for (let i = 0; i < 50; i++) e.update(0.1, false);
+  expect(e.drinking).toBe(false); expect(e.waterBottles).toBe(5);
+  expect(e.waterDrunk).toBe(500);
+  expect(e.refillWater(1)).toBe(false);
+  expect(e.refillWater(0)).toBe(true); expect(e.waterBottles).toBe(6);
+  e.waterBottles = 0; expect(e.takeWater(0, true)).toBe(false);
+});
+
+it('returns an untouched bottle on interruption without duplicating drunk water', () => {
+  const e = new VehiclePhysics().equipment;
+  e.takeWater(0, true); e.cancelDrink(); e.cancelDrink();
+  expect(e.waterBottles).toBe(6); expect(e.waterDrunk).toBe(0);
+  e.takeWater(0, true);
+  for (let i = 0; i < 35; i++) e.update(0.1, true);
+  e.cancelDrink();
+  expect(e.waterBottles).toBe(5); expect(e.waterDrunk).toBe(500);
+});
+
 it('keeps each vehicle lock and refrigerator attached when parked and exchanged', () => {
   const car = new VehiclePhysics('coach'), fleet = new ParkedFleet('equipment');
   car.equipment.toggleLock(); car.equipment.fridgeOn = true; car.equipment.setFridgeTarget(6);

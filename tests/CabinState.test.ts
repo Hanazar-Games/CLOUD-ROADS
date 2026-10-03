@@ -1,7 +1,23 @@
 import { expect, it } from 'vitest';
-import { CabinState, cabinSeats } from '../src/vehicle/CabinState';
+import { CabinState, cabinBounds, cabinSeats } from '../src/vehicle/CabinState';
 import { CraneSystems } from '../src/vehicle/CraneSystems';
-import { vehicleProfiles } from '../src/vehicle/VehicleConfig';
+import { vehicleProfiles, type VehicleProfile } from '../src/vehicle/VehicleConfig';
+
+it('leaves at least 0.8 m between rows and keeps coach seats clear of the rear wall', () => {
+  for (const profile of Object.values(vehicleProfiles) as VehicleProfile[]) {
+    const seats = cabinSeats(profile);
+    if (profile.bus) for (let floor = 1; floor <= profile.bus.rows.length; floor++) {
+      const rows = seats.filter(s => s.role === 'passenger' && s.column === 0 && s.floor === floor);
+      for (let i = 1; i < rows.length; i++) expect(rows[i - 1].along - rows[i].along, profile.name).toBeCloseTo(0.8);
+      expect(-rows.at(-1)!.along + 0.43, profile.name).toBeLessThan(profile.length / 2 - 0.1);
+    }
+    const rear = seats.find(s => s.id === 'rear-0');
+    if (rear) {
+      expect(profile.eye.along - rear.along, profile.name).toBeGreaterThanOrEqual(0.8 - 1e-8);
+      expect(-rear.along + 0.43, profile.name).toBeLessThan(cabinBounds(profile, profile.radius + profile.rest).max.z - 0.02);
+    }
+  }
+});
 
 it('gives every modeled cabin seat a unique position and exactly one driver', () => {
   for (const profile of Object.values(vehicleProfiles)) {

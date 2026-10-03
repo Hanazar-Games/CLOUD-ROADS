@@ -1,4 +1,4 @@
-import { Vector3, type PerspectiveCamera, type Scene } from 'three';
+import { Raycaster, Vector2, Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { DrivingCamera, drivingViews, type DrivingView } from '../camera/DrivingCamera';
 import { element } from '../debug/DebugUI';
 import type { InputManager } from '../input/InputManager';
@@ -58,6 +58,22 @@ export class DrivingSystem {
     this.mesh = new VehicleMesh(scene);
     this.cameraRig = new DrivingCamera(camera);
     const options = { signal: this.events.signal };
+    const canvas = element<HTMLCanvasElement>('world'), ray = new Raycaster(), pointer = new Vector2();
+    let press: { x: number; y: number; time: number } | undefined;
+    canvas.addEventListener('pointerdown', event => {
+      press = event.button === 0 ? { x: event.clientX, y: event.clientY, time: performance.now() } : undefined;
+    }, options);
+    canvas.addEventListener('pointercancel', () => { press = undefined; }, options);
+    canvas.addEventListener('pointerup', event => {
+      const down = press; press = undefined;
+      if (!down || document.pointerLockElement || performance.now() - down.time > 400
+        || Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4 || !this.active || !this.cabin.driver
+        || this.cameraRig.view !== 'cockpit' || !this.input.enabled) return;
+      const bounds = canvas.getBoundingClientRect();
+      pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, 1 - (event.clientY - bounds.top) / bounds.height * 2);
+      ray.setFromCamera(pointer, this.camera);
+      const action = this.mesh.buttons?.pick(ray); if (action) this.input.onAction(action);
+    }, options);
     try { const data = localStorage.getItem('cloud-roads.autopilot.v1'); if (data) this.autopilot.configure(JSON.parse(data)); }
     catch { element('autopilot-settings-status').textContent = '无法读取本机辅助设置，使用默认参数。'; }
     this.syncPilotOptions();
@@ -77,6 +93,8 @@ export class DrivingSystem {
     for (const id of ['vehicle-ignition', 'panel-ignition']) element(id).addEventListener('click', () => this.ignite(), options);
     for (const id of ['vehicle-lock', 'panel-lock']) element(id).addEventListener('click', () => this.toggleLock(), options);
     for (const id of ['vehicle-fridge', 'panel-fridge']) element(id).addEventListener('click', () => this.toggleFridge(), options);
+    for (const id of ['vehicle-water', 'panel-water']) element(id).addEventListener('click', () => this.drinkWater(), options);
+    for (const id of ['water-refill', 'panel-water-refill']) element(id).addEventListener('click', () => this.refillWater(), options);
     element('fridge-temperature').addEventListener('input', () => {
       this.car.equipment.setFridgeTarget(Number(element<HTMLInputElement>('fridge-temperature').value)); this.describeEquipment();
     }, options);
@@ -257,6 +275,7 @@ export class DrivingSystem {
   }
 
   stop(park = false): void {
+    this.car.equipment.cancelDrink();
     this.autopilot.cancel(); this.appliedThrottle = 0;
     this.boardingSurface = undefined;
     if (!this.active && !this.parked) return;
@@ -321,7 +340,7 @@ export class DrivingSystem {
     if (!this.cabinWalk.leaveSeat(this.cabin, this.car.motionSpeed)) {
       this.walkStatus(this.cabinWalk.layouts.length ? '驾驶室与货厢不贯通，请先按 F 下车，到尾门按 {CabinWalk} 进入货厢。' : '此车型没有可站立通道，可按 P 换座或 F 下到车外。'); return false;
     }
-    this.prepareWalk(); return true;
+    this.car.equipment.cancelDrink(); this.prepareWalk(); return true;
   }
 
   private prepareWalk(): void {
@@ -428,6 +447,16 @@ export class DrivingSystem {
     this.car.equipment.fridgeOn = !this.car.equipment.fridgeOn; this.describeEquipment();
   }
 
+  private drinkWater(): void {
+    if (this.operations.accessing || !this.crane.stowed || !this.car.equipment.takeWater(this.car.motionSpeed, this.active && !this.cabin.standing)) return;
+    this.autopilot.cancel(); this.car.park(); this.input.clear(); this.describeEquipment();
+  }
+
+  private refillWater(): void {
+    if (!this.active || this.cabin.standing || this.operations.accessing) return;
+    this.car.equipment.refillWater(this.car.motionSpeed); this.describeEquipment();
+  }
+
   reset(): void {
     this.autopilot.cancel();
     if (!this.active || !this.surface || !this.getWorld().roadReady || !this.cabin.driver || !this.crane.stowed) return;
@@ -459,7 +488,7 @@ export class DrivingSystem {
 
   private toggleAutopilot(): void {
     if (this.autopilot.active) this.autopilot.cancel();
-    else if (!this.active || !this.cabin.driver || !this.crane.stowed || !this.operations.driveReady || !this.getWorld().roadReady)
+    else if (!this.active || !this.cabin.driver || !this.crane.stowed || !this.operations.driveReady || this.car.equipment.drinking || !this.getWorld().roadReady)
       this.autopilot.cancel('请在驾驶位收妥设备，并等待道路就绪');
     else if (this.autopilot.engage(this.car, this.getWorld().network.routes, this.getWorld().options) && this.autopilot.settings.mode !== 'steering') {
       this.car.transmission.mode = 'auto'; element<HTMLSelectElement>('transmission-mode').value = 'auto';
@@ -481,6 +510,8 @@ export class DrivingSystem {
     if (!this.active) return;
     if (code === 'CabinWalk') this.toggleCabinWalk();
     if (code === 'Fridge') this.toggleFridge();
+    if (code === 'DrinkWater') this.drinkWater();
+    if (code === 'RefillWater') this.refillWater();
     if (this.autopilot.active && (['KeyS', 'Space', 'BracketLeft', 'BracketRight', 'Transmission'].includes(code)
       || code === 'KeyW' && this.autopilot.settings.mode !== 'steering'
       || ['KeyA', 'KeyD'].includes(code) && this.autopilot.settings.mode !== 'speed')) this.autopilot.cancel('驾驶员已接管');
@@ -562,12 +593,12 @@ export class DrivingSystem {
       if (this.car.kind === 'crane') this.crane.update(dt, { slew: axis('KeyD', 'KeyA'), lift: axis('KeyW', 'KeyS'),
         extend: axis('KeyE', 'KeyQ'), hoist: axis('KeyX', 'KeyZ') }, operator, this.car.motionSpeed);
       this.operations.update(dt);
-      if (!this.cabin.driver || !this.crane.stowed || !this.operations.driveReady) this.car.park();
+      if (!this.cabin.driver || !this.crane.stowed || !this.operations.driveReady || this.car.equipment.drinking) this.car.park();
     }
     this.surface.wet = wet;
     this.surface.level = this.car.y - this.car.profile.radius - this.car.profile.rest;
     if (!held) {
-      const canDrive = this.cabin.driver && this.crane.stowed && this.operations.driveReady;
+      const canDrive = this.cabin.driver && this.crane.stowed && this.operations.driveReady && !this.car.equipment.drinking;
       if (!canDrive) this.autopilot.cancel('设备或座位状态改变');
       const manual = { throttle: canDrive ? axis('KeyW', 'KeyS') : 0, steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') };
       const obstacles = this.autopilot.active ? [...world.traffic.entries.map(e => e.car), ...world.parkedVehicles.fleet.entries
@@ -603,6 +634,7 @@ export class DrivingSystem {
           : box.fuelCut ? '收油断油 · 带挡滑行' : !this.car.parked && box.engineBrake > 0.05 ? '松油门 · 带挡滑行' : '怠速 / 自由滑行';
       this.describeEquipment();
       element('vehicle-status').textContent = frozen ? '已暂停' : waiting ? '等待道路生成' : !focused ? '点击画面继续旅程'
+        : this.car.equipment.drinking ? '正在喝水 · 驻车中'
         : this.cabin.standing ? `${this.cabinWalk.layout?.label} · ${this.cabinWalk.floor}F · ${this.cabinWalk.eyeHeight < 1.4 ? '低顶弯腰' : '离座步行'} · 不能驾驶`
         : !this.cabin.driver ? `${this.cabin.selected.label} · P 换座${operator ? ' · O 操作吊车' : ' · 不能驾驶'}`
         : !this.crane.stowed ? '吊车未收妥 · 请回操作席按 O 收车'
@@ -629,6 +661,12 @@ export class DrivingSystem {
   }
 
   sync(night: number, rain: number, dt = 0, fog = false): void {
+    const seat = this.cabin.selected, adjustment = this.cabin.adjustment;
+    const drinkSeat = this.mesh.drinkSeat ??= { ...seat };
+    drinkSeat.x = seat.x + adjustment.x;
+    drinkSeat.y = seat.y + adjustment.height;
+    drinkSeat.along = seat.along + adjustment.along - adjustment.recline * 0.2;
+    if (this.operations.accessing || this.cabin.standing) this.car.equipment.cancelDrink();
     this.mesh.instrumentStyle = this.instrumentStyle;
     this.navigationTime += dt;
     if (this.active && this.cameraRig.view === 'cockpit' && this.navigationTime >= 0.2) {
@@ -822,6 +860,12 @@ export class DrivingSystem {
     element<HTMLInputElement>('fridge-temperature').value = String(equipment.fridgeTarget);
     element('fridge-temperature-value').textContent = `${equipment.fridgeTarget} °C`;
     element('fridge-status').textContent = `箱内 ${equipment.fridgeTemperature.toFixed(1)} °C · ${!equipment.fridgeOn ? '关闭 · 保温中' : this.car.ignition !== 'running' ? '等待点火供电' : equipment.fridgeCooling ? '制冷中' : '恒温待机'}${glass ? '' : ' · 尾箱式安装'}`;
+    const canWater = this.active && !this.cabin.standing && !this.operations.accessing && this.car.motionSpeed <= 0.1 && !equipment.drinking;
+    for (const id of ['vehicle-water', 'panel-water']) element<HTMLButtonElement>(id).disabled = !canWater || !equipment.waterBottles || !this.crane.stowed;
+    for (const id of ['water-refill', 'panel-water-refill']) element<HTMLButtonElement>(id).disabled = !canWater;
+    const waterStatus = equipment.drinking ? `正在喝水 · ${equipment.drinkTemperature.toFixed(1)} °C`
+      : `瓶装水 ${equipment.waterBottles} / 6 · ${equipment.waterTemperature.toFixed(1)} °C · 已饮用 ${equipment.waterDrunk} ml`;
+    for (const id of ['water-status', 'panel-water-status']) element(id).textContent = waterStatus;
     element<HTMLInputElement>('vehicle-windows').disabled = !glass;
     element<HTMLButtonElement>('vehicle-roof').disabled = !roof || this.car.motionSpeed > 1.4;
     element<HTMLButtonElement>('washer').disabled = !glass || s.washerFluid <= 0;
@@ -858,6 +902,7 @@ export class DrivingSystem {
   selectSeat(id: string): boolean {
     if (this.cabinWalk.layout?.entry === 'cargo') { this.walkStatus('货厢与驾驶室不贯通，请从尾门下车后进入驾驶室。'); return false; }
     if (!this.active || this.operations.accessing || !this.cabin.select(id, this.car.motionSpeed)) return false;
+    this.car.equipment.cancelDrink();
     this.cabinWalk.stop(); document.body.classList.remove('cabin-walking'); this.walkStatus('');
     this.autopilot.cancel(); this.car.park(); this.cameraRig.view = 'cockpit'; this.cameraRig.reset(); this.input.clear();
     element<HTMLSelectElement>('driving-view').value = 'cockpit'; this.updateSeatCamera(); return true;

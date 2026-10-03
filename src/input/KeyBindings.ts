@@ -16,6 +16,7 @@ export const bindingActions = [
   ['LightRange', 'Shift+KeyB', '设备', '车灯距离循环'], ['KeyQ', 'KeyQ', '设备', '左转灯 / 收吊臂'],
   ['FogLights', 'Shift+KeyF', '设备', '前后雾灯开关'],
   ['VehicleLock', 'Shift+KeyJ', '设备', '锁车 / 近车解锁'], ['Fridge', 'Shift+KeyU', '设备', '车载冷藏箱开关'],
+  ['DrinkWater', 'Shift+KeyK', '设备', '取出冰水并喝水'], ['RefillWater', 'Shift+KeyX', '设备', '停车补充冰水'],
   ['KeyE', 'KeyE', '设备', '右转灯 / 伸吊臂 / 步行疾跑'], ['KeyH', 'KeyH', '设备', '双闪'],
   ['KeyB', 'KeyB', '设备', '雨刮模式'], ['KeyG', 'KeyG', '设备', '玻璃水喷洗'], ['Refill', 'Shift+KeyG', '设备', '停车补充玻璃水'],
   ['Comma', 'Comma', '设备', '按住升窗'], ['Period', 'Period', '设备', '按住降窗'], ['KeyN', 'KeyN', '设备', '空调风机 0–6 档'],
@@ -58,7 +59,7 @@ export class KeyBindings {
     this.values = { ...values };
   }
   format(text: string): string {
-    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug|FogLights|VehicleLock|Fridge|CabinWalk|Powertrain|Roadbook)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
+    return text.replace(/(?<![A-Za-z0-9°])(?:\{(?:Ignition|PauseToggle|Debug|FogLights|VehicleLock|Fridge|DrinkWater|RefillWater|CabinWalk|Powertrain|Roadbook)\}|[A-Z]|PageUp|PageDown|Home|End|Backspace|Space)(?![A-Za-z0-9])/g,
       (key: string, index: number) => key === 'L' && /\d\s?$/.test(text.slice(0, index)) ? key : this.label(key.startsWith('{') ? key.slice(1, -1) : key.length === 1 ? `Key${key}` : key));
   }
 }

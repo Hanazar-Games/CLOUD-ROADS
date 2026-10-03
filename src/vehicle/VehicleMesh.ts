@@ -21,6 +21,8 @@ import { compactSideLights, sideLampPositions, sideMarkerX, vehicleReflectors } 
 import { reflectiveMaterial } from '../render/ReflectiveMaterial';
 import { SprinklerSpray } from './SprinklerSpray';
 import { cabinFridge } from './CabinFridge';
+import { CabinButtons } from './CabinButtons';
+import { CabinWater } from './CabinWater';
 import { compartmentDetails, dashboardDetails, displaySurround, doorDetails, seatDetails } from './CabinDetails';
 import type { InteriorBounds } from '../render/InteriorVolume';
 
@@ -51,6 +53,9 @@ export class VehicleMesh {
   readonly navigation?: NavigationDisplay;
   instrumentStyle: InstrumentStyle = 'digital';
   private readonly operatorDisplay?: VehicleDisplay;
+  private readonly water?: CabinWater;
+  readonly buttons?: CabinButtons;
+  drinkSeat?: { x: number; y: number; along: number };
   private readonly deviceLights: InstancedMesh<BoxGeometry, MeshBasicMaterial>;
   private readonly indicatorColor = new Color();
   private readonly crane?: CraneMesh;
@@ -59,6 +64,7 @@ export class VehicleMesh {
   private readonly fogLens;
   private readonly rearFog;
   private readonly sideLamp;
+  private readonly rearSideLamp;
   private readonly reverseLens;
   private readonly spray?: SprinklerSpray;
   private readonly interior: InteriorBounds;
@@ -80,6 +86,9 @@ export class VehicleMesh {
     this.fogLens = this.material(0xffdc85, 0.22); this.fogLens.emissive.setHex(0xffdf8c); this.fogLens.emissiveIntensity = 0;
     this.rearFog = this.material(0xc92b21, 0.25); this.rearFog.emissive.setHex(0xff2414); this.rearFog.emissiveIntensity = 0;
     this.sideLamp = this.material(0xdb8723, 0.3); this.sideLamp.emissive.setHex(0xffa128); this.sideLamp.emissiveIntensity = 0;
+    this.sideLamp.name = 'side-marker-amber';
+    this.rearSideLamp = this.material(0xa42c24, 0.25); this.rearSideLamp.name = 'side-marker-red';
+    this.rearSideLamp.emissive.setHex(0xff3321); this.rearSideLamp.emissiveIntensity = 0;
     this.reverseLens = this.material(0xe5eef0, 0.2); this.reverseLens.name = 'reverse-lens';
     this.reverseLens.emissive.setHex(0xffffff); this.reverseLens.emissiveIntensity = 0;
     this.root.add(this.chassis); this.root.visible = false; scene.add(this.root);
@@ -167,7 +176,8 @@ export class VehicleMesh {
     fleetBody(profile, this.chassis, kit, this.fittings, this.rideHeight);
     roadTripDetails(profile, this.chassis, kit, this.rideHeight);
     vehicleFinish(profile, this.chassis, kit, this.rideHeight);
-    const fridge = cabinFridge(profile, this.chassis, kit);
+    const fridge = cabinFridge(profile, this.chassis, kit, detailedCabin);
+    if (detailedCabin) this.water = new CabinWater(this.chassis, fridge.storage, fridge.lid);
     if (profile.body === 'ambulance' || profile.body === 'firetruck') {
       const beacon = this.fittings.beacon = this.material(0x347bbf, 0.2); beacon.emissive.setHex(0x268aff);
       for (const side of [-1, 1]) block(0.4, 0.16, 0.28, side * 0.65, Math.min(profile.height - this.rideHeight - 0.1, profile.eye.y + 0.48), -profile.eye.along, beacon);
@@ -241,6 +251,10 @@ export class VehicleMesh {
       }
       this.chassis.add(screen);
       dashboardDetails(profile, this.chassis, this.steering, screen, kit);
+      this.buttons = new CabinButtons();
+      this.buttons.root.position.set(0, -0.121, 0.015);
+      screen.updateMatrix(); this.buttons.root.applyMatrix4(screen.matrix);
+      this.chassis.add(this.buttons.root);
       displaySurround(this.chassis, this.display.root, kit);
     }
     if (this.crane) {
@@ -256,12 +270,12 @@ export class VehicleMesh {
     const consoleScreen = this.navigation?.root ?? this.display.root;
     consoleScreen.updateMatrix();
     for (let i = 0; i < 12; i++) this.deviceLights.setMatrixAt(i,
-      new Matrix4().makeScale(0.014, 0.012, 0.012).setPosition(-0.12 + i * 0.022, -0.128, 0.012).premultiply(consoleScreen.matrix));
+      new Matrix4().makeScale(0.014, 0.006, 0.006).setPosition(-0.12 + i * 0.022, 0.098, 0.025).premultiply(consoleScreen.matrix));
     this.deviceLights.instanceMatrix.needsUpdate = true;
     const ignitionX = profile.shape === 'motorcycle' ? 0.12 : eye.x + 0.23;
     block(0.08, 0.07, 0.04, ignitionX, eye.y - 0.33, -eye.along - 0.48, metal);
     this.deviceLights.setMatrixAt(12, new Matrix4().makeScale(0.044, 0.035, 0.008).setPosition(ignitionX, eye.y - 0.33, -eye.along - 0.455));
-    this.deviceLights.setMatrixAt(13, new Matrix4().makeScale(0.06, 0.026, 0.006).setPosition(fridge.position));
+    this.deviceLights.setMatrixAt(13, new Matrix4().makeScale(0.06, 0.026, 0.006).setPosition(fridge.indicator.position));
     if (profile.shape !== 'motorcycle') {
       const eye = profile.eye;
       for (let deck = 0; deck < (profile.bus?.rows.length ?? 1); deck++) for (const side of [-1, 1])
@@ -288,6 +302,10 @@ export class VehicleMesh {
         block(bike ? 0.08 : 0.18, 0.08, 0.05, x, y, z, signal);
       }
       if (!bike && !compact) block(0.04, 0.075, 0.16, side * (profile.width / 2 + 0.02), 0.15, -profile.chassisLength / 2 + 0.75, signal);
+      if (bike) {
+        panel(0.075, 0.085, 0.16, side * 0.255, 0.34, -0.72, trim);
+        panel(0.018, 0.055, 0.12, side * 0.296, 0.34, -0.72, signal);
+      }
     }
     const tireWidth = profile.shape === 'motorcycle' ? 0.15 : profile.width > 2.3 ? 0.3 : 0.24;
     const tireShape = this.geometry(tireGeometry(profile.radius, tireWidth));
@@ -422,11 +440,18 @@ export class VehicleMesh {
         const reflector = new Mesh(geometry, retro); reflector.scale.set(m.w, m.h, m.l); reflector.position.set(m.x, m.y, m.z);
         reflector.receiveShadow = true; parent.add(reflector);
       }
-      if (profile.shape !== 'motorcycle') for (const side of [-1, 1]) for (const z of sideLampPositions(profile, part)) {
+      const sidePositions = sideLampPositions(profile, part);
+      if (profile.shape !== 'motorcycle') for (const side of [-1, 1]) for (const z of sidePositions) {
         const compact = compactSideLights(profile, part), mount = sideMarkerX(profile, z), x = side * (mount + 0.025);
+        const last = sidePositions.at(-1)!;
+        const marker = z === last ? this.rearSideLamp : this.sideLamp;
         panel(0.045, compact ? 0.1 : 0.22, compact ? 0.2 : 0.25, side * (mount + 0.005), compact ? -0.1 : 0.1, z, trim, parent);
-        block(0.025, compact ? 0.052 : 0.07, compact ? 0.09 : 0.18, x, compact ? -0.1 : 0.06, z - (compact ? 0.043 : 0), this.sideLamp, parent);
-        block(0.028, compact ? 0.052 : 0.07, compact ? 0.065 : 0.14, x, compact ? -0.1 : 0.145, z + (compact ? 0.045 : 0), this.signals[side < 0 ? 0 : 1], parent);
+        panel(0.025, compact ? 0.052 : 0.07, compact ? 0.09 : 0.18, x, compact ? -0.1 : 0.06, z - (compact ? 0.043 : 0), marker, parent);
+        panel(0.028, compact ? 0.052 : 0.07, compact ? 0.065 : 0.14, x, compact ? -0.1 : 0.145, z + (compact ? 0.045 : 0), this.signals[side < 0 ? 0 : 1], parent);
+        for (const offset of [-1, 1]) {
+          block(0.006, compact ? 0.034 : 0.045, 0.006, x + side * 0.016, compact ? -0.1 : 0.06,
+            z - (compact ? 0.043 : 0) + offset * (compact ? 0.021 : 0.054), metal, parent);
+        }
       }
       const rear = trailer ? trailer.length - trailer.front : profile.chassisLength / 2;
       for (const side of profile.shape === 'motorcycle' ? [0] : [-1, 1]) {
@@ -520,7 +545,7 @@ export class VehicleMesh {
     const on = systems.beam !== 'off', high = systems.beam === 'high';
     this.tail.emissiveIntensity = car.braking ? 2 : on ? 0.75 : 0;
     this.lamp.emissiveIntensity = on ? high ? 3 : 1.8 : 0;
-    this.sideLamp.emissiveIntensity = on || systems.fogLights ? 1.6 : 0;
+    this.sideLamp.emissiveIntensity = this.rearSideLamp.emissiveIntensity = on || systems.fogLights ? 2 : 0;
     this.fogLens.emissiveIntensity = systems.fogLights ? 2.5 : 0;
     this.rearFog.emissiveIntensity = systems.fogLights ? 3 : 0;
     this.reverseLens.emissiveIntensity = car.reversing ? 3.5 : 0;
@@ -548,6 +573,8 @@ export class VehicleMesh {
       ? car.equipment.fridgeCooling ? 0x50dbef : 0x36c784 : 0x07111a));
     this.deviceLights.instanceColor!.needsUpdate = true;
     this.display.style = this.instrumentStyle;
+    this.water?.update(car.equipment, this.drinkSeat ?? this.profile.eye);
+    this.buttons?.update(car, systems);
     this.display.update(car, systems, dt, undefined, operations);
     this.operatorDisplay?.update(car, systems, dt, crane, operations);
     if (crane) this.crane?.sync(crane);
@@ -732,6 +759,8 @@ export class VehicleMesh {
   private geometry<T extends BufferGeometry>(geometry: T): T { this.geometries.push(geometry); return geometry; }
   dispose(): void {
     this.display.dispose();
+    this.water?.dispose();
+    this.buttons?.dispose();
     this.navigation?.dispose();
     this.operatorDisplay?.dispose();
     this.deviceLights.dispose(); this.deviceLights.material.dispose();

@@ -51,13 +51,14 @@ export class CloudSystem {
 
   update(dt: number, camera: PerspectiveCamera, origin: { x: number; z: number }, weather: Readonly<WeatherProfile> = weatherProfiles.clear, shelter = 0, distance = 2048): void {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(dt, 1)) : 0;
-    this.driftX = wrapCloudCoordinate(this.driftX + dt * 4);
-    this.driftZ = wrapCloudCoordinate(this.driftZ + dt * 1.5);
-    this.mistX = wrapCloudCoordinate(this.mistX + dt * 0.65);
-    this.mistZ = wrapCloudCoordinate(this.mistZ + dt * 0.28);
+    const wind = 0.35 + weather.wind * 0.65;
+    this.driftX = wrapCloudCoordinate(this.driftX + dt * 4 * wind);
+    this.driftZ = wrapCloudCoordinate(this.driftZ + dt * 1.5 * wind);
+    this.mistX = wrapCloudCoordinate(this.mistX + dt * 0.65 * wind);
+    this.mistZ = wrapCloudCoordinate(this.mistZ + dt * 0.28 * wind);
     const x = wrapCloudCoordinate(camera.position.x + origin.x + this.driftX);
     const z = wrapCloudCoordinate(camera.position.z + origin.z + this.driftZ);
-    this.sample = this.field.sample(x, camera.position.y, z);
+    this.sample = this.field.sample(x, camera.position.y, z, weather.cover);
     const earth = !this.sun.extraterrestrial;
     const density = this.enabled && earth ? this.sample.density : 0;
     const near = 1000 * distance / 2048, far = 1950 * distance / 2048;

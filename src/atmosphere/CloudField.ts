@@ -53,12 +53,14 @@ export class CloudField {
     return mix(mix(read(ix, iz), read(ix + 1, iz), px - ix), mix(read(ix, iz + 1), read(ix + 1, iz + 1), px - ix), pz - iz);
   }
 
-  sample(x: number, y: number, z: number) {
+  sample(x: number, y: number, z: number, cover = 1) {
     const top = CLOUD_TOP + (this.channel(x, z, 1) - 0.5) * CLOUD_RELIEF + (this.channel(x, z, 2) - 0.5) * 48;
-    const density = smooth(CLOUD_BASE, CLOUD_BASE + 100, y) * (1 - smooth(top - 90, top, y)) * (0.85 + this.channel(x, z, 0) * 0.15);
+    const field = this.channel(x, z, 0) * 0.65 + this.channel(x, z, 1) * 0.35;
+    const banks = smooth(mix(0.46, 0.2, cover), mix(0.64, 0.4, cover), field);
+    const density = smooth(CLOUD_BASE, CLOUD_BASE + 100, y) * (1 - smooth(top - 90, top, y)) * banks;
     return {
       base: CLOUD_BASE, top, density,
-      region: y < CLOUD_BASE ? 'below' as const : y > top ? 'above' as const : 'inside' as const,
+      region: y < CLOUD_BASE ? 'below' as const : y > top ? 'above' as const : density < 0.05 ? 'between' as const : 'inside' as const,
       fogNear: mix(1000, 12, density), fogFar: mix(1950, 110, density),
     };
   }

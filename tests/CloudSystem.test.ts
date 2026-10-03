@@ -4,6 +4,17 @@ import { CloudSystem } from '../src/atmosphere/CloudSystem';
 import { SunSystem } from '../src/atmosphere/SunSystem';
 import { weatherProfiles } from '../src/atmosphere/WeatherSystem';
 
+it('advects clouds faster in a storm while keeping a paused weather scene stationary', () => {
+  const camera = new PerspectiveCamera(), calm = new CloudSystem('wind', new SunSystem()), storm = new CloudSystem('wind', new SunSystem());
+  calm.update(0.1, camera, { x: 0, z: 0 }, weatherProfiles.clear);
+  storm.update(0.1, camera, { x: 0, z: 0 }, weatherProfiles.storm);
+  expect(storm.material.uniforms.phase.value.x).toBeGreaterThan(calm.material.uniforms.phase.value.x * 2);
+  const phase = storm.material.uniforms.phase.value.clone();
+  storm.update(0, camera, { x: 0, z: 0 }, weatherProfiles.storm);
+  expect(storm.material.uniforms.phase.value).toEqual(phase);
+  calm.dispose(); storm.dispose();
+});
+
 it('keeps cloud phase and fog unchanged when the render origin moves', () => {
   const clouds = new CloudSystem('CLOUD-ROAD-001', new SunSystem()), camera = new PerspectiveCamera();
   camera.position.set(10128, 2050, -20000);
@@ -14,7 +25,7 @@ it('keeps cloud phase and fog unchanged when the render origin moves', () => {
   clouds.update(0, camera, { x: 10240, z: -19968 });
   expect(clouds.sample).toEqual(sample);
   expect(clouds.material.uniforms.phase.value).toEqual(phase);
-  expect(clouds.fog.far).toBeLessThan(400);
+  expect(clouds.fog.far).toBeCloseTo(sample.fogFar);
   clouds.dispose();
 });
 

@@ -28,6 +28,7 @@ export class WeatherSystem {
   private readonly altitude = { value: 0 };
   private readonly drift = { value: new Vector2() };
   private readonly wind = { value: 1 };
+  private readonly visibilityRange = { value: 1950 };
   private readonly current: WeatherProfile = { ...weatherProfiles.clear };
   private density = 1;
   private visibility = 100;
@@ -38,7 +39,8 @@ export class WeatherSystem {
     const rng = createRng(0x72a19), positions = new Float32Array(1400 * 6), phases = new Float32Array(2800), seeds = new Float32Array(5600);
     for (let i = 0; i < positions.length; i += 6) {
       const x = rng() * 100 - 50, y = rng() * 70 - 25, z = rng() * 100 - 50;
-      positions.set([x, y, z, x - 0.18, y + 1.7, z + 0.07], i);
+      const length = 0.8 + rng() * 1.2;
+      positions.set([x, y, z, x - 0.1 * length, y + length, z + 0.04 * length], i);
       phases[i / 3] = phases[i / 3 + 1] = y + 25;
       seeds.set([x, z, x, z], i / 3 * 2);
     }
@@ -59,18 +61,20 @@ export class WeatherSystem {
       shader.uniforms.rainResolution = this.resolution;
       shader.uniforms.rainAnchor = this.anchor; shader.uniforms.rainAltitude = this.altitude;
       shader.uniforms.rainDrift = this.drift; shader.uniforms.rainWind = this.wind;
+      shader.uniforms.rainVisibility = this.visibilityRange;
       shader.vertexShader = `uniform float rainTime, rainAltitude, rainWind;\nuniform vec2 rainAnchor, rainDrift;\nattribute float rainPhase;\nattribute vec2 rainSeed;\nvarying float rainDistance;\nvarying vec3 rainWorld;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
         #include <begin_vertex>
         transformed.y += mod(rainPhase - rainTime * ${snow ? '3.0' : '23.0'} - rainAltitude, 70.0) - rainPhase;
         transformed.xz += mod(rainSeed + rainDrift - rainAnchor + 50.0, 100.0) - 50.0 - rainSeed;
         ${snow ? 'transformed.xz += vec2(sin(rainTime * 0.62831853 + rainPhase), cos(rainTime * 0.44879895 + rainSeed.x)) * 0.6;' : 'transformed.x -= (position.y - rainPhase + 25.0) * rainWind / 23.0;'}
       `).replace('#include <project_vertex>', '#include <project_vertex>\nrainDistance = length(mvPosition.xyz);\nrainWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      shader.fragmentShader = `${interiorShader}\nuniform sampler2D rainDepth;\nuniform vec2 rainResolution;\nvarying float rainDistance;\nvarying vec3 rainWorld;\n${shader.fragmentShader}`
+      shader.fragmentShader = `${interiorShader}\nuniform sampler2D rainDepth;\nuniform vec2 rainResolution;\nuniform float rainVisibility;\nvarying float rainDistance;\nvarying vec3 rainWorld;\n${shader.fragmentShader}`
         .replace('#include <color_fragment>', `
           if (gl_FragCoord.z > texture2D(rainDepth, gl_FragCoord.xy / rainResolution).r) discard;
           if (rainDistance < indoorDistance(cameraPosition, normalize(rainWorld - cameraPosition))) discard;
           #include <color_fragment>
           diffuseColor.a *= smoothstep(1.5, 5.0, rainDistance) * (1.0 - smoothstep(35.0, 65.0, rainDistance));
+          diffuseColor.a *= exp(-3.912 * rainDistance / max(2.0, rainVisibility));
           ${snow ? 'diffuseColor.a *= 1.0 - smoothstep(0.2, 0.5, length(gl_PointCoord - 0.5));' : ''}
         `);
     };
@@ -134,6 +138,7 @@ export class WeatherSystem {
     this.drift.value.x = (this.drift.value.x + dt * this.profile.wind) % 100;
     this.drift.value.y = (this.drift.value.y + dt * this.profile.wind * 0.3) % 100;
     this.wind.value = this.profile.wind;
+    this.visibilityRange.value = this.profile.far;
     this.anchor.value.set((camera.position.x + origin.x) % 100, (camera.position.z + origin.z) % 100);
     this.altitude.value = camera.position.y % 70;
     this.rain.position.copy(camera.position);

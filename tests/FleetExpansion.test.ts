@@ -4,7 +4,7 @@ import { vehicleProfiles } from '../src/vehicle/VehicleConfig';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
 import { VehicleOperations } from '../src/vehicle/VehicleOperations';
 
-it.each([['minibus', 9], ['coach', 13], ['coach15', 18]] as const)('gives %s exactly %i passenger rows with four selectable seats per row', (kind, rows) => {
+it.each([['minibus', 8], ['coach', 13], ['coach15', 16]] as const)('gives %s exactly %i passenger rows with four selectable seats per row', (kind, rows) => {
   const seats = cabinSeats(vehicleProfiles[kind]), passengers = seats.filter(s => s.role === 'passenger');
   expect(passengers).toHaveLength(rows * 4);
   for (let row = 1; row <= rows; row++) expect(passengers.filter(s => s.row === row)).toHaveLength(4);

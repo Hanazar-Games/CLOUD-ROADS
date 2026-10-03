@@ -5,7 +5,7 @@ export interface ShortcutContext {
   paused?: boolean; modal?: boolean; ready?: boolean; accessing?: boolean; stopped?: boolean;
   board?: boolean; cargo?: boolean; lock?: boolean; leaveSeat?: boolean; sit?: boolean; exit?: boolean;
   glass?: boolean; convertible?: boolean; ev?: boolean; trailer?: boolean; driveReady?: boolean;
-  doors?: string; tailgate?: string; auxiliary?: string; crane?: boolean;
+  doors?: string; tailgate?: string; auxiliary?: string; crane?: boolean; drinking?: boolean; water?: boolean;
 }
 export function availableShortcuts(s: ShortcutContext): { id: string; label: string; group: string }[] {
   if (s.modal) return [{ id: 'Escape', label: '关闭弹窗', group: '菜单' }];
@@ -42,6 +42,7 @@ export function availableShortcuts(s: ShortcutContext): { id: string; label: str
         if (s.leaveSeat && s.stopped) label('CabinWalk', '车内离座');
       }
       add('KeyP', 'KeyL', 'LightPower', 'LightRange', 'FogLights', 'Fridge', 'KeyV');
+      if (!walking && s.stopped && !s.drinking) { add('RefillWater'); if (s.water !== false) add('DrinkWater'); }
       if (s.glass) add('KeyB', 'KeyG', 'KeyN', 'KeyK', 'KeyU', 'Comma', 'Period');
       if (s.glass && s.stopped) add('Refill');
       if (s.convertible && s.stopped) add('KeyT');

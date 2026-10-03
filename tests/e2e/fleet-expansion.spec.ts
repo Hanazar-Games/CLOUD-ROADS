@@ -8,7 +8,7 @@ const choose = async (page: Page, kind: string) => {
 
 test('uses exact bus row counts and selects both double-decker floors without granting passenger controls', async ({ page }) => {
   await page.goto('/?seed=FLEET-FLAT');
-  for (const [kind, count] of [['minibus', 37], ['coach', 53], ['coach15', 73], ['citybus', 41]] as const) {
+  for (const [kind, count] of [['minibus', 33], ['coach', 53], ['coach15', 65], ['citybus', 41]] as const) {
     await choose(page, kind);
     if (!await page.locator('#drive-hud').isVisible()) await page.locator('#drive-toggle').click(); await ignite(page);
     await page.keyboard.press('KeyP'); await expect(page.locator('#seat-map button')).toHaveCount(count);
@@ -16,8 +16,8 @@ test('uses exact bus row counts and selects both double-decker floors without gr
   }
   await choose(page, 'doubleDecker'); await page.keyboard.press('KeyP');
   await expect(page.locator('#seat-map button')).toHaveCount(49);
-  await page.locator('[data-deck="2"]').click(); await expect(page.locator('#seat-map button')).toHaveCount(56);
-  await page.locator('[data-seat="upper-row-14-3"]').click(); await expect(metric(page, 'Cabin floor')).toHaveText('2');
+  await page.locator('[data-deck="2"]').click(); await expect(page.locator('#seat-map button')).toHaveCount(48);
+  await page.locator('[data-seat="upper-row-12-3"]').click(); await expect(metric(page, 'Cabin floor')).toHaveText('2');
   const position = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
   await page.keyboard.down('KeyW'); await page.keyboard.press('KeyJ'); await page.waitForTimeout(400); await page.keyboard.up('KeyW');
   const after = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);

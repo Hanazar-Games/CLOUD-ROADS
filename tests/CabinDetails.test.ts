@@ -15,7 +15,7 @@ it('omits player cabin detailing from traffic templates without multiplying play
     const traffic = new VehicleMesh(new Scene(), vehicleProfiles[kind], false);
     const a = complexity(detailed), b = complexity(traffic);
     expect(a.vertices, kind).toBeGreaterThan(b.vertices);
-    expect(a.meshes, kind).toBeLessThanOrEqual(b.meshes + 3);
+    expect(a.meshes, kind).toBeLessThanOrEqual(b.meshes + 8);
     expect(detailed.root.getObjectByName('vehicle-navigation')).toBeDefined();
     expect(traffic.root.getObjectByName('vehicle-navigation')).toBeUndefined();
     detailed.dispose(); traffic.dispose();

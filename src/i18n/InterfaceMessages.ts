@@ -1,5 +1,15 @@
 export const interfaceMessages = `当前浏览器无法开启音频，仍可继续探索。	This browser cannot start audio. You can continue exploring.	このブラウザーでは音声を開始できません。探索は続けられます。	이 브라우저에서는 오디오를 시작할 수 없습니다. 탐험은 계속할 수 있습니다.	Este navegador no puede iniciar el audio. Puedes seguir explorando.
 声音设置已保留 · 点击页面或按键后开启声音	Sound settings retained · Click the page or press a key to start audio	音声設定を保持しています · 画面をクリックするかキーを押すと音声が始まります	소리 설정이 유지됩니다 · 페이지를 클릭하거나 키를 눌러 소리를 시작하세요	Ajustes de sonido conservados · Haz clic en la página o pulsa una tecla para iniciar el audio
+云间空隙	Between cloud banks	雲の切れ間	구름 사이	Entre nubes
+取出冰水并喝水	Take and drink water	冷水を取り出して飲む	찬물 꺼내 마시기	Sacar y beber agua
+取水并喝水	Take and drink water	水を取り出して飲む	물 꺼내 마시기	Sacar y beber agua
+停车补充冰水	Restock water while parked	停車中に冷水を補充	정차 중 냉수 보충	Reponer agua con el vehículo parado
+补充冰水	Restock cold water	冷水を補充	냉수 보충	Reponer agua fría
+正在喝水	Drinking water	水を飲んでいます	물을 마시는 중	Bebiendo agua
+驻车中	Parked	停車中	정차 중	Estacionado
+瓶装水	Bottled water	ボトル入りの水	생수	Agua embotellada
+已饮用	Consumed	飲用済み	마신 양	Consumido
+停车就座后取用 500 ml 瓶装水；开箱、拿瓶、喝水和收起约 4 秒。下车或换座会结束动作，未喝的水放回箱内。补水需停车，冷藏箱通电可保持低温。	Take a 500 ml bottle while seated and parked. Opening, drinking and putting it away takes about 4 seconds. Leaving or changing seats ends the action and returns untouched water. Restock while parked; power the cooler to keep water cold.	停車して着席中に 500 ml の水を取れます。開閉から飲み終わるまで約 4 秒です。降車や席の変更で中断し、未開封の水は戻します。補充は停車中に行い、冷蔵庫に通電すると低温を保ちます。	착석 및 정차 중 500 ml 물을 꺼냅니다. 꺼내 마시고 정리하는 데 약 4초가 걸립니다. 하차나 좌석 변경 시 중단되고 마시지 않은 물은 반환됩니다. 정차 중 보충하고 냉장고 전원을 켜 차갑게 유지하세요.	Toma una botella de 500 ml sentado y con el vehículo parado. Abrir, beber y guardarla tarda unos 4 segundos. Salir o cambiar de asiento termina la acción y devuelve el agua intacta. Repón agua al aparcar; enciende la nevera para mantenerla fría.
 请调高总音量、全部音效及「发动机」音量。	Raise the master, effects and engine volumes.	マスター・効果音・エンジンの音量を上げてください。	전체, 효과음 및 엔진 음량을 높이세요.	Sube el volumen general, de efectos y del motor.
 请调高总音量、全部音效及「发动机与换挡机械声」音量。	Raise the master, effects, engine and gearshift volumes.	マスター・効果音・エンジン・変速音の音量を上げてください。	전체, 효과음, 엔진 및 변속 음량을 높이세요.	Sube el volumen general, de efectos, del motor y de los cambios de marcha.
 请调高总音量、全部音效及「本车喇叭」音量。	Raise the master, effects and player horn volumes.	マスター・効果音・自車ホーンの音量を上げてください。	전체, 효과음 및 내 차량 경적 음량을 높이세요.	Sube el volumen general, de efectos y de la bocina del vehículo.

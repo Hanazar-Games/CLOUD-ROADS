@@ -95,7 +95,7 @@ it.each(Object.keys(vehicleProfiles) as (keyof typeof vehicleProfiles)[])('settl
   expect(size.y).toBeLessThan(car.profile.height + 0.2);
   let parts = 0;
   mesh.root.traverse(object => { if (object instanceof Mesh) parts++; });
-  expect(parts).toBeLessThan(kind === 'roadTrain' ? 161 : 105);
+  expect(parts).toBeLessThan(kind === 'roadTrain' ? 171 : 112);
   mesh.dispose(); expect(scene.children).toHaveLength(0);
 });
 

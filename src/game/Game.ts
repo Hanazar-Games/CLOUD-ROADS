@@ -37,7 +37,7 @@ import { TrafficControlPanel } from '../settings/TrafficControlPanel';
 import { crossroadsEnabled } from '../road/JunctionSchedule';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
-const cloudNames = { below: '云下', inside: '云中', above: '云上' };
+const cloudNames = { below: '云下', inside: '云中', above: '云上', between: '云间空隙' };
 
 export class Game {
   private readonly initialSeed = startingSeed(location.search);
@@ -866,7 +866,8 @@ export class Game {
         lock: d.active ? d.cabin.driver && !ops.moving && ops.doors < 0.001 && ops.cargo < 0.001 : boardable || !!cargo,
         leaveSeat: d.cabinWalk.layouts.some(l => l.entry === 'cabin'), sit: !!d.cabinWalk.nearestSeat(d.cabin), exit: d.nearInteriorExit,
         glass: d.systems.hasWindows, convertible: d.systems.convertible, ev: c.powertrain === 'ev', trailer: !!c.trailers.length,
-        driveReady: ops.driveReady && d.crane.stowed, doors: !c.equipment.locked ? ops.label('doors') : '',
+        drinking: c.equipment.drinking, water: c.equipment.waterBottles > 0,
+        driveReady: ops.driveReady && d.crane.stowed && !c.equipment.drinking, doors: !c.equipment.locked ? ops.label('doors') : '',
         tailgate: !c.equipment.locked ? ops.label('cargo') : '', auxiliary: ops.label('aux'), crane: c.kind === 'crane' });
       element('boarding-help').hidden = !boardable && !cargo && !this.access;
       element('boarding-help').textContent = this.access ? this.access.sequence.closing ? '车门关闭中 · 请稍候'
@@ -984,6 +985,9 @@ export class Game {
         'Reverse lights': this.driving.car.reversing ? 'on' : 'off',
         'Fridge temperature': this.driving.car.equipment.fridgeTemperature.toFixed(1),
         'Fridge cooling': this.driving.car.equipment.fridgeCooling ? 'on' : 'off',
+        'Drinking water': this.driving.car.equipment.drinking ? 'drinking' : 'idle',
+        'Water bottles': this.driving.car.equipment.waterBottles,
+        'Water consumed': this.driving.car.equipment.waterDrunk,
         'Cabin seat': this.driving.cabin.selected.id,
         'Cabin displays': this.driving.displayStatus,
         'Cabin walking': this.driving.cabin.standing ? this.driving.cabinWalk.layout?.id ?? 'off' : 'off',

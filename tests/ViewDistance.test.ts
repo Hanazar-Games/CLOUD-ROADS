@@ -39,6 +39,8 @@ it('extends clear visibility with distance while keeping dense weather and cloud
   expect(clouds.fog.far).toBe(420);
   camera.position.y = 2050;
   clouds.update(0, camera, { x: 0, z: 0 }, weatherProfiles.clear, 0, 4096);
+  expect(clouds.fog.far).toBeCloseTo(3900 + (110 - 3900) * clouds.sample.density);
+  clouds.update(0, camera, { x: 0, z: 0 }, weatherProfiles.overcast, 0, 4096);
   expect(clouds.fog.far).toBeLessThan(1000);
   clouds.dispose();
 });

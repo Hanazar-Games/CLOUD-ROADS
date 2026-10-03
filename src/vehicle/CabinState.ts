@@ -25,14 +25,14 @@ export function cabinSeats(p: VehicleProfile): CabinSeat[] {
   if (p.shape === 'motorcycle') return seats;
   if (p.shape !== 'bus') seats.push({ ...p.eye, x: -p.eye.x, id: 'front', label: '前排乘客', role: 'passenger', row: 0, column: 4, floor: 1 });
   if ((p.shape === 'sedan' || p.shape === 'suv') && p.body !== 'pickup') for (const [i, x] of [-p.width * 0.25, 0, p.width * 0.25].entries())
-    seats.push({ id: `rear-${i}`, label: `后排 ${i + 1}`, role: 'passenger', x, y: p.eye.y, along: p.body === 'limousine' ? -1.7 : -0.55, row: 1, column: i * 2, floor: 1 });
+    seats.push({ id: `rear-${i}`, label: `后排 ${i + 1}`, role: 'passenger', x, y: p.eye.y, along: Math.min(p.eye.along - 0.8, p.body === 'limousine' ? -1.7 : -0.55), row: 1, column: i * 2, floor: 1 });
   if (p.bus) for (const [deck, rows] of p.bus.rows.entries()) {
-    const front = p.bus.rows.length > 1 ? p.chassisLength / 2 - 3.6 : p.eye.along - 1, back = -p.chassisLength / 2 + 0.7;
+    const front = p.bus.rows.length > 1 ? p.chassisLength / 2 - 3.6 : p.eye.along - 0.9;
     const inner = 0.26 + busSeatWidth(p) * 0.58, outer = p.width / 2 - 0.08 - busSeatWidth(p) * 0.58;
     for (let row = 1; row <= rows; row++)
       for (const [i, x] of [-outer, -inner, inner, outer].entries())
         seats.push({ id: `${deck ? 'upper-' : ''}row-${row}-${i}`, label: `${p.bus.rows.length > 1 ? `${deck + 1}F · ` : ''}${row} 排 ${i + 1} 座`,
-          role: 'passenger', x, y: p.eye.y + deck * p.bus.deckHeight, along: front + (back - front) * (row - 1) / Math.max(1, rows - 1), row, column: i < 2 ? i : i + 1, floor: deck + 1 });
+          role: 'passenger', x, y: p.eye.y + deck * p.bus.deckHeight, along: front - (row - 1) * 0.8, row, column: i < 2 ? i : i + 1, floor: deck + 1 });
   }
   if (p.shape === 'crane') seats.push({ id: 'operator', label: '吊车操作席', role: 'operator', x: -0.88, y: 1.79, along: -1.55, row: 3, column: 0, floor: 1 });
   return seats;
