@@ -12,7 +12,8 @@ import { busSeatWidth, cabinBounds, cabinSeats } from './CabinState';
 import { cabinLayouts, type CabinLayout } from './CabinLayout';
 import { CraneMesh } from './CraneMesh';
 import type { CraneSystems } from './CraneSystems';
-import { VehicleDisplay } from './VehicleDisplay';
+import { VehicleDisplay, type InstrumentStyle } from './VehicleDisplay';
+import { NavigationDisplay } from './NavigationDisplay';
 import { fleetBody } from './FleetBody';
 import { roadTripDetails } from './RoadTripDetails';
 import { vehicleFinish } from './VehicleFinish';
@@ -47,6 +48,8 @@ export class VehicleMesh {
   private readonly readingLamp: MeshStandardMaterial;
   private readonly ambient: MeshStandardMaterial;
   private readonly display = new VehicleDisplay();
+  readonly navigation?: NavigationDisplay;
+  instrumentStyle: InstrumentStyle = 'digital';
   private readonly operatorDisplay?: VehicleDisplay;
   private readonly deviceLights: InstancedMesh<BoxGeometry, MeshBasicMaterial>;
   private readonly indicatorColor = new Color();
@@ -215,14 +218,31 @@ export class VehicleMesh {
       if (detailedCabin) seatDetails(seat, width, this.chassis, kit, leather, upholstery);
     }
     const eye = profile.eye;
-    this.display.root.position.set(eye.x + 0.5, eye.y - 0.22, -eye.along - 0.6);
+    if (profile.shape !== 'motorcycle') this.steering.position.y -= 0.1;
+    this.display.root.position.set(eye.x, eye.y - 0.195, -eye.along - 0.7);
     this.display.root.rotation.x = -0.2;
+    this.display.root.scale.setScalar(0.95);
     if (profile.shape === 'motorcycle') {
-      this.display.root.position.set(0, eye.y - 0.165, -eye.along - 0.45);
+      this.display.root.position.set(0, eye.y - 0.12, -eye.along - 0.45);
       this.display.root.scale.setScalar(0.7); this.display.root.rotation.x = -0.45;
     }
     this.chassis.add(this.display.root);
-    if (detailedCabin) dashboardDetails(profile, this.chassis, this.steering, this.display.root, kit);
+    if (detailedCabin) {
+      this.navigation = new NavigationDisplay();
+      const screen = this.navigation.root;
+      screen.position.set(eye.x + 0.4, eye.y - 0.2, -eye.along - 0.72);
+      screen.rotation.x = -0.2;
+      if (profile.shape === 'motorcycle') {
+        screen.position.set(0.23, eye.y - 0.1, -eye.along - 0.42);
+        screen.scale.setScalar(0.55); screen.rotation.set(-0.3, -0.4, 0);
+      } else {
+        panel(0.31, 0.14, 0.08, eye.x, eye.y - 0.37, -eye.along - 0.76, trim);
+        panel(0.27, 0.14, 0.08, screen.position.x, eye.y - 0.37, -eye.along - 0.78, trim);
+      }
+      this.chassis.add(screen);
+      dashboardDetails(profile, this.chassis, this.steering, screen, kit);
+      displaySurround(this.chassis, this.display.root, kit);
+    }
     if (this.crane) {
       this.operatorDisplay = new VehicleDisplay();
       this.operatorDisplay.root.name = 'crane-display';
@@ -233,9 +253,10 @@ export class VehicleMesh {
     }
     this.deviceLights = new InstancedMesh(box, new MeshBasicMaterial({ toneMapped: false }), 14);
     this.deviceLights.name = 'device-indicators'; this.chassis.add(this.deviceLights);
-    this.display.root.updateMatrix();
+    const consoleScreen = this.navigation?.root ?? this.display.root;
+    consoleScreen.updateMatrix();
     for (let i = 0; i < 12; i++) this.deviceLights.setMatrixAt(i,
-      new Matrix4().makeScale(0.014, 0.012, 0.012).setPosition(-0.12 + i * 0.022, -0.128, 0.012).premultiply(this.display.root.matrix));
+      new Matrix4().makeScale(0.014, 0.012, 0.012).setPosition(-0.12 + i * 0.022, -0.128, 0.012).premultiply(consoleScreen.matrix));
     this.deviceLights.instanceMatrix.needsUpdate = true;
     const ignitionX = profile.shape === 'motorcycle' ? 0.12 : eye.x + 0.23;
     block(0.08, 0.07, 0.04, ignitionX, eye.y - 0.33, -eye.along - 0.48, metal);
@@ -526,6 +547,7 @@ export class VehicleMesh {
     this.deviceLights.setColorAt(13, this.indicatorColor.setHex(car.equipment.fridgeOn && car.ignition === 'running'
       ? car.equipment.fridgeCooling ? 0x50dbef : 0x36c784 : 0x07111a));
     this.deviceLights.instanceColor!.needsUpdate = true;
+    this.display.style = this.instrumentStyle;
     this.display.update(car, systems, dt, undefined, operations);
     this.operatorDisplay?.update(car, systems, dt, crane, operations);
     if (crane) this.crane?.sync(crane);
@@ -537,6 +559,8 @@ export class VehicleMesh {
   }
 
   private get rideHeight(): number { return this.profile.radius + this.profile.rest - 9.81 / suspensionTuning(3, this.profile).spring; }
+
+  get displayStatus(): string { return `${this.display.root.userData.style ?? 'off'} / ${this.navigation?.root.userData.navigation?.status ?? 'off'}`; }
 
   private buildBody(block: Block, paint: MeshStandardMaterial, trim: MeshStandardMaterial, metal: MeshStandardMaterial,
     glass: MeshStandardMaterial, leather: MeshStandardMaterial, lamp: MeshStandardMaterial, kit: VehicleDetailKit): void {
@@ -708,6 +732,7 @@ export class VehicleMesh {
   private geometry<T extends BufferGeometry>(geometry: T): T { this.geometries.push(geometry); return geometry; }
   dispose(): void {
     this.display.dispose();
+    this.navigation?.dispose();
     this.operatorDisplay?.dispose();
     this.deviceLights.dispose(); this.deviceLights.material.dispose();
     this.windshield?.dispose();

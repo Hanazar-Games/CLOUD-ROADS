@@ -13,7 +13,7 @@ test('holds windows at arbitrary heights and uses six fan speeds, ten radio chan
   for (let channel = 1; channel <= 10; channel++) { await page.keyboard.press(`Digit${channel % 10}`); await expect(metric('Radio channel')).toHaveText(String(channel)); }
   await page.keyboard.press('KeyK'); await page.keyboard.press('KeyU'); await expect(metric('Cabin lighting')).toHaveText('ambient / reading');
   await page.keyboard.press('KeyQ'); await expect(page.locator('#turn-left')).toHaveClass(/lit/);
-  await page.keyboard.press('KeyM'); await expect(page.getByRole('dialog', { name: '旅程操作' })).toBeVisible();
+  await page.keyboard.press('Shift+KeyR'); await expect(page.getByRole('dialog', { name: '旅程操作' })).toBeVisible();
   await expect(page.locator('#shortcut-list')).toContainText('Home'); await expect(page.locator('#shortcut-list')).toContainText('End'); await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });
@@ -48,7 +48,7 @@ test('operates a parked crane from its rear seat and requires stowing before dri
   await page.waitForTimeout(3000); await page.keyboard.down('KeyW'); await page.keyboard.down('KeyD'); await page.keyboard.down('KeyE');
   await page.waitForTimeout(1500); await page.keyboard.up('KeyW'); await page.keyboard.up('KeyD'); await page.keyboard.up('KeyE');
   await expect(page.locator('[data-metric="Crane boom"]')).not.toHaveText('0.00 / 0.00 / 0.00');
-  await page.keyboard.press('KeyM');
+  await page.keyboard.press('Shift+KeyR');
   await expect(page.locator('#controls-menu')).toBeVisible();
   await page.waitForTimeout(300);
   const boom = await page.locator('[data-metric="Crane boom"]').textContent();
@@ -72,7 +72,7 @@ test('keeps every coach seat and menu controls reachable in a short narrow windo
   const bounds = await dialog.boundingBox(); expect(bounds!.y).toBeGreaterThanOrEqual(0); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(450);
   await page.locator('#seat-map button').last().click();
   await expect(page.locator('[data-metric="Cabin seat"]')).toHaveText('row-13-3');
-  await page.keyboard.press('KeyM');
+  await page.keyboard.press('Shift+KeyR');
   await page.locator('#shortcut-list tr').last().scrollIntoViewIfNeeded();
   await page.locator('#controls-menu button[data-close]').click();
   await expect(page.locator('#world')).toBeFocused();

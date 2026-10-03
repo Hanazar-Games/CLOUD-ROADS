@@ -48,20 +48,20 @@ test('suspends native audio in the roadbook and recovers after graphics loss', a
   const voices = await page.evaluate(() => Reflect.get(window, 'auditVoices'));
   await closeSettings(page);
   for (let i = 0; i < 3; i++) {
-    await page.keyboard.press('Shift+KeyR'); await expect(state).toHaveText('suspended');
+    await page.keyboard.press('KeyM'); await expect(state).toHaveText('suspended');
     const clock = await page.evaluate(() => (Reflect.get(window, 'auditAudioContext') as AudioContext).currentTime);
     await page.waitForTimeout(180);
     expect(await page.evaluate(() => (Reflect.get(window, 'auditAudioContext') as AudioContext).currentTime)).toBe(clock);
     await page.keyboard.press('Escape'); await expect(state).toHaveText('running');
   }
-  await page.keyboard.press('Shift+KeyR');
+  await page.keyboard.press('KeyM');
   await page.locator('#world').evaluate(canvas => {
     const extension = (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!;
     extension.loseContext(); setTimeout(() => extension.restoreContext(), 600);
   });
   await expect(page.locator('#roadbook-dialog')).toBeHidden(); await expect(page.locator('#error')).toBeHidden({ timeout: 15000 });
   await expect(page.locator('#world')).toBeFocused(); await expect(state).toHaveText('running');
-  await page.keyboard.press('Shift+KeyR'); await expect(page.locator('#roadbook-content')).toBeVisible();
+  await page.keyboard.press('KeyM'); await expect(page.locator('#roadbook-content')).toBeVisible();
   await page.keyboard.press('Escape');
   expect(await page.evaluate(() => Reflect.get(window, 'auditVoices'))).toBe(voices); expect(errors).toEqual([]);
 });

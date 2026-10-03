@@ -24,7 +24,7 @@ test('leaves seats, walks real aisles, freezes in menus and sits back down befor
   await expect(metric(page, 'Vehicle position')).toHaveText(car!);
   await page.keyboard.press('KeyF'); await expect(metric(page, 'Cabin walking')).toHaveText('saloon');
   await expect(page.locator('#cabin-walk-status')).toContainText('车门附近');
-  await page.keyboard.press('KeyU'); await page.keyboard.press('KeyM');
+  await page.keyboard.press('KeyU'); await page.keyboard.press('Shift+KeyR');
   await page.waitForTimeout(300);
   const paused = await metric(page, 'Interior position').textContent();
   await page.keyboard.down('KeyS'); await page.waitForTimeout(400); await page.keyboard.up('KeyS');

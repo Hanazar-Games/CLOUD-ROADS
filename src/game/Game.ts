@@ -985,6 +985,7 @@ export class Game {
         'Fridge temperature': this.driving.car.equipment.fridgeTemperature.toFixed(1),
         'Fridge cooling': this.driving.car.equipment.fridgeCooling ? 'on' : 'off',
         'Cabin seat': this.driving.cabin.selected.id,
+        'Cabin displays': this.driving.displayStatus,
         'Cabin walking': this.driving.cabin.standing ? this.driving.cabinWalk.layout?.id ?? 'off' : 'off',
         'Interior position': [this.driving.cabinWalk.person.x, this.driving.cabinWalk.person.y, this.driving.cabinWalk.person.z].map(v => v.toFixed(2)).join(' / '),
         'Interior floor': this.driving.cabinWalk.floor,

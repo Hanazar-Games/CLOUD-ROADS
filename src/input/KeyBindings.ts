@@ -29,8 +29,8 @@ export const bindingActions = [
   ['ArrowUp', 'ArrowUp', '视角 / 座椅', '座椅前移'], ['ArrowDown', 'ArrowDown', '视角 / 座椅', '座椅后移'],
   ['ArrowLeft', 'ArrowLeft', '视角 / 座椅', '座椅左移'], ['ArrowRight', 'ArrowRight', '视角 / 座椅', '座椅右移'],
   ['Home', 'Home', '视角 / 座椅', '靠背直立'], ['End', 'End', '视角 / 座椅', '靠背后仰'], ['Backspace', 'Backspace', '视角 / 座椅', '重置座椅'],
-  ['KeyM', 'KeyM', '菜单', '操作菜单'], ['Panel', 'Shift+KeyM', '菜单', '载具面板'], ['Settings', 'Shift+KeyP', '菜单', '旅程设置'],
-  ['Roadbook', 'Shift+KeyR', '菜单', '旅途路书'],
+  ['KeyM', 'Shift+KeyR', '菜单', '操作菜单'], ['Panel', 'Shift+KeyM', '菜单', '载具面板'], ['Settings', 'Shift+KeyP', '菜单', '旅程设置'],
+  ['Roadbook', 'KeyM', '菜单', '旅途路书'],
   ['PauseToggle', 'Slash', '菜单', '暂停 / 继续'], ['Pause', 'Pause', '菜单', '暂停 / 继续（备用）'], ['Debug', 'Backslash', '菜单', '调试信息'],
   ...Array.from({ length: 10 }, (_, i) => [`Digit${i}`, `Digit${i}`, '电台', `频道 ${i || 10}`]),
 ] as readonly (readonly string[])[];

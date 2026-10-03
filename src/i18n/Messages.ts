@@ -5,6 +5,9 @@ export const messages = `旅程设置	Journey settings	旅の設定
 开始驾驶	Start driving	運転開始
 开始步行	Start walking	歩行開始
 路书	Roadbook	ロードブック
+车载导航 · 路书	Cabin navigation · Roadbook	車載ナビ · ロードブック
+仪表与速度表样式	Instrument and HUD style	車内メーターと HUD のスタイル
+同步切换方向盘前的车内仪表；极简模式使用数字车内仪表。中控地图持续显示路线，{Roadbook} 打开完整路书。	Also changes the instruments behind the wheel; minimal HUD uses digital cabin instruments. The center map shows the route. {Roadbook} opens the full roadbook.	ステアリング前のメーターも切り替わります。ミニマル HUD では車内はデジタル表示です。中央の地図にルートを表示し、{Roadbook} でロードブックを開きます。
 菜单	Menu	メニュー
 设置	Settings	設定
 版本公告	Release notes	更新情報

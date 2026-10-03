@@ -1,37 +1,18 @@
-import { DataTexture, Group, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace } from 'three';
+import { DisplaySurface, screenWidth as width, screenHeight as height } from './DisplaySurface';
 import type { VehiclePhysics } from './VehiclePhysics';
 import type { VehicleSystems } from './VehicleSystems';
 import type { CraneSystems } from './CraneSystems';
 import type { VehicleOperations } from './VehicleOperations';
 
-const font: Record<string, number[]> = {
-  '0':[14,17,19,21,25,17,14], '1':[4,12,4,4,4,4,14], '2':[14,17,1,2,4,8,31], '3':[30,1,1,14,1,1,30], '4':[2,6,10,18,31,2,2],
-  '5':[31,16,16,30,1,1,30], '6':[14,16,16,30,17,17,14], '7':[31,1,2,4,8,8,8], '8':[14,17,17,14,17,17,14], '9':[14,17,17,15,1,1,14],
-  A:[14,17,17,31,17,17,17], C:[14,17,16,16,16,17,14], D:[30,17,17,17,17,17,30], E:[31,16,16,30,16,16,31], F:[31,16,16,30,16,16,16],
-  G:[14,17,16,23,17,17,15], H:[17,17,17,31,17,17,17], I:[14,4,4,4,4,4,14], K:[17,18,20,24,20,18,17], L:[16,16,16,16,16,16,31],
-  M:[17,27,21,21,17,17,17], N:[17,25,25,21,19,19,17], O:[14,17,17,17,17,17,14], P:[30,17,17,30,16,16,16], R:[30,17,17,30,20,18,17],
-  S:[15,16,16,14,1,1,30], T:[31,4,4,4,4,4,4], U:[17,17,17,17,17,17,14], W:[17,17,17,21,21,27,17],
-  '<':[1,2,4,8,4,2,1], '>':[16,8,4,2,4,8,16], '.':[0,0,0,0,0,6,6], '-':[0,0,0,31,0,0,0], '/':[1,2,2,4,8,8,16],
-  V:[17,17,17,17,17,10,4],
-  X:[17,17,10,4,10,17,17],
-  B:[30,17,17,30,17,17,30], J:[7,2,2,2,18,18,12], Q:[14,17,17,17,21,18,13],
-  Y:[17,17,10,4,4,4,4], Z:[31,1,2,4,8,16,31], ':':[0,4,4,0,4,4,0],
-};
-const width = 384, height = 224;
 const ink = [179, 223, 230], accent = [126, 242, 208], muted = [110, 149, 167], amber = [255, 189, 105];
-export class VehicleDisplay {
-  readonly root = new Group();
-  private readonly pixels = new Uint8Array(width * height * 4);
-  readonly texture = new DataTexture(this.pixels, width, height);
-  private readonly material = new MeshBasicMaterial({ map: this.texture, toneMapped: false });
-  private readonly geometry = new PlaneGeometry(0.32, 0.32 * height / width);
+export type InstrumentStyle = 'digital' | 'dial';
+export class VehicleDisplay extends DisplaySurface {
+  style: InstrumentStyle = 'digital';
+  private lastStyle?: InstrumentStyle;
   private last = '';
   private alert = '';
   private elapsed = 0;
-  constructor() {
-    this.root.name = 'vehicle-display'; this.root.add(new Mesh(this.geometry, this.material));
-    this.texture.colorSpace = SRGBColorSpace; this.texture.magFilter = this.texture.minFilter = LinearFilter;
-  }
+  constructor() { super('vehicle-display'); }
   update(car: VehiclePhysics, systems: VehicleSystems, dt: number, crane?: CraneSystems, operations?: VehicleOperations): void {
     this.elapsed += dt;
     const gear = car.parked ? 'P' : car.reversing ? 'R' : car.speed > 0.1 ? car.powertrain === 'ev' ? 'D' : `D${car.transmission.gear}` : 'N';
@@ -57,21 +38,30 @@ export class VehicleDisplay {
       `ARM ${Math.round(crane.angle * 180 / Math.PI)} EXT ${crane.extension.toFixed(1)}`,
       `HOOK ${crane.rope.toFixed(1)} M`);
     lines.push(alert || (car.parked ? 'PARKED' : 'READY'));
-    const signature = lines.join('|');
-    if (signature === this.last || this.elapsed < 0.1 && this.last && alert === this.alert) return;
-    this.elapsed = 0; this.last = signature; this.alert = alert;
+    const signature = `${lines.join('|')}|${car.maxSpeed}|${car.transmission.redline}`;
+    if (this.style === this.lastStyle && (signature === this.last || this.elapsed < 0.1 && this.last && alert === this.alert)) return;
+    this.elapsed = 0; this.last = signature; this.alert = alert; this.lastStyle = this.style;
+    this.root.userData.style = this.style;
     this.rect(0, 0, width, height, [5, 15, 23]);
     this.text('CLOUD / DRIVE', 16, 12, 1, muted);
     this.text('<', 242, 9, 2, systems.leftSignal ? amber : muted);
     this.text('>', 352, 9, 2, systems.rightSignal ? amber : muted);
-    this.text(speed, 16, 34, 6, accent);
-    this.text('KM/H', 142, 64, 1, muted);
-    this.rect(245, 33, 123, 46, [18, 39, 48]);
-    this.text(gear, 262, 43, 4, accent);
-    this.text(lines[1], 16, 86, 1, ink);
-    const level = Math.min(1, Math.max(0, car.powertrain === 'ev' ? car.motionSpeed / car.maxSpeed : car.engineRpm / car.transmission.redline));
-    for (let i = 0; i < 36; i++) this.rect(16 + i * 10, 99, 7, 4, i / 36 < level ? i > 29 ? amber : accent : [29, 48, 60]);
-    this.text(lines[2], 16, 114, 2, ink);
+    if (this.style === 'dial' && !crane) {
+      this.dial(94, 76, 53, car.motionSpeed * 3.6, Math.ceil(car.maxSpeed * 3.6 / 20) * 20, 'KM/H', accent);
+      this.dial(288, 76, 53, car.powertrain === 'ev' ? car.regeneration : car.engineRpm,
+        car.powertrain === 'ev' ? 3 : car.transmission.redline, car.powertrain === 'ev' ? 'REGEN' : 'RPM', amber);
+      this.text(speed, 78 - speed.length * 3, 83, 2, ink);
+      this.text(gear, 177, 55, 3, accent);
+    } else {
+      this.text(speed, 16, 34, 6, accent);
+      this.text('KM/H', 142, 64, 1, muted);
+      this.rect(245, 33, 123, 46, [18, 39, 48]);
+      this.text(gear, 262, 43, 4, accent);
+      this.text(lines[1], 16, 86, 1, ink);
+      const level = Math.min(1, Math.max(0, car.powertrain === 'ev' ? car.motionSpeed / car.maxSpeed : car.engineRpm / car.transmission.redline));
+      for (let i = 0; i < 36; i++) this.rect(16 + i * 10, 99, 7, 4, i / 36 < level ? i > 29 ? amber : accent : [29, 48, 60]);
+    }
+    this.text(lines[2], 16, 118, 2, ink);
     this.text(lines[3], 16, 138, 2, ink);
     this.text(lines[4], 16, 162, 2, muted);
     this.text(lines[5], 16, 182, 1, muted);
@@ -79,16 +69,20 @@ export class VehicleDisplay {
     this.text(lines[6], 16, 202, 2, alert ? amber : accent);
     this.root.userData.display = signature; this.texture.needsUpdate = true;
   }
-  private rect(x: number, y: number, w: number, h: number, color: number[]): void {
-    for (let row = Math.max(0, y); row < Math.min(height, y + h); row++) for (let col = Math.max(0, x); col < Math.min(width, x + w); col++) {
-      const index = ((height - 1 - row) * width + col) * 4;
-      this.pixels[index] = color[0]; this.pixels[index + 1] = color[1]; this.pixels[index + 2] = color[2]; this.pixels[index + 3] = 255;
+  private dial(x: number, y: number, radius: number, value: number, max: number, label: string, color: number[]): void {
+    const from = Math.PI * 0.8, sweep = Math.PI * 1.4;
+    this.ring(x, y, radius, [54, 69, 78], 3, from, from + sweep);
+    this.ring(x, y, radius - 5, color, 1, from, from + sweep);
+    for (let i = 0; i <= 20; i++) {
+      const angle = from + sweep * i / 20, inner = radius - (i % 5 ? 7 : 12);
+      this.line(x + Math.cos(angle) * inner, y + Math.sin(angle) * inner, x + Math.cos(angle) * radius, y + Math.sin(angle) * radius, ink, i % 5 ? 1 : 2);
     }
+    this.text('0', x - 48, y + 30, 1, muted);
+    const top = label === 'RPM' ? (max / 1000).toFixed(0) + 'K' : String(max);
+    this.text(top, x + 28, y + 30, 1, muted);
+    this.text(label, x - label.length * 3, y - 20, 1, muted);
+    const angle = from + sweep * Math.min(1, Math.max(0, value / Math.max(1, max)));
+    this.line(x, y, x + Math.cos(angle) * (radius - 14), y + Math.sin(angle) * (radius - 14), [255, 107, 79], 3);
+    this.ring(x, y, 4, ink, 3);
   }
-  private text(value: string, x: number, y: number, scale: number, color: number[]): void {
-    [...value].forEach((letter, column) => (font[letter] ?? []).forEach((bits, row) => {
-      for (let bit = 0; bit < 5; bit++) if (bits & (1 << (4 - bit))) this.rect(x + (column * 6 + bit) * scale, y + row * scale, scale, scale, color);
-    }));
-  }
-  dispose(): void { this.texture.dispose(); this.geometry.dispose(); this.material.dispose(); }
 }

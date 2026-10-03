@@ -35,7 +35,7 @@ test('animates doors and luggage, blocks departure until shut, and freezes fitti
   await page.goto('/?seed=FLEET-FLAT'); await choose(page, 'coach'); await page.locator('#drive-toggle').click(); await ignite(page);
   await page.keyboard.press('KeyJ'); await expect(metric(page, 'Vehicle operations')).toHaveText('1.00 / 0.00 / 0.00');
   await page.keyboard.down('KeyW'); await page.waitForTimeout(500); await page.keyboard.up('KeyW'); await expect(page.locator('#vehicle-speed')).toHaveText('0');
-  await page.keyboard.press('KeyY'); await page.keyboard.press('KeyM');
+  await page.keyboard.press('KeyY'); await page.keyboard.press('Shift+KeyR');
   await expect(page.locator('#vehicle-status')).toHaveText('已暂停');
   await page.waitForTimeout(200); // Let throttled telemetry catch up with the last pre-dialog frame.
   const frozen = await metric(page, 'Vehicle operations').textContent(); await page.waitForTimeout(400);

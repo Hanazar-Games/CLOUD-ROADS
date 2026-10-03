@@ -18,6 +18,8 @@ import { VehicleOperations, operationKeys, type VehicleOperation } from './Vehic
 import type { ParkedEntry } from '../service/ServiceParking';
 import { Autopilot, pilotModes, type AutopilotSettings } from './Autopilot';
 import { transmissionTuning, type TransmissionTuning } from './Transmission';
+import { buildNavigation } from '../road/NavigationMap';
+import type { InstrumentStyle } from './VehicleDisplay';
 
 const driftTuning = [
   ['road-grip', 'gripScale', 1, 100, '%'], ['handbrake-strength', 'handbrakeStrength', 1, 100, '%'],
@@ -46,6 +48,10 @@ export class DrivingSystem {
   private exitBlockedTime = 0;
   private hudTime = 0;
   private systemsDt = 0;
+  private navigationTime = 0;
+  private instrumentStyle: InstrumentStyle = 'digital';
+
+  get displayStatus(): string { return `${this.car.kind} / ${this.mesh.displayStatus}`; }
 
   constructor(private readonly scene: Scene, private readonly camera: PerspectiveCamera, private readonly input: InputManager, private readonly getWorld: () => World,
     private readonly getWalker: () => { x: number; y: number; z: number } | undefined = () => undefined) {
@@ -85,6 +91,7 @@ export class DrivingSystem {
     element('hud-style').addEventListener('change', () => {
       const style = element<HTMLSelectElement>('hud-style').value;
       if (['digital', 'dial', 'minimal'].includes(style)) element('drive-hud').dataset.style = style;
+      this.instrumentStyle = style === 'dial' ? 'dial' : 'digital';
     }, options);
     this.systems.configure(this.car.profile.shape);
     element('vehicle-energy').addEventListener('change', () => {
@@ -622,6 +629,16 @@ export class DrivingSystem {
   }
 
   sync(night: number, rain: number, dt = 0, fog = false): void {
+    this.mesh.instrumentStyle = this.instrumentStyle;
+    this.navigationTime += dt;
+    if (this.active && this.cameraRig.view === 'cockpit' && this.navigationTime >= 0.2) {
+      this.navigationTime = 0;
+      const world = this.getWorld(), car = this.car;
+      const current = world.roadReady && !world.searching ? world.road.nearest(car.x, car.z) : undefined;
+      this.mesh.navigation?.update(buildNavigation({ samples: world.road.samples, bridges: world.bridges, tunnels: world.tunnels,
+        services: world.services, passes: world.passes, junctions: world.network.junctions.filter(j => j.route === world.network.active.id) },
+      current, car, world.options.roadWidth));
+    }
     this.systems.updateFog(fog);
     element<HTMLInputElement>('vehicle-fog-lights').checked = this.systems.fogLights;
     this.car.roofOpen = this.systems.roofOpen;

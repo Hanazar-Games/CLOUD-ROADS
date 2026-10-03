@@ -43,7 +43,7 @@ test('rebinds operations, handles conflicts and shifted keys, persists and reset
   await closeSettings(page); await page.keyboard.press('Shift+KeyZ');
   await expect(page.locator('[data-metric="Ignition"]')).toHaveText('off');
   await page.keyboard.press('Backquote'); await expect(page.locator('[data-metric="Ignition"]')).toHaveText('off');
-  await page.keyboard.press('KeyM'); await expect(page.locator('#shortcut-list')).toContainText('F9');
+  await page.keyboard.press('Shift+KeyR'); await expect(page.locator('#shortcut-list')).toContainText('F9');
   await page.keyboard.press('Escape'); await page.reload();
   await (await control(page, page.locator('[data-binding="Autopilot"]'))).scrollIntoViewIfNeeded();
   await expect(page.locator('[data-binding="Autopilot"]')).toHaveText('F9');

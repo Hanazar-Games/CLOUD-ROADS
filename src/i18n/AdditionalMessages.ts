@@ -5,6 +5,9 @@ Infinite mountain world; drag to look, WASD to fly	무한 산악 월드; 드래�
 Start driving	운전 시작	Empezar a conducir
 Start walking	걷기 시작	Empezar a caminar
 Roadbook	로드북	Libro de ruta
+Cabin navigation · Roadbook	차내 내비게이션 · 로드북	Navegación a bordo · Libro de ruta
+Instrument and HUD style	계기판 및 HUD 스타일	Estilo de instrumentos y HUD
+Also changes the instruments behind the wheel; minimal HUD uses digital cabin instruments. The center map shows the route. {Roadbook} opens the full roadbook.	운전대 앞 계기판도 바뀝니다. 미니멀 HUD는 디지털 계기판을 사용합니다. 중앙 지도에 경로가 표시되며 {Roadbook} 키로 전체 로드북을 엽니다.	También cambia los instrumentos tras el volante; el HUD mínimo usa instrumentos digitales. El mapa central muestra la ruta. {Roadbook} abre el libro completo.
 Menu	메뉴	Menú
 Settings	설정	Ajustes
 Release notes	업데이트 소식	Notas de versión

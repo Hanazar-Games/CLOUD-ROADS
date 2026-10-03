@@ -36,8 +36,9 @@
           <select id="vehicle-kind" aria-describedby="vehicle-summary"></select>
           <p id="vehicle-summary" class="panel-help" aria-live="polite"></p>
           <button id="vehicle-panel-settings" type="button" aria-haspopup="dialog">查看当前载具面板</button>
-          <label for="hud-style">速度表样式</label>
+          <label for="hud-style">仪表与速度表样式</label>
           <select id="hud-style"><option value="digital">科技数字 · 完整信息</option><option value="dial">经典指针 · 环形仪表</option><option value="minimal">极简 · 专注道路</option></select>
+          <p class="panel-help">同步切换方向盘前的车内仪表；极简模式使用数字车内仪表。中控地图持续显示路线，{Roadbook} 打开完整路书。</p>
           <p class="panel-help">所有车型均可使用；速度表下方可打开当前载具面板，查看参数、设备及座位。</p>
           <label for="vehicle-paint">车身配色</label>
           <select id="vehicle-paint"><option value="default">车型原色</option><option value="d8dedb">冰川白</option><option value="29485e">深海蓝</option><option value="377d78">山谷青</option><option value="a73d32">赤焰红</option><option value="dca632">工程黄</option><option value="353d43">石墨灰</option><option value="7d658e">暮光紫</option><option value="9b7453">岩棕</option><option value="83b3bb">湖蓝</option><option value="d4bc97">沙金</option></select>
@@ -597,7 +598,7 @@
         <div class="settings-footer"><span id="settings-context">参数即时生效 · 下次保留请保存预设</span><button id="settings-presets-shortcut" type="button">保存 / 预设 <span aria-hidden="true">→</span></button></div>
       </dialog>
       <dialog id="roadbook-dialog" class="cabin-dialog" aria-labelledby="roadbook-title" aria-describedby="roadbook-status">
-        <header><div><p class="eyebrow">JOURNEY / ROADBOOK</p><h2 id="roadbook-title">旅途路书</h2></div><button type="button" data-close autofocus>返回旅程 · Esc</button></header>
+        <header><div><p class="eyebrow" translate="no">CLOUD NAV / ROUTE COMPUTER</p><h2 id="roadbook-title">车载导航 · 路书</h2></div><button type="button" data-close autofocus>返回旅程 · Esc</button></header>
         <p id="roadbook-context"></p>
         <div class="roadbook-toolbar"><div class="actions" role="group" aria-label="路书预览距离"><button type="button" data-roadbook-range="1000" aria-pressed="false">1 km</button><button type="button" data-roadbook-range="3000" aria-pressed="true">3 km</button><button type="button" data-roadbook-range="5000" aria-pressed="false">5 km</button></div><button id="roadbook-reverse" type="button" aria-pressed="false">反向查看</button></div>
         <div class="roadbook-scroll">

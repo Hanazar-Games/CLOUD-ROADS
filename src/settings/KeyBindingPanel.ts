@@ -3,7 +3,7 @@ import { sourceText } from '../i18n/DomLocalizer';
 import type { InputManager } from '../input/InputManager';
 import { bindingActions, keyLabel } from '../input/KeyBindings';
 
-const storageKey = 'cloud-roads.key-bindings.v6';
+const storageKey = 'cloud-roads.key-bindings.v7';
 export class KeyBindingPanel {
   private readonly events = new AbortController();
   private pending?: string;

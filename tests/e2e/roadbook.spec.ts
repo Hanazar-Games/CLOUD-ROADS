@@ -25,7 +25,7 @@ test('previews actual road geometry, changes range and reverses the elevation pr
   await expect(page.locator('#roadbook-profile-summary')).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: info.outputPath('roadbook-desktop.png') });
   await page.keyboard.press('Escape'); await expect(page.locator('#world')).toBeFocused();
-  await page.keyboard.press('Shift+KeyR'); await expect(page.locator('#roadbook-dialog')).toBeVisible();
+  await page.keyboard.press('KeyM'); await expect(page.locator('#roadbook-dialog')).toBeVisible();
   await expect(page.locator('#roadbook-dialog [data-close]')).toBeFocused();
   expect(errors).toEqual([]);
 });
@@ -35,7 +35,7 @@ test('freezes a moving vehicle and clears held throttle when the roadbook opens'
   await page.locator('#drive-toggle').click(); await ignite(page);
   await page.keyboard.down('KeyW');
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent()), { timeout: 20000 }).toBeGreaterThan(12);
-  await page.keyboard.press('Shift+KeyR'); await page.keyboard.up('KeyW');
+  await page.keyboard.press('KeyM'); await page.keyboard.up('KeyW');
   await expect(page.locator('#roadbook-content')).toBeVisible();
   await page.waitForTimeout(300);
   const trip = await page.locator('#vehicle-trip').textContent(), speed = await page.locator('#vehicle-speed').textContent();
@@ -43,7 +43,7 @@ test('freezes a moving vehicle and clears held throttle when the roadbook opens'
   await expect(page.locator('#vehicle-trip')).toHaveText(trip!); await expect(page.locator('#vehicle-speed')).toHaveText(speed!);
   await page.keyboard.press('Escape'); await expect(page.locator('#world')).toBeFocused();
   await expect.poll(async () => Number(await page.locator('#vehicle-speed').textContent()), { timeout: 10000 }).toBeLessThanOrEqual(Number(speed));
-  await page.keyboard.press('Slash'); await page.keyboard.press('Shift+KeyR'); await page.keyboard.press('Escape');
+  await page.keyboard.press('Slash'); await page.keyboard.press('KeyM'); await page.keyboard.press('Escape');
   await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
 });
 

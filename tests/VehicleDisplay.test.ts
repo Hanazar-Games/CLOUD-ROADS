@@ -5,6 +5,20 @@ import { VehicleSystems } from '../src/vehicle/VehicleSystems';
 import { VehicleOperations } from '../src/vehicle/VehicleOperations';
 import { CraneSystems } from '../src/vehicle/CraneSystems';
 
+it('switches between real dial and digital artwork immediately while retaining warnings', () => {
+  const car = new VehiclePhysics(), systems = new VehicleSystems(), screen = new VehicleDisplay();
+  screen.update(car, systems, 0);
+  const digital = screen.texture.image.data!.slice(), version = screen.texture.version;
+  screen.style = 'dial'; screen.update(car, systems, 0);
+  expect(screen.root.userData.style).toBe('dial');
+  expect(screen.texture.version).toBe(version + 1);
+  expect(screen.texture.image.data).not.toEqual(digital);
+  expect(screen.root.userData.display).toContain('ENGINE OFF');
+  screen.style = 'digital'; screen.update(car, systems, 0);
+  expect(screen.texture.image.data).toEqual(digital);
+  screen.dispose();
+});
+
 it('keeps safety alerts visible alongside crane telemetry and equipment status', () => {
   const car = new VehiclePhysics('crane'), systems = new VehicleSystems(), screen = new VehicleDisplay();
   const operations = new VehicleOperations(car.profile), crane = new CraneSystems();
