@@ -31,6 +31,26 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it('clears transient effects on SFX mute and does not replay events collected while muted', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  try {
+    const nodes = audio as unknown as { shiftGain: ReturnType<typeof gain>; clickGain: ReturnType<typeof gain>; stepGain: ReturnType<typeof gain> };
+    audio.update(0.1, { ...idle, driving: true, shifts: 1, signal: true });
+    expect(nodes.shiftGain.gain.linearRampToValueAtTime).toHaveBeenCalled();
+    audio.sfxVolume = 0;
+    audio.update(0.1, { ...idle, driving: true, shifts: 2, walkingSpeed: 20 });
+    for (const channel of [nodes.shiftGain, nodes.clickGain, nodes.stepGain]) {
+      expect(channel.gain.value).toBe(0);
+      channel.gain.linearRampToValueAtTime.mockClear();
+    }
+    audio.update(0.1, { ...idle, driving: true, shifts: 3, signal: true, walkingSpeed: 20 });
+    audio.sfxVolume = 1; audio.update(0.1, { ...idle, driving: true, shifts: 3, signal: true });
+    for (const channel of [nodes.shiftGain, nodes.clickGain, nodes.stepGain]) expect(channel.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    expect(audio.musicPlaying).toBe(true);
+  } finally { audio.dispose(); }
+});
+
 it.each(['engine', 'shift', 'horn'] as const)('ends a %s preview on audio time even when rendering barely advances', async kind => {
   const context = new AudioContextStub(); context.currentTime = 10;
   vi.stubGlobal('AudioContext', function () { return context; });

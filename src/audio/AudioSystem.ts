@@ -259,6 +259,10 @@ export class AudioSystem {
         }
       }
     }
+    if (this.sfxVolume <= 0) for (const channel of [this.shiftGain, this.pneumaticGain, this.clickGain, this.stepGain]) {
+      if (this.targets.get(channel!.gain) === 0) continue;
+      channel!.gain.cancelScheduledValues(now); channel!.gain.setValueAtTime(0, now); this.targets.set(channel!.gain, 0);
+    }
     for (const [parameter, value] of [[this.sfx!.gain, this.sfxVolume], [this.music!.gain, this.musicVolume], [this.master!.gain, audible ? this.masterVolume * 0.7 : 0]] as const) {
       if (this.targets.get(parameter) === value) continue;
       this.targets.set(parameter, value);
@@ -490,6 +494,7 @@ export class AudioSystem {
   }
 
   private pulse(channel: GainNode, level: number, decay: number): void {
+    if (this.sfxVolume <= 0) return;
     const now = this.context!.currentTime;
     this.targets.delete(channel.gain);
     const current = channel.gain.value;

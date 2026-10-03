@@ -65,15 +65,26 @@ export class InterchangeMesh {
             for (const s of [-1, 1]) this.edge(this.markings, along(0.7, s * 0.7), along(2), 0.18, 0.02, 0.045);
           }
           if (i % 8 === 0 && !corridor.crossesBelow({ ...plan.center, position: a, routeId: `${plan.id}:ramp`, distance: i * 6 }, 9)) {
-            const floor = terrain.sample(a.x, a.z), height = a.y - 1.45 - floor;
+            const ground = terrain.sample(a.x, a.z), height = a.y - 1.45 - ground;
             if (height > 2) {
-              const width = Math.min(6, 1.5 + height * 0.02);
-              this.edge(this.decks, { ...a, y: floor + height / 2 }, { ...a, x: a.x + 0.01, y: floor + height / 2, z: a.z + 2 }, width, height, 0);
-              this.edge(this.decks, { ...a, y: floor + 0.3 }, { ...a, x: a.x + 0.01, y: floor + 0.3, z: a.z + 3.5 }, width + 2, 0.6, 0);
-              this.edge(this.decks, { ...side(a, -3.2), y: a.y - 1.95 }, { ...side(a, 3.2), y: a.y - 1.95 }, 1.8, 0.7, 0);
-              for (const offset of detail ? [-2.3, 2.3] : []) {
+              const width = Math.min(6, 1.5 + height * 0.02), tx = (b.x - a.x) / length, tz = (b.z - a.z) / length;
+              const point = (across: number, along: number, y: number) => ({ x: a.x + nx * across + tx * along, y, z: a.z + nz * across + tz * along });
+              let floor = ground;
+              for (const across of [-(width + 2) / 2, (width + 2) / 2]) for (const along of [-2, 2]) {
+                const p = point(across, along, 0); floor = Math.min(floor, terrain.sample(p.x, p.z));
+              }
+              floor -= 0.6;
+              const top = a.y - 2.3 + Math.abs(a.slopeX * tx + a.slopeZ * tz)
+                + Math.abs(a.slopeX * nx + a.slopeZ * nz) * width / 2 + 0.03;
+              const base = floor + 0.6, cap = Math.min(3.2, (a.halfWidth ?? 3.7) - 0.45);
+              this.edge(this.decks, point(0, -1, (base + top) / 2), point(0, 1, (base + top) / 2), width, top - base, 0);
+              this.edge(this.decks, point(0, -2, floor + 0.45), point(0, 2, floor + 0.45), width + 2, 0.9, 0);
+              this.edge(this.decks, side(a, -cap), side(a, cap), 1.8, 0.7, -1.95);
+              for (const offset of [-Math.min(2.3, cap - 0.35), Math.min(2.3, cap - 0.35)]) {
                 const p = side(a, offset);
-                this.edge(this.rails, { ...p, y: a.y - 1.5 }, { ...p, x: p.x + (b.x - a.x) / length * 0.65, z: p.z + (b.z - a.z) / length * 0.65, y: a.y - 1.5 }, 0.7, 0.2, 0);
+                const rise = (a.slopeX * tx + a.slopeZ * tz) * 0.325;
+                this.edge(this.rails, { x: p.x - tx * 0.325, y: p.y - rise, z: p.z - tz * 0.325 },
+                  { x: p.x + tx * 0.325, y: p.y + rise, z: p.z + tz * 0.325 }, 0.7, 0.2, -1.55);
               }
             }
           }

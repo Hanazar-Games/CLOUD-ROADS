@@ -35,6 +35,7 @@ import type { CabinLayout } from '../vehicle/CabinLayout';
 import { ShortcutDock } from '../ui/ShortcutDock';
 import { TrafficControlPanel } from '../settings/TrafficControlPanel';
 import { crossroadsEnabled } from '../road/JunctionSchedule';
+import { sourceText } from '../i18n/DomLocalizer';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上', between: '云间空隙' };
@@ -672,13 +673,15 @@ export class Game {
       this.audioPreviewPending = false;
       element('audio-preview-status').textContent = this.audio.error || '试听已结束 · 可调整混音参数后再次试听。';
     }
-    element('audio-toggle').setAttribute('aria-pressed', String(this.audio.enabled));
-    element('audio-toggle').textContent = this.audio.error ? '重试开启声音' : this.audio.enabled ? '静音' : '开启声音';
-    element('audio-status').textContent = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.masterVolume <= 0 ? '总音量为零'
+    const button = element('audio-toggle'), label = this.audio.error ? '重试开启声音' : this.audio.enabled ? '静音' : '开启声音';
+    if (button.getAttribute('aria-pressed') !== String(this.audio.enabled)) button.setAttribute('aria-pressed', String(this.audio.enabled));
+    if (sourceText(button) !== label) button.textContent = label;
+    const status = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.masterVolume <= 0 ? '总音量为零'
       : this.audio.testing ? '正在测试输出声道' : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音'
-        : this.paused ? '游戏已暂停 · 解除暂停后恢复声音' : document.hidden || !this.windowFocused || !document.hasFocus() ? '窗口未激活 · 返回游戏后恢复声音'
+        : this.paused || this.releaseNotes.open || this.cabinDialogs.open ? '游戏已暂停 · 解除暂停后恢复声音' : document.hidden || !this.windowFocused || !document.hasFocus() ? '窗口未激活 · 返回游戏后恢复声音'
           : this.audio.awaitingActivation ? '声音设置已保留 · 点击页面或按键后开启声音'
             : this.audio.state === 'running' ? '声音已开启' : this.audio.state === 'suspended' ? '声音已暂停或等待浏览器授权 · 可点击强制开启声音' : `音频状态：${this.audio.state}`);
+    if (sourceText(element('audio-status')) !== status) element('audio-status').textContent = status;
   }
 
   private refreshAudioFocus(): void {
