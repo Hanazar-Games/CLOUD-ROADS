@@ -36,6 +36,28 @@ it('keeps straight-line braking and parked handbrakes free of artificial sideway
   expect(car.motionSpeed).toBe(0); expect(car.yawRate).toBe(0); expect(car.heading).toBe(0);
 });
 
+it('requires a deliberate sustained handbrake above the configured drift speed', () => {
+  const tap = create(), held = create(), slow = create();
+  slow.speed = 4;
+  run(tap, 0.12, { ...coast, steer: 0.8, handbrake: true });
+  expect(tap.rearLock).toBe(0); expect(tap.speed).toBeLessThan(20);
+  run(slow, 0.8, { ...coast, steer: 0.8, handbrake: true });
+  expect(slow.rearLock).toBe(0);
+  run(held, 0.7, { ...coast, steer: 0.8, handbrake: true });
+  expect(held.rearLock).toBeGreaterThan(0.9);
+  tap.driftDelay = 0; tap.driftMinSpeed = 0;
+  run(tap, 0.25, { ...coast, handbrake: true }); expect(tap.rearLock).toBeGreaterThan(0);
+  tap.reset(0, 0, 0, flat); expect(tap.rearLock).toBe(0);
+});
+
+it('reduces abrupt high-speed steering demand with stability assistance and preserves low-speed lock', () => {
+  const stable = create(), manual = create(); manual.stabilityAssist = 0; stable.stabilityAssist = 1;
+  for (const car of [stable, manual]) { car.speed = 35; car.steeringAssist = false; run(car, 1, { ...coast, steer: 1 }); }
+  expect(Math.abs(stable.slipAngle)).toBeLessThan(Math.abs(manual.slipAngle));
+  for (const car of [stable, manual]) { car.reset(0, 0, 0, flat); run(car, 1, { ...coast, steer: 1 }); }
+  expect(stable.steering).toBeCloseTo(manual.steering, 8);
+});
+
 it('recovers grip continuously after release and countersteering arrests rotation', () => {
   const car = create(); run(car, 0.55, { ...coast, steer: 0.8, handbrake: true });
   const slip = Math.abs(car.slipAngle), yaw = car.yawRate, speed = car.motionSpeed;
@@ -76,7 +98,7 @@ it('uses rear contact for the handbrake and stops rear wheel rotation when locke
   const car = create(), rearIce = (_x: number, z: number) => ({ height: 0, grip: z > 0 ? 0 : 1 });
   car.update(1 / 120, { ...coast, handbrake: true }, rearIce);
   expect(car.speed).toBe(20);
-  run(car, 0.3, { ...coast, handbrake: true }); const wheel = car.rearWheelAngle, front = car.wheelAngle;
+  run(car, 0.6, { ...coast, handbrake: true }); const wheel = car.rearWheelAngle, front = car.wheelAngle;
   run(car, 0.1, { ...coast, handbrake: true });
   expect(car.rearWheelAngle).toBe(wheel); expect(car.wheelAngle).not.toBe(front);
   run(car, 0.5, coast); expect(car.rearWheelAngle).not.toBe(wheel);

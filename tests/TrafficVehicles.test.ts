@@ -4,6 +4,28 @@ import { TrafficVehicles } from '../src/traffic/TrafficVehicles';
 import { MAX_TRAFFIC, TrafficSystem } from '../src/traffic/TrafficSystem';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
 import { VehiclePhysics } from '../src/vehicle/VehiclePhysics';
+import { ModelLoadQueue } from '../src/render/ModelLoadQueue';
+
+const loadModels = (renderer: TrafficVehicles, queue: ModelLoadQueue) => {
+  for (let frame = 0; frame < 100; frame++) {
+    renderer.update({ x: 0, z: 0 }, 0); queue.pump();
+    if (!queue.pending) { renderer.update({ x: 0, z: 0 }, 0); return; }
+  }
+  throw new Error('Models did not finish loading');
+};
+
+it('preloads detail without displaying it until the vehicle enters the detail distance', () => {
+  const scene = new Scene(), traffic = new TrafficSystem('prefetch', DEFAULT_OPTIONS), queue = new ModelLoadQueue(() => 0), renderer = new TrafficVehicles(scene, traffic, queue);
+  const car = new VehiclePhysics('panoramicBus'); car.reset(350, 0, 0, () => ({ height: 0, grip: 1 }));
+  traffic.entries.push({ id: 'prefetch', car, routeId: 'root', distance: 0, direction: 1, cruise: 15, lane: 0, offset: 0, signal: 0, cooldown: 0 });
+  loadModels(renderer, queue);
+  const near = scene.getObjectByName('traffic-panoramicBus:near-0') as InstancedMesh;
+  const far = scene.getObjectByName('traffic-panoramicBus:far-0') as InstancedMesh;
+  expect(near.count).toBe(0); expect(far.count).toBe(1);
+  renderer.update({ x: 0, z: 0 }, 0, { x: 200, z: 0 });
+  expect(near.count).toBe(1); expect(far.count).toBe(0); expect(queue.pending).toBe(0);
+  queue.dispose(); renderer.dispose(); expect(scene.children).toHaveLength(0);
+});
 
 it('uploads only occupied instance ranges even when a traffic batch grows or shrinks', () => {
   const scene = new Scene(), traffic = new TrafficSystem('uploads', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
@@ -24,13 +46,13 @@ it('uploads only occupied instance ranges even when a traffic batch grows or shr
 });
 
 it('animates wheel travel per vehicle without adding body draw batches', () => {
-  const scene = new Scene(), traffic = new TrafficSystem('wheels', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
+  const scene = new Scene(), traffic = new TrafficSystem('wheels', DEFAULT_OPTIONS), queue = new ModelLoadQueue(() => 0), renderer = new TrafficVehicles(scene, traffic, queue);
   for (let i = 0; i < 2; i++) {
     const car = new VehiclePhysics('sedan'); car.reset(i * 6, 0, 0, () => ({ height: 0, grip: 1 }));
     car.wheelAngle = i + 0.5; car.steering = i ? -0.2 : 0.1;
     traffic.entries.push({ id: String(i), car, routeId: 'root', distance: 0, direction: 1, cruise: 15, lane: 0, offset: 0, signal: 0, cooldown: 0 });
   }
-  renderer.update({ x: 0, z: 0 }, 0);
+  loadModels(renderer, queue);
   const bodies = scene.children.filter(o => o.name.includes(':near-')) as InstancedMesh[];
   expect(bodies).toHaveLength(1);
   const motion = bodies[0].geometry.getAttribute('trafficMotion') as InstancedBufferAttribute;
@@ -57,7 +79,7 @@ it('keeps every articulated side signal within the shared lamp budget at maximum
 });
 
 it('reduces distant traffic geometry without losing bodies or changing simulation state', () => {
-  const scene = new Scene(), traffic = new TrafficSystem('lod', DEFAULT_OPTIONS), renderer = new TrafficVehicles(scene, traffic);
+  const scene = new Scene(), traffic = new TrafficSystem('lod', DEFAULT_OPTIONS), queue = new ModelLoadQueue(() => 0), renderer = new TrafficVehicles(scene, traffic, queue);
   for (const [i, kind] of (['sedan', 'semi20', 'minibus'] as const).entries()) {
     const car = new VehiclePhysics(kind); car.reset(i * 10, 0, 0, () => ({ height: 0, grip: 1 }));
     traffic.entries.push({ id: String(i), car, routeId: 'root', distance: 0, direction: 1, cruise: 15, lane: 0, offset: 0, signal: 0, cooldown: 0 });
@@ -65,7 +87,7 @@ it('reduces distant traffic geometry without losing bodies or changing simulatio
   const bodies = () => scene.children.filter(o => /^traffic-.+:(near|far)-/.test(o.name)) as InstancedMesh[];
   const count = () => bodies().reduce((n, m) => n + m.count, 0);
   const vertices = () => bodies().reduce((n, m) => n + m.count * m.geometry.getAttribute('position').count, 0);
-  for (let i = 0; i < 3; i++) renderer.update({ x: 0, z: 0 }, 0);
+  loadModels(renderer, queue);
   expect(count()).toBe(4); const detailed = vertices(), positions = traffic.entries.map(e => [e.car.x, e.car.y, e.car.z]);
   for (let i = 0; i < 3; i++) { renderer.update({ x: 0, z: 0 }, 0, { x: 800, z: 0 }); expect(count()).toBe(4); }
   expect(vertices()).toBeLessThan(detailed * 0.05);

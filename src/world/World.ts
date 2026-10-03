@@ -9,7 +9,7 @@ import { RoadDebug } from '../road/RoadDebug';
 import type { RoadSample } from '../road/RoadSegment';
 import { RoadMesh } from '../road/RoadMesh';
 import { RoadCorridor } from '../road/RoadCorridor';
-import type { BridgeSpan } from '../bridge/BridgeDetector';
+import { BridgeDetector, type BridgeSpan } from '../bridge/BridgeDetector';
 import { BridgeMesh } from '../bridge/BridgeMesh';
 import { BiomeSystem, type BiomeSample } from '../biome/BiomeSystem';
 import { surfaceGravity, DEFAULT_OPTIONS, type WorldOptions } from './WorldOptions';
@@ -19,7 +19,7 @@ import { TunnelDetector, openTunnelAccess, type TunnelSpan } from '../tunnel/Tun
 import { TunnelMesh } from '../tunnel/TunnelMesh';
 import { RoadFurniture } from '../road/RoadFurniture';
 import { RoadsideScenery } from '../road/RoadsideScenery';
-import type { ServiceArea } from '../service/ServicePlanner';
+import { ServicePlanner, type ServiceArea } from '../service/ServicePlanner';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../service/ServiceSchedule';
 import { ServiceMesh } from '../service/ServiceMesh';
 import { padPoint, crossoverShelter } from '../service/ServiceTerrain';
@@ -30,11 +30,15 @@ import { CrossingPlanner } from '../road/CrossingPlanner';
 import { CrossingMesh } from '../road/CrossingMesh';
 import { SeasonState, type Season } from '../season/SeasonState';
 import { seasonMaterial } from '../season/SeasonMaterial';
-import { JUNCTION_INTERVAL, junctionLead, junctionsEnabled } from '../road/JunctionSchedule';
+import { INTERCHANGE_EXTENT, crossroadsEnabled, junctionInterval, junctionLead, junctionsEnabled, junctionTail } from '../road/JunctionSchedule';
+import { TrafficSignals } from '../traffic/TrafficSignals';
+import { SignalMesh } from '../road/SignalMesh';
+import { crossroadSite } from '../road/CrossroadSite';
 import { JunctionMesh } from '../road/JunctionMesh';
 import { InterchangeMesh } from '../road/InterchangeMesh';
 import { TrafficSystem } from '../traffic/TrafficSystem';
 import { TrafficVehicles } from '../traffic/TrafficVehicles';
+import { ModelLoadQueue } from '../render/ModelLoadQueue';
 import { Garage } from '../garage/Garage';
 import { GarageMesh } from '../garage/GarageMesh';
 import { placeRoadGarage } from '../garage/GarageAccess';
@@ -48,6 +52,7 @@ export interface GroundSample {
 
 export class World {
   detailLevel = 1;
+  garageCache = 4;
   detailDistance = 1;
   readonly pavementTextures = new PavementTextures();
   readonly season: SeasonState;
@@ -65,7 +70,10 @@ export class World {
   readonly serviceMesh: ServiceMesh;
   readonly parkedVehicles: ParkedVehicles;
   readonly traffic: TrafficSystem;
+  readonly signals: TrafficSignals;
+  readonly signalMesh: SignalMesh;
   readonly trafficVehicles: TrafficVehicles;
+  readonly modelLoads = new ModelLoadQueue();
   readonly garage: Garage;
   readonly garageMesh: GarageMesh;
   private readonly serviceGarages = new Map<Garage, GarageMesh>();
@@ -89,7 +97,8 @@ export class World {
   private renderTunnels: TunnelSpan[] = [];
   private renderServices: ServiceArea[] = [];
   private renderSamples: RoadSample[] = [];
-  private scout: { road: RoadSpine; kind: 'service' | 'pass' | 'junction' | 'landmark'; id: number; progress: number } | undefined;
+  private scout: { road: RoadSpine; kind: 'service' | 'pass' | 'junction' | 'landmark'; id: number; progress: number; limit?: number } | undefined;
+  junctionStatus = '';
   landmarkStatus = '';
   private readonly biomes: BiomeSystem;
   roadSample: RoadSample | undefined;
@@ -116,9 +125,11 @@ export class World {
     this.furniture = new RoadFurniture(scene, seed, options);
     this.roadside = new RoadsideScenery(scene, seed, options);
     this.serviceMesh = new ServiceMesh(scene, options, this.height, this.pavementTextures);
-    this.parkedVehicles = new ParkedVehicles(scene, seed, surfaceGravity(options.terrain));
+    this.parkedVehicles = new ParkedVehicles(scene, seed, surfaceGravity(options.terrain), this.modelLoads);
     this.traffic = new TrafficSystem(seed, options);
-    this.trafficVehicles = new TrafficVehicles(scene, this.traffic);
+    this.signals = new TrafficSignals(options); this.traffic.signals = this.signals;
+    this.signalMesh = new SignalMesh(scene);
+    this.trafficVehicles = new TrafficVehicles(scene, this.traffic, this.modelLoads);
     this.signs = new RoadSigns(scene, options);
     this.crossingMesh = new CrossingMesh(scene, seed, options);
     this.junctionMesh = new JunctionMesh(scene, options);
@@ -209,10 +220,11 @@ export class World {
       this.corridorVersion, this.origin.x, this.origin.z, nearRoute, this.chunks.vegetation.enabled && !this.season.extraterrestrial);
     this.serviceMesh.update(this.renderServices, this.corridorVersion, this.origin.x, this.origin.z, this.chunks.vegetation.enabled && !this.season.extraterrestrial, this.corridor);
     this.parkedVehicles.update(this.renderServices, this.origin, camera.position, this.garage, [...this.serviceGarages.keys()]);
-    this.garageMesh.update(this.origin, camera.position);
-    for (const mesh of this.serviceGarages.values()) mesh.update(this.origin, camera.position);
+    this.garageMesh.cacheLimit = this.garageCache; this.garageMesh.update(this.origin, camera.position);
+    for (const mesh of this.serviceGarages.values()) { mesh.cacheLimit = this.garageCache; mesh.update(this.origin, camera.position); }
     this.junctionMesh.update(this.network.junctions, this.network.routes, this.corridorVersion, this.origin.x, this.origin.z);
-    this.interchangeMesh.update(this.network.junctions.flatMap(j => j.interchange ? [j.interchange] : []), this.origin, this.corridor, this.height);
+    this.signals.sync(this.network.junctions); this.signalMesh.update(this.signals, this.origin);
+    this.interchangeMesh.update(this.network.junctions.flatMap(j => j.interchange ? [j.interchange] : []), this.origin, this.corridor, this.height, this.detailLevel);
     for (const details of [this.bridgeMesh.jointDetails, this.bridgeMesh.drainDetails, this.tunnelMesh.cabinetDetails,
       this.crossingMesh.tunnels.cabinetDetails, this.serviceMesh.chargerDetails, this.serviceMesh.picnicDetails])
       details.update({ x, y: camera.position.y, z }, this.origin.x, this.origin.z, this.detailLevel, nearRoute, this.detailDistance);
@@ -224,22 +236,24 @@ export class World {
   get searching(): boolean { return !!this.scout; }
 
   get nextJunction() {
-    return this.network.junctions.filter(j => j.route === this.network.active.id && (j.interchange ? j.distance + 820 : j.ramps.at(-1)!.sample.distance) > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
+    return this.network.junctions.filter(j => j.route === this.network.active.id && (j.interchange ? j.distance + INTERCHANGE_EXTENT : j.ramps.at(-1)!.sample.distance) > (this.roadSample?.distance ?? 0) - 200).sort((a, b) => a.distance - b.distance)[0];
   }
 
   inspectJunction(camera: PerspectiveCamera): { heading: number; pitch: number } | undefined {
     if (!this.roadReady || this.scout || !junctionsEnabled(this.options)) return undefined;
+    this.junctionStatus = '';
     const junction = this.nextJunction;
     if (!junction) {
-      const id = Math.max(1, Math.ceil(((this.roadSample?.distance ?? 0) + 200) / JUNCTION_INTERVAL));
-      this.scout = { road: this.road.fork(), kind: 'junction', id, progress: 0 };
+      const id = Math.max(1, Math.ceil(((this.roadSample?.distance ?? 0) + 200) / junctionInterval(this.options)));
+      this.scout = { road: this.road.fork(), kind: 'junction', id, progress: 0,
+        limit: crossroadsEnabled(this.options) ? id + Math.max(3, Math.ceil(100000 / junctionInterval(this.options))) : undefined };
       return undefined;
     }
     if (junction.interchange) {
       const p = junction.sample.position, heading = junction.sample.heading + Math.PI / 4;
-      const x = p.x - Math.sin(heading) * 1250, z = p.z + Math.cos(heading) * 1250, y = Math.max(p.y + 1250, this.height.sample(x, z) + 120);
+      const x = p.x - Math.sin(heading) * 1400, z = p.z + Math.cos(heading) * 1400, y = Math.max(p.y + 1000, this.height.sample(x, z) + 120);
       camera.position.set(x - this.origin.x, y, z - this.origin.z);
-      return { heading, pitch: -Math.atan2(y - p.y, 1250) };
+      return { heading, pitch: -Math.atan2(y - p.y, 1400) };
     }
     const segment = this.road.segments.find(s => s.start.distance <= junction.distance - 100 && s.end.distance >= junction.distance - 100);
     if (!segment) return undefined;
@@ -256,11 +270,13 @@ export class World {
     this.renderRoutes = []; this.renderSamples = []; this.renderBridges = []; this.renderTunnels = []; this.renderServices = [];
     const corridors: RoadCorridor[] = [];
     let remaining = 256;
+    const signalNearby = this.network.junctions.some(j => j.kind === 'crossroads' && Math.hypot(j.sample.position.x - x, j.sample.position.z - z) < 1000);
     for (const [i, route] of routes.entries()) {
       if (!remaining) break;
       const nearest = route.road.nearest(x, z)!, all = route.road.segments;
       const at = Math.max(0, all.findIndex(s => s.end.distance >= nearest.distance));
-      const count = Math.min(remaining, i === 0 ? 192 : 64), first = Math.max(0, Math.min(all.length - count, at - Math.floor(count / 3)));
+      const budget = signalNearby ? i === 0 ? 128 : Math.min(64, Math.floor(remaining / (routes.length - i))) : i === 0 ? 192 : 64;
+      const count = Math.min(remaining, budget), first = Math.max(0, Math.min(all.length - count, at - Math.floor(count / 3)));
       const segments = all.slice(first, first + count);
       if (!segments.length) continue;
       const min = segments[0].start.distance, max = segments.at(-1)!.end.distance;
@@ -286,7 +302,7 @@ export class World {
     for (const [garage, mesh] of this.serviceGarages) if (!garages.includes(garage)) { mesh.dispose(); this.serviceGarages.delete(garage); }
     for (const garage of garages) if (!this.serviceGarages.has(garage)) this.serviceGarages.set(garage, new GarageMesh(this.scene, garage));
     this.garages = [this.garage, ...garages];
-    const interchanges = this.network.junctions.filter(j => j.interchange).map(j => ({ id: -1, sample: j.sample, start: j.distance - 600, end: j.distance + 600, ground: j.interchange!.ground }));
+    const interchanges = this.network.junctions.filter(j => j.interchange).map(j => ({ id: -1, sample: j.sample, start: j.distance - INTERCHANGE_EXTENT, end: j.distance + INTERCHANGE_EXTENT, ground: j.interchange!.ground }));
     const garageAccess = this.garages.map(garage => garage === this.garage && this.garageEntrance ? this.garageEntrance
       : { id: -3, sample: this.road.samples[0], start: -Infinity, end: -Infinity, ground: garage.ground });
     this.connections = [...interchanges, ...garageAccess];
@@ -337,7 +353,7 @@ export class World {
   requestServiceView(): void {
     if (this.scout || !this.roadReady) return;
     let id = Math.max(1, Math.floor((this.roadSample?.distance ?? 0) / 15000));
-    while (serviceTarget(this.network.active.seed, id) < (this.roadSample?.distance ?? 0) + 1000) id++;
+    while (serviceTarget(this.network.active.seed, id, this.options) < (this.roadSample?.distance ?? 0) + 1000) id++;
     this.scout = { road: this.road.fork(), kind: 'service', id, progress: 0 };
   }
 
@@ -361,14 +377,24 @@ export class World {
       return;
     }
     if (scout.kind === 'junction') {
-      const target = scout.id * JUNCTION_INTERVAL;
-      const ready = scout.road.advanceToDistance(target + 1400);
-      scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / (target + 1400));
+      if (scout.limit !== undefined && scout.id >= scout.limit) {
+        this.scout = undefined; this.junctionStatus = '未找到适合的信号路口，请降低山体密度或选择较平缓地形。'; return;
+      }
+      const target = scout.id * junctionInterval(this.options);
+      const end = target + junctionTail(this.options) + 200;
+      const ready = scout.road.advanceToDistance(end);
+      scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / end);
       if (!ready) return;
       const sample = scout.road.segments.find(s => s.start.distance <= target - 100 && s.end.distance >= target - 100)!.atDistance(target - 100);
       if (sample.structure?.landmark) { scout.id++; return; }
-      const tunnels = new TunnelDetector(this.height, this.options).detect(scout.road.samples, []);
-      if (tunnels.some(span => span.start.distance < target + 1200 && span.end.distance > target - junctionLead(this.options))) { scout.id++; return; }
+      const bridges = crossroadsEnabled(this.options) ? new BridgeDetector(this.height, this.options).detect(scout.road.samples) : [];
+      const tunnels = new TunnelDetector(this.height, this.options).detect(scout.road.samples, bridges);
+      if (crossroadsEnabled(this.options)) {
+        const center = scout.road.segments.find(s => s.start.distance <= target && s.end.distance >= target)!.atDistance(target);
+        const services = new ServicePlanner(this.network.active.seed, this.height, this.options).detect(scout.road.samples, tunnels);
+        if (!crossroadSite(center, this.height, this.options, { bridges, tunnels, services, samples: scout.road.samples })) { scout.id++; return; }
+      }
+      if (tunnels.some(span => span.start.distance < target + junctionTail(this.options) && span.end.distance > target - junctionLead(this.options))) { scout.id++; return; }
       this.placeOnRoad(camera, sample, 6);
       this.roadReady = false;
       this.serviceView = { heading: sample.heading, pitch: -0.04 };
@@ -390,7 +416,7 @@ export class World {
       this.scout = undefined;
       return;
     }
-    const target = serviceTarget(this.network.active.seed, scout.id) + SERVICE_SEARCH_RADIUS + 4;
+    const target = serviceTarget(this.network.active.seed, scout.id, this.options) + SERVICE_SEARCH_RADIUS + 4;
     const ready = scout.road.advanceToDistance(target);
     scout.progress = Math.min(1, (scout.road.segments.at(-1)?.end.distance ?? 0) / target);
     if (!ready) return;
@@ -526,6 +552,7 @@ export class World {
   }
 
   dispose(): void {
+    this.modelLoads.dispose();
     this.garageMesh.dispose();
     for (const mesh of this.serviceGarages.values()) mesh.dispose(); this.serviceGarages.clear();
     for (const mesh of this.extraRoads.values()) mesh.dispose(); this.extraRoads.clear();
@@ -537,6 +564,7 @@ export class World {
     this.signs.dispose();
     this.crossingMesh.dispose(); this.crossingPlanner.clear();
     this.junctionMesh.dispose();
+    this.signalMesh.dispose();
     this.interchangeMesh.dispose();
   }
 }

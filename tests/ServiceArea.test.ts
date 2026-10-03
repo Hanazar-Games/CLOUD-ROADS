@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { ServicePlanner } from '../src/service/ServicePlanner';
 import { SERVICE_SEARCH_RADIUS, serviceTarget } from '../src/service/ServiceSchedule';
+import { INTERCHANGE_EXTENT, JUNCTION_INTERVAL } from '../src/road/JunctionSchedule';
 import { RoadGenerator } from '../src/road/RoadGenerator';
 import { RoadSegment } from '../src/road/RoadSegment';
 import { RoadCorridor } from '../src/road/RoadCorridor';
@@ -10,6 +11,14 @@ import { ServiceMesh } from '../src/service/ServiceMesh';
 import { RoadSpine } from '../src/road/RoadSpine';
 import { HeightFunction } from '../src/terrain/HeightFunction';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
+
+it('reserves the full multi-level interchange and its merge lanes before placing highway services', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
+  for (let seed = 0; seed < 40; seed++) for (let id = 1; id < 10; id++) {
+    const distance = serviceTarget(`stack-services-${seed}`, id, options);
+    expect(Math.abs(distance - Math.round(distance / JUNCTION_INTERVAL) * JUNCTION_INTERVAL)).toBeGreaterThanOrEqual(INTERCHANGE_EXTENT + 1400);
+  }
+});
 import { padPoint } from '../src/service/ServiceTerrain';
 import { RoadSigns } from '../src/road/RoadSigns';
 import { BridgeDetector } from '../src/bridge/BridgeDetector';

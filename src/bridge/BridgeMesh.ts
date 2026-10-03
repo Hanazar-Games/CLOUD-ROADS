@@ -203,10 +203,13 @@ export class BridgeMesh {
   }
 
   private between(a: RoadSample, b: RoadSample, t: number): RoadSample {
+    const heading = a.heading + (b.heading - a.heading) * t, grade = a.grade + (b.grade - a.grade) * t;
+    const speed = Math.hypot(1, grade);
     return { ...a,
       position: { x: a.position.x + (b.position.x - a.position.x) * t,
         y: a.position.y + (b.position.y - a.position.y) * t, z: a.position.z + (b.position.z - a.position.z) * t },
-      heading: a.heading + (b.heading - a.heading) * t, grade: a.grade + (b.grade - a.grade) * t,
+      heading, grade, tangent: { x: Math.sin(heading) / speed, y: grade / speed, z: -Math.cos(heading) / speed },
+      curvature: a.curvature + (b.curvature - a.curvature) * t,
       bank: a.bank + (b.bank - a.bank) * t, distance: a.distance + (b.distance - a.distance) * t,
     };
   }

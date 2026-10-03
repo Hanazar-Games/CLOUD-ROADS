@@ -65,7 +65,7 @@ it('shares wet-road grip between braking and turning and includes trailer tires'
 
 it('provides five suspension levels and distinct cars, trucks, buses, articulated rigs and a motorcycle', () => {
   expect(suspensionLevels).toEqual([1, 2, 3, 4, 5]);
-  expect(Object.keys(vehicleProfiles)).toHaveLength(39);
+  expect(Object.keys(vehicleProfiles)).toHaveLength(49);
   for (const [kind, length] of [['truck5', 5], ['truck8', 8], ['semi15', 15], ['semi20', 20]] as const) expect(vehicleProfiles[kind].length).toBe(length);
   expect(vehicleProfiles.motorcycle.wheels).toHaveLength(2);
   expect(vehicleProfiles.semi20.trailers[0]!.wheelbase).toBeGreaterThan(vehicleProfiles.semi15.trailers[0]!.wheelbase);
@@ -131,8 +131,8 @@ it.each(['semi15', 'semi20', 'stake18', 'heavySemi'] as const)('keeps %s hitched
   }
 });
 
-it('leans a motorcycle into a turn and balances at rest', () => {
-  const car = new VehiclePhysics('motorcycle'); car.reset(0, 0, 0, flat);
+it.each(['motorcycle', 'touringMotorcycle'] as const)('leans %s into a turn and balances at rest', kind => {
+  const car = new VehiclePhysics(kind); car.reset(0, 0, 0, flat);
   drive(car, 5, 0.35);
   expect(car.heading).toBeGreaterThan(0); expect(car.roll).toBeLessThan(-0.05);
   for (let i = 0; i < 1200; i++) car.update(1 / 120, { throttle: 0, steer: 0, handbrake: true }, flat);

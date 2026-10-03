@@ -44,16 +44,21 @@ it('still renders and supports a garage vehicle after it is driven out and parke
   renderer.dispose(); expect(scene.children).toHaveLength(0);
 });
 
-it('loads all floor details on demand, releases inactive floors and keeps a bounded local light pool', () => {
+it('budgets floor construction, retains a bounded cache and keeps a stable local light pool', () => {
   const garage = new Garage('loading', { x: 0, y: 100, z: 0 }), scene = new Scene(), model = new GarageMesh(scene, garage);
   const camera = { x: 0, y: 83.7, z: 0 }, origin = { x: 0, z: 0 };
-  model.update(origin, camera); expect(model.loadedFloors).toBe(3);
+  model.update(origin, camera); expect(model.loadedFloors).toBe(1);
+  for (let i = 0; i < 2; i++) model.update(origin, camera);
+  expect(model.loadedFloors).toBe(3);
   expect(model.root.getObjectByName('garage-B1')!.children).toHaveLength(0);
-  garage.loading = 'all'; model.update(origin, camera); expect(model.loadedFloors).toBe(6);
+  garage.loading = 'all'; model.update(origin, camera); expect(model.loadedFloors).toBe(4);
+  for (let i = 0; i < 2; i++) model.update(origin, camera);
+  expect(model.loadedFloors).toBe(6);
   let disposed = 0;
-  model.root.getObjectByName('garage-B1')!.traverse(object => { if (object instanceof Mesh) object.geometry.addEventListener('dispose', () => disposed++); });
+  model.root.getObjectByName('garage-B5')!.traverse(object => { if (object instanceof Mesh) object.geometry.addEventListener('dispose', () => disposed++); });
   garage.loading = 'floor'; model.update(origin, camera);
   expect(disposed).toBeGreaterThan(0); expect(model.loadedFloors).toBe(3);
+  expect(model.cachedFloors).toBe(4);
   garage.light = 1.8; model.update(origin, camera);
   expect(scene.children.find(o => o.type === 'HemisphereLight')).toMatchObject({ intensity: 3.06, visible: true });
   expect(model.root.children.filter(o => o.type === 'PointLight' && o.visible)).toHaveLength(4);

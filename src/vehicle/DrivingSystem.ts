@@ -19,7 +19,11 @@ import type { ParkedEntry } from '../service/ServiceParking';
 import { Autopilot, pilotModes, type AutopilotSettings } from './Autopilot';
 import { transmissionTuning, type TransmissionTuning } from './Transmission';
 
-const driftTuning = [['road-grip', 'gripScale', 1], ['handbrake-strength', 'handbrakeStrength', 1], ['countersteer-assist', 'countersteerAssist', 0.6]] as const;
+const driftTuning = [
+  ['road-grip', 'gripScale', 1, 100, '%'], ['handbrake-strength', 'handbrakeStrength', 1, 100, '%'],
+  ['countersteer-assist', 'countersteerAssist', 0.6, 100, '%'], ['stability-assist', 'stabilityAssist', 0.65, 100, '%'],
+  ['drift-min-speed', 'driftMinSpeed', 30 / 3.6, 3.6, ' km/h'], ['drift-delay', 'driftDelay', 0.25, 1000, ' ms'],
+] as const;
 
 export class DrivingSystem {
   car = new VehiclePhysics();
@@ -168,8 +172,8 @@ export class DrivingSystem {
       this.describeVehicle();
     }, options);
     element('vehicle-paint').addEventListener('change', () => this.applyPaint(), options);
-    for (const [id, field] of driftTuning) element(id).addEventListener('input', () => {
-      this.car[field] = Number(element<HTMLInputElement>(id).value) / 100; this.describeTuning();
+    for (const [id, field, , scale] of driftTuning) element(id).addEventListener('input', () => {
+      this.car[field] = Number(element<HTMLInputElement>(id).value) / scale; this.describeTuning();
     }, options);
     element('drift-reset').addEventListener('click', () => {
       this.car.driftEnabled = true;
@@ -561,7 +565,7 @@ export class DrivingSystem {
       const manual = { throttle: canDrive ? axis('KeyW', 'KeyS') : 0, steer: canDrive ? axis('KeyD', 'KeyA') : 0, handbrake: !canDrive || this.input.down('Space') };
       const obstacles = this.autopilot.active ? [...world.traffic.entries.map(e => e.car), ...world.parkedVehicles.fleet.entries
         .filter(e => Math.hypot(e.x - this.car.x, e.z - this.car.z) < 300).map(e => world.parkedVehicles.fleet.vehicle(e))] : [];
-      const controls = this.autopilot.update(dt, this.car, world.network.routes, obstacles, manual, this.surface.sample(this.car.x, this.car.z).grip * this.car.gripScale);
+      const controls = this.autopilot.update(dt, this.car, world.network.routes, obstacles, manual, this.surface.sample(this.car.x, this.car.z).grip * this.car.gripScale, world.signals);
       this.appliedThrottle = controls.throttle;
       const hit = this.car.update(dt, controls, this.surface.sample, this.surface.constrain);
       this.collisionTime = Math.max(0, this.collisionTime - dt);
@@ -739,16 +743,18 @@ export class DrivingSystem {
       const input = element<HTMLInputElement>(`steering-${key}`), degrees = key === 'leanLimit';
       input.value = String(Math.round(this.car.steeringTuning[key] * (degrees ? 1 : 100)));
       element(`steering-${key}-value`).textContent = `${input.value}${degrees ? '°' : '%'}`;
-      input.disabled = ['leanResponse', 'leanLimit', 'countersteer'].includes(key) ? this.car.kind !== 'motorcycle'
+      input.disabled = ['leanResponse', 'leanLimit', 'countersteer'].includes(key) ? this.car.profile.shape !== 'motorcycle'
         : key !== 'directness' && this.car.steeringTuning.directness === 1;
     }
     element<HTMLInputElement>('steering-response').disabled = this.car.steeringTuning.directness === 1;
     const strength = element<HTMLInputElement>('steering-assist-strength');
     strength.value = String(Math.round(this.car.steeringAssistStrength * 100)); strength.disabled = !this.car.steeringAssist;
     element('steering-assist-strength-value').textContent = `${strength.value}%${this.car.steeringAssist ? '' : ' · 已关闭'}`;
-    for (const [id, field] of driftTuning) {
-      const value = String(Math.round(this.car[field] * 100));
-      element<HTMLInputElement>(id).value = value; element(`${id}-value`).textContent = `${value}%`;
+    for (const [id, field, , scale, unit] of driftTuning) {
+      const value = String(Math.round(this.car[field] * scale));
+      const input = element<HTMLInputElement>(id); input.value = value;
+      input.disabled = !this.car.driftEnabled && ['drift-min-speed', 'drift-delay', 'countersteer-assist'].includes(id);
+      element(`${id}-value`).textContent = `${value}${unit}`;
     }
   }
 
@@ -777,11 +783,11 @@ export class DrivingSystem {
       button.setAttribute('aria-pressed', String(ignition !== 'off'));
     }
     element('ignition-status').textContent = ignition === 'running' ? ev ? 'EV 已就绪' : '发动机运转' : ignition === 'starting' ? ev ? '高压系统自检' : '正在点火' : ev ? 'EV 已断电' : '发动机关闭';
-    const s = this.systems, glass = this.car.kind !== 'motorcycle', roof = this.car.kind === 'roadster';
+    const s = this.systems, glass = this.car.profile.shape !== 'motorcycle', roof = this.car.kind === 'roadster';
     for (const action of ['doors', 'cargo', 'aux'] as const) for (const prefix of ['vehicle', 'panel']) {
       const node = element<HTMLButtonElement>(`${prefix}-${action}`), label = this.operations.label(action);
       node.hidden = !label; node.disabled = !this.active || !this.cabin.driver || this.operations.accessing || action !== 'aux' && this.car.equipment.locked
-        || (action !== 'aux' || this.car.kind === 'motorcycle') && this.car.motionSpeed > 0.1;
+        || (action !== 'aux' || this.car.profile.shape === 'motorcycle') && this.car.motionSpeed > 0.1;
       node.textContent = `${label} · ${this.operations.target[action] ? '收起 / 关闭' : '展开 / 开启'} · ${this.input.bindings.label(operationKeys[action])}`;
       node.setAttribute('aria-pressed', String(!!this.operations.target[action]));
     }

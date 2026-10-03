@@ -18,7 +18,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
     await openSettings(page);
     await page.locator('[data-settings-target="graphics"]').click();
     await page.locator('#graphics-preset').selectOption('economy');
-    await (await control(page, page.locator('#view-distance'))).fill('1');
+    await (await control(page, page.locator('#view-distance'))).fill('3');
     await page.locator('[data-settings-target="explore"]').click();
     await page.locator('#vegetation-toggle').click();
     await closeSettings(page);

@@ -1,5 +1,14 @@
-import { BufferGeometry, ExtrudeGeometry, LatheGeometry, Mesh, Shape, Vector2, type Group } from 'three';
+import { BufferGeometry, CatmullRomCurve3, ExtrudeGeometry, LatheGeometry, Mesh, Shape, TubeGeometry, Vector2, Vector3, type Group } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+export function suspensionGeometry(): BufferGeometry {
+  const coil = new TubeGeometry(new CatmullRomCurve3(Array.from({ length: 65 }, (_, i) =>
+    new Vector3(Math.cos(i * Math.PI / 4) * 0.065, i / 64, Math.sin(i * Math.PI / 4) * 0.065))), 64, 0.012, 4, false);
+  const damper = new LatheGeometry([[0, 0.03], [0.038, 0.03], [0.038, 0.57], [0.018, 0.57], [0.018, 0.98], [0, 0.98]]
+    .map(([x, y]) => new Vector2(x, y)), 8).translate(0, 0, 0.13);
+  const geometry = mergeGeometries([coil, damper])!;
+  coil.dispose(); damper.dispose(); return geometry;
+}
 
 export function bodyPanelGeometry(): BufferGeometry {
   const shape = new Shape();

@@ -53,10 +53,21 @@ export class AudioSystem {
   musicDucking = 0.35;
   musicStyle: MusicStyle = 'ambient';
   musicPace = 1;
+  resumeFade = 0.12;
+  testVolume = 0.2;
+  musicRecovery = 0.55;
+  limiterRelease = 0.18;
+  onDiagnostic?: (level: 'info' | 'warn' | 'error', message: string) => void;
   station = 1;
   error = '';
   private context?: AudioContext;
   private master?: GainNode;
+  private limiter?: DynamicsCompressorNode;
+  private testGain?: GainNode;
+  private testPan?: StereoPannerNode;
+  private testRequested = false;
+  private testUntil = 0;
+  private transitionTimer?: ReturnType<typeof setTimeout>;
   private sfx?: GainNode;
   private music?: GainNode;
   private program?: GainNode;
@@ -115,9 +126,10 @@ export class AudioSystem {
   private lastSignal = false;
   private lastWiper = 0;
   private audible = false;
-  private readonly targets = new WeakMap<AudioParam, number>();
+  private targets = new WeakMap<AudioParam, number>();
 
   get state(): string { return this.error ? 'unavailable' : this.context?.state ?? 'locked'; }
+  get testing(): boolean { return this.testRequested || this.testUntil > (this.context?.currentTime ?? 0); }
   get musicPlaying(): boolean {
     return this.audible && !this.disposed && this.state === 'running' && this.masterVolume > 0 && this.musicVolume > 0;
   }
@@ -153,10 +165,60 @@ export class AudioSystem {
     if (this.disposed) return;
     this.enabled = !this.enabled;
     if (this.enabled && !this.context) {
-      try { this.create(); }
-      catch { this.error = '当前浏览器无法开启音频，仍可继续探索。'; this.enabled = false; this.dispose(); return; }
+      if (!this.openContext()) return;
     }
     this.sync();
+  }
+
+  recover(): void {
+    if (this.disposed) return;
+    this.releaseContext(); this.enabled = true;
+    if (this.masterVolume <= 0) this.masterVolume = 0.85;
+    if (this.sfxVolume <= 0) this.sfxVolume = 0.8;
+    if (this.musicVolume <= 0) this.musicVolume = 0.3;
+    this.onDiagnostic?.('info', 'User requested audio recovery; muted main buses restored.');
+    if (this.openContext()) this.sync();
+  }
+
+  testSound(): boolean {
+    if (this.disposed || !this.active || this.masterVolume <= 0 || this.testVolume <= 0) return false;
+    this.enabled = true;
+    if (!this.context && !this.openContext()) return false;
+    this.stopTest(); this.testRequested = true; this.sync(); return !this.error;
+  }
+
+  private openContext(): boolean {
+    this.error = '';
+    try { this.create(); this.onDiagnostic?.('info', 'Audio graph created.'); return true; }
+    catch (error) { this.fail('当前浏览器无法开启音频，仍可继续探索。', error); return false; }
+  }
+
+  private fail(message: string, error?: unknown): void {
+    this.error = message; this.enabled = false;
+    this.releaseContext();
+    this.onDiagnostic?.('error', `${message} ${error instanceof Error ? error.message : String(error ?? '')}`);
+  }
+
+  private stopTest(): void {
+    this.testRequested = false; this.testUntil = 0;
+    if (!this.testGain || !this.context) return;
+    this.testGain.gain.cancelScheduledValues(this.context.currentTime);
+    this.testGain.gain.setValueAtTime(0, this.context.currentTime);
+  }
+
+  private startTest(): void {
+    if (!this.testRequested || this.context?.state !== 'running') return;
+    const now = this.context.currentTime, level = Math.min(0.5, Math.max(0, this.testVolume));
+    this.testRequested = false; this.testUntil = now + 2.1;
+    this.testPan!.pan.cancelScheduledValues(now);
+    for (let i = 0; i < 3; i++) {
+      const start = now + 0.12 + i * 0.65;
+      this.testPan!.pan.setValueAtTime(i - 1, start);
+      this.testGain!.gain.setValueAtTime(0, start);
+      this.testGain!.gain.linearRampToValueAtTime(level, start + 0.04);
+      this.testGain!.gain.linearRampToValueAtTime(0, start + 0.42);
+    }
+    this.onDiagnostic?.('info', 'Left / center / right test scheduled on the master bus.');
   }
 
   setActive(active: boolean): void { this.active = active; this.sync(); }
@@ -164,8 +226,10 @@ export class AudioSystem {
   private sync(): void {
     const context = this.context;
     if (!context || this.disposed || this.error) return;
+    if (context.state === 'closed') { this.fail('音频设备已关闭，请点击强制开启声音重建。'); return; }
     const now = context.currentTime;
-    const audible = this.enabled && this.active && this.masterVolume > 0 && (this.sfxVolume > 0 || this.musicVolume > 0);
+    if (!this.enabled || !this.active || this.masterVolume <= 0 || this.testVolume <= 0) this.stopTest();
+    const audible = this.enabled && this.active && this.masterVolume > 0 && (this.sfxVolume > 0 || this.musicVolume > 0 || this.testing);
     if (this.audible !== audible) {
       this.audible = audible;
       this.master!.gain.cancelScheduledValues(now); this.master!.gain.setValueAtTime(0, now); this.targets.delete(this.master!.gain);
@@ -186,23 +250,33 @@ export class AudioSystem {
       if (this.targets.get(parameter) === value) continue;
       this.targets.set(parameter, value);
       if ((context.state !== 'running' && parameter !== this.master!.gain) || value === 0) { parameter.cancelScheduledValues(now); parameter.setValueAtTime(value, now); }
-      else parameter.setTargetAtTime(value, now, parameter === this.master!.gain ? 0.02 : 0.08);
+      else parameter.setTargetAtTime(value, now, parameter === this.master!.gain ? Math.max(0.01, this.resumeFade / 3) : 0.08);
     }
+    this.limiter!.release.value = Math.max(0.05, Math.min(1, this.limiterRelease));
+    this.startTest();
     if (this.transitioning || context.state === (audible ? 'running' : 'suspended')) return;
     this.transitioning = true;
-    void (audible ? context.resume() : context.suspend()).then(() => {
+    const previous = context.state;
+    this.transitionTimer = setTimeout(() => {
+      if (this.context === context) this.fail('音频设备响应超时，请点击强制开启声音重试。');
+    }, 4000);
+    const failed = (error: unknown) => {
+      if (this.context === context && !this.disposed) this.fail('音频恢复失败，请点击强制开启声音重试。', error);
+    };
+    try { void (audible ? context.resume() : context.suspend()).then(() => {
+      if (this.context !== context || this.disposed) return;
+      clearTimeout(this.transitionTimer);
       this.transitioning = false;
+      if (context.state === previous) { failed('Audio context state did not change.'); return; }
+      this.onDiagnostic?.('info', `Audio context ${context.state}.`);
       this.sync();
-    }, () => {
-      this.transitioning = false;
-      if (!this.disposed) { this.error = '音频暂不可用，请刷新页面后重试。'; this.enabled = false; this.dispose(); }
-    });
+    }, failed); } catch (error) { failed(error); }
   }
 
   private create(): void {
     const context = this.context = new AudioContext();
     const gain = (target: AudioNode, value = 0) => { const node = context.createGain(); node.gain.value = value; node.connect(target); return node; };
-    const limiter = context.createDynamicsCompressor();
+    const limiter = this.limiter = context.createDynamicsCompressor();
     limiter.threshold.value = -8; limiter.knee.value = 6; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.18;
     limiter.connect(context.destination); this.master = gain(limiter);
     this.sfx = gain(this.master, this.sfxVolume); this.music = gain(this.master, this.musicVolume);
@@ -247,6 +321,9 @@ export class AudioSystem {
     this.skidGain = noiseChannel(1250, 'bandpass'); this.skidTone = oscillator('triangle', this.skidGain);
     for (let i = 0; i < 6; i++) this.nearbyEngines.push({ voice: new EngineVoice(context, this.sfx, noiseSource) });
     this.impactGain = noiseChannel(160, 'lowpass'); this.scrapeGain = noiseChannel(1150, 'bandpass');
+    this.testPan = context.createStereoPanner(); this.testPan.connect(this.master);
+    this.testGain = gain(this.testPan);
+    const test = oscillator('sine', this.testGain); test.frequency.value = 660;
   }
 
   update(dt: number, state: SoundState): void {
@@ -276,7 +353,7 @@ export class AudioSystem {
     const duck = Math.min(1 - priority * 0.95, 1 - Math.max(0, Math.min(0.8, this.musicDucking))
       * (state.driving && this.sfxVolume > 0 ? Math.max(engineDemand, impactDemand) : 0));
     this.ambienceDuck += (1 - priority * 0.65 - this.ambienceDuck) * (1 - Math.exp(-Math.max(0, dt) * (priority ? 15 : 3)));
-    this.musicDuck += (duck - this.musicDuck) * (1 - Math.exp(-Math.max(0, dt) * (duck < this.musicDuck ? 8 : 1.8)));
+    this.musicDuck += (duck - this.musicDuck) * (1 - Math.exp(-Math.max(0, dt) * (duck < this.musicDuck ? 8 : 1 / Math.max(0.1, this.musicRecovery))));
     const ev = state.powertrain === 'ev';
     this.engine!.type = ev ? 'sine' : 'triangle';
     const frequency = ev ? 140 + motorSpeed * 22 + (state.regeneration ? 90 : 0) : Math.max(20, rpm / 60 * (state.supercar ? 3.2 : state.motorcycle ? 1.4 : state.mass > 4000 ? 2 : 2.5));
@@ -397,12 +474,21 @@ export class AudioSystem {
 
   dispose(): void {
     if (this.disposed) return;
-    this.disposed = true;
+    this.disposed = true; this.releaseContext();
+  }
+
+  private releaseContext(): void {
+    clearTimeout(this.transitionTimer); this.transitioning = false; this.stopTest();
     this.audible = false; this.previewTime = 0;
     this.playerHorn?.dispose(); this.npcHorns.forEach(slot => slot.voice.dispose()); this.npcHorns.length = 0;
     this.nearbyEngines.forEach(slot => slot.voice.dispose()); this.nearbyEngines.length = 0;
+    this.playerHorn = undefined;
     for (const source of this.sources) { source.stop(); source.disconnect(); }
-    this.master?.disconnect();
+    this.sources.length = this.voices.length = this.pads.length = 0;
+    this.master?.disconnect(); this.master = undefined;
     if (this.context && this.context.state !== 'closed') void this.context.close().catch(() => {});
+    this.context = undefined; this.testGain = undefined; this.testPan = undefined;
+    this.targets = new WeakMap(); this.retuneAt = undefined;
+    this.musicTime = this.time = this.load = 0; this.musicDuck = this.ambienceDuck = 1;
   }
 }

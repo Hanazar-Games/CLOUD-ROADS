@@ -16,6 +16,7 @@ export interface VehicleProfile {
   trailers?: readonly TrailerConfig[];
   body?: 'hatchback' | 'wagon' | 'pickup' | 'van' | 'camper' | 'ambulance' | 'firetruck' | 'dumptruck' | 'tanker' | 'sprinkler' | 'citybus' | 'coupe' | 'rally' | 'limousine' | 'expedition' | 'schoolbus' | 'shuttle' | 'mixer' | 'garbage' | 'refrigerated' | 'towtruck';
   bus?: { rows: readonly number[]; deckHeight: number };
+  edition?: 'taxi' | 'surf' | 'patrol' | 'parcel' | 'adventure' | 'panorama' | 'livestock' | 'logging' | 'maintenance' | 'touring';
 }
 const axles = (track: number, positions: number[], steeringAxles = 1): WheelPoint[] => positions.flatMap((along, axle) =>
   [-1, 1].map(side => ({ x: side * track / 2, along, steer: axle < steeringAxles })));
@@ -115,6 +116,18 @@ const fleet = {
 } as const satisfies Record<string, VehicleProfile>;
 export const vehicleProfiles = {
   ...fleet,
+  taxi: { ...fleet.sedan, name: '城市巡游出租车', edition: 'taxi', mass: 1690, power: 128000, maxSpeed: 47, paint: 0xe6bc42 },
+  surfWagon: { ...fleet.wagon, name: '海岸冲浪旅行车', edition: 'surf', mass: 1840, drag: 0.68, suspensionRate: 0.95, paint: 0x71b9b2 },
+  patrol: { ...fleet.suv, name: '公路巡查越野车', edition: 'patrol', mass: 2350, power: 240000, force: 14200, maxSpeed: 55, paint: 0xd8deda },
+  parcelVan: { ...fleet.van, name: '快递配送高顶厢车', edition: 'parcel', height: 3.05, mass: 3550, power: 135000, force: 18500, maxSpeed: 36, paint: 0xc89457 },
+  adventureCamper: { ...fleet.camper, name: '太阳能远征房车', edition: 'adventure', mass: 5600, power: 195000, force: 31000, travel: 0.38, maxSpeed: 32, paint: 0xb2b990 },
+  panoramicBus: { ...fleet.coach, name: '山景全景旅行客车', edition: 'panorama', mass: 19200, power: 330000, force: 86000,
+    bus: { rows: [10], deckHeight: 0 }, suspensionRate: 0.8, paint: 0x729fbe },
+  livestockTruck: { ...fleet.truck8, name: '通风畜牧运输车', edition: 'livestock', mass: 16800, power: 275000, force: 87000, maxSpeed: 26, paint: 0xb6baac },
+  loggingTruck: { ...fleet.truck8, name: '三轴原木运输车', shape: 'flatbed', edition: 'logging', mass: 22800, power: 335000, force: 125000, maxSpeed: 25, cg: 1.55, paint: 0x577760 },
+  maintenanceTruck: { ...fleet.truck5, name: '公路养护作业车', shape: 'flatbed', edition: 'maintenance', mass: 5800, power: 165000, force: 32000, maxSpeed: 28, paint: 0xe2ac37 },
+  touringMotorcycle: { ...fleet.motorcycle, name: '双箱长途旅行摩托', edition: 'touring', width: 1.06, height: 1.8, mass: 365, power: 72000, force: 2900,
+    maxSpeed: 53, drag: 0.4, steerRate: 1.7, travel: 0.26, paint: 0x596e9c },
   sprinkler: { ...fleet.tanker, name: '10 米道路洒水车', body: 'sprinkler', mass: 24000, power: 310000, force: 120000, maxSpeed: 25, paint: 0x6cb6b0 },
   roadTrain: { ...fleet.semi20, name: '三节公路列车 · 3 × 10 m', length: 39.4, chassisLength: 6.4, mass: 72000,
     power: 850000, force: 380000, maxSpeed: 25, reverseSpeed: 2.2, brake: 6.5, drag: 9, steerRate: 0.7,

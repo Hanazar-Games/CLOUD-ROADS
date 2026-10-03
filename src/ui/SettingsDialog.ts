@@ -1,4 +1,6 @@
 import { element } from '../debug/DebugUI';
+import { parameterExplanation } from './SettingsHelp';
+import { sourceClone } from '../i18n/DomLocalizer';
 
 export class SettingsDialog {
   private readonly dialog = element<HTMLDialogElement>('explorer');
@@ -8,7 +10,7 @@ export class SettingsDialog {
   private readonly categories = [...this.content.querySelectorAll<HTMLElement>('.settings-category')];
   private readonly tabs = [...this.dialog.querySelectorAll<HTMLButtonElement>('[data-settings-target]')];
   private readonly positions = new Map<HTMLElement, number>();
-  private active = this.categories[0];
+  private active = element('settings-driving');
   get open(): boolean { return this.dialog.open; }
 
   constructor(private readonly clearInput: () => void) {
@@ -21,20 +23,22 @@ export class SettingsDialog {
       world: '规划地形与路线；生成参数需应用后生效，并返回起点。', weather: '切换季节、光线与天气，观察沿途风景变化。',
       graphics: '平衡画面细节与性能；先选预设，再微调滑条。', audio: '分层调整音乐、车辆与环境声音，可即时试听。',
       presets: '将喜欢的组合保存到本机，或用 JSON 导入导出。', explore: '快速前往沿途景观，或切换自由探索工具。',
+      diagnostics: '查看声音与世界运行记录，导出本次会话的诊断信息。',
+      language: '选择界面语言，即时生效并保存到本机。',
     };
     for (const section of content.querySelectorAll<HTMLElement>('.settings-category')) {
       const heading = section.querySelector('h3')!, row = document.createElement('div'); row.className = 'settings-category-heading';
       heading.before(row); row.append(heading);
       const intro = document.createElement('p'); intro.className = 'settings-intro';
       intro.textContent = descriptions[section.id.replace('settings-', '')]; row.after(intro);
-      if (!section.querySelector('details')) continue;
+      if (!section.querySelector('details') && section.id !== 'settings-bindings') continue;
       const actions = document.createElement('div'); actions.className = 'settings-fold-actions'; row.append(actions);
       for (const open of [true, false]) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = open ? '展开全部' : '收起全部';
         button.dataset[open ? 'settingsExpand' : 'settingsCollapse'] = '';
         button.setAttribute('aria-label', `${open ? '展开' : '收起'}${heading.textContent}全部分组`);
         button.addEventListener('click', () => {
-          section.querySelectorAll('details').forEach(detail => { detail.open = open; });
+          section.querySelectorAll<HTMLDetailsElement>('details:not(.parameter-help)').forEach(detail => { detail.open = open; });
           if (!open) row.scrollIntoView({ block: 'nearest' });
         }, options);
         actions.append(button);
@@ -118,12 +122,13 @@ export class SettingsDialog {
       const target = element<HTMLInputElement>('preset-name'); this.revealControl(target); target.focus({ preventScroll: true });
     }, options);
     this.selectCategory(this.active);
+    window.addEventListener('resize', () => this.revealActiveTab(), options);
     button.addEventListener('click', () => this.show(), options);
     element('settings-close').addEventListener('click', () => this.close(), options);
     this.dialog.addEventListener('close', () => {
       search.value = ''; find();
       button.setAttribute('aria-expanded', 'false');
-      this.focusWorld();
+      if (document.activeElement === button || document.activeElement === document.body || this.dialog.contains(document.activeElement)) this.focusWorld();
     }, options);
     this.dialog.addEventListener('cancel', event => {
       event.preventDefault();
@@ -154,7 +159,10 @@ export class SettingsDialog {
     if (document.pointerLockElement) document.exitPointerLock();
     this.syncParameters(); this.clearInput(); this.dialog.showModal();
     this.content.scrollTop = this.positions.get(this.active) ?? 0;
-    this.tabs.find(tab => tab.dataset.settingsTarget === this.active.id.replace('settings-', ''))?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    this.revealActiveTab();
+  }
+  private revealActiveTab(): void {
+    if (this.open) this.tabs.find(tab => tab.hasAttribute('aria-current'))?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   private selectCategory(section: HTMLElement, top = false): void {
     if (section !== this.active) this.positions.set(this.active, this.content.scrollTop);
@@ -168,7 +176,9 @@ export class SettingsDialog {
     this.content.scrollTop = top ? 0 : this.positions.get(section) ?? 0;
     element('settings-context').textContent = section.id === 'settings-world' ? '生成参数需应用 · 应用后返回起点'
       : section.id === 'settings-presets' ? '主动保存后保留设置 · 不保存行驶进度'
-        : section.id === 'settings-bindings' ? '按键修改自动保存到本机 · 可恢复默认' : '参数即时生效 · 下次保留请保存预设';
+        : section.id === 'settings-bindings' ? '按键修改自动保存到本机 · 可恢复默认'
+          : section.id === 'settings-diagnostics' ? '日志仅保留于本次会话 · 可手动导出'
+            : section.id === 'settings-language' ? '语言即时生效 · 独立于旅程预设' : '参数即时生效 · 下次保留请保存预设';
     this.syncParameters(section);
   }
   private revealControl(target: HTMLElement): void {
@@ -182,12 +192,17 @@ export class SettingsDialog {
       if (!number) {
         const label = this.dialog.querySelector<HTMLLabelElement>(`label[for="${slider.id}"]`);
         if (!label) continue;
-        const copy = label.cloneNode(true) as HTMLElement; copy.querySelectorAll('output').forEach(output => output.remove());
+        const copy = sourceClone(label); copy.querySelectorAll('output').forEach(output => output.remove());
         number = document.createElement('input'); number.type = 'number'; number.id = `${slider.id}-number`; number.className = 'parameter-number';
         number.hidden = slider.hasAttribute('data-discrete');
         number.setAttribute('aria-label', `${copy.textContent!.trim()} · 精确数值`);
-        number.setAttribute('aria-describedby', slider.getAttribute('aria-describedby') ?? 'settings-help');
         const wrapper = document.createElement('div'); wrapper.className = 'parameter-control'; slider.before(wrapper); wrapper.append(slider, number);
+        const help = document.createElement('details'), title = document.createElement('summary'), text = document.createElement('p');
+        help.className = 'parameter-help'; title.textContent = '参数说明'; title.setAttribute('aria-label', `${copy.textContent!.trim()} · 参数说明`);
+        text.id = `${slider.id}-parameter-help`; text.textContent = parameterExplanation(slider);
+        help.append(title, text); wrapper.after(help);
+        const described = [slider.getAttribute('aria-describedby'), text.id].filter(Boolean).join(' ');
+        slider.setAttribute('aria-describedby', described); number.setAttribute('aria-describedby', described);
         wrapper.classList.toggle('parameter-discrete', number.hidden);
         const field = number, commit = () => {
           const previous = slider.value;

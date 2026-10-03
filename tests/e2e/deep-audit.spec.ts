@@ -105,7 +105,7 @@ test('releases native audio after a resume failure and keeps exploration availab
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/?seed=FLEET-FLAT'); await (await control(page, page.locator('#audio-toggle'))).click();
   await page.evaluate(async () => { await (Reflect.get(window, 'failedAudio') as AudioContext).suspend(); });
-  await expect(page.locator('#audio-status')).toContainText('音频暂不可用');
+  await expect(page.locator('#audio-status')).toContainText('音频恢复失败，请点击强制开启声音重试。');
   await expect.poll(() => page.evaluate(() => (Reflect.get(window, 'failedAudio') as AudioContext).state)).toBe('closed');
   await closeSettings(page); await page.locator('#drive-toggle').click();
   await expect(page.locator('#drive-hud')).toBeVisible(); await expect(page.locator('#error')).toBeHidden();

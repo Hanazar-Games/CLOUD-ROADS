@@ -32,9 +32,12 @@ export class PavementTextures {
     material.addEventListener('dispose', release);
   }
 
-  configure(detail: number, maxAnisotropy: number): void {
-    this.uniforms.pavementDetail.value = Math.max(0, Math.min(2, Number.isFinite(detail) ? detail : 0));
-    this.anisotropy = Math.max(1, Math.min(detail > 0 ? 8 : 2, maxAnisotropy));
+  configure(detail: number, maxAnisotropy: number, relief = detail, filtering = detail > 0 ? 8 : 2): void {
+    this.uniforms.pavementDetail.value = Math.max(0, Math.min(2, Number.isFinite(relief) ? relief : 0));
+    this.anisotropy = Math.max(1, Math.min(Number.isFinite(filtering) ? filtering : 1, maxAnisotropy));
+    for (const texture of [...this.pending, this.uniforms.pavementAsphalt.value, this.uniforms.pavementConcrete.value]) {
+      if (texture.anisotropy !== this.anisotropy) { texture.anisotropy = this.anisotropy; texture.needsUpdate = true; }
+    }
     const quality = detail > 0 ? 'high' : 'low';
     if (quality === this.quality) return;
     this.quality = quality;

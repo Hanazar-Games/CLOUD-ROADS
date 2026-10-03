@@ -4,6 +4,21 @@ import { PavementTextures } from '../src/road/PavementTextures';
 
 afterEach(() => vi.restoreAllMocks());
 
+it('adjusts relief and filtering independently without reloading texture resolution', () => {
+  const pending: (() => void)[] = [];
+  const load = vi.spyOn(TextureLoader.prototype, 'load').mockImplementation((_url, onLoad) => {
+    const map = new Texture<HTMLImageElement>(); pending.push(() => onLoad?.(map)); return map;
+  });
+  const textures = new PavementTextures(), material = new MeshStandardMaterial(); textures.attach(material);
+  textures.configure(1, 8, 0, 1); pending.forEach(done => done());
+  const map = textures.uniforms.pavementAsphalt.value;
+  expect(textures.uniforms.pavementDetail.value).toBe(0); expect(map.anisotropy).toBe(1);
+  textures.configure(1, 8, 2, 16);
+  expect(textures.uniforms.pavementDetail.value).toBe(2); expect(map.anisotropy).toBe(8);
+  expect(textures.uniforms.pavementAsphalt.value).toBe(map); expect(load).toHaveBeenCalledTimes(2);
+  material.dispose();
+});
+
 it('shares maps, switches detail without recompiling and frees high resolution maps on downgrade', () => {
   const requests: { url: string; texture: Texture; complete: () => void }[] = [];
   vi.spyOn(TextureLoader.prototype, 'load').mockImplementation((url, onLoad) => {

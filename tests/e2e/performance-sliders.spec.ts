@@ -1,6 +1,22 @@
 import { expect, test } from '@playwright/test';
 import { closeSettings, control } from './settings';
 
+test('runs the minimal highway preset and restores balanced terrain without losing road readiness', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?seed=MINIMAL-HIGHWAY');
+  await (await control(page, page.locator('#road-type'))).selectOption('highway');
+  await page.locator('#world-options button[type=submit]').click();
+  const metric = (name: string) => page.locator(`[data-metric="${name}"]`);
+  await (await control(page, page.locator('#graphics-preset'))).selectOption('minimal');
+  await expect(metric('Render scale')).toHaveText('35%'); await expect(metric('Target chunks')).toHaveText('49');
+  await expect(metric('Pending / queued')).toHaveText('0 / 0', { timeout: 30000 });
+  await expect(metric('Road ready')).toHaveText('yes'); await expect(metric('Vegetation instances')).toHaveText('0');
+  await expect(page.locator('#vehicle-detail-distance')).toHaveValue('0');
+  await (await control(page, page.locator('#graphics-preset'))).selectOption('balanced');
+  await expect(metric('Target chunks')).toHaveText('289'); await expect(metric('Render scale')).toHaveText('100%');
+  await closeSettings(page); expect(errors).toEqual([]);
+});
+
 test('thins vegetation in place without resizing graphics or regenerating terrain', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
@@ -46,7 +62,7 @@ test('offers labeled performance sliders and keeps them usable on narrow screens
   await page.goto('/?seed=CLOUD-ROAD-001');
   await (await control(page, page.locator('#tree-density'))).fill('45');
   const section = page.locator('#settings-graphics');
-  await expect(section.locator('input[type=range]')).toHaveCount(17);
+  await expect(section.locator('input[type=range]')).toHaveCount(27);
   await expect(section.locator('select')).toHaveCount(1);
   for (const slider of await section.locator('input[type=range]').all()) {
     await expect(slider).toHaveAccessibleName(/\S/); await expect(slider).toHaveAttribute('aria-valuetext', /\S/);

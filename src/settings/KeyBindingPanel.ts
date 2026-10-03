@@ -1,4 +1,5 @@
 import { element } from '../debug/DebugUI';
+import { sourceText } from '../i18n/DomLocalizer';
 import type { InputManager } from '../input/InputManager';
 import { bindingActions, keyLabel } from '../input/KeyBindings';
 
@@ -55,18 +56,30 @@ export class KeyBindingPanel {
   private render(): void {
     this.input.clear();
     const focused = this.pending ?? (document.activeElement as HTMLElement | null)?.dataset.binding;
-    const list = element('binding-list'); list.replaceChildren();
+    const list = element('binding-list');
     for (const [id, , group, label] of bindingActions) {
-      const row = document.createElement('div'); row.className = 'binding-row';
-      const text = document.createElement('span'); text.textContent = `${group} · ${label}`;
-      const button = document.createElement('button'); button.type = 'button'; button.dataset.binding = id;
+      let button = list.querySelector<HTMLButtonElement>(`[data-binding="${id}"]`);
+      if (!button) {
+        let section = [...list.querySelectorAll<HTMLDetailsElement>('details')].find(node => node.dataset.bindingGroup === group);
+        if (!section) {
+          section = document.createElement('details'); section.className = 'world-options binding-group'; section.dataset.bindingGroup = group;
+          section.open = group === bindingActions[0][2];
+          const summary = document.createElement('summary'); summary.textContent = group;
+          const count = document.createElement('span'); count.className = 'binding-count';
+          count.textContent = `${bindingActions.filter(action => action[2] === group).length} 项`;
+          summary.append(count); section.append(summary); list.append(section);
+        }
+        const row = document.createElement('div'); row.className = 'binding-row';
+        const text = document.createElement('span'); text.textContent = label;
+        button = document.createElement('button'); button.type = 'button'; button.dataset.binding = id;
+        button.addEventListener('click', () => { this.pending = id; this.shiftCandidate = undefined; this.render(); this.status('按下新按键；Shift 可组合，Esc 取消。'); });
+        row.append(text, button); section.append(row);
+      }
       button.textContent = this.pending === id ? '请按键…' : this.input.bindings.label(id);
       button.setAttribute('aria-label', `修改 ${label} 快捷键`); button.setAttribute('aria-pressed', String(this.pending === id));
-      button.addEventListener('click', () => { this.pending = id; this.shiftCandidate = undefined; this.render(); this.status('按下新按键；Shift 可组合，Esc 取消。'); });
-      row.append(text, button); list.append(row);
       if (id === focused && element<HTMLDialogElement>('explorer').open) button.focus({ preventScroll: true });
     }
-    for (const hint of this.hints) if (hint.node.isConnected && hint.node.data === hint.rendered) {
+    for (const hint of this.hints) if (hint.node.isConnected && sourceText(hint.node) === hint.rendered) {
       hint.rendered = this.input.bindings.format(hint.text); hint.node.data = hint.rendered;
     }
     const footer = (id: string, actions: string[][]) => {

@@ -35,6 +35,9 @@ export class ChunkManager {
   private disposed = false;
   private completed = 0;
   private radius = VIEW_RADIUS;
+  private preload = 1;
+  uploadBudget = 2;
+  uploadLimit = 2;
   error = '';
   readonly vegetation: VegetationMesh;
 
@@ -75,8 +78,12 @@ export class ChunkManager {
       this.plan = prepare(planChunks(x, z, forward, this.viewRadius));
       this.desired = new Map(this.plan.map((request) => [request.key, request]));
       const angle = direction * Math.PI / 4;
-      const next = corridor ? prepare(planChunks(x + Math.round(Math.sin(angle)) * CHUNK_SIZE, z - Math.round(Math.cos(angle)) * CHUNK_SIZE, forward, this.viewRadius)) : [];
-      this.ahead = new Map(next.filter(request => !matches(this.desired.get(request.key), request)).slice(0, 128).map(request => [request.key, request]));
+      const next = new Map<string, TerrainRequest>();
+      if (corridor) for (let step = 1; step <= this.preload; step++) {
+        for (const request of prepare(planChunks(x + Math.round(Math.sin(angle)) * CHUNK_SIZE * step, z - Math.round(Math.cos(angle)) * CHUNK_SIZE * step, forward, this.viewRadius)))
+          if (!matches(this.desired.get(request.key), request) && !next.has(request.key) && next.size < 128) next.set(request.key, request);
+      }
+      this.ahead = next;
       this.queue = [...this.plan, ...this.ahead.values()];
       for (let i = this.ready.length - 1; i >= 0; i--) if (!matches(this.desired.get(this.ready[i].request.key), this.ready[i].request)) this.ready.splice(i, 1);
       for (const [key, result] of this.prefetched) {
@@ -88,8 +95,12 @@ export class ChunkManager {
       }
     }
     const started = performance.now();
+    if (this.ready.length > 1) {
+      const priority = new Map(this.plan.map((request, i) => [request.key, i]));
+      this.ready.sort((a, b) => (priority.get(a.request.key) ?? Infinity) - (priority.get(b.request.key) ?? Infinity));
+    }
     let uploaded = 0;
-    while (this.ready.length && uploaded < 2 && performance.now() - started < 2) {
+    while (this.ready.length && uploaded < this.uploadLimit && performance.now() - started < this.uploadBudget) {
       const result = this.ready.shift()!;
       if (!matches(this.desired.get(result.request.key), result.request)) continue;
       const previous = this.active.get(result.request.key);
@@ -135,6 +146,11 @@ export class ChunkManager {
   setViewRadius(radius: number): void {
     if (!VIEW_RADII.some(value => value === radius)) throw new Error('Invalid view distance');
     if (this.radius !== radius) { this.radius = radius; this.center = ''; }
+  }
+
+  setPreload(distance: number): void {
+    const value = Number.isFinite(distance) ? Math.max(0, Math.min(3, Math.round(distance))) : 1;
+    if (value !== this.preload) { this.preload = value; this.center = ''; }
   }
 
   private release(chunk: TerrainChunk): void {

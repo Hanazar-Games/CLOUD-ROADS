@@ -1,4 +1,5 @@
 import { element } from '../debug/DebugUI';
+import { sourceText } from '../i18n/DomLocalizer';
 import { bindingActions, type KeyBindings } from '../input/KeyBindings';
 import type { DrivingSystem } from '../vehicle/DrivingSystem';
 import { lightNames, wiperNames } from '../vehicle/VehicleSystems';
@@ -8,11 +9,23 @@ export class CabinDialogs {
   private readonly menu = element<HTMLDialogElement>('controls-menu');
   private readonly vehicle = element<HTMLDialogElement>('vehicle-panel');
   private readonly roadbook = element<HTMLDialogElement>('roadbook-dialog');
+  private readonly hudDetails = element<HTMLDetailsElement>('hud-cabin-details');
   private readonly events = new AbortController();
   get open(): boolean { return this.seats.open || this.menu.open || this.vehicle.open || this.roadbook.open; }
   constructor(private readonly driving: DrivingSystem, private readonly clear: () => void, pause: () => void, settings: (category?: string) => void, private readonly bindings: KeyBindings, private readonly refreshRoadbook: () => void) {
     const options = { signal: this.events.signal };
-    element('seat-open').addEventListener('click', () => this.showSeats(), options);
+    this.hudDetails.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault(); this.hudDetails.open = false; element('world').focus();
+    }, options);
+    this.hudDetails.addEventListener('toggle', () => {
+      if (!this.hudDetails.open && this.hudDetails.contains(document.activeElement)) element('world').focus();
+    }, options);
+    document.addEventListener('pointerdown', event => {
+      if (this.hudDetails.open && event.target instanceof Node && !this.hudDetails.contains(event.target)) this.hudDetails.open = false;
+    }, options);
+    for (const id of ['seat-open', 'hud-seats']) element(id).addEventListener('click', () => this.showSeats(), options);
+    element('hud-equipment').addEventListener('click', () => { this.close(); settings('equipment'); }, options);
     element('menu-open').addEventListener('click', () => this.showMenu(), options);
     for (const id of ['roadbook-open', 'menu-roadbook']) element(id).addEventListener('click', () => this.showRoadbook(), options);
     element('menu-pause').addEventListener('click', () => { pause(); this.close(); }, options);
@@ -86,7 +99,7 @@ export class CabinDialogs {
       const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = label; dd.textContent = value; return [dt, dd];
     }));
     element('vehicle-panel-equipment').textContent = `车灯 ${lightNames[s.lights]}${glass ? ` · 雨刮 ${wiperNames[s.wipers]} · 车窗 ${Math.round(s.windowTarget * 100)}% · 风机 ${s.fan} / 6 · 玻璃水 ${s.washerFluid.toFixed(1)} L` : ' · 开放骑行，无车窗与雨刮'}`;
-    element('vehicle-panel-help').textContent = element('vehicle-summary').textContent;
+    element('vehicle-panel-help').textContent = sourceText(element('vehicle-summary'));
     element<HTMLButtonElement>('panel-seats').disabled = !active;
     element<HTMLButtonElement>('panel-exit').disabled = !active || car.motionSpeed > 0.1 || !this.driving.nearInteriorExit;
     element<HTMLButtonElement>('panel-walk').disabled = !active || car.motionSpeed > 0.1 || this.driving.operations.accessing
@@ -95,6 +108,7 @@ export class CabinDialogs {
   }
   private show(dialog: HTMLDialogElement): void {
     if (dialog.open) return;
+    this.hudDetails.open = false;
     if (document.pointerLockElement) document.exitPointerLock();
     this.close(); element<HTMLDialogElement>('explorer').close(); this.clear(); dialog.showModal();
   }

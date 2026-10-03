@@ -11,52 +11,71 @@ import type { Garage } from '../garage/Garage';
 import { vehicleProxy } from '../vehicle/VehicleProxy';
 import { addRetroreflection } from '../render/ReflectiveMaterial';
 import { FogLampBatch } from '../vehicle/FogLampBatch';
+import { ModelLoadQueue } from '../render/ModelLoadQueue';
 
 export function vehicleTemplate(kind: VehicleKind, roofClosed = false, animateWheels = false): BufferGeometry[] {
-  const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile), parts: BufferGeometry[][] = [[]];
-  car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
-  const systems = new VehicleSystems(); systems.roofOpen = roofClosed ? 0 : 1;
-  model.sync(car, { x: 0, z: 0 }, systems); model.root.updateMatrixWorld(true);
-  const trailers = car.trailers.map((_, i) => model.root.getObjectByName(`trailer-${i}`)!);
-  const inverse = [model.root, ...trailers].map(root => root.matrixWorld.clone().invert()), transform = new Matrix4();
-  for (let i = 0; i < trailers.length; i++) parts.push([]);
-  model.root.traverse(object => {
-    if (!(object instanceof Mesh) || object instanceof InstancedMesh || Array.isArray(object.material) || !object.visible) return;
-    let part = 0, spinning = false, wheel: Object3D | undefined;
-    for (let parent = object.parent; parent && parent !== model.root; parent = parent.parent) {
-      if (!parent.visible) return;
-      const index = trailers.indexOf(parent); if (index >= 0) part = index + 1;
-      if (parent.name === 'wheel-spin') spinning = true;
-      if (parent.name === 'wheel-steer' || parent.name === 'wheel-fixed') wheel = parent;
-    }
-    const material = object.material as MeshStandardMaterial;
-    if (!material.color || !object.geometry.getAttribute('normal') || object.name === 'windshield-water') return;
-    const geometry = object.geometry.index ? object.geometry.clone() : mergeVertices(object.geometry);
-    geometry.applyMatrix4(transform.multiplyMatrices(inverse[part], object.matrixWorld));
-    const vertexColors = material.vertexColors ? geometry.getAttribute('color') : undefined;
-    for (const name of Object.keys(geometry.attributes)) if (name !== 'position' && name !== 'normal') geometry.deleteAttribute(name);
-    const count = geometry.getAttribute('position').count, mask = material.name === 'vehicle-paint' ? 1 : 0;
-    const colors = new Float32Array(count * 3), color = mask ? new Color(0xffffff) : material.color;
-    for (let i = 0; i < count; i++) {
-      colors[i * 3] = color.r * (vertexColors?.getX(i) ?? 1);
-      colors[i * 3 + 1] = color.g * (vertexColors?.getY(i) ?? 1);
-      colors[i * 3 + 2] = color.b * (vertexColors?.getZ(i) ?? 1);
-    }
-    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-    geometry.setAttribute('glassMask', new Float32BufferAttribute(new Float32Array(count).fill(material.transparent && material.opacity < 0.9 ? 1 : 0), 1));
-    geometry.setAttribute('paintMask', new Float32BufferAttribute(new Float32Array(count).fill(mask), 1)); parts[part].push(geometry);
-    geometry.setAttribute('retroMask', new Float32BufferAttribute(new Float32Array(count).fill(Number(material.name === 'retro-reflector')), 1));
-    if (animateWheels) {
-      const pivots = new Float32Array(count * 4), center = wheel ? new Vector3().setFromMatrixPosition(wheel.matrixWorld).applyMatrix4(inverse[part]) : new Vector3();
-      if (wheel) for (let i = 0; i < count; i++) {
-        pivots[i * 4] = center.x; pivots[i * 4 + 1] = center.y; pivots[i * 4 + 2] = center.z; pivots[i * 4 + 3] = Number(spinning);
+  const build = buildVehicleTemplate(kind, roofClosed, animateWheels);
+  let result = build.next();
+  while (!result.done) result = build.next();
+  return result.value;
+}
+
+export function* buildVehicleTemplate(kind: VehicleKind, roofClosed = false, animateWheels = false): Generator<void, BufferGeometry[]> {
+  const car = new VehiclePhysics(kind), model = new VehicleMesh(new Scene(), car.profile, false), parts: BufferGeometry[][] = [[]];
+  const geometries: BufferGeometry[] = [];
+  let complete = false;
+  try {
+    yield;
+    car.reset(0, 0, 0, () => ({ height: 0, grip: 1 }));
+    const systems = new VehicleSystems(); systems.roofOpen = roofClosed ? 0 : 1;
+    model.sync(car, { x: 0, z: 0 }, systems); model.root.updateMatrixWorld(true);
+    const trailers = car.trailers.map((_, i) => model.root.getObjectByName(`trailer-${i}`)!);
+    const inverse = [model.root, ...trailers].map(root => root.matrixWorld.clone().invert()), transform = new Matrix4();
+    for (let i = 0; i < trailers.length; i++) parts.push([]);
+    const objects: Object3D[] = []; model.root.traverse(object => objects.push(object));
+    for (const object of objects) {
+      if (!(object instanceof Mesh) || object instanceof InstancedMesh || Array.isArray(object.material) || !object.visible) continue;
+      let part = 0, spinning = false, wheel: Object3D | undefined;
+      let visible = true;
+      for (let parent = object.parent; parent && parent !== model.root; parent = parent.parent) {
+        if (!parent.visible) { visible = false; break; }
+        const index = trailers.indexOf(parent); if (index >= 0) part = index + 1;
+        if (parent.name === 'wheel-spin') spinning = true;
+        if (parent.name === 'wheel-steer' || parent.name === 'wheel-fixed') wheel = parent;
       }
-      geometry.setAttribute('wheelPivot', new Float32BufferAttribute(pivots, 4));
-      geometry.setAttribute('wheelSteer', new Float32BufferAttribute(new Float32Array(count).fill(wheel?.name === 'wheel-steer' ? -center.z - car.rearAxle : 0), 1));
+      const material = object.material as MeshStandardMaterial;
+      if (!visible || !material.color || !object.geometry.getAttribute('normal') || object.name === 'windshield-water') continue;
+      const geometry = object.geometry.index ? object.geometry.clone() : mergeVertices(object.geometry);
+      geometry.applyMatrix4(transform.multiplyMatrices(inverse[part], object.matrixWorld));
+      const vertexColors = material.vertexColors ? geometry.getAttribute('color') : undefined;
+      for (const name of Object.keys(geometry.attributes)) if (name !== 'position' && name !== 'normal') geometry.deleteAttribute(name);
+      const count = geometry.getAttribute('position').count, mask = material.name === 'vehicle-paint' ? 1 : 0;
+      const colors = new Float32Array(count * 3), color = mask ? new Color(0xffffff) : material.color;
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = color.r * (vertexColors?.getX(i) ?? 1);
+        colors[i * 3 + 1] = color.g * (vertexColors?.getY(i) ?? 1);
+        colors[i * 3 + 2] = color.b * (vertexColors?.getZ(i) ?? 1);
+      }
+      geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+      geometry.setAttribute('glassMask', new Float32BufferAttribute(new Float32Array(count).fill(material.transparent && material.opacity < 0.9 ? 1 : 0), 1));
+      geometry.setAttribute('paintMask', new Float32BufferAttribute(new Float32Array(count).fill(mask), 1)); parts[part].push(geometry);
+      geometry.setAttribute('retroMask', new Float32BufferAttribute(new Float32Array(count).fill(Number(material.name === 'retro-reflector')), 1));
+      if (animateWheels) {
+        const pivots = new Float32Array(count * 4), center = wheel ? new Vector3().setFromMatrixPosition(wheel.matrixWorld).applyMatrix4(inverse[part]) : new Vector3();
+        if (wheel) for (let i = 0; i < count; i++) {
+          pivots[i * 4] = center.x; pivots[i * 4 + 1] = center.y; pivots[i * 4 + 2] = center.z; pivots[i * 4 + 3] = Number(spinning);
+        }
+        geometry.setAttribute('wheelPivot', new Float32BufferAttribute(pivots, 4));
+        geometry.setAttribute('wheelSteer', new Float32BufferAttribute(new Float32Array(count).fill(wheel?.name === 'wheel-steer' ? -center.z - car.rearAxle : 0), 1));
+      }
+      yield;
     }
-  });
-  const geometries = parts.map(group => mergeGeometries(group)!);
-  parts.flat().forEach(p => p.dispose()); model.dispose(); return geometries;
+    for (const group of parts) { geometries.push(mergeGeometries(group)!); yield; }
+    complete = true; return geometries;
+  } finally {
+    parts.flat().forEach(p => p.dispose()); model.dispose();
+    if (!complete) geometries.forEach(g => g.dispose());
+  }
 }
 
 export class ParkedVehicles {
@@ -69,12 +88,15 @@ export class ParkedVehicles {
   private readonly color = new Color();
   private version = -1;
   detailDistance = 240;
+  detailLimit = 12;
+  preloadDistance = 180;
+  private readonly localLoads = new ModelLoadQueue();
   private detailSignature = '';
   private garageFloor: string | undefined;
   private garageEntries: readonly (readonly ParkedEntry[])[] = [];
   private extraEntries: ParkedEntry[] = [];
   private anchorX = 0; private anchorZ = 0;
-  constructor(private readonly scene: Scene, seed: string, gravity = 9.81) {
+  constructor(private readonly scene: Scene, seed: string, gravity = 9.81, private readonly sharedLoads?: ModelLoadQueue) {
     this.fogLamps = new FogLampBatch(scene, 64, 'parked-fog-lamps');
     this.fleet = new ParkedFleet(seed, gravity);
     this.material.onBeforeCompile = shader => {
@@ -99,7 +121,9 @@ export class ParkedVehicles {
     const near = this.fleet.entries.filter(e => Math.hypot(e.x - camera.x - origin.x, e.z - camera.z - origin.z) < 1600
       && (e.slot < 0 || !e.id.startsWith('garage:') || garages.some(g => e.id.startsWith(`garage:${g.id}:`)
         && g.visibleFloor(Math.round((g.position.y - e.y) / 6), g.floor(camera.x + origin.x, camera.y, camera.z + origin.z)))));
-    const key = (entry: typeof near[number]) => `${entry.kind}${Math.hypot(entry.x - camera.x - origin.x, entry.z - camera.z - origin.z) > this.detailDistance ? ':far' : entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
+    const distance = (entry: ParkedEntry) => Math.hypot(entry.x - camera.x - origin.x, entry.y - camera.y, entry.z - camera.z - origin.z);
+    const detailed = new Set(near.filter(e => distance(e) < this.detailDistance).sort((a, b) => distance(a) - distance(b)).slice(0, this.detailLimit));
+    const key = (entry: typeof near[number]) => `${entry.kind}${!detailed.has(entry) ? ':far' : entry.kind === 'roadster' && this.fleet.vehicle(entry).roofOpen < 0.05 ? ':closed' : ''}`;
     const counts = new Map<string, number>();
     for (const entry of near) counts.set(key(entry), (counts.get(key(entry)) ?? 0) + 1);
     for (const [key, count] of counts) {
@@ -112,14 +136,28 @@ export class ParkedVehicles {
       }));
       this.version = -1;
     }
-    const missing = near.find(e => !this.batches.has(key(e)));
-    if (missing) {
-      const meshes = (key(missing).endsWith(':far') ? vehicleProxy(missing.kind) : vehicleTemplate(missing.kind, key(missing).endsWith(':closed'))).map((geometry, part) => {
-        const mesh = new InstancedMesh(geometry, this.material, 256); mesh.count = 0; mesh.receiveShadow = true;
-        mesh.name = `${missing.kind}:${part ? 'trailer' : 'vehicle'}`; this.scene.add(mesh); return mesh;
-      });
-      this.batches.set(key(missing), meshes); this.version = -1;
+    const loads = this.sharedLoads ?? this.localLoads;
+    const candidates = [...near].sort((a, b) => distance(a) - distance(b));
+    const preloaded = new Set(candidates.filter(e => this.detailDistance > 0 && distance(e) < this.detailDistance + this.preloadDistance).slice(0, this.detailLimit));
+    const requested = new Set<string>();
+    for (const missing of candidates) for (const detail of [false, true]) {
+      if (detail && !preloaded.has(missing)) continue;
+      const batchKey = `${missing.kind}${detail ? missing.kind === 'roadster' && this.fleet.vehicle(missing).roofOpen < 0.05 ? ':closed' : '' : ':far'}`;
+      if (this.batches.has(batchKey) || requested.has(batchKey)) continue;
+      requested.add(batchKey);
+      const capacity = Math.max(256, 2 ** Math.ceil(Math.log2(near.filter(e => e.kind === missing.kind).length)));
+      const priority = distance(missing) + (detail ? detailed.has(missing) ? 10000 : 20000 : 0);
+      const build = function* (this: ParkedVehicles): Generator<void> {
+        const geometries = detail ? yield* buildVehicleTemplate(missing.kind, batchKey.endsWith(':closed')) : vehicleProxy(missing.kind);
+        const meshes = geometries.map((geometry, part) => {
+          const mesh = new InstancedMesh(geometry, this.material, capacity); mesh.count = 0; mesh.receiveShadow = true;
+          mesh.name = `${missing.kind}:${part ? 'trailer' : 'vehicle'}`; this.scene.add(mesh); return mesh;
+        });
+        this.batches.set(batchKey, meshes); this.version = -1;
+      }.bind(this);
+      loads.request(`parked:${batchKey}`, priority, build);
     }
+    if (!this.sharedLoads) loads.pump();
     const anchorChanged = Math.hypot(camera.x + origin.x - this.anchorX, camera.z + origin.z - this.anchorZ) > 300;
     const signature = near.map(entry => `${entry.id}:${key(entry)}`).join('|');
     if (this.version !== this.fleet.version || anchorChanged || signature !== this.detailSignature) {
@@ -148,5 +186,5 @@ export class ParkedVehicles {
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.position.set(this.anchorX - origin.x, 0, this.anchorZ - origin.z); mesh.visible = mesh.count > 0; }
   }
   get drawBatches(): number { return [...this.batches.values()].flat().filter(m => m.count > 0).length; }
-  dispose(): void { this.fogLamps.dispose(); for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); } this.material.dispose(); }
+  dispose(): void { this.localLoads.dispose(); this.fogLamps.dispose(); for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); } this.material.dispose(); }
 }

@@ -6,7 +6,7 @@ import { absoluteElevation, DEFAULT_OPTIONS, type WorldOptions } from '../world/
 import type { MountainGuide } from '../terrain/MountainRanges';
 import { serviceTarget } from '../service/ServiceSchedule';
 import { StructurePlanner } from './StructurePlanner';
-import { junctionApproach, junctionLead, junctionsEnabled, junctionTarget } from './JunctionSchedule';
+import { junctionApproach, junctionLead, junctionsEnabled, junctionTarget, junctionTail } from './JunctionSchedule';
 import { landmarkTarget, planLandmark } from './LandmarkBridge';
 import { roadFrame } from './RoadFrame';
 import { roadProfile } from './RoadProfile';
@@ -54,7 +54,7 @@ export class RoadGenerator {
     if (junction) {
       const grade = start.grade - clamp(start.grade, this.structures.gradeStep);
       const segment = new RoadSegment({ ...start, mountain: undefined, structure: undefined }, start.heading, grade);
-      segment.end.nextMountain = junctionTarget(start.distance) + 1200;
+      segment.end.nextMountain = junctionTarget(start.distance, this.options) + junctionTail(this.options);
       segment.end.nextStructure = segment.end.nextMountain;
       return segment;
     }
@@ -69,10 +69,10 @@ export class RoadGenerator {
         if (a < this.options.altitudeMin + 2 || b > this.options.altitudeMax - 2) structure = undefined;
       }
       if (structure) {
-        const service = serviceTarget(this.seed, Math.max(1, Math.round((start.distance + structure.finish) / 30000)));
+        const service = serviceTarget(this.seed, Math.max(1, Math.round((start.distance + structure.finish) / 30000)), this.options);
         if (structure.finish > service - 1000 && start.distance < service + 800) structure = undefined;
-        const junction = junctionTarget(start.distance);
-        if (structure && junctionsEnabled(this.options) && structure.finish > junction - junctionLead(this.options) && start.distance < junction + 1200) structure = undefined;
+        const junction = junctionTarget(start.distance, this.options);
+        if (structure && junctionsEnabled(this.options) && structure.finish > junction - junctionLead(this.options) && start.distance < junction + junctionTail(this.options)) structure = undefined;
       }
       start = { ...start, nextStructure: start.distance + 192 };
     }
@@ -114,13 +114,13 @@ export class RoadGenerator {
   }
 
   private serviceApproach(distance: number): boolean {
-    const target = serviceTarget(this.seed, Math.max(1, Math.round(distance / 15000)));
+    const target = serviceTarget(this.seed, Math.max(1, Math.round(distance / 15000)), this.options);
     return distance >= target - 1000 && distance < target + 800;
   }
 
   private plan(start: RoadControlPoint): RoadSegment {
     if (this.options.routeStyle >= 2 || this.options.maxGrade > 0.06) {
-      const target = serviceTarget(this.seed, Math.max(1, Math.round(start.distance / 15000)));
+      const target = serviceTarget(this.seed, Math.max(1, Math.round(start.distance / 15000)), this.options);
       if (this.serviceApproach(start.distance)) {
         const heading = this.limitHeading(start, this.options.routeStyle === 0 ? this.start.heading : start.heading + clamp(this.start.heading - start.heading, Math.PI / 10));
         const blend = Math.max(0, Math.min(1, (Math.abs(start.distance - target) - 160) / 640));

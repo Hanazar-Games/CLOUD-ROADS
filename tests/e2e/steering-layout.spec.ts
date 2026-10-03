@@ -46,7 +46,7 @@ test('persists steering weights and motorcycle tuning through vehicle changes, r
   const stream = await (await download).createReadStream(), chunks = [];
   for await (const chunk of stream!) chunks.push(chunk);
   const data = Buffer.concat(chunks).toString(), preset = JSON.parse(data);
-  expect(preset.version).toBe(16); expect(preset.settings['steering-directness']).toBe(35); expect(preset.settings['steering-leanLimit']).toBe(30);
+  expect(preset.version).toBe(20); expect(preset.settings['steering-directness']).toBe(35); expect(preset.settings['steering-leanLimit']).toBe(30);
   await (await control(page, page.locator('#steering-reset'))).click();
   await expect(page.locator('#steering-directness')).toHaveValue('0'); await expect(page.locator('#steering-leanLimit')).toHaveValue('40');
   await control(page, page.locator('#preset-import-open'));

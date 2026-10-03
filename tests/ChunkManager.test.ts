@@ -25,6 +25,31 @@ class DeferredTerrain implements TerrainBackend {
 }
 
 describe('ChunkManager lifecycle', () => {
+  it('uploads the highest priority result first even when workers complete out of order', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.uploadLimit = 1; manager.uploadBudget = Infinity;
+    const forward = { x: 0, z: -1 };
+    manager.update(128, 128, forward, emptyCorridor);
+    const jobs = backend.jobs.splice(0), generator = new TerrainGenerator('test');
+    for (const job of [...jobs].reverse()) job.resolve(generator.generate(job.request.x, job.request.z, job.request.cells));
+    await Promise.resolve(); await Promise.resolve();
+    manager.update(128, 128, forward, emptyCorridor);
+    expect(manager.stats.completed).toBe(1);
+    const active = Reflect.get(manager, 'active') as Map<string, unknown>;
+    expect([...active.keys()]).toEqual([jobs[0].request.key]);
+    manager.dispose();
+  });
+
+  it('can disable forward prefetch and restores it without rebuilding current terrain', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.setViewRadius(3); manager.setPreload(0);
+    for (let frame = 0; frame < 90; frame++) { manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor); await backend.complete(); }
+    expect(manager.stats.active).toBe(49); expect(manager.stats.prefetched).toBe(0);
+    const completed = manager.stats.completed; manager.setPreload(3);
+    for (let frame = 0; frame < 90; frame++) { manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor); await backend.complete(); }
+    expect(manager.stats.prefetched).toBeGreaterThan(0); expect(manager.stats.prefetched).toBeLessThanOrEqual(128);
+    expect(manager.stats.completed).toBe(completed); manager.dispose();
+  });
   it('rejects terrain generated before a local road change, even without moving', async () => {
     const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
     const forward = { x: 0, z: -1 };

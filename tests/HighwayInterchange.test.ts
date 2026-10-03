@@ -11,6 +11,34 @@ import { Raycaster, Scene, Vector3 } from 'three';
 import { InterchangeMesh } from '../src/road/InterchangeMesh';
 import { RoadCorridor } from '../src/road/RoadCorridor';
 import { roadProfile } from '../src/road/RoadProfile';
+import { INTERCHANGE_EXTENT, junctionLead } from '../src/road/JunctionSchedule';
+
+it.each([-0.4, 0.4])('finishes leveling a %s grade before any highway merge', grade => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const, maxGrade: 0.4 };
+  const generator = new RoadGenerator('steep-approach', { sample: () => 100 }, options);
+  let point = { ...generator.start, distance: 20000 - junctionLead(options), grade };
+  while (point.distance < 20000 - INTERCHANGE_EXTENT) point = generator.next(point).end;
+  expect(point.grade).toBe(0);
+});
+
+it('provides four usable deck elevations, broad loop radii and no overlapping ramp decks', () => {
+  const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
+  const center = new RoadSegment(new RoadGenerator('stack-levels', { sample: () => 100 }, options).start, 0, 0).sample(0);
+  const plan = highwayInterchange('stack-levels', center, options);
+  const levels = new Set([0, plan.upperHeight - center.position.y, ...plan.ramps.filter(r => r.turn === 'left')
+    .map(r => Math.round(Math.max(...r.points.map(p => p.y)) - center.position.y))]);
+  expect(levels.size).toBe(4);
+  for (const ramp of plan.ramps) for (let i = 2; i < ramp.points.length; i++) {
+    const [a, b, c] = ramp.points.slice(i - 2, i + 1);
+    const ab = Math.hypot(b.x - a.x, b.z - a.z), bc = Math.hypot(c.x - b.x, c.z - b.z), ac = Math.hypot(c.x - a.x, c.z - a.z);
+    const cross = Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x));
+    if (cross > 0.001) expect(ab * bc * ac / (2 * cross)).toBeGreaterThan(300);
+  }
+  for (const [i, ramp] of plan.ramps.entries()) for (const other of plan.ramps.slice(i + 1)) {
+    for (const a of ramp.points) for (const b of other.points) if (Math.hypot(a.x - b.x, a.z - b.z) < 10)
+      expect(Math.abs(a.y - b.y)).toBeGreaterThan(7);
+  }
+});
 
 it('keeps the full ramp width level with the carriageway until it clears the merge', () => {
   const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const };
@@ -118,6 +146,15 @@ it('connects all four approaches to both crossing directions with continuous one
     const hit = ray.intersectObject(model.pavement)[0];
     expect(hit?.point.y).toBeCloseTo((a.y + b.y) / 2 + 0.015, 2);
   }
+  expect(scene.children).toHaveLength(5);
+  const detailedRails = model.rails.count, pavementCount = model.pavement.geometry.getAttribute('position').count;
+  model.update([plan], origin, corridor, { sample: () => 60 }, 0);
+  expect(model.rails.count).toBeLessThan(detailedRails * 0.25);
+  expect(model.pavement.geometry.getAttribute('position').count).toBe(pavementCount);
+  const other = highwayInterchange('second', { ...center, position: { ...center.position, x: center.position.x + 10000 } }, options);
+  model.update([plan, other], origin, corridor, { sample: () => 60 });
+  expect(model.rails.count).toBeGreaterThan(detailedRails);
+  expect(model.rails.count).toBeLessThanOrEqual(model.rails.instanceMatrix.count);
   expect(scene.children).toHaveLength(5);
   model.update([], origin, corridor, { sample: () => 60 }); expect(scene.children.every(o => !o.visible)).toBe(true);
   model.dispose(); expect(scene.children).toHaveLength(0);

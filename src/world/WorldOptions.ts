@@ -30,13 +30,15 @@ export interface WorldOptions {
   landmarkClearance: number;
   junctions: boolean;
   interchanges: boolean;
+  crossroads: boolean;
+  crossroadInterval: number;
 }
 
 export const DEFAULT_OPTIONS: Readonly<WorldOptions> = { terrain: 'alpine', roadType: 'mountain', roadWidth: 8, roadLanes: 2, oneWay: false, highwayRadius: 200, routeStyle: 1, maxGrade: 0.06,
   elevationMode: 'natural', climbMin: 300, climbMax: 900, altitudeMin: 300, altitudeMax: 1500, elevationDirection: 'up',
   mountainHeight: 'natural', mountainMin: 0, mountainMax: 3500, mountainDensity: 1, vegetationDensity: 1,
   terrainFollow: 0.8, bridgeHeight: 120, landmarkBridges: true, landmarkMin: 100000, landmarkMax: 200000, landmarkLength: 1200, landmarkClearance: 60,
-  junctions: true, interchanges: true };
+  junctions: true, interchanges: true, crossroads: false, crossroadInterval: 3000 };
 export const absoluteElevation = (options: Readonly<WorldOptions>): boolean => options.elevationMode === 'fixed' || options.elevationMode === 'random';
 export const routeNames: Record<RouteStyle, string> = { 0: '全直道 · 零弯道', 1: '1 档 · 舒缓山路', 2: '2 档 · 蜿蜒山路', 3: '3 档 · 盘山折返', 4: '4 档 · 密集发卡弯', 5: '5 档 · 连续发卡弯' };
 export const terrainNames: Record<TerrainKind, string> = { alpine: '高山雪岭', forest: '森林山谷', desert: '沙漠峡谷', dunes: '沙丘旷野',
@@ -53,11 +55,11 @@ export function validWorldOptions(value: unknown): value is WorldOptions {
   if (Object.keys(v).length !== Object.keys(DEFAULT_OPTIONS).length || Object.keys(DEFAULT_OPTIONS).some(key => !Object.hasOwn(v, key))) return false;
   const ranges = { roadWidth: [5, 12], roadLanes: [1, 4], highwayRadius: [50, 2000], maxGrade: [0, 0.4], climbMin: [50, 2000], climbMax: [50, 2000],
     altitudeMin: [0, 6000], altitudeMax: [0, 6000], mountainMin: [0, 6000], mountainMax: [0, 6000], mountainDensity: [0.25, 2], vegetationDensity: [0, 2],
-    terrainFollow: [0, 1], bridgeHeight: [20, 1000], landmarkMin: [50000, 300000], landmarkMax: [50000, 300000], landmarkLength: [800, 2000], landmarkClearance: [20, 300] };
+    terrainFollow: [0, 1], bridgeHeight: [20, 1000], landmarkMin: [50000, 300000], landmarkMax: [50000, 300000], landmarkLength: [800, 2000], landmarkClearance: [20, 300], crossroadInterval: [1000, 30000] };
   for (const [key, [min, max]] of Object.entries(ranges)) if (typeof v[key] !== 'number' || !Number.isFinite(v[key]) || v[key] < min || v[key] > max) return false;
   const steps = { roadWidth: 0.5, roadLanes: 1, highwayRadius: 10, maxGrade: 0.01, climbMin: 50, climbMax: 50, altitudeMin: 1, altitudeMax: 1,
     mountainMin: 1, mountainMax: 1, mountainDensity: 0.05, vegetationDensity: 0.05,
-    terrainFollow: 0.05, bridgeHeight: 10, landmarkMin: 10000, landmarkMax: 10000, landmarkLength: 100, landmarkClearance: 10 };
+    terrainFollow: 0.05, bridgeHeight: 10, landmarkMin: 10000, landmarkMax: 10000, landmarkLength: 100, landmarkClearance: 10, crossroadInterval: 500 };
   for (const [key, step] of Object.entries(steps)) if (Math.abs((v[key] as number) / step - Math.round((v[key] as number) / step)) > 1e-7) return false;
   const o = value as WorldOptions;
   return Object.hasOwn(terrainNames, o.terrain) && Object.hasOwn(roadNames, o.roadType)
@@ -66,6 +68,6 @@ export function validWorldOptions(value: unknown): value is WorldOptions {
     && ROUTE_LEVELS.includes(o.routeStyle) && ['natural', 'cycles', 'fixed', 'random'].includes(o.elevationMode)
     && ['up', 'down', 'random'].includes(o.elevationDirection) && ['natural', 'range'].includes(o.mountainHeight)
     && o.climbMin <= o.climbMax && o.altitudeMin <= o.altitudeMax && o.mountainMin <= o.mountainMax
-    && typeof o.junctions === 'boolean' && typeof o.interchanges === 'boolean'
+    && typeof o.junctions === 'boolean' && typeof o.interchanges === 'boolean' && typeof o.crossroads === 'boolean'
     && typeof o.landmarkBridges === 'boolean' && o.landmarkMin <= o.landmarkMax;
 }

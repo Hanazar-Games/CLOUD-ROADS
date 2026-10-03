@@ -64,9 +64,9 @@ export class ServicePlanner {
     const buried = (distance: number) => tunnels.some(span => distance > span.start.distance - approach && distance < span.end.distance + approach);
     let roadIndex: RoadIndex | undefined;
     const edges: RoadEdge[] = [];
-    for (const id of this.cache.keys()) if (serviceTarget(this.seed, id) < first - 2000 || serviceTarget(this.seed, id) > last + 2000) this.cache.delete(id);
+    for (const id of this.cache.keys()) if (serviceTarget(this.seed, id, this.options) < first - 2000 || serviceTarget(this.seed, id, this.options) > last + 2000) this.cache.delete(id);
     for (let id = Math.max(1, Math.floor(first / 15000)); id <= Math.ceil(last / 15000); id++) {
-      const target = serviceTarget(this.seed, id), facility = serviceFacility(this.seed, id);
+      const target = serviceTarget(this.seed, id, this.options), facility = serviceFacility(this.seed, id);
       if (target - SERVICE_SEARCH_RADIUS < first || target + SERVICE_SEARCH_RADIUS > last) continue;
       let site = this.cache.get(id);
       if (site && buried(site.sample.distance)) { this.cache.delete(id); site = undefined; }

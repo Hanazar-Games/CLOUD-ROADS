@@ -38,6 +38,7 @@ export class GarageMesh {
   private readonly glow = new MeshBasicMaterial({ color: 0xd6edff });
   private readonly atlas;
   private readonly signs;
+  cacheLimit = 4;
 
   constructor(scene: Scene, readonly garage: Garage) {
     this.root.name = 'underground-garage';
@@ -87,8 +88,8 @@ export class GarageMesh {
     }
     batch(this.root, structure, this.concrete, 'garage-concrete');
     this.fixtures.push({ x: 64, y: 6.1, z: -72 });
-    for (const lamp of this.lamps) { lamp.visible = false; this.root.add(lamp); }
-    scene.add(this.root, this.lighting); this.lighting.visible = false;
+    for (const lamp of this.lamps) { lamp.intensity = 0; this.root.add(lamp); }
+    scene.add(this.root, this.lighting); this.lighting.intensity = 0;
   }
 
   private build(floor: number, group: Group): void {
@@ -150,26 +151,29 @@ export class GarageMesh {
     batch(group, lights, this.glow, 'garage-luminaires'); batch(group, labels, this.signs, 'garage-wayfinding');
   }
 
-  get loadedFloors(): number { return this.levels.filter(group => group.children.length > 0).length; }
+  get loadedFloors(): number { return this.levels.filter(group => group.visible && group.children.length > 0).length; }
+  get cachedFloors(): number { return this.levels.filter(group => group.children.length > 0).length; }
 
   update(origin: { x: number; z: number }, camera: { x: number; y: number; z: number }): void {
     const p = this.garage.position, x = camera.x + origin.x, z = camera.z + origin.z;
     this.root.position.set(p.x - origin.x, p.y, p.z - origin.z); this.root.rotation.y = -this.garage.heading;
     this.root.visible = Math.hypot(p.x - x, p.z - z) < 1800;
     const floor = this.garage.floor(x, camera.y, z);
+    const priority = this.levels.map((_, i) => i).sort((a, b) => Math.abs(a - (floor ?? 0)) - Math.abs(b - (floor ?? 0)));
     for (const [i, group] of this.levels.entries()) {
       group.visible = this.root.visible && this.garage.visibleFloor(i, floor);
-      if (group.visible && !group.children.length) this.build(i, group);
-      else if (!group.visible && group.children.length) clear(group);
     }
-    this.lighting.visible = this.root.visible && this.garage.shelter(x, camera.y, z) > 0;
-    this.lighting.intensity = 1.7 * this.garage.light;
+    const next = priority.find(i => this.levels[i].visible && !this.levels[i].children.length);
+    if (next !== undefined) this.build(next, this.levels[next]);
+    const capacity = this.root.visible ? this.garage.loading === 'all' ? this.levels.length : Math.max(3, this.cacheLimit) : 0;
+    for (const i of priority.slice().reverse()) if (this.cachedFloors > capacity && !this.levels[i].visible && this.levels[i].children.length) clear(this.levels[i]);
+    this.lighting.intensity = this.root.visible && this.garage.shelter(x, camera.y, z) > 0 ? 1.7 * this.garage.light : 0;
     this.glow.color.setRGB(0.84 * this.garage.light, 0.93 * this.garage.light, this.garage.light);
     const local = this.garage.local(x, z), y = camera.y - p.y;
     const near = this.root.visible && floor !== undefined ? this.fixtures.filter(p => p.y - y > -1 && p.y - y < 6 && Math.hypot(p.x - local.x, p.z - local.z) < 32)
       .sort((a, b) => Math.hypot(a.x - local.x, a.z - local.z) - Math.hypot(b.x - local.x, b.z - local.z)) : [];
     for (const [i, lamp] of this.lamps.entries()) {
-      const point = near[i]; lamp.visible = !!point; lamp.intensity = 110 * this.garage.light;
+      const point = near[i]; lamp.intensity = point ? 110 * this.garage.light : 0;
       if (point) lamp.position.set(point.x, point.y - 0.12, point.z);
     }
   }

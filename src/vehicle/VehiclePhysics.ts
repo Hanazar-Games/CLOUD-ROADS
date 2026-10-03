@@ -41,6 +41,9 @@ export class VehiclePhysics {
   damping = 1;
   powerScale = 1; brakeScale = 1; steeringScale = 1;
   gripScale = 1; handbrakeStrength = 1; countersteerAssist = 0.6;
+  driftMinSpeed = 30 / 3.6; driftDelay = 0.25; stabilityAssist = 0.65;
+  rearLock = 0;
+  private handbrakeTime = 0;
   private allowDrift = true;
   turningRadius?: number;
   steeringResponse = 1;
@@ -92,7 +95,7 @@ export class VehiclePhysics {
   get driftEnabled(): boolean { return this.allowDrift; }
   set driftEnabled(value: boolean) {
     this.allowDrift = value;
-    if (!value) this.lateralSpeed = this.yawRate = this.tireSlip = 0;
+    if (!value) this.lateralSpeed = this.yawRate = this.tireSlip = this.rearLock = this.handbrakeTime = 0;
   }
   get mechanicalLock(): number {
     return this.turningRadius !== undefined && Number.isFinite(this.turningRadius)
@@ -115,7 +118,7 @@ export class VehiclePhysics {
     }
   }
   get steeringLock(): number {
-    const config = this.profile, stability = this.kind === 'motorcycle' ? 8 : Math.min(8, this.gravity * config.width / (2 * config.cg) * 0.7);
+    const config = this.profile, stability = this.profile.shape === 'motorcycle' ? 8 : Math.min(8, this.gravity * config.width / (2 * config.cg) * 0.7);
     const speed = this.motionSpeed * Math.sqrt(clamp(this.steeringAssistStrength, 0.25, 2));
     const blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
     const low = this.mechanicalLock / (1 + speed / 28);
@@ -131,7 +134,7 @@ export class VehiclePhysics {
     this.reverseSelected = false;
     this.impact = this.scrape = 0;
     this.speed = this.lateralSpeed = this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
-    this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
+    this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = this.rearLock = this.handbrakeTime = 0;
     this.transmission.reset(); this.trailerBrake = this.regenerating = false;
     this.parked = true; this.braking = false; this.saveMotion();
     this.progressiveSteering = this.steering;
@@ -154,13 +157,13 @@ export class VehiclePhysics {
     this.x = x; this.z = z; this.heading = this.previousHeading = heading;
     this.speed = this.lateralSpeed = this.steering = this.pitch = this.roll = this.wheelAngle = this.rearWheelAngle = 0;
     this.progressiveSteering = 0;
-    this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = 0;
+    this.yawRate = this.handbrake = this.tireSlip = this.longitudinalAcceleration = this.rearLock = this.handbrakeTime = 0;
     this.vy = this.pitchVelocity = this.rollVelocity = this.accumulator = 0;
     this.parked = true; this.braking = this.jackknifed = this.regenerating = this.trailerBrake = false;
     if (!preservePowertrain) this.transmission.reset();
     if (!preserveTrip) this.trip = 0;
     const contacts = this.contacts(surface), grade = this.slope(contacts, 'along'), bank = this.slope(contacts, 'x');
-    this.pitch = Math.atan(grade); this.roll = this.kind === 'motorcycle' ? 0 : Math.atan(bank * Math.cos(this.pitch));
+    this.pitch = Math.atan(grade); this.roll = this.profile.shape === 'motorcycle' ? 0 : Math.atan(bank * Math.cos(this.pitch));
     const settled = this.contacts(surface);
     this.y = settled.reduce((sum, contact) => sum + contact.height, 0) / settled.length
       + this.profile.radius + this.profile.rest - this.gravity / suspensionTuning(this.suspension, this.profile).spring;
@@ -285,6 +288,10 @@ export class VehiclePhysics {
     const trailerGrade = this.trailers.reduce((sum, t) => sum + Math.sin(t.pitch), 0) / Math.max(1, this.trailers.length);
     const slopeForce = this.gravity * (grade / Math.hypot(1, grade) * tractorShare + trailerGrade * (1 - tractorShare));
     this.handbrake = approach(this.handbrake, input.handbrake ? clamp(this.handbrakeStrength, 0.4, 1) : 0, STEP * (input.handbrake ? 6 : 3));
+    this.handbrakeTime = input.handbrake ? this.handbrakeTime + STEP : 0;
+    const deliberate = this.driftEnabled && input.handbrake && this.handbrakeTime >= clamp(this.driftDelay, 0, 0.8)
+      && (this.motionSpeed >= clamp(this.driftMinSpeed, 0, 80 / 3.6) || this.rearLock > 0.05 && this.motionSpeed > 2);
+    this.rearLock = approach(this.rearLock, deliberate ? this.handbrake : 0, STEP * (deliberate ? 5 : 3));
     const rearLoad = clamp(this.frontAxle / this.wheelbase + this.longitudinalAcceleration * Math.sign(this.speed || 1) * config.cg / (this.gravity * this.wheelbase), 0.18, 0.8);
     const parking = this.parked || input.handbrake && this.motionSpeed < 1;
     const rearOnly = this.driftEnabled && this.handbrake > 0 && !parking && throttle * this.speed >= 0;
@@ -315,8 +322,13 @@ export class VehiclePhysics {
     const correction = this.motionSpeed > 3 ? slide * clamp(this.countersteerAssist, 0, 1) * Math.sign(this.speed || 1) : 0;
     const countersteering = input.steer * slide * Math.sign(this.speed || 1) > 0;
     const mechanicalLock = this.mechanicalLock;
-    const bike = this.kind === 'motorcycle';
-    const targetSteer = clamp(clamp(input.steer, -1, 1) * (countersteering && !bike ? mechanicalLock : steeringLock) + (bike ? 0 : correction), -mechanicalLock, mechanicalLock);
+    const bike = this.profile.shape === 'motorcycle';
+    let targetSteer = clamp(clamp(input.steer, -1, 1) * (countersteering && !bike ? mechanicalLock : steeringLock) + (bike ? 0 : correction), -mechanicalLock, mechanicalLock);
+    if (!bike && !countersteering && this.motionSpeed > 3) {
+      const stableLock = Math.atan(this.gravity * grip * 0.72 * this.wheelbase / Math.max(1, this.speed ** 2));
+      const assist = clamp(this.stabilityAssist, 0, 1) * (1 - this.rearLock);
+      targetSteer += (clamp(targetSteer, -stableLock, stableLock) - targetSteer) * assist;
+    }
     const tuning = this.steeringTuning;
     const response = Math.abs(input.steer) < 0.001 ? tuning.returnSpeed
       : targetSteer * this.progressiveSteering < 0 ? tuning.reversalSpeed : 1;
@@ -344,7 +356,7 @@ export class VehiclePhysics {
     this.z += (-Math.cos(this.heading) * this.speed + Math.sin(this.heading) * this.lateralSpeed) * STEP;
     this.trip += Math.hypot(this.speed, this.lateralSpeed) * STEP;
     this.wheelAngle = (this.wheelAngle + this.speed * STEP / config.radius) % (Math.PI * 2);
-    this.rearWheelAngle = (this.rearWheelAngle + this.speed * (1 - this.handbrake) * STEP / config.radius) % (Math.PI * 2);
+    this.rearWheelAngle = (this.rearWheelAngle + this.speed * (1 - this.rearLock) * STEP / config.radius) % (Math.PI * 2);
     let lift = -this.gravity, pitchForce = 0, rollForce = 0;
     const next = this.contacts(surface);
     for (let i = 0; i < count; i++) {
@@ -405,9 +417,9 @@ export class VehiclePhysics {
       const stiffness = this.gravity * load * 12;
       const rollingForce = clamp(-slipAngle * stiffness, -limit, limit);
       const lockedForce = -sideways / Math.max(0.5, Math.hypot(speed, sideways)) * capacity * 0.78;
-      const force = !front && rearOnly ? rollingForce * (1 - this.handbrake) + lockedForce * this.handbrake : rollingForce;
+      const force = !front && rearOnly ? rollingForce * (1 - this.rearLock) + lockedForce * this.rearLock : rollingForce;
       lateral += force * cos; longitudinal -= force * sin; torque += force * cos * along;
-      if (grip > 0) slip = Math.max(slip, Math.abs(sideways) / 6, !front ? this.handbrake * Math.abs(speed) / 20 : 0);
+      if (grip > 0) slip = Math.max(slip, Math.abs(sideways) / 6, !front ? this.rearLock * Math.abs(speed) / 20 : 0);
     }
     const energy = this.speed ** 2 + this.lateralSpeed ** 2 + inertia * this.yawRate ** 2;
     this.longitudinalAcceleration += longitudinal;

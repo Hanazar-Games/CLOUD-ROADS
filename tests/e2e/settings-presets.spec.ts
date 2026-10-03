@@ -55,11 +55,13 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await page.locator('#engine-response').fill('125');
   await page.locator('#vehicle-max-speed').fill('75'); await page.locator('#steering-assist').uncheck();
   await page.locator('#road-grip').fill('45'); await page.locator('#handbrake-strength').fill('75'); await page.locator('#countersteer-assist').fill('35');
+  await page.locator('#drift-min-speed').fill('55'); await page.locator('#drift-delay').fill('600'); await page.locator('#stability-assist').fill('80');
   await category(page, 'weather'); await page.locator('#weather-rain').check();
   await category(page, 'audio'); await page.locator('#music-ducking').fill('65'); await page.locator('#collision-volume').fill('40');
   await category(page, 'world'); await page.locator('#mountain-density').fill('125');
   await category(page, 'graphics'); await page.locator('#vegetation-lod').fill('50');
   await page.locator('#distant-trees').fill('25'); await page.locator('#vehicle-detail-distance').fill('120');
+  await page.locator('#parked-detail-limit').fill('8'); await page.locator('#garage-cache').fill('5');
   for (const [id, value] of [['tree-density', '45'], ['ground-density', '20'], ['flower-density', '65'], ['rock-density', '35'], ['detail-distance', '175'], ['frame-limit', '3']]) await page.locator(`#${id}`).fill(value);
   await category(page, 'traffic'); await page.locator('#traffic-scenario').selectOption('stopgo');
   await category(page, 'presets'); await page.locator('#preset-name').fill('雨中山路'); await page.locator('#preset-save').click();
@@ -69,7 +71,8 @@ test('saves and reloads local presets, exports and imports JSON without applying
   const saved = JSON.parse(buffer.toString());
   expect(saved.world.mountainDensity).toBe(1.25); expect(saved.settings['vehicle-max-speed']).toBe(75);
   expect(saved.factorySpeed).toBe(false); expect(saved.position).toBeUndefined();
-  expect(saved.version).toBe(16); expect(saved.settings['road-grip']).toBe(45);
+  expect(saved.version).toBe(20); expect(saved.settings['road-grip']).toBe(45);
+  for (const [id, value] of [['drift-min-speed', 55], ['drift-delay', 600], ['stability-assist', 80], ['parked-detail-limit', 8], ['garage-cache', 5]]) expect(saved.settings[id]).toBe(value);
   expect(saved.settings['engine-response']).toBe(125); expect(saved.settings['music-ducking']).toBe(65); expect(saved.settings['collision-volume']).toBe(40);
   expect(saved.settings['vegetation-lod']).toBe(50); expect(saved.settings['distant-trees']).toBe(25);
   expect(saved.settings['vehicle-detail-distance']).toBe(120); expect(saved.settings['traffic-scenario']).toBe('stopgo');
@@ -86,6 +89,8 @@ test('saves and reloads local presets, exports and imports JSON without applying
   await expect(page.locator('#vehicle-max-speed')).toHaveValue('75'); await expect(page.locator('#steering-assist')).not.toBeChecked();
   await expect(page.locator('#road-grip')).toHaveValue('45'); await expect(page.locator('#handbrake-strength')).toHaveValue('75');
   await expect(page.locator('#countersteer-assist')).toHaveValue('35');
+  await expect(page.locator('#drift-min-speed')).toHaveValue('55'); await expect(page.locator('#drift-delay')).toHaveValue('600');
+  await expect(page.locator('#stability-assist')).toHaveValue('80');
   await expect(page.locator('#drive-hud')).toHaveAttribute('data-style', 'dial');
   await page.locator('#vehicle-max-speed').fill('40');
   await category(page, 'presets'); await page.locator('#preset-import').setInputFiles({ name: 'trip.json', mimeType: 'application/json', buffer });

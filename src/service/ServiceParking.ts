@@ -9,14 +9,14 @@ const paints = [0xd8dedb, 0x29485e, 0x377d78, 0xa73d32, 0xdca632, 0x353d43, 0x7d
 export const PARK_HALF_WIDTH = 80, PARK_HALF_LENGTH = 110;
 const slots: ParkingSlot[] = [];
 for (const x of [-57, -39]) for (let along = -80; along <= 80; along += 4)
-  slots.push({ x, along, heading: x < -48 ? Math.PI / 2 : -Math.PI / 2, length: 6.5, width: 3.2, zone: 0, kinds: ['roadster', 'sedan', 'suv', 'supercar', 'hatchback', 'wagon', 'pickup', 'van', 'coupe', 'rally'] });
+  slots.push({ x, along, heading: x < -48 ? Math.PI / 2 : -Math.PI / 2, length: 6.5, width: 3.2, zone: 0, kinds: ['roadster', 'sedan', 'suv', 'supercar', 'hatchback', 'wagon', 'pickup', 'van', 'coupe', 'rally', 'taxi', 'surfWagon', 'patrol', 'parcelVan'] });
 for (const along of [-84, -61, -38, -15, 8, 31, 54, 77])
-  slots.push({ x: -13, along, heading: 0, length: 19, width: 4, zone: 1, kinds: ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus', 'camper', 'limousine', 'expedition6', 'schoolbus', 'shuttle'] });
+  slots.push({ x: -13, along, heading: 0, length: 19, width: 4, zone: 1, kinds: ['minibus', 'coach', 'coach15', 'doubleDecker', 'citybus', 'camper', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'adventureCamper', 'panoramicBus'] });
 for (const along of [-84, -61, -38])
-  slots.push({ x: 43, along, heading: 0, length: 17, width: 4.5, zone: 2, kinds: ['truck5', 'truck8', 'flatbed12', 'crane', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'sprinkler', 'mixer', 'garbage', 'refrigerated', 'towtruck'] });
+  slots.push({ x: 43, along, heading: 0, length: 17, width: 4.5, zone: 2, kinds: ['truck5', 'truck8', 'flatbed12', 'crane', 'ambulance', 'firetruck', 'dumptruck', 'tanker', 'sprinkler', 'mixer', 'garbage', 'refrigerated', 'towtruck', 'livestockTruck', 'loggingTruck', 'maintenanceTruck'] });
 for (const along of [-84, -56, -28])
   slots.push({ x: 66, along, heading: 0, length: 25, width: 4.5, zone: 3, kinds: ['semi15', 'semi20', 'stake18', 'heavySemi'] });
-for (let x = -9; x < 12; x += 1.8) slots.push({ x, along: -100, heading: 0, length: 3, width: 1.4, zone: 4, kinds: ['motorcycle'] });
+for (let x = -9; x < 12; x += 1.8) slots.push({ x, along: -100, heading: 0, length: 3, width: 1.4, zone: 4, kinds: ['motorcycle', 'touringMotorcycle'] });
 export const parkingSlots = (): readonly ParkingSlot[] => slots;
 
 export function parkedAt(seed: string, site: ServiceArea): ParkedEntry[] {

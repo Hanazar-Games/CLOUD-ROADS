@@ -4,6 +4,7 @@ import { DEFAULT_OPTIONS, minimumRoadWidth, validWorldOptions, type WorldOptions
 const fields: Record<keyof WorldOptions, [string, number?]> = {
   terrain: ['terrain-kind'], roadType: ['road-type'], roadWidth: ['road-width'], highwayRadius: ['highway-radius'], routeStyle: ['route-style'],
   roadLanes: ['road-lanes'], oneWay: ['road-one-way'],
+  crossroads: ['crossroads'], crossroadInterval: ['crossroad-interval', 0.001],
   maxGrade: ['max-grade', 100], elevationMode: ['elevation-mode'], climbMin: ['climb-min'], climbMax: ['climb-max'],
   altitudeMin: ['altitude-min'], altitudeMax: ['altitude-max'], elevationDirection: ['elevation-direction'],
   mountainHeight: ['mountain-height'], mountainMin: ['mountain-min'], mountainMax: ['mountain-max'],
@@ -51,6 +52,8 @@ export class WorldSettings {
   sync(changed?: string): void {
     const type = element<HTMLSelectElement>('road-type').value as WorldOptions['roadType'];
     const oneWay = element<HTMLInputElement>('road-one-way').checked, lanes = element<HTMLSelectElement>('road-lanes');
+    element<HTMLInputElement>('crossroads').disabled = type === 'highway' || oneWay;
+    element<HTMLInputElement>('crossroad-interval').disabled = type === 'highway' || oneWay || !element<HTMLInputElement>('crossroads').checked;
     for (const option of lanes.options) option.disabled = type === 'highway' ? Number(option.value) > 3 : !oneWay && Number(option.value) % 2 !== 0;
     if (lanes.selectedOptions[0]?.disabled) lanes.value = '2';
     const width = element<HTMLInputElement>('road-width'), min = minimumRoadWidth(type, Number(lanes.value));

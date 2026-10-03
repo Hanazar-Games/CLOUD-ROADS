@@ -1,7 +1,17 @@
 import './style.css';
 import { Game } from './game/Game';
 import { ReleaseNotes } from './ui/ReleaseNotes';
+import { runtimeLog } from './debug/RuntimeLog';
+import { exportRuntimeLog } from './debug/DebugUI';
+import { LanguageSettings } from './i18n/LanguageSettings';
 
+const stopCapture = runtimeLog.capture(window);
+const exportError = () => exportRuntimeLog();
+document.getElementById('error-export-log')!.addEventListener('click', exportError);
+runtimeLog.write('info', 'app', 'Starting CLOUD ROADS.');
+if (import.meta.hot) import.meta.hot.dispose(() => {
+  stopCapture(); document.getElementById('error-export-log')?.removeEventListener('click', exportError);
+});
 const releases = new ReleaseNotes();
 if (import.meta.hot) import.meta.hot.dispose(() => releases.dispose());
 
@@ -9,6 +19,7 @@ try {
   const game = new Game();
   if (import.meta.hot) import.meta.hot.dispose(() => game.dispose());
 } catch (error) {
+  runtimeLog.write('error', 'startup', error);
   const panel = document.getElementById('error');
   if (panel) {
     panel.hidden = false;
@@ -23,3 +34,6 @@ try {
   }
   console.error(error);
 }
+
+const language = new LanguageSettings();
+if (import.meta.hot) import.meta.hot.dispose(() => language.dispose());

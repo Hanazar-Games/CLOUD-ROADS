@@ -1,5 +1,6 @@
 import { BoxGeometry, Color, DynamicDrawUsage, Float32BufferAttribute, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, type Scene } from 'three';
-import { vehicleTemplate } from '../service/ParkedVehicles';
+import { buildVehicleTemplate } from '../service/ParkedVehicles';
+import { ModelLoadQueue } from '../render/ModelLoadQueue';
 import { MAX_TRAFFIC, type TrafficSystem } from './TrafficSystem';
 import type { VehicleKind } from '../vehicle/VehicleConfig';
 import { vehicleProxy } from '../vehicle/VehicleProxy';
@@ -11,6 +12,8 @@ export class TrafficVehicles {
   private readonly batches = new Map<string, InstancedMesh[]>();
   private readonly lampLayouts = new Map<VehicleKind, number[][]>();
   detailDistance = 240;
+  preloadDistance = 180;
+  private readonly localLoads = new ModelLoadQueue();
   private readonly material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.65, alphaHash: true });
   private readonly box = new BoxGeometry();
   private readonly lamps = new InstancedMesh(this.box, new MeshBasicMaterial({ toneMapped: false }), MAX_TRAFFIC * 80);
@@ -19,7 +22,7 @@ export class TrafficVehicles {
   private readonly local = new Matrix4();
   private readonly color = new Color();
   private readonly fogLamps: FogLampBatch;
-  constructor(private readonly scene: Scene, readonly traffic: TrafficSystem) {
+  constructor(private readonly scene: Scene, readonly traffic: TrafficSystem, private readonly sharedLoads?: ModelLoadQueue) {
     this.fogLamps = new FogLampBatch(scene, MAX_TRAFFIC, 'traffic-fog-lamps');
     this.material.onBeforeCompile = shader => {
       shader.vertexShader = `attribute float paintMask; attribute float glassMask; varying float vTrafficGlass;
@@ -58,18 +61,27 @@ export class TrafficVehicles {
     if (fog) darkness = Math.max(0.3, darkness);
     const detail = (car: { x: number; z: number }) => Math.hypot(car.x - anchor.x, car.z - anchor.z) <= this.detailDistance;
     const key = (car: { kind: VehicleKind; x: number; z: number }) => `${car.kind}:${detail(car) ? 'near' : 'far'}`;
-    const missing = this.traffic.entries.find(e => !this.batches.has(key(e.car)));
-    if (missing) this.batches.set(key(missing.car), (detail(missing.car) ? vehicleTemplate(missing.car.kind, false, true) : vehicleProxy(missing.car.kind)).map((geometry, i) => {
-      const count = geometry.getAttribute('position').count;
-      if (!geometry.hasAttribute('wheelPivot')) {
-        geometry.setAttribute('wheelPivot', new Float32BufferAttribute(new Float32Array(count * 4), 4));
-        geometry.setAttribute('wheelSteer', new Float32BufferAttribute(new Float32Array(count), 1));
-      }
-      geometry.setAttribute('trafficMotion', new InstancedBufferAttribute(new Float32Array(MAX_TRAFFIC * 2), 2).setUsage(DynamicDrawUsage));
-      const mesh = new InstancedMesh(geometry, this.material, MAX_TRAFFIC); mesh.name = `traffic-${key(missing.car)}-${i}`;
-      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-      mesh.count = 0; mesh.receiveShadow = true; this.scene.add(mesh); return mesh;
-    }));
+    const loads = this.sharedLoads ?? this.localLoads;
+    for (const { car } of this.traffic.entries) for (const fine of [false, true]) {
+      const distance = Math.hypot(car.x - anchor.x, car.z - anchor.z), batchKey = `${car.kind}:${fine ? 'near' : 'far'}`;
+      if (this.batches.has(batchKey) || fine && (this.detailDistance === 0 || distance > this.detailDistance + this.preloadDistance)) continue;
+      const build = function* (this: TrafficVehicles): Generator<void> {
+        const geometries = fine ? yield* buildVehicleTemplate(car.kind, false, true) : vehicleProxy(car.kind);
+        this.batches.set(batchKey, geometries.map((geometry, i) => {
+          const count = geometry.getAttribute('position').count;
+          if (!geometry.hasAttribute('wheelPivot')) {
+            geometry.setAttribute('wheelPivot', new Float32BufferAttribute(new Float32Array(count * 4), 4));
+            geometry.setAttribute('wheelSteer', new Float32BufferAttribute(new Float32Array(count), 1));
+          }
+          geometry.setAttribute('trafficMotion', new InstancedBufferAttribute(new Float32Array(MAX_TRAFFIC * 2), 2).setUsage(DynamicDrawUsage));
+          const mesh = new InstancedMesh(geometry, this.material, MAX_TRAFFIC); mesh.name = `traffic-${batchKey}-${i}`;
+          mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+          mesh.count = 0; mesh.receiveShadow = true; this.scene.add(mesh); return mesh;
+        }));
+      }.bind(this);
+      loads.request(`traffic:${batchKey}`, distance + (fine ? detail(car) ? 10000 : 20000 : 0), build);
+    }
+    if (!this.sharedLoads) loads.pump();
     for (const meshes of this.batches.values()) for (const mesh of meshes) mesh.count = 0;
     this.lamps.count = this.drivers.count = 0;
     for (const { car, signal } of this.traffic.entries) {
@@ -142,6 +154,7 @@ export class TrafficVehicles {
     upload(this.lamps); upload(this.drivers);
   }
   dispose(): void {
+    this.localLoads.dispose();
     this.fogLamps.dispose();
     for (const meshes of this.batches.values()) for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh.dispose(); }
     for (const mesh of [this.lamps, this.drivers]) { mesh.removeFromParent(); mesh.material.dispose(); mesh.dispose(); }

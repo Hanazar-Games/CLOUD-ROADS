@@ -31,6 +31,63 @@ class AudioContextStub {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it('recovers from a failed resume without losing a nonzero mix', async () => {
+  const failed = new AudioContextStub(), recovered = new AudioContextStub();
+  failed.resume = async () => { throw new Error('device lost'); };
+  const create = vi.fn().mockImplementationOnce(function () { return failed; }).mockImplementation(function () { return recovered; });
+  vi.stubGlobal('AudioContext', create);
+  const audio = new AudioSystem(); audio.engineVolume = 0.4; audio.musicVolume = 0;
+  audio.toggle(); await Promise.resolve(); await Promise.resolve();
+  expect(audio.state).toBe('unavailable');
+  audio.recover(); await Promise.resolve();
+  expect(audio.state).toBe('running'); expect(audio.enabled).toBe(true);
+  expect(audio.engineVolume).toBe(0.4); expect(audio.musicVolume).toBe(0.3);
+  expect(failed.state).toBe('closed'); audio.dispose();
+});
+
+it('ignores a stale resume rejection after explicit recovery', async () => {
+  const stale = new AudioContextStub(), current = new AudioContextStub();
+  let reject!: (error: Error) => void;
+  stale.resume = () => new Promise<void>((_, failure) => { reject = failure; });
+  vi.stubGlobal('AudioContext', vi.fn().mockImplementationOnce(function () { return stale; }).mockImplementation(function () { return current; }));
+  const audio = new AudioSystem(); audio.toggle(); audio.recover(); await Promise.resolve();
+  reject(new Error('old device')); await Promise.resolve();
+  expect(audio.state).toBe('running'); expect(audio.error).toBe('');
+  expect(stale.state).toBe('closed'); expect(current.state).toBe('running'); audio.dispose();
+});
+
+it('plays an independent channel test with muted music and effects, and cancels on pause', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.sfxVolume = audio.musicVolume = 0;
+  expect(audio.testSound()).toBe(true); await Promise.resolve();
+  expect(audio.testing).toBe(true); expect(context.state).toBe('running');
+  expect(audio.sfxVolume).toBe(0); expect(audio.musicVolume).toBe(0);
+  audio.setActive(false); await Promise.resolve();
+  expect(audio.testing).toBe(false); expect(context.state).toBe('suspended');
+  audio.setActive(true); await Promise.resolve(); expect(audio.testing).toBe(false);
+  audio.masterVolume = 0; expect(audio.testSound()).toBe(false); audio.dispose();
+});
+
+it('fails a resolved but still suspended resume instead of recursively retrying', async () => {
+  const context = new AudioContextStub(); context.resume = vi.fn(async () => {});
+  vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
+  expect(context.resume).toHaveBeenCalledOnce(); expect(audio.state).toBe('unavailable'); audio.dispose();
+});
+
+it('times out a blocked browser resume and allows a later user gesture to rebuild', async () => {
+  vi.useFakeTimers();
+  const blocked = new AudioContextStub(), recovered = new AudioContextStub();
+  blocked.resume = () => new Promise<void>(() => {});
+  vi.stubGlobal('AudioContext', vi.fn().mockImplementationOnce(function () { return blocked; }).mockImplementation(function () { return recovered; }));
+  const audio = new AudioSystem();
+  try {
+    audio.toggle(); await vi.advanceTimersByTimeAsync(4001);
+    expect(audio.state).toBe('unavailable'); expect(blocked.state).toBe('closed');
+    audio.recover(); await Promise.resolve(); expect(audio.state).toBe('running');
+  } finally { audio.dispose(); vi.useRealTimers(); }
+});
+
 it.each(['player', 'traffic'])('keeps music at full level when muted %s horns are triggered', async source => {
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.sfxVolume = 0; audio.musicDucking = 0; audio.hornFocus = 1;
@@ -176,7 +233,8 @@ it('mixes contact sounds only while driving and respects their independent volum
   const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
   const audio = new AudioSystem(); audio.toggle(); await Promise.resolve();
   audio.update(0.1, { ...idle, driving: true, impact: 12, scrape: 15 });
-  const contacts = context.gains.slice(-2);
+  const nodes = audio as unknown as { impactGain: ReturnType<typeof gain>; scrapeGain: ReturnType<typeof gain> };
+  const contacts = [nodes.impactGain, nodes.scrapeGain];
   expect(contacts.every(g => g.gain.value > 0)).toBe(true);
   audio.collisionVolume = 0; audio.update(0.1, { ...idle, driving: true, impact: 12, scrape: 15 });
   expect(contacts.every(g => g.gain.value === 0)).toBe(true);

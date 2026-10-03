@@ -7,11 +7,12 @@ import type { RoadTerrain } from './RoadGenerator';
 import { RoadSegment, type RoadControlPoint, type RoadSample } from './RoadSegment';
 import { RoadSpine } from './RoadSpine';
 import { roadProfile } from './RoadProfile';
-import { JUNCTION_INTERVAL, junctionLead, junctionsEnabled } from './JunctionSchedule';
+import { INTERCHANGE_EXTENT, crossroadsEnabled, junctionInterval, junctionLead, junctionsEnabled, junctionTail } from './JunctionSchedule';
 import { highwayInterchange, type HighwayInterchange } from './HighwayInterchange';
+import { crossroadSite } from './CrossroadSite';
 
 export interface JunctionRamp { id: string; sample: RoadSample; direction: 'left' | 'right' | 'return' }
-export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack'; exits: string[]; ramps: JunctionRamp[]; interchange?: HighwayInterchange }
+export interface Junction { id: string; route: string; distance: number; sample: RoadSample; kind: 'fork' | 'stack' | 'crossroads'; exits: string[]; ramps: JunctionRamp[]; interchange?: HighwayInterchange }
 interface RouteDefinition { id: string; seed: string; origin?: RoadControlPoint; prefix: RoadSegment[]; parent?: RouteDefinition; openings?: RoadSpine['openings']; opposite?: string }
 export interface NetworkRoute {
   id: string; seed: string; road: RoadSpine; definition: RouteDefinition;
@@ -115,19 +116,41 @@ export class RoadNetwork {
   private planJunctions(x: number, z: number, route = this.active): void {
     if (!junctionsEnabled(this.options)) return;
     const current = route.road.nearest(x, z)!;
-    const first = Math.max(1, Math.floor((current.distance - 2400) / JUNCTION_INTERVAL));
+    const interval = junctionInterval(this.options);
+    const first = Math.max(1, Math.floor((current.distance - junctionTail(this.options) - 200) / interval));
     for (let index = first; index <= first + 1; index++) {
       const id = `${route.id}/${index}`, seed = `${route.seed}:junction:${index}`;
       const existing = this.junctions.find(junction => junction.id === id);
       if (existing && existing.exits.every(exit => this.cache.has(exit))) continue;
-      const distance = index * JUNCTION_INTERVAL;
-      if (distance > current.distance + 2800 || distance < current.distance - 1400) continue;
-      if (route.tunnels.some(span => span.start.distance < distance + 1200 && span.end.distance > distance - junctionLead(this.options))) continue;
+      const distance = index * interval;
+      if (distance > current.distance + junctionLead(this.options) || distance < current.distance - junctionTail(this.options) - 200) continue;
+      if (route.tunnels.some(span => span.start.distance < distance + junctionTail(this.options) && span.end.distance > distance - junctionLead(this.options))) continue;
       const segment = route.road.segments.find(s => s.start.distance <= distance && s.end.distance >= distance);
       if (!segment) continue;
       if (route.road.segments.some(s => s.start.structure?.landmark && s.end.distance > distance - 3000 && s.start.distance < distance + 3000)) continue;
       const sample = segment.atDistance(distance);
       const childId = `branch-${hashSeed(seed).toString(36)}-${hashSeed(`${seed}:id`).toString(36)}`;
+      if (crossroadsEnabled(this.options)) {
+        if (!crossroadSite(sample, this.terrain, this.options, { ...route, samples: route.road.samples })) continue;
+        const exits = [childId, `${childId}-opposite`], half = roadProfile(this.options).outerHalfWidth + 2;
+        for (const [i, direction] of [1, -1].entries()) {
+          const start: RoadControlPoint = { ...sample, routeId: exits[i], position: { ...sample.position },
+            heading: sample.heading + direction * Math.PI / 2, grade: 0, bank: 0, distance: 0,
+            junction: true, mountain: undefined, structure: undefined, structureStep: undefined, nextStructure: 400,
+            nextMountain: 500, nextLandmark: undefined, climb: undefined };
+          const prefix = [new RoadSegment(start, start.heading, 0, 100)];
+          const child = this.add({ id: exits[i], seed: exits[i], origin: { ...prefix[0].end, junction: undefined },
+            prefix, parent: route.definition, opposite: exits[1 - i] });
+          child.road.openings.splice(0, child.road.openings.length, { start: 0, end: half, side: 0 });
+          child.road.version++; child.ready = true; this.refresh(child);
+        }
+        route.road.openings.splice(0, route.road.openings.length, ...route.road.openings.filter(o => o.end >= current.distance - 8000 && o.start !== distance - half));
+        route.road.openings.push({ start: distance - half, end: distance + half, side: 0 });
+        if (existing) this.junctions.splice(this.junctions.indexOf(existing), 1);
+        this.junctions.push({ id, route: route.id, distance, sample, kind: 'crossroads', exits,
+          ramps: exits.map((id, i) => ({ id, sample, direction: i ? 'left' : 'right' })) });
+        route.road.version++; this.version++; continue;
+      }
       if (this.options.roadType === 'highway' && !this.options.oneWay && this.options.interchanges) {
         if (Math.abs(sample.grade) > 0.001) continue;
         const interchange = highwayInterchange(id, sample, this.options), exits = [childId, `${childId}-opposite`];
@@ -136,17 +159,17 @@ export class RoadNetwork {
             heading: sample.heading + direction * Math.PI / 2, grade: 0, distance: 0, bank: 0, junction: true, elevated: true,
             mountain: undefined, structure: undefined, structureStep: undefined, nextStructure: undefined, nextLandmark: undefined, climb: undefined };
           const prefix: RoadSegment[] = [];
-          for (let j = 0; j < 12; j++) { const segment = new RoadSegment(start, start.heading, 0); prefix.push(segment); start = segment.end; }
+          while (start.distance < INTERCHANGE_EXTENT) { const segment = new RoadSegment(start, start.heading, 0); prefix.push(segment); start = segment.end; }
           const child = this.add({ id: exits[i], seed: exits[i], origin: { ...start, junction: undefined, elevated: undefined, nextMountain: start.distance + 600 },
             prefix, parent: route.definition, opposite: exits[1 - i] });
           child.road.openings.length = 0;
           for (const ramp of interchange.ramps) for (const port of [ramp.entry, ramp.exit]) if (port.direction % 2 && port.u * direction > 0)
-            child.road.openings.push({ start: Math.abs(port.u) - 170, end: Math.abs(port.u) + 170, side: -Math.sign(port.v) * direction });
+            child.road.openings.push({ start: Math.min(port.start * direction, port.end * direction), end: Math.max(port.start * direction, port.end * direction), side: -Math.sign(port.v) * direction });
           child.road.version++; child.ready = true; this.refresh(child);
         }
         route.road.openings.splice(0, route.road.openings.length, ...route.road.openings.filter(range => range.end >= current.distance - 8000));
         for (const ramp of interchange.ramps) for (const port of [ramp.entry, ramp.exit]) if (!(port.direction % 2)) {
-          const opening = { start: distance + port.v - 170, end: distance + port.v + 170, side: Math.sign(port.u) };
+          const opening = { start: distance + port.start, end: distance + port.end, side: Math.sign(port.u) };
           if (!route.road.openings.some(o => o.start === opening.start && o.side === opening.side)) route.road.openings.push(opening);
         }
         if (existing) this.junctions.splice(this.junctions.indexOf(existing), 1);

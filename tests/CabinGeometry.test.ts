@@ -136,3 +136,13 @@ it('extends crane pads down to the settled vehicle ground plane', () => {
   for (const leg of legs) expect(Math.abs(new Box3().setFromObject(leg).min.y)).toBeLessThan(0.05);
   expect(mesh.root.getObjectByName('crane-display')!.userData.display).toContain('CRANE ON'); mesh.dispose();
 });
+
+it('forwards door interlocks to the crane operator display as well as the driving display', () => {
+  const car = new VehiclePhysics('crane'), mesh = new VehicleMesh(new Scene(), car.profile);
+  const systems = new VehicleSystems(), crane = new CraneSystems(), operations = new VehicleOperations(car.profile);
+  operations.toggle('doors', 0, true);
+  mesh.sync(car, { x: 0, z: 0 }, systems, 0.2, crane, operations);
+  for (const name of ['vehicle-display', 'crane-display'])
+    expect(mesh.root.getObjectByName(name)!.userData.display, name).toContain('DOOR OPEN - PARK');
+  mesh.dispose();
+});

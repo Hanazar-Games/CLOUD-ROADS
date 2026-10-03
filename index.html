@@ -19,7 +19,14 @@
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
         <p id="settings-help">设置期间暂停行驶，声音可试听。拖动滑条或输入数值后按 Enter；Esc 取消编辑。Ctrl / ⌘ K 搜索。</p>
         <div class="settings-search"><label for="settings-search">搜索全部设置与操作</label><div class="settings-search-row"><input id="settings-search" type="search" placeholder="搜索车型、植被、雨刮、音量…" autocomplete="off" aria-controls="settings-search-results" aria-describedby="settings-search-status" /><button id="settings-search-clear" type="button" disabled>清除</button></div><div class="settings-quick" aria-label="常用设置"><span>常用</span><button type="button" data-settings-shortcut="vehicle-kind">载具</button><button type="button" data-settings-shortcut="tree-density">植被数量</button><button type="button" data-settings-shortcut="weather-clear">天气</button><button type="button" data-settings-shortcut="master-volume">音量</button></div><span id="settings-search-status" role="status"></span><div id="settings-search-results" aria-label="搜索结果" hidden></div></div>
-        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="autopilot" aria-controls="settings-autopilot">自动驾驶</button><button type="button" data-settings-target="bindings" aria-controls="settings-bindings">快捷键</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="traffic" aria-controls="settings-traffic">NPC 交通</button><button type="button" data-settings-target="garage" aria-controls="settings-garage">地下停车场</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
+        <div class="settings-layout"><nav class="settings-nav" aria-label="设置分类"><button type="button" data-settings-target="language" aria-controls="settings-language">语言 / Language</button><button type="button" data-settings-target="driving" aria-controls="settings-driving">驾驶与视角</button><button type="button" data-settings-target="autopilot" aria-controls="settings-autopilot">自动驾驶</button><button type="button" data-settings-target="bindings" aria-controls="settings-bindings">快捷键</button><button type="button" data-settings-target="equipment" aria-controls="settings-equipment">车载设备</button><button type="button" data-settings-target="traffic" aria-controls="settings-traffic">NPC 交通</button><button type="button" data-settings-target="garage" aria-controls="settings-garage">地下停车场</button><button type="button" data-settings-target="world" aria-controls="settings-world">世界与道路</button><button type="button" data-settings-target="weather" aria-controls="settings-weather">天气与时间</button><button type="button" data-settings-target="graphics" aria-controls="settings-graphics">性能与画质</button><button type="button" data-settings-target="audio" aria-controls="settings-audio">声音与音乐</button><button type="button" data-settings-target="diagnostics" aria-controls="settings-diagnostics">诊断与日志</button><button type="button" data-settings-target="presets" aria-controls="settings-presets">我的预设</button><button type="button" data-settings-target="explore" aria-controls="settings-explore">探索工具</button></nav><div class="settings-content" id="settings-content">
+<section class="settings-category" id="settings-language" aria-labelledby="heading-language"><h3 id="heading-language">语言 / Language</h3>
+        <label for="interface-language">界面语言</label>
+        <select id="interface-language" translate="no"><option value="zh-CN" lang="zh-CN">中文（简体）</option><option value="ja" lang="ja">日本語</option><option value="en" lang="en">English</option><option value="ko" lang="ko">한국어</option><option value="es" lang="es">Español</option></select>
+        <p class="panel-help">切换后立即更新设置、菜单与驾驶提示，语言偏好独立保存到本机。</p>
+        <p id="language-status" class="panel-help" role="status"></p>
+        <p class="panel-help">版本公告与开发日志保留原文。</p>
+</section>
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
         <label class="check-label"><input id="beginner-mode" type="checkbox" checked /> 新手模式 · 底部显示当前可用快捷键</label>
         <p class="panel-help">F 下到车外；{CabinWalk} 在客车 / 房车中离座、就近坐下，或从货厢尾门进入。{Powertrain} 切换燃油 / 电动。均可在快捷键分类修改。</p>
@@ -120,7 +127,13 @@
             <input id="handbrake-strength" type="range" min="40" max="100" step="5" value="100" aria-describedby="drift-help" />
             <label class="speed-label" for="countersteer-assist">漂移反打辅助 <output id="countersteer-assist-value">60%</output></label>
             <input id="countersteer-assist" type="range" min="0" max="100" step="5" value="60" aria-describedby="drift-help" />
-            <p id="drift-help" class="panel-help">行驶中转向并按住 Space，让后轮逐渐锁止并甩尾；松开手刹、反打方向恢复抓地。持续拉手刹会减速，长车响应较慢。抓地力越低越滑，制动距离也更长，与雨雪和路外地面效果叠加，作用于玩家车辆并随换车保留。反打辅助只调整前轮方向，0% 为完全手动。静止时 Space 保持驻车。</p>
+            <label class="speed-label" for="drift-min-speed">主动漂移最低速度 <output id="drift-min-speed-value">30 km/h</output></label>
+            <input id="drift-min-speed" type="range" min="0" max="80" step="5" value="30" />
+            <label class="speed-label" for="drift-delay">手刹漂移确认时间 <output id="drift-delay-value">250 ms</output></label>
+            <input id="drift-delay" type="range" min="0" max="800" step="50" value="250" />
+            <label class="speed-label" for="stability-assist">转向稳定辅助 <output id="stability-assist-value">65%</output></label>
+            <input id="stability-assist" type="range" min="0" max="100" step="5" value="65" />
+            <p id="drift-help" class="panel-help">Space 立即制动；达到最低速度并持续按住后，后轮才逐渐锁止进入漂移。松开手刹、反打方向恢复抓地。稳定辅助按抓地力限制过大的转向请求，主动漂移时逐渐减弱，0% 为手动。雨雪和低抓地力仍会导致自然侧滑；关闭漂移可抑制侧滑。参数随换车保留，静止时 Space 保持驻车。</p>
             <button id="drift-reset" type="button">恢复默认漂移参数</button>
           </details>
         <details class="world-options"><summary>视角与悬挂</summary>
@@ -202,6 +215,23 @@
           <p id="equipment-help" class="panel-help">G 喷洗；V 鸣笛；按住 ，/。升降车窗（《/》所在键），松开即停；N 切换风速；K 氛围灯、U 阅读灯；T 开关敞篷。敞篷仅低于 5 km/h 可操作，途中加速会暂停动作；车门、车窗和车顶改变驾驶舱风声。设置关闭后继续设备动画，摩托车不提供玻璃、雨刮、风机和室内灯。</p>
 </details></div></section>
 <section class="settings-category" id="settings-traffic" aria-labelledby="heading-traffic"><h3 id="heading-traffic">NPC 交通</h3>
+          <details class="world-options" open><summary>红绿灯与交规提醒</summary>
+          <p class="panel-help">在世界与道路中启用信号十字路口。NPC 与控速自动驾驶会等待信号；仅控方向时仍需自行刹车。转弯须让行，暂不模拟行人信号与独立左转相位。</p>
+          <label for="signal-mainGreen">主路绿灯时间 <output id="signal-mainGreen-value">12 s</output></label><input id="signal-mainGreen" type="range" min="5" max="90" step="1" value="12" data-help="主路两个方向同时放行；越长主路越顺畅，但支路等待更久。" />
+          <label for="signal-crossGreen">支路绿灯时间 <output id="signal-crossGreen-value">8 s</output></label><input id="signal-crossGreen" type="range" min="5" max="90" step="1" value="8" data-help="交叉方向的通行时间，默认较短。" />
+          <label for="signal-yellow">黄灯时间 <output id="signal-yellow-value">3 s</output></label><input id="signal-yellow" type="range" min="2" max="6" step="1" value="3" data-help="黄灯时能安全停车的车辆会停车；过近时继续清空路口。黄灯不判闯红灯。" />
+          <label for="signal-clearance">全红清空时间 <output id="signal-clearance-value">2 s</output></label><input id="signal-clearance" type="range" min="1" max="8" step="1" value="2" data-help="切换方向前让两个方向都亮红灯。长车较多时可适当增加。修改配时后先全红，再恢复周期。" />
+          <p id="signal-settings-status" class="panel-help" role="status"></p>
+          <label class="check-label"><input id="signal-countdown" type="checkbox" checked /> 显示前方信号倒计时</label>
+          <label class="check-label"><input id="rules-enabled" type="checkbox" checked /> 开启交通违规提醒</label>
+          <label class="check-label"><input id="rules-red" type="checkbox" checked /> 提醒闯红灯</label>
+          <label class="check-label"><input id="rules-speed" type="checkbox" checked /> 提醒持续超速</label>
+          <label for="rules-limit">提醒限速 <output id="rules-limit-value">80 km/h</output></label><input id="rules-limit" type="range" min="20" max="200" step="5" value="80" data-help="仅用于玩家超速提醒；不改变车辆最高速度或 NPC 巡航速度。连续超速两秒后提醒。" />
+          <label for="rules-tolerance">超速容差 <output id="rules-tolerance-value">5 km/h</output></label><input id="rules-tolerance" type="range" min="0" max="20" step="1" value="5" data-help="车速超过提醒限速加此容差时，才开始计算持续超速。" />
+          <label for="rules-duration">提醒显示时长 <output id="rules-duration-value">5 s</output></label><input id="rules-duration" type="range" min="3" max="12" step="1" value="5" />
+          <label for="rules-cooldown">超速重复提醒间隔 <output id="rules-cooldown-value">8 s</output></label><input id="rules-cooldown" type="range" min="5" max="60" step="1" value="8" />
+          <p class="panel-help">提醒不罚款、不强制制动，仅在驾驶时记录。关闭总开关立即隐藏提醒，NPC 仍遵守信号；暂停、换世界与重新放置车辆不会产生越线处罚。</p>
+          </details>
           <details class="world-options" open><summary>车流密度与拥堵</summary>
           <label class="slider-label" for="traffic-density">交通密度 <output id="traffic-density-value">35%</output></label>
           <input id="traffic-density" type="range" min="0" max="100" step="5" value="35" />
@@ -298,8 +328,11 @@
             <input id="road-width" type="number" min="5" max="12" step="0.5" value="8" required aria-describedby="road-width-help" />
             <p id="road-width-help">沥青宽度，不含路肩。高速按每个方向计算，中央分隔带 4 米。</p>
             </details><details class="world-options"><summary>岔路与立交</summary>
+            <label class="check-label"><input id="crossroads" type="checkbox" /> 启用信号十字路口</label>
+            <label for="crossroad-interval">十字路口目标间隔 · km</label><input id="crossroad-interval" type="range" min="1" max="30" step="0.5" value="3" disabled data-help="仅双向山路与景观大道生效，替代原分支匝道。桥梁、隧道、服务区和过陡地形会跳过，因此实际间距可能更大。应用后重新生成。" />
+            <p class="panel-help">开启后使用四向平面路口，转入支路后继续无限生成。高速与单向道路保留原匝道；信号配时与违规提醒在 NPC 交通分类调整。</p>
             <label for="junctions"><input id="junctions" type="checkbox" checked /> 山路岔路 · 可转入支路</label>
-            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 双层高速互通 / 山路匝道</label>
+            <label for="interchanges"><input id="interchanges" type="checkbox" checked /> 四层高速互通 / 山路匝道</label>
             <p class="panel-help">双向高速每 20 公里生成上下交叉主线，四个方向均可直行、左转、右转。连接匝道独立采用不超过 6% 的坡度，主线仍使用坡度设置。上层主线抬高 14 米以保留净空，立交局部高度可超出海拔区间。</p>
             <p class="panel-help">山路与单向高速沿用分支匝道；山路坡度低于 2.5% 或净空不足时使用平面出口。双向高速采用四向全互通；应用后重新生成。</p>
             </details><details class="world-options"><summary>坡度与海拔</summary>
@@ -384,9 +417,9 @@
 <section class="settings-category" id="settings-graphics" aria-labelledby="heading-graphics"><h3 id="heading-graphics">性能与画质</h3>
         <details class="world-options" open><summary>渲染与帧率</summary>
           <label for="graphics-preset">一键画质预设</label>
-          <select id="graphics-preset"><option value="economy">节能 · 减少细节与植被</option><option value="balanced" selected>均衡</option><option value="quality">精细 · 更远细节</option><option value="custom" disabled>自定义</option></select>
+          <select id="graphics-preset"><option value="minimal">极低 · 保留道路与车辆主体</option><option value="economy">节能 · 减少细节与植被</option><option value="balanced" selected>均衡</option><option value="quality">精细 · 更远细节</option><option value="custom" disabled>自定义</option></select>
           <label class="speed-label" for="render-scale">3D 渲染比例 <output id="render-scale-value">100%</output></label>
-          <input id="render-scale" type="range" min="50" max="200" step="5" value="100" aria-describedby="render-scale-help" />
+          <input id="render-scale" type="range" min="25" max="200" step="5" value="100" aria-describedby="render-scale-help" />
           <p id="render-scale-help" class="panel-help">200% 为宽高各两倍，像素量为 100% 的四倍；文字保持清晰。超出显卡尺寸限制时自动缩减，实际分辨率显示在下方。</p>
           <label class="speed-label" for="frame-limit">帧率上限 <output id="frame-limit-value">60 FPS</output></label>
           <input id="frame-limit" type="range" min="0" max="7" step="1" value="1" data-discrete />
@@ -406,19 +439,46 @@
           <p id="vegetation-retention-help" class="panel-help">0% 隐藏，100% 显示当前世界生成的全部候选；远景树木还会按距离简化。保留量与「世界与道路」中的生成密度叠加。调整不改变种子、不挪动车辆；按每帧预算逐步更新，恢复时回到原来的位置。服务区人工绿化保留。</p>
         </details>
         <details class="world-options"><summary>模型精度与距离</summary>
-          <label class="speed-label" for="map-detail">道路与近景细节 <output id="map-detail-value">标准</output></label>
+          <label class="speed-label" for="map-detail">设施与近景小物件 <output id="map-detail-value">标准</output></label>
           <input id="map-detail" type="range" min="0" max="2" step="1" value="1" data-discrete aria-describedby="map-detail-help" />
-          <p id="map-detail-help" class="panel-help">轻量使用小纹理并关闭额外小部件；标准 / 丰富使用 2K 路面，默认显示 80 / 160 米内的伸缩缝、格栅、消防柜与服务区细节。</p>
+          <p id="map-detail-help" class="panel-help">轻量关闭额外小部件；标准 / 丰富默认显示 80 / 160 米内的伸缩缝、格栅、消防柜与服务区细节。路面材质可在下方独立调整。</p>
           <label class="speed-label" for="detail-distance">道路与设施小物件距离 <output id="detail-distance-value">100%</output></label>
           <input id="detail-distance" type="range" min="0" max="200" step="5" value="100" />
           <p class="panel-help">按上方细节档位缩放，0% 关闭额外小部件，200% 最远延伸到 320 米；道路、护栏、建筑主体和碰撞持续保留。</p>
           <label class="speed-label" for="vegetation-lod">植被精度距离 <output id="vegetation-lod-value">100%</output></label>
           <input id="vegetation-lod" type="range" min="50" max="150" step="5" value="100" />
           <label class="speed-label" for="vehicle-detail-distance">其他车辆精细距离 <output id="vehicle-detail-distance-value">240 m</output></label>
-          <input id="vehicle-detail-distance" type="range" min="60" max="960" step="30" value="240" />
+          <input id="vehicle-detail-distance" type="range" min="0" max="960" step="30" value="240" />
+          <label class="speed-label" for="parked-detail-limit">停车车辆精细显示上限 <output id="parked-detail-limit-value">12 辆</output></label>
+          <input id="parked-detail-limit" type="range" min="0" max="64" step="1" value="12" />
+          <label class="speed-label" for="garage-cache">停车场楼层缓存 <output id="garage-cache-value">4 层</output></label>
+          <input id="garage-cache" type="range" min="3" max="6" step="1" value="4" />
+          <p class="panel-help">优先精细显示最近的停车车辆，其余使用简模，碰撞和上下车保持有效。楼层细节每帧加载一层；缓存越大，返回楼层时重复加载越少，占用内存更多。「全部加载」会逐步补齐所有层。</p>
           <label class="speed-label" for="view-distance">周围地形范围 <output id="view-distance-value">约 2.0 km</output></label>
-          <input id="view-distance" type="range" min="0" max="3" step="1" value="1" data-discrete aria-describedby="view-distance-help" />
-          <p id="view-distance-help" class="panel-help">四档约 1.5 / 2 / 3 / 4 公里。附近地形优先加载，远处使用简模；更远视距占用更多显存，云雾仍影响能见度。</p>
+          <input id="view-distance" type="range" min="0" max="5" step="1" value="3" data-discrete aria-describedby="view-distance-help" />
+          <p id="view-distance-help" class="panel-help">六档约 0.8 / 1 / 1.5 / 2 / 3 / 4 公里。附近地形优先加载，远处使用简模；更远视距占用更多显存，云雾仍影响能见度。</p>
+        </details>
+        <details class="world-options"><summary>路面纹理与凹凸</summary>
+          <label class="speed-label" for="road-texture">路面纹理分辨率 <output id="road-texture-value">2048 · 高清</output></label>
+          <input id="road-texture" type="range" min="0" max="1" step="1" value="1" data-discrete />
+          <label class="speed-label" for="road-relief">路面凹凸细节 <output id="road-relief-value">近处凹凸</output></label>
+          <input id="road-relief" type="range" min="0" max="2" step="1" value="1" data-discrete />
+          <label class="speed-label" for="road-filtering">斜视纹理清晰度 <output id="road-filtering-value">8×</output></label>
+          <input id="road-filtering" type="range" min="0" max="4" step="1" value="3" data-discrete />
+          <p class="panel-help">低分辨率减少纹理显存；关闭凹凸降低着色开销。更高过滤级别让前方路面更清晰，实际值受显卡支持限制。划线、护栏和碰撞不受影响。</p>
+        </details>
+        <details class="world-options"><summary>预加载与每帧预算</summary>
+          <label class="speed-label" for="model-load-budget">车辆模型加载预算 <output id="model-load-budget-value">2 ms / 帧</output></label>
+          <input id="model-load-budget" type="range" min="1" max="8" step="1" value="2" />
+          <label class="speed-label" for="model-preload-distance">车辆精模预加载距离 <output id="model-preload-distance-value">提前 180 m</output></label>
+          <input id="model-preload-distance" type="range" min="0" max="600" step="30" value="180" />
+          <label class="speed-label" for="terrain-upload-budget">地形上传预算 <output id="terrain-upload-budget-value">2 ms / 帧</output></label>
+          <input id="terrain-upload-budget" type="range" min="1" max="6" step="1" value="2" />
+          <label class="speed-label" for="terrain-upload-limit">地形每帧上传上限 <output id="terrain-upload-limit-value">2 块 / 帧</output></label>
+          <input id="terrain-upload-limit" type="range" min="1" max="4" step="1" value="2" />
+          <label class="speed-label" for="terrain-preload">前方地形预加载 <output id="terrain-preload-value">提前 256 m</output></label>
+          <input id="terrain-preload" type="range" min="0" max="3" step="1" value="1" />
+          <p class="panel-help">NPC 与停车车辆共用加载预算，附近基础模型优先，精模分步补齐；预加载更远会占用更多内存。地形先补齐当前视野再准备前方。预算为软限制，单次不可拆分的操作可能超出；较低预算更平稳，但补齐细节更慢。</p>
           <label class="speed-label" for="vegetation-budget">每帧植被更新地块 <output id="vegetation-budget-value">4 块 / 帧</output></label>
           <input id="vegetation-budget" type="range" min="1" max="8" step="1" value="4" />
           <p class="panel-help">预算低时每帧开销更小，补齐细节需要更久。远处车辆使用简模，实体碰撞保持一致。</p>
@@ -439,6 +499,11 @@
           <p class="panel-help">拖动时先更新读数，较重的画质变更在松手或停顿后合并应用。参数支持本机预设；切到后台后停止渲染。</p>
 </section>
 <section class="settings-category" id="settings-audio" aria-labelledby="heading-audio"><h3 id="heading-audio">声音与音乐</h3>
+        <div class="audio-diagnostics">
+          <p id="audio-status" class="panel-help" role="status">声音未开启</p>
+          <div class="actions"><button id="audio-test" type="button">声音测试 · 左 / 中 / 右</button><button id="audio-recover" type="button">强制开启声音</button></div>
+          <p id="audio-test-status" class="panel-help" role="status">测试音经过总音量，独立于音乐和音效。强制开启会重建音频，并恢复被静音的总音量、音乐和音效；系统或浏览器站点静音需手动解除。</p>
+        </div>
         <details class="world-options" open>
           <summary>音量与声道</summary>
           <button id="audio-toggle" type="button" aria-pressed="false">开启声音</button>
@@ -459,13 +524,28 @@
           <label class="speed-label" for="music-ducking">驾驶时音乐压低 <output id="music-ducking-value">35%</output></label>
           <input id="music-ducking" type="range" min="0" max="80" step="5" value="35" />
           <p class="panel-help">加速或发生接触时，为发动机与路面声音留出空间；松油门后音乐渐渐恢复。0% 关闭，喇叭提示仍会短暂压低音乐。</p>
+          <label class="speed-label" for="music-recovery">音乐回升时间 <output id="music-recovery-value">550 ms</output></label>
+          <input id="music-recovery" type="range" min="100" max="2000" step="50" value="550" data-help="发动机或喇叭压低音乐后，音量回升的时间常数。越大越柔和，约三倍时间恢复到目标的 95%。" />
+          </details><details class="world-options"><summary>声音恢复与输出调校</summary>
+          <label class="speed-label" for="audio-resume-fade">恢复淡入时间 <output id="audio-resume-fade-value">120 ms</output></label>
+          <input id="audio-resume-fade" type="range" min="30" max="1000" step="10" value="120" data-help="开启声音或切回游戏时，总音量恢复到约 95% 的时间。增大可减少突然响起的感觉，不会延迟驾驶操作。" />
+          <label class="speed-label" for="audio-test-volume">测试音量 <output id="audio-test-volume-value">20 %</output></label>
+          <input id="audio-test-volume" type="range" min="5" max="50" step="5" value="20" data-help="只调整左、中、右诊断测试音；仍受总音量控制。默认 20%，调节后再次点击声音测试。" />
+          <label class="speed-label" for="audio-limiter-release">输出压缩释放时间 <output id="audio-limiter-release-value">180 ms</output></label>
+          <input id="audio-limiter-release" type="range" min="50" max="1000" step="10" value="180" data-help="喇叭和碰撞触发输出压缩后，压缩器恢复的时间。较长更平滑，较短让动态更快恢复；不会提高最大输出限制。" />
           </details><details class="world-options"><summary>试听与混音重置</summary>
           <div class="actions road-actions"><button id="preview-engine" type="button">试听发动机</button><button id="preview-shift" type="button">试听换挡</button><button id="preview-horn" type="button">试听喇叭</button></div>
           <button id="audio-mix-reset" type="button">恢复默认混音</button>
           <p id="audio-preview-status" class="panel-help" role="status">先开启声音，再选择试听。</p>
-          <p id="audio-status" class="panel-help" role="status">声音未开启</p>
           <p class="panel-help">发动机随车型、转速与换挡变化；湿路胎噪、风雨、日间鸟声与夜间虫鸣分层混音。开窗、敞篷和隧道改变听感。音源由程序合成，设有输出压缩保护；暂停、公告和窗口失焦时静音，设置页允许试听，混音参数可存入预设。</p>
         </details>
+</section>
+<section class="settings-category" id="settings-diagnostics" aria-labelledby="heading-diagnostics"><h3 id="heading-diagnostics">诊断与日志</h3>
+        <p class="panel-help">记录音频恢复、世界加载、图形异常与脚本错误。日志仅在本次页面内存中保留，刷新后清空，不会自动上传。导出包含当前世界与性能指标，便于复现问题。</p>
+        <label class="toggle-row"><input id="log-recording" type="checkbox" checked />记录运行日志</label>
+        <label class="speed-label" for="log-capacity">日志缓存上限 <output id="log-capacity-value">300 条</output></label>
+        <input id="log-capacity" type="range" min="100" max="1000" step="100" value="300" data-help="仅本次会话生效。达到上限后淘汰最早记录；连续重复事件合并计数。日志面板最多绘制最后 80 条，导出包含全部缓存。" />
+        <div class="actions"><button id="diagnostics-open" type="button">打开开发者日志</button><button id="diagnostics-export" type="button">导出诊断 JSON</button></div>
 </section>
 <section class="settings-category" id="settings-presets" aria-labelledby="heading-presets"><h3 id="heading-presets">我的预设</h3>
         <p class="panel-help">保存世界种子、道路与地形、车型与调校、仪表、设备、天气、画质和声音设置。仅在主动保存时写入当前浏览器；不保存位置、车速、行程或玻璃水余量。</p>
@@ -482,7 +562,7 @@
         <div class="actions"><button id="preset-apply" type="button" disabled>应用预设并返回起点</button><button id="preset-delete" type="button" disabled>删除所选本机预设</button></div>
         <label for="preset-import-open">导入 JSON 预设</label><button id="preset-import-open" type="button" aria-controls="preset-import">选择 JSON 文件…</button><input id="preset-import" type="file" accept=".json,application/json" hidden />
         <p class="panel-help">导入后先预览，再点击应用；应用会重新生成世界并返回起点。若要保留导入的预设，请应用后点击保存。同名保存会更新原预设。最多 32 个本机预设，单个 JSON 不超过 64 KB；清除网站数据会移除本机预设，可先导出备份。</p>
-        <p class="panel-help">本版使用格式 16，包含独立植被保留量、小物件距离及性能滑条参数；早期预设需重新配置并保存，浏览器中的旧数据不会被覆盖。</p>
+        <p class="panel-help">本版使用格式 20，包含独立植被保留量、小物件距离、性能滑条及声音调校参数；早期预设需重新配置并保存。</p>
         <p id="preset-status" role="status" class="panel-help" aria-live="polite"></p>
 </section>
 <section class="settings-category" id="settings-explore" aria-labelledby="heading-explore"><h3 id="heading-explore">探索工具</h3>
@@ -552,11 +632,15 @@
       </dialog>
       <dialog id="vehicle-panel" class="cabin-dialog" aria-labelledby="vehicle-panel-title">
         <header><div><p class="eyebrow">VEHICLE / CONTROL PANEL</p><h2 id="vehicle-panel-title">载具面板</h2></div><button type="button" data-close>返回旅程 · Esc</button></header>
-        <div class="vehicle-panel-scroll"><p id="vehicle-panel-state"></p><dl id="vehicle-panel-specs" class="vehicle-specs"></dl><p id="vehicle-panel-equipment" class="equipment-status"></p>
-        <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表</button><button id="panel-equipment" type="button">车载设备</button><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div>
-        <div class="actions"><button id="panel-ignition" type="button">点火 · {Ignition}</button><button id="panel-lock" type="button" aria-pressed="false">锁车 · {VehicleLock}</button><button id="panel-fridge" type="button" aria-pressed="false">冷藏箱 · {Fridge}</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button><button id="panel-powertrain" type="button"></button><button id="panel-regen" type="button"></button><button id="panel-trailer-brake" type="button" hidden></button></div>
-        <div class="actions"><button id="panel-walk" type="button">车内离座 · {CabinWalk}</button><button id="panel-exit" type="button">下到车外 · F</button></div>
-        <p id="vehicle-panel-help" class="panel-help"></p></div>
+        <div class="vehicle-panel-scroll"><p id="vehicle-panel-state" class="panel-state"></p>
+        <section class="panel-section" aria-labelledby="panel-access-title"><h3 id="panel-access-title">座舱与出入</h3>
+        <div class="vehicle-panel-actions"><button id="panel-seats" type="button">座位地图 · P</button><button id="panel-equipment" type="button">灯光、车窗与电台</button><button id="panel-walk" type="button">车内离座 · {CabinWalk}</button><button id="panel-exit" type="button">下到车外 · F</button></div>
+        <p id="vehicle-panel-equipment" class="equipment-status"></p></section>
+        <section class="panel-section" aria-labelledby="panel-controls-title"><h3 id="panel-controls-title">动力与设备操作</h3>
+        <div class="vehicle-panel-actions"><button id="panel-ignition" type="button">点火 · {Ignition}</button><button id="panel-lock" type="button" aria-pressed="false">锁车 · {VehicleLock}</button><button id="panel-fridge" type="button" aria-pressed="false">冷藏箱 · {Fridge}</button><button id="panel-doors" type="button" hidden></button><button id="panel-cargo" type="button" hidden></button><button id="panel-aux" type="button" hidden></button><button id="panel-powertrain" type="button"></button><button id="panel-regen" type="button"></button><button id="panel-trailer-brake" type="button" hidden></button></div>
+        <p id="vehicle-panel-help" class="panel-help"></p></section>
+        <details class="panel-specification"><summary>车辆规格与底盘参数</summary><dl id="vehicle-panel-specs" class="vehicle-specs"></dl></details>
+        <div class="vehicle-panel-actions"><button id="panel-driving" type="button">动力、悬挂与仪表设置</button><button id="panel-shortcuts" type="button">全部快捷键 · M</button></div></div>
       </dialog>
       <div class="crosshair" aria-hidden="true">+</div>
       <div id="notice" role="status">拖动视角，开始探索</div>
@@ -570,15 +654,26 @@
         <button id="hud-autopilot" type="button" aria-pressed="false">自动驾驶 · 待机</button>
         <p class="rpm-reading"><span id="ignition-status">发动机关闭</span> · <span id="transmission-status">AT · 1 挡</span> · <span id="engine-rpm">0</span> RPM</p>
         <div class="engine-feedback"><meter id="rpm-meter" min="0" max="7000" value="0" aria-label="发动机转速"></meter><span id="engine-load-status">动力关闭</span></div>
-        <p id="seat-reading" class="rpm-reading"></p><p id="radio-reading" class="rpm-reading"></p>
-        <p id="cabin-status" class="rpm-reading">敞篷开启 · 玻璃水 3.0 L</p>
+        <details id="hud-cabin-details"><summary>座舱状态 <span>座位 · 电台 · 车窗</span></summary><div class="hud-cabin-readings">
+          <p id="seat-reading"></p><p id="radio-reading"></p><p id="cabin-status">敞篷开启 · 玻璃水 3.0 L</p>
+        </div></details>
         <p id="drive-condition">夏季 · 路面正常</p>
         <p id="junction-status" class="route-guidance">沿当前路线继续探索</p>
+        <p id="signal-guidance" class="route-guidance" hidden></p>
         <div class="vehicle-indicators"><span id="turn-left" aria-label="左转灯灭">◀</span><span id="vehicle-lights-status">自动灯</span><span id="vehicle-wipers-status">雨刮 · 自动</span><span id="turn-right" aria-label="右转灯灭">▶</span></div>
-        <button id="hud-vehicle-panel" type="button" aria-haspopup="dialog">载具面板 <span>参数 · 设备 · 座位</span></button>
+        <div class="hud-actions"><button id="hud-vehicle-panel" type="button" aria-haspopup="dialog">载具面板</button><button id="hud-seats" type="button" aria-haspopup="dialog">座位</button><button id="hud-equipment" type="button" aria-haspopup="dialog">设备</button></div>
       </section>
+      <p id="traffic-warning" role="status" aria-live="polite" hidden></p>
       <section id="walk-hud" aria-label="步行状态" hidden><strong id="walking-status">站立</strong><span id="walking-speed">0.0 km/h</span><small>Shift 跑步 · E 疾跑 · Space 跳跃 · R 回到道路</small><small id="boarding-help" hidden>F 上车</small></section>
-      <section id="debug" aria-label="调试信息" hidden><h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭 · {Debug}</button></h2><dl id="debug-values"></dl></section>
+      <section id="debug" aria-label="调试信息" hidden>
+        <h2>WORLD TELEMETRY <button id="debug-close" type="button" aria-label="关闭调试面板">关闭调试 · {Debug}</button></h2>
+        <details open><summary>世界与性能指标</summary><dl id="debug-values"></dl></details>
+        <section class="debug-log" aria-labelledby="log-heading"><h3 id="log-heading">运行日志 / LOG</h3>
+          <label for="log-filter">筛选级别</label><select id="log-filter"><option value="all">全部</option><option value="info">信息</option><option value="warn">警告</option><option value="error">错误</option></select>
+          <p id="log-status" role="status"></p><ol id="log-entries"></ol>
+          <div class="actions"><button id="log-clear" type="button">清空日志</button><button id="log-export" type="button">导出日志 JSON</button></div>
+        </section>
+      </section>
       <footer>
         <section id="shortcut-dock" aria-label="当前可用快捷键" hidden><p id="shortcut-context"></p><div id="shortcut-items" tabindex="0" aria-label="滚动查看全部可用快捷键"></div></section>
         <div class="telemetry"><span><small>海拔 ALTITUDE</small><b id="altitude">0</b> <em>m</em></span><span><small>坐标 POSITION</small><b id="position">0 / 0</b></span><span><small>渲染 FRAME RATE</small><b id="fps">—</b> <em>fps</em></span></div>
@@ -586,11 +681,11 @@
         <div class="controls" id="driving-controls" hidden><span><kbd>W / S</kbd> 油门 / 制动</span><span><kbd>A D</kbd> 转向</span><span><kbd>Space</kbd> 手刹</span><span><kbd>C</kbd> 视角</span><span><kbd>F</kbd> 下车</span><span><kbd>L / B</kbd> 车灯 / 雨刮</span><span><kbd>Q / E / H</kbd> 左灯 / 右灯 / 双闪</span><span><kbd>R</kbd> 回正</span><span><kbd>P</kbd> 座位</span><span><kbd>M</kbd> 菜单</span></div>
         <div class="controls" id="walking-controls" hidden><span><kbd>F</kbd> 靠近车辆上车</span><span><kbd>W A S D</kbd> 行走</span><span><kbd>Shift</kbd> 跑步</span><span><kbd>E</kbd> 疾跑</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>R</kbd> 回正</span><span><kbd>{PauseToggle}</kbd> 暂停</span><span><kbd>M</kbd> 菜单</span></div>
       </footer>
-      <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><button id="retry-world" type="button">重试当前世界</button></div>
+      <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><div class="actions"><button id="retry-world" type="button">重试当前世界</button><button id="error-export-log" type="button">导出错误日志</button></div></div>
       <dialog id="release-notes" aria-labelledby="release-title">
-        <header><h2 id="release-title">版本公告</h2><form method="dialog"><button aria-label="关闭公告" autofocus>关闭</button></form></header>
-        <section id="release-current" data-release="current" aria-label="当前公告"></section>
-        <details><summary>历史公告</summary><section id="release-history" data-release="history" aria-label="历史版本"></section></details>
+        <header><h2 id="release-title">版本公告</h2><form method="dialog"><button aria-label="关闭公告" autofocus>关闭公告</button></form></header>
+        <section id="release-current" data-release="current" aria-label="当前公告" lang="zh-CN" translate="no"></section>
+        <details><summary>历史公告</summary><section id="release-history" data-release="history" aria-label="历史版本" lang="zh-CN" translate="no"></section></details>
       </dialog>
     </main>
     <script type="module" src="/src/main.ts"></script>

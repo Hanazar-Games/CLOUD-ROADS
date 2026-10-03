@@ -16,6 +16,9 @@ test('loads shared HD pavement, switches to small textures and renders wet winte
   await expect(page.locator('[data-metric="Map detail"]')).toHaveText('2');
   expect(textures.filter(url => url.includes('-2048-'))).toHaveLength(2);
   await (await control(page, page.locator('#map-detail'))).fill('0');
+  expect(textures.filter(url => url.includes('-256-'))).toHaveLength(0);
+  await expect(page.locator('#road-texture')).toHaveValue('1');
+  await (await control(page, page.locator('#road-texture'))).fill('0');
   await expect.poll(() => textures.filter(url => url.includes('-256-')).length).toBe(2);
   await (await control(page, page.locator('#season-kind'))).selectOption('winter');
   await (await control(page, page.locator('#weather-rain'))).check();
@@ -25,6 +28,7 @@ test('loads shared HD pavement, switches to small textures and renders wet winte
   await (await control(page, page.locator('#random-world'))).click();
   await expect(page.locator('[data-metric="Road ready"]')).toHaveText('yes', { timeout: 20000 });
   await expect(page.locator('[data-metric="Map detail"]')).toHaveText('2');
+  await expect(page.locator('#road-texture')).toHaveValue('0');
   await closeSettings(page);
   await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);

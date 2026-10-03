@@ -1,4 +1,6 @@
 import { element } from '../debug/DebugUI';
+import { setUserMessage } from '../i18n/DomLocalizer';
+import { trafficControlFields } from './TrafficControlPanel';
 import { audioChannels } from '../audio/AudioSystem';
 import { trafficTuning } from '../traffic/TrafficSystem';
 import { transmissionTuning } from '../vehicle/Transmission';
@@ -8,7 +10,9 @@ import { roadNames, terrainNames, type WorldOptions } from '../world/WorldOption
 import { parsePreset, PresetStore, PRESET_MAX_BYTES, type SettingRules, type SettingsPreset } from './SettingsPreset';
 
 const controls = ['vehicle-kind', 'hud-style', 'beginner-mode', 'vehicle-energy', 'ev-regeneration', 'transmission-mode', 'vehicle-max-speed', 'vehicle-power', 'vehicle-brake', 'vehicle-steering',
-  'engine-response', 'music-ducking', 'steering-assist', 'steering-assist-strength', 'drift-enabled', 'custom-turning-radius', 'turning-radius', 'steering-response', 'road-grip', 'handbrake-strength', 'countersteer-assist',
+  ...trafficControlFields, 'engine-response', 'music-ducking', 'steering-assist', 'steering-assist-strength', 'drift-enabled', 'custom-turning-radius', 'turning-radius', 'steering-response', 'road-grip', 'handbrake-strength', 'countersteer-assist',
+  'drift-min-speed', 'drift-delay', 'stability-assist',
+  'audio-resume-fade', 'audio-test-volume', 'music-recovery', 'audio-limiter-release',
   'vehicle-paint', 'driving-view', 'driving-fov', 'camera-distance', 'camera-height', 'suspension', 'suspension-damping',
   'vehicle-lights', 'light-power', 'light-range', 'vehicle-wipers', 'vehicle-windows', 'cabin-fan', 'fog-visibility', 'fridge-temperature',
   'traffic-density', 'traffic-limit', 'traffic-scenario', 'garage-density', 'garage-kind', 'garage-paint', 'garage-loading', 'garage-light', 'season-kind', 'weather-kind', 'fog-density', 'daylight', 'frame-limit', 'radio-station', 'music-style', 'music-pace', 'speed',
@@ -40,7 +44,7 @@ export class PresetPanel {
     const options = { signal: this.events.signal };
     element('preset-save').addEventListener('click', () => this.attempt(() => {
       const preset = this.capture(); this.store.save(preset); this.refresh(preset.name);
-      this.status(`已保存「${preset.name}」到本机浏览器。`);
+      this.status('已保存「{name}」到本机浏览器。', { name: preset.name });
     }), options);
     element('preset-export').addEventListener('click', () => this.attempt(() => {
       const preset = this.capture(), url = URL.createObjectURL(new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' }));
@@ -52,17 +56,17 @@ export class PresetPanel {
     element('preset-apply').addEventListener('click', () => this.attempt(() => {
       const selected = this.selected(); if (!selected) return;
       const preset = parsePreset(JSON.stringify(selected), this.rules);
-      this.apply(preset); this.status(`已应用「${preset.name}」，关闭设置后可从新起点出发。`);
+      this.apply(preset); this.status('已应用「{name}」，关闭设置后可从新起点出发。', { name: preset.name });
     }), options);
     element('preset-delete').addEventListener('click', () => this.attempt(() => {
       const selected = this.selected(); if (!selected || selected === this.imported) return;
-      this.store.remove(selected.name); this.refresh(); this.status(`已删除本机预设「${selected.name}」。`);
+      this.store.remove(selected.name); this.refresh(); this.status('本机预设「{name}」已删除。', { name: selected.name });
     }), options);
     element('preset-import').addEventListener('change', () => { void this.importFile(); }, options);
     element('preset-import-open').addEventListener('click', () => element<HTMLInputElement>('preset-import').click(), options);
     element('startup-save').addEventListener('click', () => this.attempt(() => {
       const preset = this.capture(); this.store.setStartup(preset);
-      element('startup-status').textContent = `已保存「${preset.name}」；下次打开自动恢复，后续调整请再次保存。`;
+      setUserMessage(element('startup-status'), '已保存「{name}」；下次打开自动恢复，后续调整请再次保存。', { name: preset.name });
     }), options);
     element('startup-clear').addEventListener('click', () => this.attempt(() => {
       this.store.setStartup(null); element('startup-status').textContent = '已取消启动恢复，命名预设仍保留。';
@@ -74,7 +78,7 @@ export class PresetPanel {
     try {
       const preset = this.store.startup(); if (!preset) return false;
       this.apply(seed ? { ...preset, seed } : preset);
-      element('startup-status').textContent = `已恢复「${preset.name}」${seed ? '，使用链接中的世界种子' : ''}。`;
+      setUserMessage(element('startup-status'), `已恢复「{name}」${seed ? '，使用链接中的世界种子' : ''}。`, { name: preset.name });
       return true;
     } catch (error) { this.error(error); return false; }
   }
@@ -107,7 +111,7 @@ export class PresetPanel {
         : node instanceof HTMLSelectElement ? node.value : node.type === 'checkbox' ? node.checked : Number(node.value);
     }
     for (const id of toggles) settings[id] = element(id).getAttribute('aria-pressed') === 'true';
-    const preset = { format: 'cloud-roads-preset', version: 16, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
+    const preset = { format: 'cloud-roads-preset', version: 20, name: element<HTMLInputElement>('preset-name').value.trim(), ...this.snapshot(), settings };
     return parsePreset(JSON.stringify(preset), this.rules);
   }
   private async importFile(): Promise<void> {
@@ -118,7 +122,7 @@ export class PresetPanel {
       const preset = parsePreset(await file.text(), this.rules);
       if (version !== this.importVersion || this.events.signal.aborted) return;
       this.imported = preset; this.refresh(); element<HTMLSelectElement>('preset-list').value = 'import'; this.describe();
-      this.status(`已校验「${preset.name}」。点击应用后生效，当前旅程尚未改变。`);
+      this.status('已校验「{name}」。点击应用后生效，当前旅程尚未改变。', { name: preset.name });
     } catch (error) { if (version === this.importVersion && !this.events.signal.aborted) this.error(error); }
     finally { if (version === this.importVersion) input.value = ''; }
   }
@@ -129,8 +133,12 @@ export class PresetPanel {
   private refresh(name?: string): void {
     try { this.entries = this.store.list(); } catch (error) { this.entries = []; this.error(error); }
     const select = element<HTMLSelectElement>('preset-list');
-    select.replaceChildren(...this.entries.map((preset, i) => new Option(preset.name, String(i))));
-    if (this.imported) select.add(new Option(`导入预览 · ${this.imported.name}`, 'import'));
+    const namedOption = (name: string, value: string) => { const option = new Option(name, value); option.translate = false; return option; };
+    select.replaceChildren(...this.entries.map((preset, i) => namedOption(preset.name, String(i))));
+    if (this.imported) {
+      const preview = new Option('', 'import');
+      setUserMessage(preview, '导入预览 · {name}', { name: this.imported.name }); select.add(preview);
+    }
     if (!select.options.length) select.add(new Option('尚无预设', ''));
     if (name) select.value = String(this.entries.findIndex(p => p.name === name));
     this.describe();
@@ -140,9 +148,9 @@ export class PresetPanel {
     element<HTMLButtonElement>('preset-apply').disabled = !preset;
     element<HTMLButtonElement>('preset-delete').disabled = !preset || preset === this.imported;
     if (preset) element<HTMLInputElement>('preset-name').value = preset.name;
-    element('preset-summary').textContent = preset ? `${terrainNames[preset.world.terrain]} · ${roadNames[preset.world.roadType]} · 种子 ${preset.seed} · 应用将返回起点` : '保存当前设置，或选择一个 JSON 文件导入。';
+    setUserMessage(element('preset-summary'), preset ? `${terrainNames[preset.world.terrain]} · ${roadNames[preset.world.roadType]} · 种子 {seed} · 应用将返回起点` : '保存当前设置，或选择一个 JSON 文件导入。', { seed: preset?.seed ?? '' });
   }
-  private status(message: string): void { element('preset-status').textContent = message; }
+  private status(message: string, values?: Record<string, string>): void { setUserMessage(element('preset-status'), message, values); }
   private error(error: unknown): void { this.status(`操作未完成：${error instanceof Error ? error.message : String(error)} 可使用 JSON 导入导出。`); }
   private attempt(action: () => void): void { try { action(); } catch (error) { this.error(error); } }
   dispose(): void { this.events.abort(); this.importVersion++; }

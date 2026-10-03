@@ -64,14 +64,22 @@ it('batches a populated parking lot by vehicle kind, removes claimed instances a
     expect(mask.array.some(value => value === 1)).toBe(true);
     expect(mask.array.some(value => value === 0)).toBe(true);
     for (let i = 0; i < mask.count; i++) if (mask.getX(i)) expect(colors.getX(i)).toBe(1);
-    const kind = mesh.name.split(':')[0], entries = renderer.fleet.entries.filter(e => e.kind === kind), color = new Color();
-    for (let i = 0; i < mesh.count; i++) { mesh.getColorAt(i, color); expect(color.getHex()).toBe(entries[i].paint); }
+    const kind = mesh.name.split(':')[0], entries = renderer.fleet.entries.filter(e => e.kind === kind), color = new Color(), matrix = new Matrix4();
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, matrix); mesh.getColorAt(i, color);
+      const entry = entries.find(e => {
+        const car = renderer.fleet.vehicle(e), body = mesh.name.endsWith(':trailer') ? car.trailers[0] : car;
+        return Math.abs(body.x - matrix.elements[12] - mesh.position.x) < 0.01 && Math.abs(body.z - matrix.elements[14] - mesh.position.z) < 0.01;
+      });
+      expect(entry).toBeDefined(); expect(color.getHex()).toBe(entry!.paint);
+    }
   }
   const before = count(); renderer.fleet.take(renderer.fleet.entries[0].id); renderer.update([site], { x: 0, z: 0 }, camera);
   expect(count()).toBe(before - 1); renderer.dispose(); expect(scene.children).toHaveLength(0);
 });
 it('keeps the fleet visible during LOD construction and substantially reduces distant triangles', () => {
   const scene = new Scene(), renderer = new ParkedVehicles(scene, 'rest'), camera = new Vector3(1000, 200, -15000);
+  renderer.detailLimit = 64;
   const update = () => renderer.update([site], { x: 0, z: 0 }, camera);
   const count = () => scene.children.reduce((sum, object) => sum + (object as InstancedMesh).count, 0);
   const vertices = () => scene.children.reduce((sum, object) => {
@@ -95,10 +103,31 @@ it('retains an articulated trailer pose when a borrowed semi is returned to the 
   renderer.fleet.park(car, entry.id);
   const camera = new Vector3(car.x, car.y + 10, car.z), matrix = new Matrix4();
   for (let i = 0; i < 32; i++) renderer.update([site], { x: 0, z: 0 }, camera);
-  const mesh = scene.getObjectByName(`${car.kind}:trailer`) as InstancedMesh;
+  const mesh = scene.children.find(o => {
+    if (!(o instanceof InstancedMesh) || o.name !== `${car.kind}:trailer` || !o.count) return false;
+    o.getMatrixAt(o.count - 1, matrix);
+    return Math.abs(matrix.elements[12] + o.position.x - trailer.x) < 0.01;
+  }) as InstancedMesh;
   expect(mesh).toBeDefined(); mesh.getMatrixAt(mesh.count - 1, matrix);
   expect(matrix.elements[12] + mesh.position.x).toBeCloseTo(trailer.x, 3);
   expect(matrix.elements[14] + mesh.position.z).toBeCloseTo(trailer.z, 3);
   expect(Math.atan2(-matrix.elements[8], matrix.elements[10])).toBeCloseTo(trailer.heading, 3);
+  renderer.dispose();
+});
+
+it('caps detailed parked bodies without removing proxy vehicles or their support surfaces', () => {
+  const scene = new Scene(), renderer = new ParkedVehicles(scene, 'rest'), camera = new Vector3(1000, 200, -15000);
+  renderer.detailDistance = 1000; renderer.detailLimit = 0;
+  const update = () => renderer.update([site], { x: 0, z: 0 }, camera);
+  for (let i = 0; i < 80; i++) update();
+  const bodies = () => scene.children.filter(o => o instanceof InstancedMesh && o.name.endsWith(':vehicle')) as InstancedMesh[];
+  const count = () => bodies().reduce((sum, mesh) => sum + mesh.count, 0);
+  const total = count(); expect(total).toBe(renderer.fleet.entries.length);
+  renderer.detailLimit = 2;
+  for (let i = 0; i < 80; i++) update();
+  expect(count()).toBe(total);
+  expect(bodies().filter(m => m.geometry.getAttribute('position').count > 3000).reduce((sum, m) => sum + m.count, 0)).toBe(2);
+  const car = renderer.fleet.vehicle(renderer.fleet.entries[0]);
+  expect(renderer.fleet.support(car.x, car.z, Infinity)).toBeGreaterThan(car.y);
   renderer.dispose();
 });

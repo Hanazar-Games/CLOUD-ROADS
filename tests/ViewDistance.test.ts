@@ -9,12 +9,12 @@ import { weatherProfiles } from '../src/atmosphere/WeatherSystem';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { VegetationMesh } from '../src/vegetation/VegetationMesh';
 
-it.each([6, 8, 12, 16])('plans a bounded %i-chunk radius with consistent close detail', radius => {
+it.each([3, 4, 6, 8, 12, 16])('plans a bounded %i-chunk radius with consistent close detail', radius => {
   const plan = planChunks(128, 128, { x: 0, z: -1 }, radius);
   expect(plan).toHaveLength((radius * 2 + 1) ** 2);
   expect(new Set(plan.map(p => p.key)).size).toBe(plan.length);
   expect(plan.filter(p => p.cells === 64)).toHaveLength(25);
-  expect(plan.filter(p => p.cells === 16)).toHaveLength(56);
+  expect(plan.filter(p => p.cells === 16)).toHaveLength((Math.min(4, radius) * 2 + 1) ** 2 - 25);
 });
 
 it('replans distance at a stationary camera and retains the same world coordinates', () => {

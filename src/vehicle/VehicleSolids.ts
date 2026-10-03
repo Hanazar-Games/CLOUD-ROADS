@@ -21,11 +21,17 @@ export function vehicleSolids(car: VehiclePhysics): VehicleSolid[] {
     }
   } else if (p.shape === 'motorcycle') {
     add(body, body.front, body.rear, 0.4, 0.42);
+    if (p.edition === 'touring') add(body, -0.205, -0.855, 0.56, 1.02, 0.16);
   } else if (p.shape === 'bus') add(body, body.front, body.rear, p.height - ride);
   else {
     const back = body.front - (p.chassisLength > 6 ? 2.5 : 2);
     add(body, body.front, back, p.body === 'camper' ? p.height - ride : Math.min(p.height - ride, p.eye.y + 0.4));
     add(body, back, body.rear, p.shape === 'tractor' ? 0.2 : p.shape === 'flatbed' ? 0.38 : p.shape === 'crane' ? 0.75 : p.height - ride);
+    if (p.edition === 'logging') add(body, body.front - 3.1, body.rear + 0.5, 1.62, 1.98, 0.38);
+    if (p.edition === 'maintenance') {
+      add(body, 0.1, -0.5, 1.05, p.width * 0.76, 0.38);
+      add(body, body.rear + 0.4, body.rear + 0.24, 1.975, p.width * 0.8, 0.38);
+    }
   }
   for (const [i, config] of (p.trailers ?? []).entries()) {
     const trailer = bodies[i + 1];

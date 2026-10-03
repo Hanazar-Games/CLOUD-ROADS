@@ -18,7 +18,7 @@ test('renders a full four-way highway interchange and exposes traffic and distan
   await page.locator('#world-options button[type="submit"]').click();
   await (await control(page, page.locator('#time-preset'))).selectOption('0');
   await page.locator('#fog-density').fill('50');
-  await (await control(page, page.locator('#view-distance'))).fill('3');
+  await (await control(page, page.locator('#view-distance'))).fill('5');
   await expect(metric('Road ready')).toHaveText('yes', { timeout: 30000 });
   await (await control(page, page.locator('#junction-view'))).click();
   await expect(metric('Interchange ramps')).toHaveText('8', { timeout: 60000 });

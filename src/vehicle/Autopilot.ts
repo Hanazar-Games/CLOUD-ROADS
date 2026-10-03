@@ -2,6 +2,7 @@ import type { RoadSpine } from '../road/RoadSpine';
 import { roadProfile } from '../road/RoadProfile';
 import type { WorldOptions } from '../world/WorldOptions';
 import type { VehicleInput, VehiclePhysics } from './VehiclePhysics';
+import type { TrafficSignals } from '../traffic/TrafficSignals';
 
 export interface AutopilotSettings { mode: 'full' | 'speed' | 'steering'; comfort: number; minKmh: number; maxKmh: number }
 export type PilotRoute = { id: string; road: RoadSpine };
@@ -54,7 +55,7 @@ export class Autopilot {
     this.active = true; this.status = '沿当前路线巡航'; return true;
   }
 
-  update(dt: number, car: VehiclePhysics, routes: readonly PilotRoute[], obstacles: readonly VehiclePhysics[], manual: VehicleInput, grip: number): VehicleInput {
+  update(dt: number, car: VehiclePhysics, routes: readonly PilotRoute[], obstacles: readonly VehiclePhysics[], manual: VehicleInput, grip: number, signals?: TrafficSignals): VehicleInput {
     if (!this.active) return manual;
     const speedControl = this.settings.mode !== 'steering', steeringControl = this.settings.mode !== 'speed';
     if (manual.handbrake || manual.throttle < 0 || speedControl && manual.throttle > 0 || steeringControl && manual.steer !== 0) {
@@ -116,14 +117,17 @@ export class Autopilot {
         if (clearance < gap) { gap = clearance; leadSpeed = Math.max(0, other.speed * Math.cos(turn)); }
       }
     }
+    const signalGap = signals?.stopDistance(car) ?? Infinity;
+    if (signalGap < gap) { gap = signalGap; leadSpeed = 0; }
     if (gap < Infinity) {
       target = Math.min(target, Math.max(0, gap / (1.2 + comfort * 0.35)), Math.sqrt(leadSpeed ** 2 + 2 * decel * Math.max(0, gap)));
       if (gap < car.speed * (2 + comfort * 0.4) + 15) this.status = '前方车辆 · 跟随 / 停车';
       if (gap < 3 && leadSpeed < 0.5) target = 0;
     }
     this.targetKmh = target * 3.6;
+    if (signalGap < 100) this.status = speedControl ? '信号灯 · 减速等待' : '信号灯 · 请自行制动';
     if (target * 3.6 < this.settings.minKmh && this.status === '沿当前路线巡航') this.status = '弯道 / 坡道 · 低于最低巡航偏好';
-    const leanTime = car.kind === 'motorcycle' ? 0.45 / car.steeringTuning.leanResponse : 0;
+    const leanTime = car.profile.shape === 'motorcycle' ? 0.45 / car.steeringTuning.leanResponse : 0;
     const look = clamp(5 + car.speed * (0.45 + comfort * 0.04 + leanTime) + car.wheelbase * 0.3, 6, leanTime ? 40 : 25);
     const point = sampleAt(near.distance + this.direction * Math.min(look, Math.max(0, remaining - 0.1))) ?? near;
     const dx = point.position.x + Math.cos(point.heading) * this.offset - car.x, dz = point.position.z + Math.sin(point.heading) * this.offset - car.z;

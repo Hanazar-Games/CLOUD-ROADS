@@ -79,6 +79,21 @@ export function vehicleProxy(kind: VehicleKind): BufferGeometry[] {
       box(p.width * 0.83, Math.max(0.25, p.height - 1.05), p.chassisLength * 0.55, 0, ground + 1.05 + Math.max(0.25, p.height - 1.05) / 2, 0);
     }
   }
+  if (p.edition === 'logging') {
+    const start = nose + 2.85, center = (start + end - 0.25) / 2;
+    for (const [x, y, radius] of [[-0.48, 0.82, 0.43], [0.48, 0.82, 0.43], [0, 1.3, 0.31]])
+      add(new CylinderGeometry(radius, radius, end - start - 0.5, 5).rotateX(Math.PI / 2).translate(x, y, center), false, 0x8b7859);
+    for (const x of [-1, 1]) for (const z of [start + 0.25, end - 0.55]) box(0.12, 1.75, 0.14, x * (p.width / 2 - 0.13), 1.16, z);
+  } else if (p.edition === 'touring') {
+    for (const side of [-1, 1]) box(0.26, 0.4, 0.65, side * 0.38, 0.36, 0.53, true);
+    box(0.52, 0.48, 0.025, 0, 0.88, -0.57);
+  } else if (p.edition === 'taxi' || p.edition === 'patrol') box(p.edition === 'taxi' ? 0.55 : p.width * 0.62, 0.13, 0.24, 0, ground + p.height + 0.04, 0, false, 0xe6a02d);
+  else if (p.edition === 'surf' || p.edition === 'adventure' || p.edition === 'panorama')
+    box(p.width * 0.8, 0.075, p.edition === 'panorama' ? p.length - 3 : 2.5, 0, ground + p.height + 0.08, 0.25, false, p.edition === 'surf' ? 0x8b7859 : 0x344450);
+  else if (p.edition === 'maintenance') {
+    box(p.width * 0.76, 0.7, 0.6, 0, 0.7, 0.2);
+    box(p.width * 0.8, 0.55, 0.1, 0, 1.7, end - 0.32, false, 0xd8a240);
+  }
   wheels(p.wheels);
   reflectors(0);
   const result = [merge()];

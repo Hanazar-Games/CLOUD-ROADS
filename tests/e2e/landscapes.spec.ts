@@ -20,7 +20,7 @@ test('streams distant forest and undergrowth, restores visibility and releases f
   expect(await count('Ground cover')).toBeGreaterThan(1000);
   const initial = await count('Distant canopies');
   expect(initial).toBeGreaterThan(100);
-  await (await control(page, page.locator('#view-distance'))).fill('3');
+  await (await control(page, page.locator('#view-distance'))).fill('5');
   await expect(metric('Target chunks')).toHaveText('1089'); await ready();
   await expect(metric('Active chunks')).toHaveText('1089');
   const far = await count('Distant canopies'), total = await count('Vegetation instances');
@@ -34,7 +34,7 @@ test('streams distant forest and undergrowth, restores visibility and releases f
   await (await control(page, page.locator('#vegetation-toggle'))).click();
   await expect(metric('Vegetation instances')).toHaveText(String(total));
   expect((await sceneShot(page, { clip })).equals(forest)).toBe(true);
-  await (await control(page, page.locator('#view-distance'))).fill('0');
+  await (await control(page, page.locator('#view-distance'))).fill('2');
   await expect(metric('Target chunks')).toHaveText('169'); await ready();
   await expect(metric('Active chunks')).toHaveText('169');
   expect(await count('Distant canopies')).toBeLessThan(initial);

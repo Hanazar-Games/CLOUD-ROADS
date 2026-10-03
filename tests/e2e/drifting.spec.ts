@@ -34,16 +34,24 @@ test('retains drift tuning across vehicles, resets it independently and supports
   await page.goto('/?seed=DRIFT-SETTINGS');
   await (await control(page, page.locator('#road-grip'))).fill('40');
   await page.locator('#handbrake-strength').fill('65'); await page.locator('#countersteer-assist').fill('0');
+  await page.locator('#drift-min-speed').fill('45'); await page.locator('#drift-delay').fill('500');
+  await page.locator('#stability-assist').fill('85');
   await page.locator('#drift-help').scrollIntoViewIfNeeded();
   await page.screenshot({ path: test.info().outputPath('drift-settings.png') });
   for (const kind of ['sedan', 'semi20', 'coach15', 'motorcycle']) {
     await page.locator('#vehicle-kind').selectOption(kind);
     await expect(page.locator('#road-grip-value')).toHaveText('40%'); await expect(page.locator('#handbrake-strength-value')).toHaveText('65%');
     await expect(page.locator('#countersteer-assist-value')).toHaveText('0%');
+    await expect(page.locator('#drift-min-speed-value')).toHaveText('45 km/h');
+    await expect(page.locator('#drift-delay-value')).toHaveText('500 ms'); await expect(page.locator('#stability-assist')).toHaveValue('85');
   }
   await page.locator('#vehicle-tuning-reset').click(); await expect(page.locator('#road-grip')).toHaveValue('40');
   await page.locator('#drift-reset').click(); await expect(page.locator('#road-grip')).toHaveValue('100');
   await expect(page.locator('#handbrake-strength')).toHaveValue('100'); await expect(page.locator('#countersteer-assist')).toHaveValue('60');
+  await expect(page.locator('#drift-min-speed')).toHaveValue('30'); await expect(page.locator('#drift-delay')).toHaveValue('250');
+  await expect(page.locator('#stability-assist')).toHaveValue('65');
+  await page.locator('#drift-enabled').uncheck(); await expect(page.locator('#drift-delay')).toBeDisabled();
+  await page.locator('#drift-enabled').check();
   await page.locator('#vehicle-kind').selectOption('sedan');
   await (await control(page, page.locator('[data-binding="Space"]'))).click(); await page.keyboard.press('F9');
   await closeSettings(page); await page.locator('#drive-toggle').click(); await ignite(page);

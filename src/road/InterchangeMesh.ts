@@ -14,10 +14,10 @@ export class InterchangeMesh {
   private readonly pavementOrigin = new Vector2();
   readonly pavement: Mesh<BufferGeometry, MeshStandardMaterial>;
   private readonly concreteOrigin = new Vector2();
-  readonly decks = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.concreteOrigin), 12000);
+  decks = new InstancedMesh(new BoxGeometry(), createConcreteMaterial(this.concreteOrigin), 12000);
   readonly slabs = new Mesh(new BufferGeometry(), this.decks.material);
-  readonly rails = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa6b2b8, metalness: 0.6, roughness: 0.48 }), 20000);
-  readonly markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xeee9d6, roughness: 0.85 }), 12000);
+  rails = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xa6b2b8, metalness: 0.6, roughness: 0.48 }), 40000);
+  markings = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial({ color: 0xeee9d6, roughness: 0.85 }), 20000);
   private readonly matrix = new Matrix4();
   private plans: readonly HighwayInterchange[] = [];
   private signature = '';
@@ -32,13 +32,20 @@ export class InterchangeMesh {
     this.decks.castShadow = this.rails.castShadow = true;
   }
 
-  update(plans: readonly HighwayInterchange[], origin: { x: number; z: number }, corridor: RoadCorridor, terrain: RoadTerrain): void {
+  update(plans: readonly HighwayInterchange[], origin: { x: number; z: number }, corridor: RoadCorridor, terrain: RoadTerrain, detail = 1): void {
     this.concreteOrigin.set(origin.x, origin.z);
-    const signature = plans.map(p => p.id).join('|');
+    const signature = `${detail}:${plans.map(p => p.id).join('|')}`;
     if (signature !== this.signature || plans.some((p, i) => p !== this.plans[i])) {
       this.signature = signature; this.plans = plans;
       this.x = plans[0]?.center.position.x ?? 0; this.z = plans[0]?.center.position.z ?? 0;
       this.pavementOrigin.set(this.x % 40, this.z % 40);
+      for (const [key, capacity] of [['decks', 12000], ['rails', 40000], ['markings', 20000]] as const) {
+        const old = this[key];
+        if (old.instanceMatrix.count >= capacity * plans.length) continue;
+        const mesh = new InstancedMesh(old.geometry, old.material, capacity * plans.length);
+        mesh.receiveShadow = old.receiveShadow; mesh.castShadow = old.castShadow;
+        old.parent?.add(mesh); old.removeFromParent(); old.dispose(); this[key] = mesh;
+      }
       this.decks.count = this.rails.count = this.markings.count = 0;
       const positions: number[] = [], slabs: number[] = [];
       for (const plan of plans) {
@@ -63,10 +70,16 @@ export class InterchangeMesh {
               const width = Math.min(6, 1.5 + height * 0.02);
               this.edge(this.decks, { ...a, y: floor + height / 2 }, { ...a, x: a.x + 0.01, y: floor + height / 2, z: a.z + 2 }, width, height, 0);
               this.edge(this.decks, { ...a, y: floor + 0.3 }, { ...a, x: a.x + 0.01, y: floor + 0.3, z: a.z + 3.5 }, width + 2, 0.6, 0);
+              this.edge(this.decks, { ...side(a, -3.2), y: a.y - 1.95 }, { ...side(a, 3.2), y: a.y - 1.95 }, 1.8, 0.7, 0);
+              for (const offset of detail ? [-2.3, 2.3] : []) {
+                const p = side(a, offset);
+                this.edge(this.rails, { ...p, y: a.y - 1.5 }, { ...p, x: p.x + (b.x - a.x) / length * 0.65, z: p.z + (b.z - a.z) / length * 0.65, y: a.y - 1.5 }, 0.7, 0.2, 0);
+              }
             }
           }
         }
         for (const [i, { a, b }] of plan.ground.barriers.entries()) {
+          if (!detail) { this.edge(this.rails, a, b, 0.22, 1.2, 0.6); continue; }
           for (const y of [0.55, 1.05]) this.edge(this.rails, a, b, 0.13, 0.15, y);
           const length = Math.hypot(b.x - a.x, b.z - a.z);
           const posts = Math.max(1, Math.ceil(length / 4));

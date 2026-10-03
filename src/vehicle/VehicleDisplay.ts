@@ -1,4 +1,4 @@
-import { DataTexture, Group, Mesh, MeshBasicMaterial, NearestFilter, PlaneGeometry, SRGBColorSpace } from 'three';
+import { DataTexture, Group, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace } from 'three';
 import type { VehiclePhysics } from './VehiclePhysics';
 import type { VehicleSystems } from './VehicleSystems';
 import type { CraneSystems } from './CraneSystems';
@@ -14,51 +14,81 @@ const font: Record<string, number[]> = {
   '<':[1,2,4,8,4,2,1], '>':[16,8,4,2,4,8,16], '.':[0,0,0,0,0,6,6], '-':[0,0,0,31,0,0,0], '/':[1,2,2,4,8,8,16],
   V:[17,17,17,17,17,10,4],
   X:[17,17,10,4,10,17,17],
+  B:[30,17,17,30,17,17,30], J:[7,2,2,2,18,18,12], Q:[14,17,17,17,21,18,13],
+  Y:[17,17,10,4,4,4,4], Z:[31,1,2,4,8,16,31], ':':[0,4,4,0,4,4,0],
 };
+const width = 384, height = 224;
+const ink = [179, 223, 230], accent = [126, 242, 208], muted = [110, 149, 167], amber = [255, 189, 105];
 export class VehicleDisplay {
   readonly root = new Group();
-  private readonly pixels = new Uint8Array(256 * 128 * 4);
-  readonly texture = new DataTexture(this.pixels, 256, 128);
+  private readonly pixels = new Uint8Array(width * height * 4);
+  readonly texture = new DataTexture(this.pixels, width, height);
   private readonly material = new MeshBasicMaterial({ map: this.texture, toneMapped: false });
-  private readonly geometry = new PlaneGeometry(0.28, 0.14);
+  private readonly geometry = new PlaneGeometry(0.32, 0.32 * height / width);
   private last = '';
+  private alert = '';
   private elapsed = 0;
   constructor() {
     this.root.name = 'vehicle-display'; this.root.add(new Mesh(this.geometry, this.material));
-    this.texture.colorSpace = SRGBColorSpace; this.texture.magFilter = this.texture.minFilter = NearestFilter;
+    this.texture.colorSpace = SRGBColorSpace; this.texture.magFilter = this.texture.minFilter = LinearFilter;
   }
   update(car: VehiclePhysics, systems: VehicleSystems, dt: number, crane?: CraneSystems, operations?: VehicleOperations): void {
     this.elapsed += dt;
+    const gear = car.parked ? 'P' : car.reversing ? 'R' : car.speed > 0.1 ? car.powertrain === 'ev' ? 'D' : `D${car.transmission.gear}` : 'N';
+    const speed = String(Math.round(car.motionSpeed * 3.6));
     const lines = [
       `${systems.leftSignal ? '<' : ' '} ${Math.round(car.motionSpeed * 3.6)} KM/H ${systems.rightSignal ? '>' : ' '}`,
-      `${car.parked ? 'P' : car.reversing ? 'R' : car.speed > 0.1 ? `D${car.transmission.gear}` : 'N'} ${Math.round(car.engineRpm / 50) * 50} RPM`,
+      `${gear} ${Math.round(car.engineRpm / 50) * 50} RPM`,
       `TRIP ${(car.trip / 1000).toFixed(2)} KM`,
       `CH ${systems.radioChannel} ${systems.radioPlaying ? 'ON' : 'OFF'} FAN ${systems.fan}`,
       `L ${systems.beam === 'off' ? '-' : systems.beam === 'high' ? 'HI' : 'ON'} W ${systems.wiperRate ? 'ON' : '-'} ${systems.fogLights ? 'FOG' : systems.washerSpray ? 'WASH' : ''}`,
       `AIR ${systems.fan} ${systems.ambientLight ? 'LED' : '---'} ${systems.cabinLight ? 'READ' : '----'}`,
     ];
-    if (car.powertrain === 'ev') lines[1] = `EV ${car.parked ? 'P' : car.reversing ? 'R' : 'D'} REGEN ${car.regeneration}${car.regenerating ? ' ON' : ''}`;
+    if (car.powertrain === 'ev') lines[1] = `EV ${gear} REGEN ${car.regeneration}${car.regenerating ? ' ON' : ''}`;
     if (car.equipment.fridgeOn || car.equipment.locked) lines[5] = `${car.equipment.locked ? 'LOCK' : 'OPEN'} ICE ${car.equipment.fridgeTemperature.toFixed(1)}C`;
     if (car.profile.body === 'sprinkler') lines[5] = `WATER PUMP ${operations?.target.aux && car.ignition === 'running' ? 'ON' : 'OFF'}`;
-    if (car.trailerBrake) lines[5] = 'TRAILER BRAKE ON';
-    if (car.ignition !== 'running') lines[5] = car.powertrain === 'ev' ? car.ignition === 'starting' ? 'EV STARTING' : 'EV OFF' : car.ignition === 'starting' ? 'ENGINE STARTING' : 'ENGINE OFF';
-    if (operations && !operations.driveReady) lines[5] = operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
+    let alert = '';
+    if (car.trailerBrake) alert = 'TRAILER BRAKE ON';
+    if (crane && !crane.stowed) alert = 'CRANE DEPLOYED - PARK';
+    if (car.ignition !== 'running') alert = `${car.powertrain === 'ev' ? 'EV' : 'ENGINE'} ${car.ignition === 'starting' ? 'STARTING' : 'OFF'}`;
+    if (operations && !operations.driveReady) alert = operations.accessing ? 'BOARDING - PARK' : operations.target.doors || operations.doors > 0.001 ? 'DOOR OPEN - PARK' : operations.target.cargo || operations.cargo > 0.001 ? 'GATE OPEN - PARK' : 'STAND DOWN - PARK';
     if (crane) lines.splice(3, 3,
       `CRANE ${crane.stowed ? 'PARK' : crane.enabled ? 'ON' : 'STOW'}`,
       `ARM ${Math.round(crane.angle * 180 / Math.PI)} EXT ${crane.extension.toFixed(1)}`,
       `HOOK ${crane.rope.toFixed(1)} M`);
+    lines.push(alert || (car.parked ? 'PARKED' : 'READY'));
     const signature = lines.join('|');
-    if (signature === this.last || this.elapsed < 0.1 && this.last) return;
-    this.elapsed = 0; this.last = signature;
-    for (let i = 0; i < this.pixels.length; i += 4) { this.pixels[i] = 5; this.pixels[i + 1] = 17; this.pixels[i + 2] = 24; this.pixels[i + 3] = 255; }
-    lines.forEach((line, row) => [...line].forEach((letter, column) => (font[letter] ?? []).forEach((bits, y) => {
-      for (let x = 0; x < 5; x++) if (bits & (1 << (4 - x))) for (let sy = 0; sy < 2; sy++) for (let sx = 0; sx < 2; sx++) {
-        const index = ((127 - (5 + row * 20 + y * 2 + sy)) * 256 + 7 + column * 12 + x * 2 + sx) * 4;
-        if (column * 12 + x * 2 + sx > 245) continue;
-        this.pixels[index] = row === 0 ? 115 : 88; this.pixels[index + 1] = 236; this.pixels[index + 2] = row === 0 ? 168 : 240;
-      }
-    })));
+    if (signature === this.last || this.elapsed < 0.1 && this.last && alert === this.alert) return;
+    this.elapsed = 0; this.last = signature; this.alert = alert;
+    this.rect(0, 0, width, height, [5, 15, 23]);
+    this.text('CLOUD / DRIVE', 16, 12, 1, muted);
+    this.text('<', 242, 9, 2, systems.leftSignal ? amber : muted);
+    this.text('>', 352, 9, 2, systems.rightSignal ? amber : muted);
+    this.text(speed, 16, 34, 6, accent);
+    this.text('KM/H', 142, 64, 1, muted);
+    this.rect(245, 33, 123, 46, [18, 39, 48]);
+    this.text(gear, 262, 43, 4, accent);
+    this.text(lines[1], 16, 86, 1, ink);
+    const level = Math.min(1, Math.max(0, car.powertrain === 'ev' ? car.motionSpeed / car.maxSpeed : car.engineRpm / car.transmission.redline));
+    for (let i = 0; i < 36; i++) this.rect(16 + i * 10, 99, 7, 4, i / 36 < level ? i > 29 ? amber : accent : [29, 48, 60]);
+    this.text(lines[2], 16, 114, 2, ink);
+    this.text(lines[3], 16, 138, 2, ink);
+    this.text(lines[4], 16, 162, 2, muted);
+    this.text(lines[5], 16, 182, 1, muted);
+    this.rect(8, 197, 368, 23, alert ? [57, 37, 23] : [17, 42, 43]);
+    this.text(lines[6], 16, 202, 2, alert ? amber : accent);
     this.root.userData.display = signature; this.texture.needsUpdate = true;
+  }
+  private rect(x: number, y: number, w: number, h: number, color: number[]): void {
+    for (let row = Math.max(0, y); row < Math.min(height, y + h); row++) for (let col = Math.max(0, x); col < Math.min(width, x + w); col++) {
+      const index = ((height - 1 - row) * width + col) * 4;
+      this.pixels[index] = color[0]; this.pixels[index + 1] = color[1]; this.pixels[index + 2] = color[2]; this.pixels[index + 3] = 255;
+    }
+  }
+  private text(value: string, x: number, y: number, scale: number, color: number[]): void {
+    [...value].forEach((letter, column) => (font[letter] ?? []).forEach((bits, row) => {
+      for (let bit = 0; bit < 5; bit++) if (bits & (1 << (4 - bit))) this.rect(x + (column * 6 + bit) * scale, y + row * scale, scale, scale, color);
+    }));
   }
   dispose(): void { this.texture.dispose(); this.geometry.dispose(); this.material.dispose(); }
 }

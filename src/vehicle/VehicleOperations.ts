@@ -12,6 +12,8 @@ export class VehicleOperations {
   constructor(readonly profile: VehicleProfile, readonly equipment?: VehicleEquipment) {}
   label(action: VehicleOperation): string {
     const p = this.profile;
+    if (action === 'cargo' && (p.edition === 'logging' || p.edition === 'maintenance')) return '';
+    if (action === 'aux' && (p.edition === 'patrol' || p.edition === 'maintenance')) return '公路作业警示灯';
     if (action === 'cargo' && (p.trailers?.length ?? 0) > 1) return '三节联动车厢尾门';
     if (action === 'cargo' && (p.body === 'tanker' || p.body === 'mixer' || p.body === 'sprinkler')) return '';
     if (action === 'aux' && p.body === 'sprinkler') return '洒水泵 / 作业警示灯';

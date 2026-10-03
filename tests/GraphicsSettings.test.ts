@@ -13,7 +13,7 @@ it('supports 200 percent rendering and fits the complete image within GPU limits
 it('maps stepped sliders to valid GPU and streaming settings and describes their actual values', () => {
   for (const [id, values] of [
     ['shadow-quality', [0, 1024, 2048, 4096]], ['antialiasing', [0, 1, 2, 4]],
-    ['view-distance', [6, 8, 12, 16]], ['frame-limit', [30, 60, 90, 120, 144, 165, 240, 0]],
+    ['view-distance', [3, 4, 6, 8, 12, 16]], ['frame-limit', [30, 60, 90, 120, 144, 165, 240, 0]],
   ] as const) for (const [index, value] of values.entries()) {
     expect(graphicsValue(id, index)).toBe(value); expect(graphicsPosition(id, value)).toBe(index);
   }

@@ -24,6 +24,25 @@ const fixture = () => {
 };
 
 describe('BridgeMesh', () => {
+  it('keeps bearing anchor bolts coplanar through a curved vertical transition', () => {
+    const terrain = { sample: () => 0 }, start = new RoadGenerator('transition', { sample: () => 140 }).start;
+    const segment = new RoadSegment(start, start.heading + 0.6, 0.3, 576);
+    const samples = Array.from({ length: 117 }, (_, i) => segment.sample(i / 116));
+    const spans = new BridgeDetector(terrain).detect(samples), mesh = new BridgeMesh(new Scene());
+    mesh.update(spans, RoadCorridor.fromSamples(samples, spans), terrain, 1, 0, 0, true);
+    const matrix = new Matrix4(); let bearing: { center: Vector3; normal: Vector3 } | undefined, checked = 0;
+    for (let i = 0; i < mesh.details.count; i++) {
+      mesh.details.getMatrixAt(i, matrix);
+      const size = new Vector3().setFromMatrixColumn(matrix, 1).length();
+      if (Math.abs(size - 0.5) < 0.0001) bearing = {
+        center: new Vector3().setFromMatrixPosition(matrix), normal: new Vector3().setFromMatrixColumn(matrix, 1).normalize(),
+      };
+      if (!bearing || Math.abs(size - 0.06) > 0.0001) continue;
+      const offset = new Vector3().setFromMatrixPosition(matrix).sub(bearing.center).dot(bearing.normal);
+      expect(offset).toBeCloseTo(-0.14, 4); checked++;
+    }
+    expect(checked).toBeGreaterThan(50); mesh.dispose();
+  });
   it('seats bearings against the girder and cap on both sides of a banked bridge', () => {
     const terrain = { sample: () => 20 }, start = new RoadGenerator('bearing', { sample: () => 200 }).start;
     const segment = new RoadSegment(start, 0, 0, 576);

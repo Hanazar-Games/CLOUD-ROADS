@@ -29,7 +29,7 @@ test('drives gentle highways, preserves the route choice and streams a distant s
   await (await control(page, page.locator('#route-style'))).selectOption('5');
   await (await control(page, page.getByRole('button', { includeHidden: true, name: '应用并返回起点' }))).click();
   await expect(metric('Route style')).toHaveText('5 档 · 连续发卡弯'); await ready();
-  await (await control(page, page.locator('#view-distance'))).fill('3');
+  await (await control(page, page.locator('#view-distance'))).fill('5');
   await expect(metric('Target chunks')).toHaveText('1089'); await ready();
   const before = await metric('Coordinates').textContent();
   await (await control(page, page.locator('#pass-view'))).click();

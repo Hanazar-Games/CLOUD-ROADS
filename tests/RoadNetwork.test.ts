@@ -84,7 +84,7 @@ it('separates interchange crossings vertically and samples the selected deck', (
   const junction = network.junctions[0]; expect(junction.kind).toBe('stack');
   const branch = network.routes.find(route => route.id === junction.exits[0])!;
   const point = branch.road.samples[0];
-  expect(point.position.y - junction.sample.position.y).toBeCloseTo(14);
+  expect(point.position.y - junction.sample.position.y).toBeCloseTo(12);
   expect(Math.abs(point.heading - junction.sample.heading)).toBeCloseTo(Math.PI / 2);
   const surface = new DrivingSurface({ seed: 'stack', options: highway, road: root, network, bridges: network.active.bridges, tunnels: [], services: [], groundHeight: () => 100 });
   const x = point.position.x + roadProfile(highway).centers[1], z = point.position.z + roadProfile(highway).centers[1];

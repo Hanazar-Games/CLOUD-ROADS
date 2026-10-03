@@ -1,6 +1,17 @@
-import { expect, it } from 'vitest';
-import { vehicleTemplate } from '../src/service/ParkedVehicles';
+import { expect, it, vi } from 'vitest';
+import { buildVehicleTemplate, vehicleTemplate } from '../src/service/ParkedVehicles';
+import { VehicleMesh } from '../src/vehicle/VehicleMesh';
 import { vehicleProfiles, type VehicleKind } from '../src/vehicle/VehicleConfig';
+
+it('disposes the temporary model when a partially built vehicle leaves the loading queue', () => {
+  const disposed = vi.spyOn(VehicleMesh.prototype, 'dispose'), build = buildVehicleTemplate('panoramicBus', false, true);
+  try {
+    for (let step = 0; step < 5; step++) expect(build.next().done).toBe(false);
+    expect(disposed).not.toHaveBeenCalled();
+    build.return([]); expect(disposed).toHaveBeenCalledOnce();
+    expect(build.next().done).toBe(true);
+  } finally { build.return([]); disposed.mockRestore(); }
+});
 
 it.each(['sedan', 'semi20', 'crane', 'motorcycle'] as const)('separates rolling and steering surfaces from the %s body in animated templates', kind => {
   const profile = vehicleProfiles[kind], parts = vehicleTemplate(kind, false, true);

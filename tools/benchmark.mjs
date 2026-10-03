@@ -20,6 +20,7 @@ try {
   };
   const driving = process.argv.includes('--drive');
   const stationary = process.argv.includes('--stationary');
+  const garage = process.argv.includes('--garage');
   await page.goto(process.argv.slice(2).find(arg => /^https?:/.test(arg)) || 'http://127.0.0.1:5173/?seed=CLOUD-ROAD-001');
   for (const [flag, id] of [['quality', 'graphics-preset'], ['scale', 'render-scale'], ['fps', 'frame-limit'], ['season', 'season-kind']]) {
     const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
@@ -32,7 +33,7 @@ try {
     const value = process.argv.find(arg => arg.startsWith(`--${flag}=`))?.split('=')[1];
     if (value) await (await control(id)).fill(value);
   }
-  if (process.argv.includes('--far')) await (await control('view-distance')).fill('3');
+  if (process.argv.includes('--far')) await (await control('view-distance')).fill('5');
   await page.waitForFunction(() => document.querySelector('[data-metric="Road ready"]')?.textContent === 'yes');
   await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
   const route = process.argv.find(arg => arg.startsWith('--route='))?.slice(8);
@@ -52,6 +53,10 @@ try {
     await page.waitForFunction(() => document.querySelector('[data-metric="Pending / queued"]')?.textContent === '0 / 0');
   }
   if (vehicle) await (await control('vehicle-kind')).selectOption(vehicle);
+  if (garage) {
+    await (await control('garage-density')).fill('100');
+    await (await control('garage-floor')).selectOption('3');
+  }
   await closeSettings();
   if (driving) {
     await page.locator('#drive-toggle').click();
@@ -65,8 +70,8 @@ try {
   if (stationary) await page.waitForTimeout(2000);
   await page.waitForFunction(() => document.querySelector('[data-metric="Vegetation pending"]')?.textContent === '0');
   await page.locator('#world').focus();
-  if (!stationary) await page.keyboard.down('KeyW');
-  const result = await page.evaluate(async () => {
+  if (!stationary && !garage) await page.keyboard.down('KeyW');
+  const measurement = page.evaluate(async () => {
     const canvas = document.querySelector('canvas');
     const gl = canvas.getContext('webgl2');
     const extension = gl.getExtension('WEBGL_debug_renderer_info');
@@ -96,8 +101,10 @@ try {
       telemetry: Object.fromEntries([...document.querySelectorAll('[data-metric]')].map((node) => [node.dataset.metric, node.textContent])),
     };
   });
-  if (!stationary) await page.keyboard.up('KeyW');
-  console.log(JSON.stringify({ mode: driving ? 'driving' : 'flight', stationary, ...result }, null, 2));
+  if (garage) await (await control('garage-view')).click();
+  const result = await measurement;
+  if (!stationary && !garage) await page.keyboard.up('KeyW');
+  console.log(JSON.stringify({ mode: garage ? 'garage-entry' : driving ? 'driving' : 'flight', stationary, ...result }, null, 2));
 } finally {
   await browser.close();
 }

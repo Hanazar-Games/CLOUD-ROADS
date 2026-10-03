@@ -1,6 +1,6 @@
 export const CHUNK_SIZE = 256;
 export const VIEW_RADIUS = 8;
-export const VIEW_RADII = [6, 8, 12, 16] as const;
+export const VIEW_RADII = [3, 4, 6, 8, 12, 16] as const;
 export type TerrainCells = 8 | 16 | 64;
 export interface ChunkRequest {
   key: string;

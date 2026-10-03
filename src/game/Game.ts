@@ -5,6 +5,7 @@ import { SkySystem } from '../atmosphere/SkySystem';
 import { WeatherSystem, weatherNames, type WeatherKind } from '../atmosphere/WeatherSystem';
 import { FreeCamera } from '../camera/FreeCamera';
 import { DebugUI, element } from '../debug/DebugUI';
+import { runtimeLog } from '../debug/RuntimeLog';
 import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
@@ -32,6 +33,8 @@ import { trafficScenarios, trafficTuning, type TrafficTuning } from '../traffic/
 import { InteriorVolume } from '../render/InteriorVolume';
 import type { CabinLayout } from '../vehicle/CabinLayout';
 import { ShortcutDock } from '../ui/ShortcutDock';
+import { TrafficControlPanel } from '../settings/TrafficControlPanel';
+import { crossroadsEnabled } from '../road/JunctionSchedule';
 
 const biomeNames = { valley: '山谷', forest: '森林', rock: '岩石', alpine: '高山', snow: '雪区', desert: '沙漠' };
 const cloudNames = { below: '云下', inside: '云中', above: '云上' };
@@ -63,6 +66,7 @@ export class Game {
   private readonly roadbook: RoadbookPanel;
   private readonly keyBindingPanel: KeyBindingPanel;
   private readonly garagePanel: GaragePanel;
+  private readonly trafficControls: TrafficControlPanel;
   private paused = false;
   private wireframe = false;
   private hudTime = 0;
@@ -74,11 +78,13 @@ export class Game {
   private graphicsResources = false;
   private readonly audio = new AudioSystem();
   private audioPreviewPending = false;
+  private audioTestPending = false;
   private windowFocused = true;
 
   constructor() {
     this.scene.background = this.sky.sun.haze;
     this.world = new World(this.scene, this.initialSeed);
+    this.trafficControls = new TrafficControlPanel(() => this.world);
     this.weather.setSeason(this.world.season);
     this.sky.sun.setTerrain(this.world.options.terrain);
     element<HTMLInputElement>('seed').value = this.initialSeed;
@@ -117,7 +123,32 @@ export class Game {
     this.loop.setFrameLimit(60);
     this.resize();
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
-    element('audio-toggle').addEventListener('click', () => { this.audio.toggle(); this.syncAudioUI(); }, { signal: this.events.signal });
+    this.audio.onDiagnostic = (level, message) => runtimeLog.write(level, 'audio', message);
+    element('audio-toggle').addEventListener('click', () => { this.refreshAudioFocus(); this.audio.toggle(); this.syncAudioUI(); }, { signal: this.events.signal });
+    element('audio-recover').addEventListener('click', () => {
+      this.refreshAudioFocus(); this.audio.recover();
+      for (const [name, field] of audioChannels.slice(0, 3)) {
+        const input = element<HTMLInputElement>(`${name}-volume`); input.value = String(Math.round(this.audio[field] * 100));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      element('audio-test-status').textContent = '已请求重建音频。请查看声音状态，再点击声音测试。'; this.syncAudioUI();
+    }, { signal: this.events.signal });
+    element('audio-test').addEventListener('click', () => {
+      this.refreshAudioFocus();
+      this.audioTestPending = this.audio.testSound();
+      element('audio-test-status').textContent = this.audioTestPending
+        ? '正在发送左 → 中 → 右测试音；如未听到，请检查系统输出设备与浏览器站点静音。'
+        : '测试未开始：请解除暂停、回到游戏窗口，调高总音量与测试音量；音频异常时点击强制开启声音。';
+      this.syncAudioUI();
+    }, { signal: this.events.signal });
+    element('diagnostics-open').addEventListener('click', () => { this.settings.close(); this.debug.show(); }, { signal: this.events.signal });
+    for (const [id, field, unit] of [
+      ['audio-resume-fade', 'resumeFade', 'ms'], ['audio-test-volume', 'testVolume', '%'],
+      ['music-recovery', 'musicRecovery', 'ms'], ['audio-limiter-release', 'limiterRelease', 'ms'],
+    ] as const) element(id).addEventListener('input', () => {
+      const value = Number(element<HTMLInputElement>(id).value); this.audio[field] = value / (unit === '%' ? 100 : 1000);
+      element(`${id}-value`).textContent = `${value} ${unit}`;
+    }, { signal: this.events.signal });
     const audioGroups = [
       ['mix', '整体音量', ['master', 'sfx', 'music']],
       ['horns', '喇叭与附近车辆', ['horn', 'npc-horn', 'nearby-engine']],
@@ -144,7 +175,8 @@ export class Game {
       element(`${id}-value`).textContent = `${value}%`;
     }, { signal: this.events.signal });
     element('audio-mix-reset').addEventListener('click', () => {
-      for (const id of [...audioChannels.map(([name]) => `${name}-volume`), 'horn-focus', 'cabin-isolation', 'music-ducking', 'music-pace']) {
+      for (const id of [...audioChannels.map(([name]) => `${name}-volume`), 'horn-focus', 'cabin-isolation', 'music-ducking', 'music-pace',
+        'audio-resume-fade', 'audio-test-volume', 'music-recovery', 'audio-limiter-release']) {
         const input = element<HTMLInputElement>(id); input.value = input.defaultValue; input.dispatchEvent(new Event('input', { bubbles: true }));
       }
       element('audio-preview-status').textContent = '已恢复默认混音，可试听或继续旅程。';
@@ -309,7 +341,11 @@ export class Game {
       const preset = graphicsPresets[element<HTMLSelectElement>('graphics-preset').value as keyof typeof graphicsPresets];
       if (!preset) return;
       for (const [id, value] of [['render-scale', preset.scale], ['shadow-quality', preset.shadows], ['antialiasing', preset.samples], ['view-distance', preset.radius], ['map-detail', preset.detail], ['cloud-quality', preset.cloudSteps], ['vegetation-lod', preset.lod], ['distant-trees', preset.trees], ['vegetation-shadows', preset.plantShadows], ['vegetation-budget', preset.budget], ['vehicle-detail-distance', preset.vehicles],
-        ['tree-density', preset.foliage], ['ground-density', preset.ground], ['flower-density', preset.flowers], ['rock-density', preset.rocks], ['detail-distance', preset.details]] as const)
+        ['tree-density', preset.foliage], ['ground-density', preset.ground], ['flower-density', preset.flowers], ['rock-density', preset.rocks], ['detail-distance', preset.details],
+        ['road-texture', preset.detail ? 1 : 0], ['road-relief', preset.detail], ['road-filtering', preset.detail ? 8 : 2],
+        ['model-load-budget', preset.detail === 2 ? 3 : 2], ['model-preload-distance', preset.vehicles ? 180 : 0],
+        ['terrain-upload-budget', 2], ['terrain-upload-limit', 2], ['terrain-preload', 1],
+        ['parked-detail-limit', preset.detail === 2 ? 20 : preset.detail ? 12 : preset.vehicles ? 6 : 0], ['garage-cache', preset.detail === 2 ? 5 : 4]] as const)
         element<HTMLInputElement>(id).value = String(graphicsPosition(id, value));
       this.setClouds(preset.clouds); this.applyGraphics();
     }, { signal: this.events.signal });
@@ -428,6 +464,7 @@ export class Game {
       this.setError('图形上下文暂时丢失，正在等待浏览器恢复。');
     }, { signal: this.events.signal });
     this.canvas.addEventListener('webglcontextrestored', () => {
+      runtimeLog.write('info', 'graphics', 'WebGL context restored.');
       this.contextLost = false;
       element<HTMLButtonElement>('retry-world').disabled = false;
       this.setError(this.world.chunks.error ? `地形生成失败，请重试当前世界。${this.world.chunks.error}` : null);
@@ -482,6 +519,7 @@ export class Game {
       element('settings-status').textContent = `当前：${terrainNames[options.terrain]} · ${routeNames[options.routeStyle]} · 最大坡度 ${Math.round(options.maxGrade * 100)}% · ${roadNames[options.roadType]} · ${roadLayout(options)} · 单幅 ${options.roadWidth} 米${options.roadType === 'highway' ? ` · 最小半径 ${options.highwayRadius} 米` : ''}${elevation} · ${options.roadType === 'highway' ? `立交${options.interchanges ? '开启' : '关闭'}` : `岔路${options.junctions ? '开启' : '关闭'}`}`
         + `${options.mountainHeight === 'range' ? ` · 山脉 ${options.mountainMin}–${options.mountainMax} 米` : ''} · 山脉密集度 ${Math.round(options.mountainDensity * 100)}% · 植被 ${Math.round(options.vegetationDensity * 100)}%`;
       this.setError(null);
+      runtimeLog.write('info', 'world', `World loaded: ${seed}; ${options.terrain}; ${options.roadType}.`);
       this.resetCamera();
       return true;
     } catch (error) {
@@ -584,6 +622,7 @@ export class Game {
   }
 
   private setError(message: string | null): void {
+    if (message) runtimeLog.write('error', 'world', message);
     const panel = element('error');
     panel.hidden = message === null;
     element('error-message').textContent = message ?? '';
@@ -617,15 +656,25 @@ export class Game {
   private customGraphics(): void { element<HTMLSelectElement>('graphics-preset').value = 'custom'; }
 
   private syncAudioUI(): void {
+    if (this.audioTestPending && !this.audio.testing) {
+      this.audioTestPending = false;
+      element('audio-test-status').textContent = this.audio.error || '声音测试已结束或中断。若未听到三段提示音，请检查系统输出设备与浏览器站点静音，或点击强制开启声音。';
+    }
     if (this.audioPreviewPending && !this.audio.previewing) {
       this.audioPreviewPending = false;
       element('audio-preview-status').textContent = '试听已结束 · 可调整混音参数后再次试听。';
     }
     element('audio-toggle').setAttribute('aria-pressed', String(this.audio.enabled));
-    element('audio-toggle').textContent = this.audio.error ? '音频不可用' : this.audio.enabled ? '静音' : '开启声音';
-    element<HTMLButtonElement>('audio-toggle').disabled = !!this.audio.error;
+    element('audio-toggle').textContent = this.audio.error ? '重试开启声音' : this.audio.enabled ? '静音' : '开启声音';
     element('audio-status').textContent = this.audio.error || (!this.audio.enabled ? '声音未开启' : this.audio.masterVolume <= 0 ? '总音量为零'
-      : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音' : this.audio.state === 'running' ? '声音已开启' : '声音已暂停');
+      : this.audio.testing ? '正在测试输出声道' : this.audio.sfxVolume <= 0 && this.audio.musicVolume <= 0 ? '音效与音乐均已静音'
+        : this.paused ? '游戏已暂停 · 解除暂停后恢复声音' : document.hidden || !this.windowFocused || !document.hasFocus() ? '窗口未激活 · 返回游戏后恢复声音'
+          : this.audio.state === 'running' ? '声音已开启' : this.audio.state === 'suspended' ? '声音已暂停或等待浏览器授权 · 可点击强制开启声音' : `音频状态：${this.audio.state}`);
+  }
+
+  private refreshAudioFocus(): void {
+    this.windowFocused = document.hasFocus();
+    this.audio.setActive(!this.paused && !this.releaseNotes.open && !this.cabinDialogs.open && this.input.enabled && !document.hidden && this.windowFocused);
   }
 
   private graphicsSetting(id: string): number { return graphicsValue(id, Number(element<HTMLInputElement>(id).value)); }
@@ -647,13 +696,20 @@ export class Game {
 
   private applyPerformance(): void {
     const value = (id: string) => this.graphicsSetting(id);
-    this.world.pavementTextures.configure(value('map-detail'), this.renderer.capabilities.getMaxAnisotropy());
+    this.world.pavementTextures.configure(value('road-texture'), this.renderer.capabilities.getMaxAnisotropy(), value('road-relief'), value('road-filtering'));
+    this.world.modelLoads.budget = value('model-load-budget');
+    this.world.trafficVehicles.preloadDistance = this.world.parkedVehicles.preloadDistance = value('model-preload-distance');
+    this.world.chunks.uploadBudget = value('terrain-upload-budget');
+    this.world.chunks.uploadLimit = value('terrain-upload-limit');
+    this.world.chunks.setPreload(value('terrain-preload'));
     this.world.detailLevel = value('map-detail');
     this.world.detailDistance = value('detail-distance') / 100;
     this.world.chunks.vegetation.setDetailLevel(value('map-detail'));
     this.world.chunks.vegetation.configure({ distance: value('vegetation-lod'), density: value('distant-trees'), shadows: value('vegetation-shadows'), budget: value('vegetation-budget'),
       trees: value('tree-density') / 100, ground: value('ground-density') / 100, flowers: value('flower-density') / 100, rocks: value('rock-density') / 100 });
     this.world.trafficVehicles.detailDistance = this.world.parkedVehicles.detailDistance = value('vehicle-detail-distance');
+    this.world.parkedVehicles.detailLimit = value('parked-detail-limit');
+    this.world.garageCache = value('garage-cache');
   }
 
   private applyGraphics(): void {
@@ -684,6 +740,8 @@ export class Game {
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const silent = this.paused || this.releaseNotes.open || this.cabinDialogs.open || !this.input.enabled;
     const frozen = silent || this.settings.open;
+    this.trafficControls.syncWorld();
+    this.world.signals.tick(!frozen && document.hasFocus() && document.activeElement === this.canvas && this.world.roadReady ? dt : 0);
     if (this.access) {
       const { car, sequence } = this.access, walking = sequence.entering !== sequence.closing;
       if (car !== this.driving.car || sequence.operations !== this.driving.operations
@@ -731,6 +789,7 @@ export class Game {
       }
     }
     const focused = document.activeElement === this.canvas && document.hasFocus(), moving = focused && this.world.roadReady && !frozen;
+    this.trafficControls.update(moving ? dt : 0, this.driving.car, this.driving.active && this.driving.cabin.driver && !this.driving.operations.accessing);
     const anchor = this.driving.active ? this.driving.car : this.walking.active ? this.walking.person
       : { x: this.camera.position.x + this.world.origin.x, y: this.camera.position.y, z: this.camera.position.z + this.world.origin.z };
     const obstacles = this.world.traffic.density ? this.world.parkedVehicles.fleet.entries.filter(e => (e.slot < 0 || !e.id.startsWith('garage:')) && Math.hypot(e.x - anchor.x, e.z - anchor.z) < 1500)
@@ -738,6 +797,7 @@ export class Game {
     if (this.driving.active || this.driving.parked) obstacles.push(this.driving.car);
     this.world.traffic.update(moving ? dt : 0, this.world.network.routes, anchor, obstacles, this.walking.active ? this.walking.person : undefined);
     this.world.trafficVehicles.update(this.world.origin, Math.max(this.sky.sun.night, this.world.shelter, this.weather.profile.far < 500 ? 1 : 0), anchor, this.weather.fogLightsNeeded);
+    this.world.modelLoads.pump();
     const cameraRight = this.camera.matrixWorld.elements;
     const right = { x: cameraRight[0], y: cameraRight[1], z: cameraRight[2] };
     const listener = { x: this.camera.position.x + this.world.origin.x, y: this.camera.position.y, z: this.camera.position.z + this.world.origin.z };
@@ -751,7 +811,7 @@ export class Game {
       atmosphere: this.world.options.terrain === 'moon' ? 0 : this.world.options.terrain === 'mars' ? 0.15 : 1, driving: this.driving.active && moving, speed: this.driving.active && moving ? this.driving.car.speed : 0,
       throttle: moving && this.driving.cabin.driver && this.driving.crane.stowed && this.driving.operations.driveReady ? this.driving.car.transmission.load : 0,
       shifting: this.driving.car.transmission.shifting, impact: this.driving.car.impact, scrape: this.driving.car.scrape,
-      mass: this.driving.car.profile.mass, motorcycle: this.driving.car.kind === 'motorcycle',
+      mass: this.driving.car.profile.mass, motorcycle: this.driving.car.profile.shape === 'motorcycle',
       rain: this.weather.liquidRain, shelter: this.world.shelter, cockpit: this.driving.active && this.driving.cameraRig.view === 'cockpit',
       signal: this.driving.active && (this.driving.systems.leftSignal || this.driving.systems.rightSignal), wiper: this.driving.active ? this.driving.systems.sweep : 0,
       rpm: this.driving.car.engineRpm, shifts: this.driving.car.transmission.shifts, ignition: this.driving.car.ignition,
@@ -842,12 +902,13 @@ export class Game {
       element('pass-view').textContent = passSearch === null ? '下一垭口' : `定位中 · ${Math.round(passSearch * 100)}%`;
       element('route-stage').textContent = this.world.routeStage;
       const junction = this.world.nextJunction;
-      const junctions = this.world.options.roadType === 'highway' ? this.world.options.interchanges : this.world.options.junctions;
+      const signalRoad = crossroadsEnabled(this.world.options);
+      const junctions = signalRoad || (this.world.options.roadType === 'highway' ? this.world.options.interchanges : this.world.options.junctions);
       const junctionSearch = this.world.junctionSearchProgress;
       element<HTMLButtonElement>('junction-view').disabled = !this.world.roadReady || this.world.searching || !junctions;
-      element('junction-view').textContent = junctionSearch === null ? '下一匝道' : `定位中 · ${Math.round(junctionSearch * 100)}%`;
-      element('junction-status').textContent = junction ? `${junction.interchange ? '双层高速 · 四向互通 · 8 条匝道' : junction.kind === 'stack' ? '多向立交 · 左转 / 右转 / 回转' : '平面分流'} · ${Math.max(0, Math.round(((junction.ramps.find(r => r.sample.distance > (this.world.roadSample?.distance ?? 0) - 30)?.sample.distance ?? junction.distance) - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
-        : junctions ? '每 20 km 寻找互通 · 隧道内顺延' : '出口关闭 · 主线双向延伸';
+      element('junction-view').textContent = junctionSearch === null ? signalRoad ? '下一信号路口' : '下一匝道' : `定位中 · ${Math.round(junctionSearch * 100)}%`;
+      element('junction-status').textContent = junction ? `${junction.kind === 'crossroads' ? '信号十字路口 · 四向连接' : junction.interchange ? '四层高速 · 四向互通 · 8 条匝道' : junction.kind === 'stack' ? '多向立交 · 左转 / 右转 / 回转' : '平面分流'} · ${Math.max(0, Math.round(((junction.ramps.find(r => r.sample.distance > (this.world.roadSample?.distance ?? 0) - 30)?.sample.distance ?? junction.distance) - (this.world.roadSample?.distance ?? 0)) / 10) * 10)} m`
+        : this.world.junctionStatus || (signalRoad ? `信号路口目标间隔 ${this.world.options.crossroadInterval / 1000} km · 不适合处跳过` : junctions ? '每 20 km 寻找互通 · 隧道内顺延' : '出口关闭 · 主线双向延伸');
       element('structure-help').textContent = !this.world.roadReady ? '路线生成中，结构视角稍后开放。'
         : `${this.world.tunnels.length ? '隧道入口：沿道路按 W 前进穿行。' : '当前路段没有隧道，可继续沿道路探索。'}路灯分段出现，入夜点亮。`;
       element<HTMLButtonElement>('cloud-view').disabled = !this.world.roadReady;
@@ -866,6 +927,10 @@ export class Game {
         'Pooled meshes': stats.pooled, 'Allocated meshes': stats.allocated,
         'Pending / queued': `${stats.pending} / ${stats.queued}`, 'Generated chunks': stats.completed,
         'Prefetched chunks': stats.prefetched, 'Preloading chunks': stats.preloading,
+        'Model loading jobs': this.world.modelLoads.pending,
+        'Model loading budget': `${this.world.modelLoads.budget} ms`,
+        'Road relief': this.world.pavementTextures.uniforms.pavementDetail.value,
+        'Road filtering': this.world.pavementTextures.uniforms.pavementAsphalt.value.anisotropy,
         Triangles: this.renderer.info.render.triangles, 'Draw calls': this.renderer.info.render.calls,
         'GPU textures': this.renderer.info.memory.textures,
         'Render scale': `${Math.round(this.renderScale * 100)}%`, 'Frame limit': this.graphicsSetting('frame-limit'),
@@ -897,6 +962,9 @@ export class Game {
         'Nearby engine voices': Math.min(6, nearbyEngines.length),
         'NPC cruise range': `${this.world.traffic.tuning.minSpeed}–${this.world.traffic.tuning.maxSpeed} km/h`,
         'NPC lane changes': this.world.traffic.entries.filter(e => e.change).length,
+        'Signal intersections': this.world.signals.junctions.length,
+        'Signal time': this.world.signals.time.toFixed(2),
+        'Traffic warnings': this.trafficControls.rules.count,
         'Transmission': `${this.driving.car.transmission.mode} / ${this.driving.car.transmission.gear}`,
         'Window opening': this.driving.systems.windowOpen.toFixed(2),
         'Roof opening': this.driving.systems.roofOpen.toFixed(2),
@@ -1015,12 +1083,14 @@ export class Game {
   dispose(): void {
     clearTimeout(this.graphicsTimer);
     this.garagePanel.dispose();
+    this.trafficControls.dispose();
     this.keyBindingPanel.dispose();
     this.presets.dispose(); this.worldSettings.dispose();
     this.cabinDialogs.dispose();
     this.roadbook.dispose();
     this.settings.dispose();
     this.audio.dispose();
+    this.debug.dispose();
     this.loop.stop();
     this.events.abort();
     this.input.dispose();

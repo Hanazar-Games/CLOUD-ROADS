@@ -89,5 +89,5 @@ it('preserves full highway interchange clearance above a narrow altitude range',
   for (let i = 0; i < 1000 && !network.junctions.length; i++) network.update(128, -19600, undefined, 4000);
   expect(network.junctions).toHaveLength(1); expect(network.junctions[0].kind).toBe('stack');
   const branch = network.routes.find(r => r.id === network.junctions[0].exits[0])!;
-  for (const segment of branch.definition.prefix) expect(segment.end.position.y).toBeCloseTo(network.junctions[0].sample.position.y + 14);
+  for (const segment of branch.definition.prefix) expect(segment.end.position.y).toBeCloseTo(network.junctions[0].sample.position.y + 12);
 });

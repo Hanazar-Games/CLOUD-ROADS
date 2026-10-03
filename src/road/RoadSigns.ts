@@ -52,7 +52,7 @@ export class RoadSigns {
         const position = { x: point.x + Math.cos(heading) * 5.6, y: point.y + 3.8, z: point.z + Math.sin(heading) * 5.6 };
         this.add(position, heading, 4.4, 1.6, signLabels.indexOf(ramp.turn === 'left' ? 'LEFT\nLOOP >' : 'RIGHT >'), 4);
       }
-      for (const junction of junctions.filter(j => !j.interchange)) for (const [i, ramp] of junction.ramps.entries()) {
+      for (const junction of junctions.filter(j => !j.interchange && j.kind !== 'crossroads')) for (const [i, ramp] of junction.ramps.entries()) {
         const sample = ramp.sample, offset = this.profile.outerHalfWidth + 3, distance = sample.distance;
         const direction = signLabels.indexOf(ramp.direction === 'left' ? 'LEFT\nLOOP >' : ramp.direction === 'return' ? 'RETURN >' : 'RIGHT >');
         const advance = signLabels.indexOf(`${ramp.direction === 'left' ? 'LEFT LOOP >' : ramp.direction === 'return' ? 'RETURN >' : 'RIGHT >'}\n200 M`);

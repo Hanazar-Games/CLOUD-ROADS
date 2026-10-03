@@ -58,6 +58,21 @@ kbd { font: 9px ui-monospace, monospace; padding: 3px 5px; border: 1px solid #ff
 #debug { position: absolute; top: 110px; right: 36px; width: 290px; max-height: calc(100vh - 220px); overflow: auto; padding: 20px; background: #102029df; border: 1px solid #ffffff25; font: 10px ui-monospace, monospace; }
 #debug h2 { position: sticky; top: -20px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; background: #102029; font-size: 10px; font-weight: 400; letter-spacing: 1px; margin: 0 0 17px; color: #d6e6c1; }
 #debug-close { min-height: 28px; padding: 4px 8px; border: 1px solid #ffffff50; border-radius: 3px; background: #14232a; color: inherit; white-space: nowrap; }
+#debug summary { cursor: pointer; padding: 8px 0; color: #b4d9e3; }
+.debug-log { margin-top: 18px; padding-top: 12px; border-top: 1px solid #79e5ed30; }
+.debug-log :is(select, button) { min-height: 34px; border: 1px solid #79e5ed55; border-radius: 5px; background: #163247; color: #e7f4f8; padding: 6px; }
+.debug-log select { width: 100%; margin-top: 6px; }
+.debug-log .actions, .audio-diagnostics .actions { flex-wrap: wrap; }
+#log-entries { list-style: none; padding: 0; max-height: 280px; overflow: auto; overscroll-behavior: contain; }
+#log-entries li { padding: 9px 0; border-bottom: 1px solid #ffffff16; overflow-wrap: anywhere; }
+#log-entries small { color: #8ed7db; }
+#log-entries [data-level=error] small { color: #ffac9a; }
+#log-entries [data-level=warn] small { color: #f3d089; }
+#log-entries p { margin: 5px 0 0; white-space: pre-wrap; line-height: 1.5; }
+.audio-diagnostics { border: 1px solid #79e5ed40; border-radius: 10px; padding: 12px; margin-bottom: 16px; background: #112c3b; }
+.parameter-help { margin: 2px 0 12px; font-size: 11px; color: #a2bac9; }
+.parameter-help summary { cursor: pointer; padding: 4px 0; font-size: 10px; }
+.parameter-help p { margin: 6px 0; line-height: 1.7; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin: 0; }
 dt { opacity: .55; } dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 #error { position: absolute; z-index: 2; inset: 25% max(20px, 15%) auto; max-height: 60dvh; overflow: auto; background: #281e21f5; border: 1px solid #d8a29c; padding: 24px; line-height: 1.8; overflow-wrap: anywhere; }
@@ -320,14 +335,20 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 #drive-hud[data-style=minimal] .engine-feedback { display: none; }
 .in-cabin #drive-hud { left: 24px; bottom: 70px; transform: none; width: 260px; padding: 12px; }
 .in-cabin #vehicle-speed { font-size: 36px; min-width: 56px; letter-spacing: -1px; }
-.in-cabin #cabin-status { display: none; }
 .hud-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; font-size: 10px; color: #c0e2e9; }
 #hud-mode { color: var(--accent); font: 8px ui-monospace, monospace; letter-spacing: 1px; }
 #drive-hud { left: 28px; right: auto; transform: none; max-width: calc(100vw - 24px); box-sizing: border-box; border-radius: 12px; }
-#hud-vehicle-panel { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 10px; padding: 9px 10px; border: 1px solid #79e5ed55; border-radius: 5px; background: #174055; color: #dbfaff; pointer-events: auto; cursor: pointer; font-size: 11px; }
-#hud-vehicle-panel span { font-size: 9px; color: #a6c4cd; }
-#hud-vehicle-panel:hover { background: #225569; }
-#hud-vehicle-panel:focus-visible { outline: 2px solid #b6faff; outline-offset: 2px; }
+.hud-actions { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+.hud-actions button { min-width: 0; padding: 9px 5px; border: 1px solid #79e5ed40; border-radius: 6px; background: #123041; color: #c7e8ed; pointer-events: auto; cursor: pointer; font-size: 11px; }
+#hud-vehicle-panel { background: #205067; color: #ecfffc; }
+.hud-actions button:hover { background: #286074; }
+.hud-actions button:focus-visible, #hud-cabin-details summary:focus-visible { outline: 2px solid #b6faff; outline-offset: 2px; }
+#hud-cabin-details { position: relative; margin: 6px 0; pointer-events: auto; }
+#hud-cabin-details summary { padding: 5px 0; color: #b8d7df; font-size: 10px; cursor: pointer; }
+#hud-cabin-details summary span { float: right; color: #83a4b3; font-size: 9px; }
+.hud-cabin-readings { position: absolute; bottom: calc(100% + 8px); left: 0; width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #79e5ed66; border-radius: 8px; background: #0a202ff5; box-shadow: 0 8px 24px #0006; z-index: 2; }
+.hud-cabin-readings p { margin: 0; padding: 6px 0; color: #c4dce5; font-size: 11px; line-height: 1.6; }
+.hud-cabin-readings p + p { border-top: 1px solid #79e5ed22; }
 .speed-dial { display: none; height: 108px; text-align: center; }
 .speed-dial svg { height: 100%; width: 180px; overflow: visible; }
 .dial-track, .dial-progress { fill: none; stroke: #688a9444; stroke-width: 8; stroke-linecap: round; }
@@ -340,20 +361,26 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 #drive-hud[data-style=dial] .speed-track { display: none; }
 #drive-hud[data-style=dial] #vehicle-speed { font-size: 36px; min-width: 54px; letter-spacing: -1px; }
 #drive-hud[data-style=dial] .drive-reading { justify-content: center; margin-top: 0; }
-#drive-hud[data-style=dial] #cabin-status, #drive-hud[data-style=dial] #radio-reading { display: none; }
 #drive-hud[data-style=minimal] { width: 270px; background: #07131bde; padding: 12px 16px; }
 #drive-hud[data-style=minimal] #vehicle-speed { font-size: 44px; min-width: 64px; letter-spacing: -1px; }
-#drive-hud[data-style=minimal] #seat-reading, #drive-hud[data-style=minimal] #radio-reading, #drive-hud[data-style=minimal] #cabin-status,
 #drive-hud[data-style=minimal] .rpm-reading, #drive-hud[data-style=minimal] .route-guidance { display: none; }
 .vehicle-panel-scroll { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .vehicle-specs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); gap: 10px 16px; margin: 20px 0; font-size: 13px; }
 .vehicle-specs dt { color: #a1becb; opacity: 1; }.vehicle-specs dd { margin: 0; color: #e2f7f5; overflow-wrap: anywhere; }
 .vehicle-panel-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+.vehicle-panel-actions button { min-height: 42px; text-align: left; font-size: 12px; line-height: 1.6; }
+.panel-state { margin: 0 0 16px; padding: 14px; background: #163747; border-radius: 8px; color: #d5f4f2; font-size: 12px; line-height: 1.8; }
+.panel-section { border-top: 1px solid #79e5ed25; padding-top: 14px; margin-top: 14px; }
+.panel-section h3 { margin: 0; font-size: 12px; font-weight: 500; color: #a3d5dc; letter-spacing: 1px; }
+.panel-section .equipment-status { border: 0; padding: 10px 12px; border-radius: 6px; color: #a9c7d1; }
+.panel-specification { border: 1px solid #79e5ed30; border-radius: 8px; padding: 12px; }
+.panel-specification summary { cursor: pointer; color: #a8ccd6; font-size: 12px; }
+.panel-specification summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 #vehicle-panel .eyebrow { color: var(--accent); font-size: 9px; margin-bottom: 6px; }
 #vehicle-panel header > div { min-width: 0; } #vehicle-panel header > button { flex-shrink: 0; }
 @media (max-height: 650px) {
   #drive-hud { padding: 10px 14px; }
-  #drive-hud #seat-reading, #drive-hud #radio-reading, #drive-hud #cabin-status, #drive-hud .route-guidance,
+  #drive-hud .route-guidance,
   #drive-hud .rpm-reading, #drive-hud #drive-condition { display: none; }
   #drive-hud #vehicle-speed { font-size: 34px; min-width: 50px; letter-spacing: -1px; }
   #drive-hud .speed-dial { height: 52px; }
@@ -392,6 +419,8 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 }
 .binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, auto); gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #ffffff12; font-size: 12px; }
 .binding-row button { min-height: 34px; overflow-wrap: anywhere; }
+.binding-count { float: right; color: #91a9b8; font-size: 11px; font-weight: 400; white-space: nowrap; }
+.binding-group .binding-row:last-child { border-bottom: 0; }
 #cabin-walk-status { font-size: 11px; line-height: 1.5; color: #b9ebe8; margin: 6px 0; }
 #cabin-walk-status:empty { display: none; }
 .beginner footer { padding: 8px 20px; background: #081723ed; border-top: 1px solid #79e5ed30; }
@@ -405,7 +434,6 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
 .cabin-walking #drive-hud .drive-reading, .cabin-walking #drive-hud .engine-feedback,
 .cabin-walking #drive-hud .speed-track, .cabin-walking #drive-hud .speed-dial, .cabin-walking #hud-autopilot { display: none; }
 .cabin-walking .crosshair { display: block; }
-.cabin-walking #drive-hud #seat-reading, .cabin-walking #drive-hud #radio-reading, .cabin-walking #drive-hud #cabin-status,
 .cabin-walking #drive-hud .rpm-reading, .cabin-walking #drive-hud .route-guidance, .cabin-walking #drive-hud #drive-condition { display: none; }
 @media (max-width: 620px), (max-height: 500px) {
   .beginner footer { padding: 5px 10px; }
@@ -422,6 +450,13 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
   #hud-autopilot { font-size: 10px; margin: 3px 0; padding: 4px 6px; }
   .beginner #drive-hud { padding: 6px 10px; }
   .beginner #drive-hud .engine-feedback { display: none; }
-  .beginner #hud-vehicle-panel { margin-top: 6px; padding: 7px 10px; }
+  .beginner .hud-actions { margin-top: 6px; }
+  .beginner .hud-actions button { padding: 7px 5px; }
+  #hud-cabin-details { margin: 2px 0; }
   .beginner .header-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 }
+#signal-guidance { border-left: 3px solid #5ee1aa; padding-left: 8px; color: #95f0c1; }
+#signal-guidance[data-signal="red"] { border-color: #ff735c; color: #ffb4a5; }
+#signal-guidance[data-signal="yellow"] { border-color: #edc663; color: #ffe2a0; }
+#traffic-warning { position: fixed; top: 90px; left: 50%; transform: translateX(-50%); z-index: 8; width: max-content; max-width: min(560px, calc(100vw - 32px)); box-sizing: border-box; margin: 0; padding: 12px 18px; border: 1px solid #d59b4e; border-radius: 10px; background: #182129f0; color: #ffe1a5; font-size: 13px; line-height: 1.6; box-shadow: 0 8px 30px #0005; pointer-events: none; }
+#traffic-warning[data-kind="red"] { border-color: #ec7867; color: #ffd0c5; }

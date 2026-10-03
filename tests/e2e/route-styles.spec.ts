@@ -20,7 +20,7 @@ test('applies winding levels, drives them and preserves choices during far strea
   const home = await metric('Coordinates').textContent();
   await (await control(page, page.locator('#hairpin-view'))).click();
   await expect(metric('Coordinates')).not.toHaveText(home!); await ready();
-  await (await control(page, page.locator('#view-distance'))).fill('3');
+  await (await control(page, page.locator('#view-distance'))).fill('5');
   await expect(metric('Target chunks')).toHaveText('1089'); await ready();
   await expect(metric('Active chunks')).toHaveText('1089');
   await (await control(page, page.locator('#terrain-kind'))).selectOption('desert');
@@ -29,7 +29,7 @@ test('applies winding levels, drives them and preserves choices during far strea
   await expect(metric('Route style')).toHaveText('5 档 · 连续发卡弯'); await ready();
   expect(Number(await metric('Bridges').textContent())).toBeGreaterThan(0);
   expect(Number(await metric('Bridge piers').textContent())).toBeGreaterThan(10);
-  await expect(page.locator('#view-distance')).toHaveValue('3');
+  await expect(page.locator('#view-distance')).toHaveValue('5');
   await (await control(page, page.locator('#drive-toggle'))).click(); await ignite(page);
   await expect(metric('Travel mode')).toHaveText('driving');
   await (await control(page, page.locator('#world'))).focus(); await page.keyboard.down('KeyW');

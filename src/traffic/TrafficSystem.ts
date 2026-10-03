@@ -9,6 +9,7 @@ import { vehicleProfiles, type VehicleKind } from '../vehicle/VehicleConfig';
 import { constrainVehicle } from '../service/ServiceCollision';
 import { vehicleSupport } from '../vehicle/VehicleSolids';
 import type { HornSound } from '../audio/VehicleHorn';
+import type { TrafficSignals } from './TrafficSignals';
 
 export const MAX_TRAFFIC = 120;
 export const trafficTuning = {
@@ -17,7 +18,7 @@ export const trafficTuning = {
 } as const;
 export type TrafficTuning = { -readonly [K in keyof typeof trafficTuning]: number };
 export const trafficScenarios = { normal: '正常通行', busy: '缓慢车流', stopgo: '走走停停', queue: '排队拥堵' } as const;
-const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck', 'sprinkler'];
+const kinds: VehicleKind[] = ['hatchback', 'sedan', 'wagon', 'pickup', 'van', 'camper', 'truck5', 'truck8', 'minibus', 'citybus', 'supercar', 'semi15', 'coupe', 'rally', 'limousine', 'expedition6', 'schoolbus', 'shuttle', 'mixer', 'garbage', 'refrigerated', 'towtruck', 'sprinkler', 'taxi', 'surfWagon', 'patrol', 'parcelVan', 'adventureCamper', 'panoramicBus', 'livestockTruck', 'loggingTruck', 'maintenanceTruck', 'touringMotorcycle'];
 const paints = [0xd8dedb, 0x29485e, 0x377d78, 0xa73d32, 0xdca632, 0x353d43, 0x7d658e, 0x9b7453, 0x83b3bb, 0xd4bc97];
 type Position = { x: number; y: number; z: number };
 interface Driver { patience: number; waiting: number; horn: number; quiet: number }
@@ -28,6 +29,7 @@ export interface TrafficEntry {
 }
 
 export class TrafficSystem {
+  signals?: TrafficSignals;
   readonly tuning = Object.fromEntries(Object.entries(trafficTuning).map(([key, [value]]) => [key, value])) as TrafficTuning;
   configure(values: Partial<TrafficTuning>): void {
     for (const key of Object.keys(trafficTuning) as (keyof TrafficTuning)[]) {
@@ -195,6 +197,8 @@ export class TrafficSystem {
       cruise: 0 };
     entry.cruise = this.cruiseSpeed(entry);
     if (!this.place(entry, route, distance) || Math.hypot(car.x - anchor.x, car.z - anchor.z) < 70
+      || this.signals?.junctions.some(j => Math.abs(car.y - j.sample.position.y) < 5
+        && Math.hypot(car.x - j.sample.position.x, car.z - j.sample.position.z) < this.signals!.stopOffset + car.profile.length + 10)
       || walker && Math.hypot(car.x - walker.x, car.z - walker.z) < 60
       || [...parked, ...this.entries.map(e => e.car)].some(other => Math.abs(other.y - car.y) < 7
         && Math.hypot(other.x - car.x, other.z - car.z) < 35 + other.profile.length + car.profile.length)) return;
@@ -297,8 +301,10 @@ export class TrafficSystem {
       if (Math.abs(walker.y - car.y) < car.profile.height + 1 && lateral < car.profile.width / 2 + 1.5 && along > -car.profile.length)
         gap = Math.min(gap, along - car.profile.chassisLength / 2 - 4);
     }
+    const signalGap = this.signals?.stopDistance(car) ?? Infinity;
+    gap = Math.min(gap, signalGap);
     entry.cooldown = Math.max(0, entry.cooldown - dt * this.tuning.laneChanges);
-    this.planChange(entry, route, gap, leaderSpeed, obstacles, walker);
+    if ((this.signals?.approach(car)?.distance ?? Infinity) > 80) this.planChange(entry, route, gap, leaderSpeed, obstacles, walker);
     const previousOffset = entry.offset, previousElapsed = entry.change?.elapsed ?? 0, previousHeading = car.heading, previousSteering = car.steering;
     if (entry.change) {
       const change = entry.change, clear = this.laneClear(entry, route, change.lane, obstacles);
@@ -343,7 +349,7 @@ export class TrafficSystem {
     const driver = this.driver(entry);
     driver.horn = Math.max(0, driver.horn - dt); driver.quiet = Math.max(0, driver.quiet - dt);
     const pedestrian = walker && Math.hypot(walker.x - car.x, walker.z - car.z) < 35;
-    const blocked = Math.min(gap, queueGap) < 25 && car.speed < 2.5 && entry.cruise > 4 && !pedestrian;
+    const blocked = Math.min(gap, queueGap) < 25 && car.speed < 2.5 && entry.cruise > 4 && !pedestrian && signalGap === Infinity;
     driver.waiting = blocked ? driver.waiting + dt : 0;
     if (blocked && (!entry.change || car.speed < 0.3) && driver.waiting > this.tuning.hornDelay + driver.patience * 3 && driver.quiet === 0) {
       driver.horn = 0.6 + driver.patience * 0.4; driver.quiet = this.tuning.hornCooldown * (1 + driver.patience);
