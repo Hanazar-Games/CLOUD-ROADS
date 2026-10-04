@@ -135,7 +135,10 @@ export class SettingsDialog {
       if (search.value) { search.value = ''; find(); search.focus(); }
       else this.close();
     }, options);
-    this.dialog.addEventListener('beforetoggle', clearInput, options);
+    this.dialog.addEventListener('beforetoggle', event => {
+      if ((event as ToggleEvent).newState === 'closed') this.positions.set(this.active, this.content.scrollTop);
+      clearInput();
+    }, options);
     this.dialog.addEventListener('toggle', () => {
       button.setAttribute('aria-expanded', String(this.open));
     }, options);
@@ -224,7 +227,7 @@ export class SettingsDialog {
       slider.style.setProperty('--range-fill', `${Math.max(0, Math.min(1, fill)) * 100}%`);
     }
   }
-  close(): void { if (this.open) { this.positions.set(this.active, this.content.scrollTop); this.clearInput(); this.dialog.close(); this.focusWorld(); } }
+  close(): void { if (this.open) { this.clearInput(); this.dialog.close(); this.focusWorld(); } }
   private focusWorld(): void { if (!element('world').inert && !document.querySelector('dialog[open]')) element('world').focus(); }
   dispose(): void { this.close(); this.events.abort(); }
 }

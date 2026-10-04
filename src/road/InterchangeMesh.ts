@@ -21,6 +21,8 @@ export class InterchangeMesh {
   private readonly matrix = new Matrix4();
   private plans: readonly HighwayInterchange[] = [];
   private signature = '';
+  private corridor?: RoadCorridor;
+  private blocked: boolean[] = [];
   private x = 0; private z = 0;
 
   constructor(scene: Scene, textures?: PavementTextures) {
@@ -35,7 +37,16 @@ export class InterchangeMesh {
   update(plans: readonly HighwayInterchange[], origin: { x: number; z: number }, corridor: RoadCorridor, terrain: RoadTerrain, detail = 1): void {
     this.concreteOrigin.set(origin.x, origin.z);
     const signature = `${detail}:${plans.map(p => p.id).join('|')}`;
-    if (signature !== this.signature || plans.some((p, i) => p !== this.plans[i])) {
+    const changed = signature !== this.signature || plans.some((p, i) => p !== this.plans[i]);
+    let clearanceChanged = false;
+    if (changed || corridor !== this.corridor) {
+      const blocked: boolean[] = [];
+      for (const plan of plans) for (const ramp of plan.ramps) for (let i = 8; i < ramp.points.length; i += 8)
+        blocked.push(corridor.crossesBelow({ ...plan.center, position: ramp.points[i - 1], routeId: `${plan.id}:ramp`, distance: i * 6 }, corridor.roadHalfWidth + 6));
+      clearanceChanged = blocked.length !== this.blocked.length || blocked.some((value, i) => value !== this.blocked[i]);
+      this.blocked = blocked; this.corridor = corridor;
+    }
+    if (changed || clearanceChanged) {
       this.signature = signature; this.plans = plans;
       this.x = plans[0]?.center.position.x ?? 0; this.z = plans[0]?.center.position.z ?? 0;
       this.pavementOrigin.set(this.x % 40, this.z % 40);
@@ -48,6 +59,7 @@ export class InterchangeMesh {
       }
       this.decks.count = this.rails.count = this.markings.count = 0;
       const positions: number[] = [], slabs: number[] = [];
+      let support = 0;
       for (const plan of plans) {
         const ribbons = accessQuads(plan.ground.access), rims = accessQuads(plan.ground.access, 0.25);
         let ribbon = 0;
@@ -64,7 +76,7 @@ export class InterchangeMesh {
             this.edge(this.markings, along(-2), along(2), 0.18, 0.02, 0.045);
             for (const s of [-1, 1]) this.edge(this.markings, along(0.7, s * 0.7), along(2), 0.18, 0.02, 0.045);
           }
-          if (i % 8 === 0 && !corridor.crossesBelow({ ...plan.center, position: a, routeId: `${plan.id}:ramp`, distance: i * 6 }, 9)) {
+          if (i % 8 === 0 && !this.blocked[support++]) {
             const ground = terrain.sample(a.x, a.z), height = a.y - 1.45 - ground;
             if (height > 2) {
               const width = Math.min(6, 1.5 + height * 0.02), tx = (b.x - a.x) / length, tz = (b.z - a.z) / length;
