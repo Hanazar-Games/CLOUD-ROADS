@@ -18,15 +18,17 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
     shader.uniforms.roadDirection = direction;
     shader.uniforms.serviceAccess = { value: access };
     shader.uniforms.parkingAccess = { value: parkingAccess };
-    shader.vertexShader = `varying vec2 vRoadUv;\n${shader.vertexShader}`.replace('#include <uv_vertex>', '#include <uv_vertex>\nvRoadUv = uv;');
-    shader.fragmentShader = `varying vec2 vRoadUv;\nuniform float roadHalfWidth;\nuniform float roadCenter;\nuniform float roadLanes;\nuniform float oneWay;\nuniform float roadDirection;\nuniform vec4 serviceAccess[4];\nuniform vec4 parkingAccess[4];\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
+    shader.vertexShader = `attribute vec2 roadAccess; varying vec2 vRoadAccess; varying vec2 vRoadUv;\n${shader.vertexShader}`
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvRoadUv = uv; vRoadAccess = roadAccess;');
+    shader.fragmentShader = `varying vec2 vRoadAccess; varying vec2 vRoadUv;\nuniform float roadHalfWidth;\nuniform float roadCenter;\nuniform float roadLanes;\nuniform float oneWay;\nuniform float roadDirection;\nuniform vec4 serviceAccess[4];\nuniform vec4 parkingAccess[4];\n${shader.fragmentShader}`.replace('#include <color_fragment>', `
       #include <color_fragment>
       float lateral = abs(abs(vRoadUv.x) - roadCenter);
       float localX = vRoadUv.x - sign(vRoadUv.x) * roadCenter;
       float laneWidth = roadHalfWidth * 2.0 / roadLanes;
       float laneCenter = (floor((localX + roadHalfWidth) / laneWidth) + 0.5) * laneWidth - roadHalfWidth;
       float aa = max(fwidth(vRoadUv.x), 0.015);
-      float shoulder = smoothstep(roadHalfWidth - aa, roadHalfWidth + aa, lateral);
+      float rampOpening = mix(vRoadAccess.x, vRoadAccess.y, step(0.0, vRoadUv.x)) * step(roadCenter, abs(vRoadUv.x));
+      float shoulder = smoothstep(roadHalfWidth - aa, roadHalfWidth + aa, lateral) * (1.0 - rampOpening);
       vec4 asphalt = texture2D(pavementAsphalt, vRoadUv * 0.5);
       vec4 concrete = texture2D(pavementConcrete, vRoadUv * 0.5);
       vec4 surfaceTexel = mix(asphalt, concrete, shoulder);
@@ -36,7 +38,7 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       surface *= 1.0 - wheelTrack * 0.065 * (1.0 - shoulder);
       float seam = 1.0 - smoothstep(0.018, 0.018 + aa, abs(lateral - roadHalfWidth * 0.96));
       surface *= 1.0 - seam * 0.18 * (1.0 - smoothstep(0.04, 0.4, length(fwidth(vRoadUv))));
-      float gutter = smoothstep(roadHalfWidth + 0.85 - aa, roadHalfWidth + 0.85 + aa, lateral);
+      float gutter = smoothstep(roadHalfWidth + 0.85 - aa, roadHalfWidth + 0.85 + aa, lateral) * (1.0 - rampOpening);
       float joint = 1.0 - smoothstep(0.015, max(0.025, fwidth(vRoadUv.y)), abs(mod(vRoadUv.y + 3.0, 6.0) - 3.0));
       surface = mix(surface, concrete.rgb * 1.2 * (1.0 - joint * 0.12), gutter);
       float edge = 1.0 - smoothstep(0.065 - aa, 0.065 + aa, abs(lateral - roadHalfWidth + 0.35));
@@ -60,11 +62,12 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       float center = (1.0 - oneWay) * (1.0 - step(0.01, roadCenter)) * (1.0 - smoothstep(0.055 - aa, 0.055 + aa, abs(abs(localX) - 0.12)));
       float along = abs(mod(vRoadUv.y, 12.0) - 6.0);
       float dash = 1.0 - smoothstep(2.0 - fwidth(vRoadUv.y), 2.0 + fwidth(vRoadUv.y), along);
+      edge *= 1.0 - rampOpening * (1.0 - dash);
       float yellow = roadCenter > 0.01 ? step(abs(vRoadUv.x), roadCenter) * edge : center;
       vec3 marking = mix(vec3(0.83, 0.82, 0.72), vec3(0.95, 0.61, 0.12), yellow);
       diffuseColor.rgb = mix(surface, marking, max(edge, max(center, divider * dash)));
       float stud = (1.0 - smoothstep(0.045, 0.045 + aa, abs(lateral - roadHalfWidth + 0.65)))
-        * (1.0 - smoothstep(0.07, 0.07 + fwidth(vRoadUv.y), abs(mod(vRoadUv.y + 6.0, 12.0) - 6.0))) * (1.0 - opening);
+        * (1.0 - smoothstep(0.07, 0.07 + fwidth(vRoadUv.y), abs(mod(vRoadUv.y + 6.0, 12.0) - 6.0))) * (1.0 - opening) * (1.0 - rampOpening);
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.7, 0.44), stud);
       float lane = abs(localX - laneCenter);
       float arrowDirection = oneWay > 0.5 ? roadDirection : sign(vRoadUv.x);
@@ -73,7 +76,7 @@ export function createRoadMaterial(options: Readonly<WorldOptions> = DEFAULT_OPT
       float headWidth = max(0.0, (3.8 - arrowY) * 0.34);
       float head = (1.0 - smoothstep(headWidth, headWidth + aa, lane)) * step(0.2, arrowY) * step(arrowY, 3.8);
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.83, 0.82, 0.72), max(shaft, head));
-      float rumble = step(roadHalfWidth + 0.25, lateral) * step(lateral, roadHalfWidth + 0.8) * step(mod(vRoadUv.y, 1.3), 0.15);
+      float rumble = step(roadHalfWidth + 0.25, lateral) * step(lateral, roadHalfWidth + 0.8) * step(mod(vRoadUv.y, 1.3), 0.15) * (1.0 - rampOpening);
       diffuseColor.rgb *= 1.0 - rumble * 0.3 * (1.0 - smoothstep(0.2, 1.0, fwidth(vRoadUv.y)));
       surfaceRelief *= 1.0 - 0.8 * max(max(edge, center), max(divider * dash, max(shaft, head)));
     `).replace('#include <lights_fragment_end>', `

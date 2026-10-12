@@ -6,6 +6,23 @@ import { RoadSpine } from '../src/road/RoadSpine';
 import { ROAD_SAMPLES, RoadSegment } from '../src/road/RoadSegment';
 
 describe('RoadMesh', () => {
+  it.each([-1, 0, 1])('passes side %s highway openings to pavement markings and clears them on regeneration', side => {
+    const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const }, spine = new RoadSpine('ramp-markings', { sample: () => 100 }, options);
+    spine.segments.push(new RoadSegment(spine.generator.start, 0, 0));
+    spine.openings.push({ start: 24, end: 72, side }); spine.version++;
+    const mesh = new RoadMesh(new Scene(), options); mesh.update(spine, 0, 0, true);
+    const access = mesh.mesh.geometry.getAttribute('roadAccess');
+    expect(access).toBeDefined();
+    for (const [i, sample] of spine.samples.entries()) for (let vertex = 0; vertex < 4; vertex++) {
+      const open = sample.distance >= 24 && sample.distance <= 72;
+      expect(access.getX(i * 4 + vertex)).toBe(Number(open && side <= 0));
+      expect(access.getY(i * 4 + vertex)).toBe(Number(open && side >= 0));
+    }
+    spine.openings.length = 0; spine.version++; mesh.update(spine, 5120, -5120, true);
+    expect(mesh.mesh.geometry.getAttribute('roadAccess')).toBe(access);
+    expect(Array.from(access.array).every(value => value === 0)).toBe(true); mesh.dispose();
+  });
+
   it('keeps the median guarded when an elevated highway opens its outer ramp connections', () => {
     const options = { ...DEFAULT_OPTIONS, roadType: 'highway' as const }, spine = new RoadSpine('median-exit', { sample: () => 100 }, options);
     spine.segments.push(new RoadSegment(spine.generator.start, 0, 0));

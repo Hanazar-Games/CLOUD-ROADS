@@ -9,13 +9,15 @@ import { INTERCHANGE_EXTENT } from './JunctionSchedule';
 export interface InterchangePort { u: number; v: number; direction: number; start: number; end: number }
 export interface InterchangeRamp {
   from: number; to: number; turn: 'left' | 'right'; points: ServiceAccessPoint[]; entry: InterchangePort; exit: InterchangePort;
+  entryEnd: number; exitStart: number;
 }
 export interface HighwayInterchange {
   id: string; center: RoadSample; upperHeight: number; ramps: InterchangeRamp[]; ground: ServiceGround;
 }
 
 export function highwayInterchange(id: string, center: RoadSample, options: Readonly<WorldOptions>): HighwayInterchange {
-  const profile = roadProfile(options), c = profile.outerHalfWidth - 2.4, radius = 420, reach = 2700;
+  const profile = roadProfile(options), c = profile.outerHalfWidth + 3, radius = 420, reach = 2700;
+  const entryLength = 240, exitLength = 300;
   const upperHeight = center.position.y + 12, ramps: InterchangeRamp[] = [];
   const ground: ServiceGround = { pads: [], access: [], barriers: [], elevated: true };
   for (let from = 0; from < 4; from++) for (const turn of ['right', 'left'] as const) {
@@ -34,8 +36,13 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
       }
     }
     const first = curve[0], last = curve.at(-1)!;
-    for (let d = 6; d <= 60; d += 6) curve.unshift({ u: first.u - Math.sin(angle) * d, v: first.v - Math.cos(angle) * d });
-    for (let d = 6; d <= 60; d += 6) curve.push({ u: last.u + Math.sin(to * Math.PI / 2) * d, v: last.v + Math.cos(to * Math.PI / 2) * d });
+    const extend = (p: typeof first, direction: number, distance: number, length: number) => {
+      const angle = direction * Math.PI / 2, t = Math.abs(distance) / length, shift = 5.4 * t * t * (3 - 2 * t);
+      return { u: p.u + Math.sin(angle) * distance - Math.cos(angle) * shift,
+        v: p.v + Math.cos(angle) * distance + Math.sin(angle) * shift };
+    };
+    for (let d = 6; d <= entryLength; d += 6) curve.unshift(extend(first, from, -d, entryLength));
+    for (let d = 6; d <= exitLength; d += 6) curve.push(extend(last, to, d, exitLength));
     const distances = [0];
     for (let i = 1; i < curve.length; i++) distances.push(distances[i - 1] + Math.hypot(curve[i].u - curve[i - 1].u, curve[i].v - curve[i - 1].v));
     const entryEnd = curve.findIndex(p => Math.abs(from % 2 ? p.v : p.u) > profile.outerHalfWidth + 4.3);
@@ -57,7 +64,7 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
       const du = after.u - before.u, dv = after.v - before.v, scale = Math.hypot(du, dv);
       const x = center.position.x + Math.cos(center.heading) * point.u + Math.sin(center.heading) * point.v;
       const z = center.position.z + Math.sin(center.heading) * point.u - Math.cos(center.heading) * point.v;
-      const taper = Math.min(1, distances[i] / 60, (distances.at(-1)! - distances[i]) / 60);
+      const taper = Math.min(1, distances[i] / entryLength, (distances.at(-1)! - distances[i]) / exitLength);
       return { x, z, y: start + (end - start) * t * t * (3 - 2 * t), halfWidth: 2.2 + 1.5 * taper * taper * (3 - 2 * taper),
         slopeX: grade * (Math.cos(center.heading) * du + Math.sin(center.heading) * dv) / scale,
         slopeZ: grade * (Math.sin(center.heading) * du - Math.cos(center.heading) * dv) / scale };
@@ -70,7 +77,7 @@ export function highwayInterchange(id: string, center: RoadSample, options: Read
       const along = direction % 2 ? 'u' : 'v', a = curve[index][along], b = curve[clear][along];
       return { ...curve[index], direction, start: Math.min(a, b) - 24, end: Math.max(a, b) + 24 };
     };
-    ramps.push({ from, to, turn, points, entry: port(0, entryEnd, from), exit: port(curve.length - 1, exitStart, to) });
+    ramps.push({ from, to, turn, points, entryEnd, exitStart, entry: port(0, entryEnd, from), exit: port(curve.length - 1, exitStart, to) });
   }
   const rims = accessQuads(ground.access, 0.2), rails = rims.flatMap(q => [{ a: q.leftA, b: q.leftB }, { a: q.rightA, b: q.rightB }]);
   let edge = 0;

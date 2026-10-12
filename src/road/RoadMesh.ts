@@ -31,7 +31,7 @@ export class RoadMesh {
     this.mesh = new Mesh(new BufferGeometry(), createRoadMaterial(options, this.access, this.direction, this.parkingAccess, textures));
     const strips = this.profile.centers.length, stride = strips * 2;
     const rows = capacity * ROAD_SAMPLES + 1;
-    for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['seasonExposure', 1]] as const) {
+    for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['seasonExposure', 1], ['roadAccess', 2]] as const) {
       this.mesh.geometry.setAttribute(name, new BufferAttribute(new Float32Array(rows * stride * size), size).setUsage(DynamicDrawUsage));
     }
     const indices = new Uint16Array((rows - 1) * strips * 6);
@@ -66,6 +66,7 @@ export class RoadMesh {
       const normals = this.mesh.geometry.getAttribute('normal') as BufferAttribute;
       const uv = this.mesh.geometry.getAttribute('uv') as BufferAttribute;
       const exposure = this.mesh.geometry.getAttribute('seasonExposure') as BufferAttribute;
+      const roadAccess = this.mesh.geometry.getAttribute('roadAccess') as BufferAttribute;
       const cycleStart = Math.floor(first.distance / 78000) * 78000; // Shared period of 12 m dashes, 2 km arrows and 1.3 m grooves.
       const facilities = services.filter(site => !site.accessWindows);
       const parking = services.flatMap(site => site.accessWindows ?? []);
@@ -92,6 +93,8 @@ export class RoadMesh {
           normals.setXYZ(index, normal.x, normal.y, normal.z);
           uv.setXY(index, offset, sample.distance - cycleStart);
           exposure.setX(index, 1 - cover);
+          roadAccess.setXY(index, Number(centers.length === 2 && (sample.opening === -1 || sample.opening === 0)),
+            Number(centers.length === 2 && (sample.opening === 1 || sample.opening === 0)));
         }
         if (centers.length === 2 && i > 0) {
           const previous = spine.samples[i - 1];
@@ -109,7 +112,7 @@ export class RoadMesh {
           }
         }
       }
-      for (const name of ['position', 'normal', 'uv', 'seasonExposure']) {
+      for (const name of ['position', 'normal', 'uv', 'seasonExposure', 'roadAccess']) {
         const attribute = this.mesh.geometry.getAttribute(name) as BufferAttribute;
         attribute.clearUpdateRanges(); attribute.addUpdateRange(0, spine.samples.length * stride * attribute.itemSize);
         attribute.needsUpdate = true;

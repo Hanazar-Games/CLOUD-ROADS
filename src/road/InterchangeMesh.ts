@@ -69,8 +69,13 @@ export class InterchangeMesh {
           const q = ribbons[ribbon], { leftA, rightA, leftB, rightB } = q;
           for (const p of [leftA, rightA, leftB, rightA, rightB, leftB]) positions.push(p.x - this.x, p.y + 0.015, p.z - this.z);
           appendRibbonSlab(slabs, q, rims[ribbon++], { x: this.x, z: this.z }, 1.4);
-          for (const sign of [-1, 1]) if (i > 14 && i < ramp.points.length - 14 || i % 3 === 0)
-            this.edge(this.markings, side(a, sign * ((a.halfWidth ?? 3.7) - 0.4)), side(b, sign * ((b.halfWidth ?? 3.7) - 0.4)), 0.12, 0.02, 0.04);
+          const inset = (edge: ServicePoint, p: typeof a) => {
+            const t = 0.4 / (p.halfWidth ?? 3.7);
+            return { x: edge.x + (p.x - edge.x) * t, y: edge.y + (p.y - edge.y) * t, z: edge.z + (p.z - edge.z) * t };
+          };
+          for (const [sign, edgeA, edgeB] of [[-1, leftA, leftB], [1, rightA, rightB]] as const)
+            if (sign === 1 || i > ramp.entryEnd && i <= ramp.exitStart || i % 3 === 0)
+              this.edge(this.markings, inset(edgeA, a), inset(edgeB, b), 0.12, 0.02, 0.04);
           if (i % 24 === 12) {
             const along = (d: number, offset = 0) => ({ x: a.x + (b.x - a.x) / length * d + nx * offset, y: a.y + (b.y - a.y) / length * d, z: a.z + (b.z - a.z) / length * d + nz * offset });
             this.edge(this.markings, along(-2), along(2), 0.18, 0.02, 0.045);
