@@ -14,7 +14,7 @@ import { RoadDeckSurface } from '../road/RoadDeckSurface';
 import { collideVehicles } from './VehicleContact';
 
 type DrivingWorld = Pick<World, 'seed' | 'road' | 'options' | 'bridges' | 'services' | 'tunnels' | 'groundHeight'> & Partial<Pick<World, 'network' | 'season' | 'garage' | 'garages' | 'connections'>>
-  & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic'] };
+  & { parkedVehicles?: Pick<World['parkedVehicles'], 'fleet'>; traffic?: World['traffic']; airports?: World['airports'] };
 
 export class DrivingSurface {
   wet = 0;
@@ -61,6 +61,8 @@ export class DrivingSurface {
       if (height <= ceiling && (this.level === undefined || Number.isFinite(ceiling) || height < this.level + 9))
         surfaces.push({ height, grip: (1 - this.wet * 0.38) * (this.world.season?.grip(height, sheltered) ?? 1) });
     };
+    const airport = this.world.airports?.surface(x, z, ceiling);
+    if (airport !== undefined) add(airport);
     for (const garage of this.garages) {
       const height = garage.surface(x, z, reference, ceiling);
       if (height !== undefined) surfaces.push({ height, grip: garage.shelter(x, height + 0.5, z) ? 1
@@ -336,6 +338,8 @@ export class DrivingSurface {
   }
 
   private connectedSurface(x: number, z: number, y: number, margin: number): boolean {
+    const airport = this.world.airports?.surface(x, z);
+    if (airport !== undefined && Math.abs(airport - y) < 1.2) return true;
     return this.world.network?.routes.some(route => {
       const sample = route.road.nearest(x, z);
       if (!sample || Math.abs(sample.position.y - y) > 1.2) return false;
@@ -363,6 +367,7 @@ export class DrivingSurface {
   private constrainService(body: { x: number; y: number; z: number }, previousX: number, previousZ: number, radius: number, feet: number, height = 1.75, vehicles = true): boolean {
     this.refreshServices();
     let hit = vehicles && (this.world.parkedVehicles?.fleet.constrain(body, previousX, previousZ, radius, feet, height) ?? false);
+    hit = this.world.airports?.constrain(body, previousX, previousZ, radius, feet, height) || hit;
     for (const garage of this.garages) hit = garage.constrain(body, previousX, previousZ, radius, feet, height) || hit;
     hit = vehicles && (this.world.traffic?.constrain(body, previousX, previousZ, radius, feet, height) ?? false) || hit;
     for (const site of this.sites) for (const pad of site.ground.pads) {

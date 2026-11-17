@@ -4,6 +4,7 @@ import { RoadCorridor } from '../src/road/RoadCorridor';
 import { World } from '../src/world/World';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
+import { DrivingSurface } from '../src/vehicle/DrivingSurface';
 
 vi.mock('../src/terrain/TerrainWorkers', () => ({
   TerrainWorkers: class {
@@ -21,6 +22,20 @@ const load = (world: World, camera: PerspectiveCamera) => {
   throw new Error('World did not finish its terrain and preloading corridor');
 };
 
+it('starts at the airport and shares its visible pavement with ground vehicles', () => {
+  const world = new World(new Scene(), 'STARTING-HUB'), camera = new PerspectiveCamera();
+  world.resetCamera(camera);
+  const site = world.airports.sites[0];
+  expect(camera.position.x).toBe(site.worldX - 265);
+  expect(Math.abs(camera.position.z - site.worldZ)).toBeLessThan(400);
+  const x = site.worldX, z = site.worldZ + site.runway.center;
+  expect(world.groundHeight(x, z)).toBeCloseTo(site.elevation + .45);
+  expect(world.sampleGround(x, z).height).toBeCloseTo(site.elevation);
+  const surface = new DrivingSurface(world);
+  expect(surface.sample(x, z)).toEqual({ height: site.elevation + .45, grip: 1 });
+  world.dispose();
+});
+
 it.each(['alpine', 'forest', 'desert', 'mars'] as const)('gives the standalone garage a road entrance in %s terrain', terrain => {
   const scene = new Scene(), world = new World(scene, `GARAGE-${terrain}`, { ...DEFAULT_OPTIONS, terrain });
   const camera = new PerspectiveCamera(); world.resetCamera(camera); load(world, camera);
@@ -36,14 +51,18 @@ it('streams a reproducible valley crossing and keeps its viewing control safe du
   const scene = new Scene(), world = new World(scene, 'VALLEY-1', { ...DEFAULT_OPTIONS, terrain: 'forest', terrainFollow: 0.5, bridgeHeight: 1000 });
   const camera = new PerspectiveCamera(); world.resetCamera(camera);
   expect(world.inspectCrossing(camera)).toBeUndefined();
-  load(world, camera);
+  for (let z = 128; z > -30000 && !world.crossings.length; z -= 4000) {
+    camera.position.set(128 - world.origin.x, world.height.sample(128, z) + 450, z - world.origin.z);
+    load(world, camera);
+  }
   expect(world.crossings.length).toBeGreaterThan(0);
   expect(world.crossings.length).toBeLessThanOrEqual(3);
+  const origin = { x: camera.position.x + world.origin.x, y: camera.position.y, z: camera.position.z + world.origin.z };
   const site = world.crossings[0];
   expect(world.inspectCrossing(camera)).toBeDefined();
   load(world, camera);
   expect(world.crossings.some(candidate => candidate.id === site.id)).toBe(true);
-  world.resetCamera(camera); load(world, camera);
+  world.resetCamera(camera); camera.position.set(origin.x, origin.y, origin.z); load(world, camera);
   expect(world.crossings[0].samples).toEqual(site.samples);
   world.dispose(); expect(scene.children).toHaveLength(0);
 });
@@ -102,6 +121,7 @@ it('reports the rendered ground biome through road coupling, bridges and origin 
   const world = new World(new Scene(), 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
+  camera.position.set(128, world.height.sample(128, 128) + 450, 128);
   load(world, camera);
   const sample = world.roadSample!;
   const x = Math.round(sample.position.x / 4) * 4, z = Math.round(sample.position.z / 4) * 4;
@@ -179,6 +199,7 @@ it('frames a detected bridge above terrain and releases its meshes with the worl
   const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001', { ...DEFAULT_OPTIONS, terrain: 'forest' });
   const camera = new PerspectiveCamera();
   world.resetCamera(camera);
+  camera.position.set(128, world.height.sample(128, 128) + 450, 128);
   load(world, camera);
   expect(world.bridges.length).toBeGreaterThan(0);
   expect(world.bridgeMesh.deck.visible).toBe(true);

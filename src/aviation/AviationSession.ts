@@ -13,6 +13,7 @@ interface AviationHost {
   resize(width: number, height: number): void;
   render(dt: number, running: boolean, distance: number): void;
   onExit(): void;
+  departure?: { aircraft: string; airport: string; apron: boolean };
 }
 
 export function createAviationSession(host: AviationHost) {

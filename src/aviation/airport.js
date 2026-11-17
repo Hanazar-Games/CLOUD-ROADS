@@ -31,13 +31,17 @@ export function airportSurfaceHeight(x, z, airport) {
 function createSite(config) {
   const { length, width, side = 1, offsetZ = 0, ...metadata } = config;
   const runway = Object.freeze({ width, shoulder: 15, start: -400 + length / 2, end: -400 - length / 2, length, center: -400, surfaceHeight: .45 });
-  const localBuildings = structures.filter(building => building.kind !== 'city' || config.biome === 'coast' || building.x > -1800 && building.z < 1200).map(building => ({ base: 0, ...building }));
+  const localBuildings = structures.filter(building => building.kind !== 'city' || config.biome !== 'coast' && building.x > -1800 && building.z < 1200).map(building => ({ base: 0, ...building }));
   if (config.biome === 'desert') localBuildings.push({ kind: 'hangar', x: 700, z: 600, width: 180, depth: 190, base: 0, height: 51 });
   localBuildings.push(
     ...[-360, -150, 60, 270].map(z => ({ kind: 'service-vehicle', x: -195, z: z + 95, width: 4, depth: 9, base: .34, height: 3.34 })),
     ...[-380, -330].map(z => ({ kind: 'fire-truck', x: 355, z, width: 5, depth: 12, base: .34, height: 4.34 })),
-    ...Array.from({ length: 18 }, (_, index) => -380 + index * 34).flatMap(z => [-880, -820, -740].map(x => ({ kind: 'parked-car', x, z: z + 15, width: 4.4, depth: 8, base: .3, height: 2.8 }))),
-    ...[-1, 1].map(sign => ({ kind: 'fence', x: sign * 1010, z: runway.center - offsetZ, width: 1, depth: length + 500, base: 0, height: 3.5 })),
+    ...Array.from({ length: 18 }, (_, index) => -380 + index * 34).filter(z => config.biome !== 'coast' || Math.abs(z + 115) > 22).flatMap(z => [-880, -820, -740].map(x => ({ kind: 'parked-car', x, z: z + 15, width: 4.4, depth: 8, base: .3, height: 2.8 }))),
+    ...[-1, 1].flatMap(sign => {
+      const start = runway.center - offsetZ - (length + 500) / 2, end = start + length + 500;
+      return (config.biome === 'coast' && sign < 0 ? [[start, -122], [-78, end]] : [[start, end]])
+        .map(([a, b]) => ({ kind: 'fence', x: sign * 1010, z: (a + b) / 2, width: 1, depth: b - a, base: 0, height: 3.5 }));
+    }),
   );
   const buildings = localBuildings.map(building => Object.freeze({ ...building, x: building.x * side, z: building.z + offsetZ }));
   const taxiways = [
@@ -53,6 +57,7 @@ function createSite(config) {
     { x: 490, z: -530, width: 450, depth: 850, surfaceHeight: .34 },
     { x: 272, z: 100, width: 30, depth: 1800, surfaceHeight: .34 },
     { x: -720, z: -650, width: 28, depth: 1100, surfaceHeight: .3 },
+    { x: -435, z: 450, width: 380, depth: 24, surfaceHeight: .34 },
   ].map(Object.freeze);
   const pavements = [...localPavements.map(item => Object.freeze({ ...item, x: item.x * side, z: item.z + offsetZ })), ...taxiways.map(item => Object.freeze({ ...item, surfaceHeight: .4 }))];
   const bounds = buildings.reduce((bounds, building) => ({ x: Math.max(bounds.x, Math.abs(building.x) + building.width / 2 + 100), z: Math.max(bounds.z, Math.abs(building.z) + building.depth / 2 + 100) }), { x: 0, z: 0 });

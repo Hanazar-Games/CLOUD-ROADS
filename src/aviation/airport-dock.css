@@ -1,0 +1,16 @@
+#airport-dock { position: absolute; right: 28px; bottom: 110px; z-index: 3; box-sizing: border-box; width: 310px; max-width: calc(100vw - 24px); padding: 18px; border: 1px solid #89d9d755; border-radius: 12px; background: #0a202fee; color: #e1eeea; box-shadow: 0 8px 30px #0004; }
+#airport-dock[hidden] { display: none; }
+#airport-dock > small { display: block; font: 9px ui-monospace, monospace; letter-spacing: 2px; color: #90ded7; margin-bottom: 8px; }
+#airport-dock > strong { display: block; font-size: 17px; }
+#airport-dock p { margin: 8px 0; font-size: 11px; line-height: 1.6; color: #abc5cc; }
+#airport-dock label, #airport-model-status { display: block; margin: 10px 0 5px; font-size: 11px; }
+#airport-dock select { box-sizing: border-box; width: 100%; min-height: 40px; padding: 8px; color: #edf9f4; background: #183a49; border: 1px solid #83c6cf77; border-radius: 6px; }
+#airport-dock > div { display: flex; gap: 8px; margin-top: 12px; }
+#airport-dock button { flex: 1; min-height: 42px; border-radius: 6px; border: 1px solid #84c9ce70; background: #234c5c; color: #edfff7; cursor: pointer; }
+#airport-dock button:disabled { opacity: .5; cursor: wait; }
+#airport-dock button:focus-visible, #airport-dock select:focus-visible { outline: 2px solid #9af5db; outline-offset: 3px; }
+#airport-dock #airport-board { background: #24665b; }
+#app > .masthead { z-index: 4; }
+@media (max-width: 620px) { #airport-dock { right: 12px; bottom: 190px; width: 270px; padding: 12px; } #airport-dock > strong { font-size: 15px; } #airport-dock p { font-size: 10px; } }
+@media (max-height: 650px) { #airport-dock { bottom: 80px; padding: 10px 12px; } #airport-dock p:last-child { display: none; } }
+@media (max-height: 500px) { #airport-dock { width: 270px; } #airport-dock > small, #airport-dock p, #airport-dock label { display: none; } #airport-dock > strong { font-size: 13px; margin-bottom: 8px; } #airport-dock select { min-height: 32px; padding: 6px; } #airport-dock button { min-height: 34px; } }

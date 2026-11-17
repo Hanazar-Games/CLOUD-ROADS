@@ -38,7 +38,10 @@ export class WalkingSystem {
     const currentGarage = world.garages.find(g => g.floor(x, this.camera.position.y, z) !== undefined);
     const floor = currentGarage?.floor(x, this.camera.position.y, z);
     const garage = floor === undefined ? undefined : currentGarage!.spawn(floor);
-    const spawn = position ?? garage ?? entrance ?? this.surface.spawn(x, z);
+    const airport = world.airports.surface(x, z);
+    const apron = airport === undefined ? undefined : { x, y: airport, z, heading: -this.camera.rotation.y };
+    if (!position && !garage && apron && this.surface.constrainWalker({ ...apron }, x, z)) return false;
+    const spawn = position ?? garage ?? apron ?? entrance ?? this.surface.spawn(x, z);
     if (!spawn) return false;
     this.person.reset(spawn.x, position?.y ?? garage?.y ?? this.surface.sample(spawn.x, spawn.z).height, spawn.z, spawn.heading);
     this.hudTime = 1;

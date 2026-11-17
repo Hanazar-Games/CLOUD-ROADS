@@ -10,7 +10,8 @@ import { disposeAircraftObject } from '../../src/aviation/aircraft-models.js';
 test('parking vehicles have matching collision envelopes at every airport and clear taxiways', () => {
   for (const airport of AIRPORTS) {
     const cars = airport.buildings.filter(building => building.kind === 'parked-car');
-    assert.equal(cars.length, 54);
+    assert.equal(cars.length, airport.id === 'coast' ? 51 : 54);
+    if (airport.id === 'coast') for (const car of cars) assert.ok(Math.abs(car.z + 100) > 22, 'keep the public airport access road clear');
     const model = createAirport({ airport });model.position.y = airport.elevation;model.updateMatrixWorld(true);
     for (const car of cars) {
       assert.equal(car.base, .3);

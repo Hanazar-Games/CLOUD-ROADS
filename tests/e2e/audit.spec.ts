@@ -255,6 +255,9 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await page.goto('/?seed=CLOUD-ROAD-001');
   await expect(page.locator('#fps')).not.toHaveText('—');
   const workerCount = await page.evaluate(() => Reflect.get(window, 'activeTerrainWorkers'));
+  await expect(page.locator('#airport-dock')).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 20_000 });
+  const textureCount = await page.locator('[data-metric="GPU textures"]').textContent();
   await (await control(page, page.locator('#wireframe'))).click();
   await (await control(page, page.locator('#road-debug'))).click();
   for (let i = 0; i < 10; i++) {
@@ -268,7 +271,8 @@ test('releases workers through repeated seed changes and keeps display preferenc
   await expect(page.locator('#wireframe')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#road-debug')).toHaveAttribute('aria-pressed', 'true');
   expect(Number(await page.locator('[data-metric="Allocated meshes"]').textContent())).toBe(289);
-  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText('10');
+  await expect(page.locator('#airport-dock')).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('[data-metric="GPU textures"]')).toHaveText(textureCount!);
   expect(errors).toEqual([]);
 });
 

@@ -1,5 +1,6 @@
 import { Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { HeightFunction } from '../terrain/HeightFunction';
+import { airportSpawn } from '../aviation/AirportGround';
 import { TerrainWorkers } from '../terrain/TerrainWorkers';
 import { ChunkManager } from './ChunkManager';
 import { FloatingOrigin } from './FloatingOrigin';
@@ -127,6 +128,7 @@ export class World {
     this.biomes = new BiomeSystem(seed, options.terrain);
     this.chunks = new ChunkManager(scene, seed, new TerrainWorkers(options));
     this.network = new RoadNetwork(seed, this.height, options, new RoadSpine(seed, this.height, options));
+    for (const route of this.network.routes) route.road.openings.push({ start: 0, end: 24, side: 0 });
     this.roadDebug = new RoadDebug(scene);
     this.roadMesh = new RoadMesh(scene, options, undefined, this.pavementTextures);
     this.bridgeMesh = new BridgeMesh(scene, options);
@@ -169,12 +171,13 @@ export class World {
     this.roadReady = false;
     this.origin.reset();
     this.chunks.setOrigin(0, 0);
-    camera.position.set(128, this.height.sample(128, 128) + 450, 128);
+    const spawn = airportSpawn(this.airports.sites[0]);
+    camera.position.set(spawn.x + 45, spawn.y + 40, spawn.z + 80);
   }
 
   update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }): void {
     if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
-    this.airports.update(this.origin);
+    this.airports.update(this.origin, this.detailDistance, { x: camera.position.x + this.origin.x, y: camera.position.y, z: camera.position.z + this.origin.z });
     this.season.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
     if (travelHeading !== undefined) this.forward.set(Math.sin(travelHeading), 0, -Math.cos(travelHeading));
@@ -474,14 +477,18 @@ export class World {
       p.y + right.y * offset + normal.y * height, p.z + right.z * offset + normal.z * height - this.origin.z);
   }
 
-  groundHeight(x: number, z: number, ceiling = Infinity): number {
+  private terrainHeight(x: number, z: number, ceiling = Infinity): number {
     const natural = this.height.sample(x, z), surface = this.corridor.height(x, z, natural, true);
     return surface <= ceiling ? surface : this.corridor.height(x, z, natural);
   }
 
+  groundHeight(x: number, z: number, ceiling = Infinity): number {
+    return Math.max(this.terrainHeight(x, z, ceiling), this.airports?.surface(x, z, ceiling) ?? -Infinity);
+  }
+
   sampleGround(x: number, z: number): GroundSample {
-    const y = this.groundHeight(x, z);
-    const normalY = 4 / Math.hypot(this.groundHeight(x - 2, z) - this.groundHeight(x + 2, z), 4, this.groundHeight(x, z - 2) - this.groundHeight(x, z + 2));
+    const y = this.terrainHeight(x, z);
+    const normalY = 4 / Math.hypot(this.terrainHeight(x - 2, z) - this.terrainHeight(x + 2, z), 4, this.terrainHeight(x, z - 2) - this.terrainHeight(x, z + 2));
     return { height: y, normalY, biome: this.biomes.sample(x, z, y, normalY) };
   }
 

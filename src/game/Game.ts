@@ -9,6 +9,7 @@ import { runtimeLog } from '../debug/RuntimeLog';
 import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
+import { AirportDock } from '../aviation/AirportDock';
 import { randomSeed, startingSeed } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { absoluteElevation, roadNames, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
@@ -84,6 +85,7 @@ export class Game {
   private aviation?: { update(dt: number): void; dispose(): void };
   private aviationLoading = false;
   private resumeGround?: () => void;
+  private readonly airportDock: AirportDock;
 
   constructor() {
     this.scene.background = this.sky.sun.haze;
@@ -94,6 +96,10 @@ export class Game {
     element<HTMLInputElement>('seed').value = this.initialSeed;
     this.driving = new DrivingSystem(this.scene, this.camera, this.input, () => this.world, () => this.walking?.active ? this.walking.person : undefined);
     this.walking = new WalkingSystem(this.camera, this.input, () => this.world, () => this.driving.parked ? this.driving.car : undefined);
+    this.airportDock = new AirportDock(() => this.world, point => {
+      if (!this.world.roadReady || this.world.searching || !this.input.enabled) return;
+      this.settings.close(); this.stopTravel(); this.walking.start(point); this.setPaused(false); this.canvas.focus();
+    }, aircraft => { void this.openAircraft({ aircraft, airport: 'coast', apron: true }); });
     this.roadbook = new RoadbookPanel(() => {
       const w = this.world, car = this.driving.car, person = this.walking.person;
       const anchor = this.driving.active ? car : this.walking.active ? person
@@ -607,7 +613,7 @@ export class Game {
 
   private stopTravel(): void { this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
 
-  private async openAircraft(): Promise<void> {
+  private async openAircraft(departure?: { aircraft: string; airport: string; apron: boolean }): Promise<void> {
     if (this.aviation || this.aviationLoading || this.contextLost || !this.input.enabled) return;
     this.aviationLoading = true;
     const button = element<HTMLButtonElement>('aircraft-toggle');
@@ -624,8 +630,10 @@ export class Game {
       this.walking.stop(); this.input.clear(); this.input.enabled = false; this.audio.setActive(false);
       if (document.pointerLockElement) document.exitPointerLock();
       element('app').inert = true; this.loop.setFrameLimit(0);
+      this.world.airports.groundAircraftVisible = false;
       const restore = () => {
         this.aviation = undefined; element('app').inert = false; this.input.enabled = !this.contextLost; this.input.clear();
+        this.world.airports.groundAircraftVisible = true;
         this.camera.position.copy(position); this.camera.position.x -= this.world.origin.x; this.camera.position.z -= this.world.origin.z;
         this.camera.quaternion.copy(rotation); this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
         this.setPaused(paused); this.loop.setFrameLimit(this.graphicsSetting('frame-limit')); this.resize();
@@ -638,7 +646,7 @@ export class Game {
         this.syncAudioUI(); this.canvas.focus();
       };
       try {
-        this.aviation = createAviationSession({ scene: this.scene, camera: this.camera, renderer: this.renderer, world: this.world, audio: this.audio,
+        this.aviation = createAviationSession({ scene: this.scene, camera: this.camera, renderer: this.renderer, world: this.world, audio: this.audio, departure,
           resize: (width, height) => this.clouds.resize(width, height),
           render: (dt, running, distance) => {
             this.interior.update(undefined, this.camera.position);
@@ -806,6 +814,8 @@ export class Game {
 
   private update(dt: number): void {
     if (this.aviation) { this.aviation.update(dt); return; }
+    this.airportDock.update(this.camera.position.x + this.world.origin.x, this.camera.position.y, this.camera.position.z + this.world.origin.z,
+      this.world.roadReady && !this.world.searching && this.input.enabled && !this.aviationLoading, this.driving.active);
     if (this.resumeGround && this.world.roadReady && !this.world.searching) { const resume = this.resumeGround; this.resumeGround = undefined; resume(); }
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const silent = this.paused || this.releaseNotes.open || this.cabinDialogs.open || !this.input.enabled;
@@ -1165,6 +1175,7 @@ export class Game {
     this.aviation?.dispose(); this.resumeGround = undefined;
     clearTimeout(this.graphicsTimer);
     this.garagePanel.dispose();
+    this.airportDock.dispose();
     this.trafficControls.dispose();
     this.keyBindingPanel.dispose();
     this.presets.dispose(); this.worldSettings.dispose();

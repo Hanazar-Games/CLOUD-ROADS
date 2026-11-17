@@ -7,11 +7,12 @@ import { AirportWorld } from '../src/aviation/AirportWorld';
 import { AIRCRAFT, createAircraftFlight, updateAircraftFlight } from '../src/aviation/aircraft-flight.js';
 
 describe('airports in the Cloud Roads world', () => {
-  it('places three deterministic airports without changing the starting road terrain', () => {
+  it('places the starting hub deterministically and preserves terrain outside airports', () => {
     const a = new HeightFunction('CLOUD-AIRPORT'), b = new HeightFunction('CLOUD-AIRPORT');
     expect(a.airports).toEqual(b.airports);
     expect(a.airports).toHaveLength(3);
-    for (const point of [[128, 128], [0, -1000], [0, -2500]]) {
+    expect(a.sample(128, 128)).toBe(a.airports[0].elevation);
+    for (const point of [[-5000, 128], [-5000, -1000], [12000, 8000]]) {
       expect(a.sample(point[0], point[1])).toBe(a.naturalSample(point[0], point[1]));
     }
     for (const site of a.airports) {

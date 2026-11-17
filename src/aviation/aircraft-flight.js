@@ -57,7 +57,7 @@ export const AIRCRAFT = Object.freeze([
 
 export const AIR_GATES = AIRPORTS[0].gates;
 
-export function createAircraftFlight(id = 'a380', airborne = false, { runwayDirection = '36', airport = 'coast', physics, systems } = {}) {
+export function createAircraftFlight(id = 'a380', airborne = false, { runwayDirection = '36', airport = 'coast', departure = 'runway', physics, systems } = {}) {
   const aircraft = AIRCRAFT.find(item => item.id === id) ?? AIRCRAFT[0];
   const site = typeof airport === 'object' ? airport : AIRPORTS.find(item => item.id === airport) ?? AIRPORTS[0], RUNWAY = site.runway;
   const south = runwayDirection === '18';
@@ -72,6 +72,12 @@ export function createAircraftFlight(id = 'a380', airborne = false, { runwayDire
   };
   setAircraftPhysics(flight, physics);
   setSystemSettings(flight);
+  if (!airborne && departure === 'apron') {
+    flight.x = -265 * site.side; flight.z = -295 + site.offsetZ;
+    flight.heading = flight.trackHeading = site.side * Math.PI / 2;
+    flight.y = airportSurfaceHeight(flight.x, flight.z, site) + aircraft.gearHeight;
+    flight.systems.parkingBrake = true;
+  }
   if (airborne) flight.speed = Math.min(flight.performance.maxSpeed * .85, Math.max(aircraft.cruiseSpeed, flight.performance.stall * 1.4));
   flight.systems.autothrottle.target = Math.min(flight.performance.maxSpeed, Math.max(aircraft.cruiseSpeed, flight.performance.stall * 1.3));
   return flight;
@@ -190,7 +196,8 @@ function stepFlight(flight, input, dt) {
   const speed = (flight.speed + nextSpeed) * .5;
   flight.speed = nextSpeed;
   if (flight.onGround) {
-    flight.heading += (yawInput + rollInput * .75) * .2 * clamp(speed / 25, 0, 1) / (1 + (speed / 55) ** 2) * dt;
+    const steering = clamp(yawInput + rollInput * .75, -1, 1) * .82 / (1 + (speed / 18) ** 2);
+    flight.heading += clamp(Math.tan(steering) * speed / Math.max(3, aircraft.length * .3), -.8, .8) * dt;
     if (speed >= takeoff && flight.pitch > .045 && !controls.brake && !flight.speedBrake && !flight.systems.reverse) {
       flight.onGround = false;
       flight.verticalSpeed = Math.max(1, speed * Math.sin(flight.pitch) * .4);

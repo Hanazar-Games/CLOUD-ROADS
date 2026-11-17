@@ -1,6 +1,6 @@
 import { hashSeed } from '../world/WorldSeed';
 import { Noise } from './Noise';
-import { DEFAULT_OPTIONS, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
+import { absoluteElevation, DEFAULT_OPTIONS, type TerrainKind, type WorldOptions } from '../world/WorldOptions';
 import { MountainRanges } from './MountainRanges';
 import { planetHeight } from './PlanetTerrain';
 import { mountainIncision } from './MountainErosion';
@@ -14,7 +14,9 @@ export class HeightFunction {
 
   constructor(readonly seed: string, readonly terrain: TerrainKind = 'alpine', roadType: WorldOptions['roadType'] = 'mountain', private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed, (roadType === 'highway' ? 64000 : 32000) / options.mountainDensity);
-    this.airports = createAirportPlacements(seed, (x, z) => this.naturalSample(x, z), z => this.ranges.sample(z).x);
+    const ascending = options.elevationDirection === 'random' ? hashSeed(`${seed}:altitude-start`) % 2 === 0 : options.elevationDirection === 'up';
+    const start = absoluteElevation(options) ? (ascending ? options.altitudeMin : options.altitudeMax) - 1 : this.naturalSample(128, 128);
+    this.airports = createAirportPlacements(seed, (x, z) => this.naturalSample(x, z), z => this.ranges.sample(z).x, start);
   }
 
   route(z: number) {

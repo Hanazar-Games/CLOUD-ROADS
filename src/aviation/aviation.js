@@ -106,7 +106,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       <div class="av-aircraft-list" role="group" aria-label="选择飞机">${AIRCRAFT.map(aircraft => `<button data-aircraft="${aircraft.id}" aria-pressed="${aircraft.id === 'a380'}"><span class="av-plane-icon" aria-hidden="true">${aircraft.cockpit === 'fighter' ? '➤' : '✈'}</span><span><strong>${aircraft.name}</strong><small>${aircraft.role} · ${aircraft.configuration}</small></span></button>`).join('')}</div>
       <p class="av-specs" data-value="specs"></p><p class="av-load-status" role="status" aria-live="polite">正在载入飞机模型…</p>
       <label class="av-runway-choice">起飞方向 <select data-setting="runway"><option value="36">跑道 36 · 向北</option><option value="18">跑道 18 · 向南</option></select><small data-value="runway-dimensions"></small></label>
-      <div class="av-panel-actions"><button data-action="resume" hidden>继续飞行</button><button data-action="runway" disabled>跑道起飞 <span>↗</span></button><button data-action="airborne" disabled>直接空中试飞</button><button data-action="retry" hidden>重试模型加载</button><button data-action="hangar" hidden>返回飞机机库</button></div>
+      <div class="av-panel-actions"><button data-action="resume" hidden>继续飞行</button><button data-action="apron" disabled>机坪登机 · 自行滑行</button><button data-action="runway" disabled>跑道起飞 <span>↗</span></button><button data-action="airborne" disabled>直接空中试飞</button><button data-action="retry" hidden>重试模型加载</button><button data-action="hangar" hidden>返回飞机机库</button></div>
       <details class="av-help av-system-settings"><summary>座舱系统、配平与自动驾驶</summary>${systemControls()}
       ${systemFields.map(([key, label, scale]) => { const [min, max] = SYSTEM_LIMITS[key].map(value => Math.round(value * scale));return `<label>${label}<output data-system-setting-value="${key}"></output><input data-system-setting="${key}" type="range" min="${min}" max="${max}" step="1" value="${SYSTEM_DEFAULTS[key] * scale}" aria-label="${label}"></label>`; }).join('')}
       <button data-action="systems-reset">恢复系统参数</button><p>跑道起飞沿用预飞的系统开关、APU 进度、油门与配平状态；返回机库重置，直接空中试飞使用已启动状态。系统参数对所有机型共用，仅保留在本次飞机模式。驾驶舱共 22 个按钮可直接点按，或使用实时系统面板。关闭发动机后逐渐失去推力，重新开启仍按发动机响应恢复。</p></details>
@@ -485,12 +485,13 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
 
   async function selectAircraft(id) {
     if (graphicsLost) return;
+    host.world.airports.selectAircraft(id);
     const version = ++loadVersion;
     physicsSettings = aircraftSettings[id];
     flight = createFlight(id, false, { airport: $('[data-setting="airport"]').value, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); loaded = false; returning = false;
     syncPhysics();
     text(loadStatus, '正在载入飞机模型…'); loadStatus.dataset.state = 'loading';
-    action('runway').disabled = true; action('airborne').disabled = true;
+    action('runway').disabled = true; action('airborne').disabled = true; action('apron').disabled = true;
     for (const button of root.querySelectorAll('[data-aircraft]')) button.setAttribute('aria-pressed', String(button.dataset.aircraft === id));
     text(values.aircraft, flight.aircraft.name);
     text(values['flap-limit'], `本机襟翼展开上限 ${Math.round(flight.aircraft.flapLimit * 3.6)} km/h；超过上限 18 km/h 自动收起。`);
@@ -500,7 +501,8 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       const installed = await world.setAircraft(flight.aircraft);
       if (disposed || graphicsLost || version !== loadVersion || !installed) return;
       loaded = true; text(loadStatus, '飞机就绪 · 选择跑道起飞或直接空中试飞'); loadStatus.dataset.state = 'ready';
-      action('runway').disabled = false; action('airborne').disabled = false; action('retry').hidden = true; dirty = true;
+      action('runway').disabled = false; action('airborne').disabled = false; action('apron').disabled = false; action('retry').hidden = true; dirty = true;
+      if (initialBoarding) { initialBoarding = false; start(false, true); chooseCamera(2); }
     } catch (error) {
       if (disposed || graphicsLost || version !== loadVersion || error.name === 'AbortError') return;
       console.error('Unable to load aircraft:', error);
@@ -509,15 +511,15 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     }
   }
 
-  function start(airborne) {
+  function start(airborne, apron = false) {
     if (!loaded || graphicsLost) return;
     const preflight = flight; touchInput.precision = false;
-    flight = createFlight(flight.aircraft.id, airborne, { airport: flight.airport.id, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); flight.status = 'running'; returning = false;
-    if (!airborne) restoreAircraftPreflight(flight, preflight);
+    flight = createFlight(flight.aircraft.id, airborne, { airport: flight.airport.id, departure: apron ? 'apron' : 'runway', runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); flight.status = 'running'; returning = false;
+    if (!airborne && !apron) restoreAircraftPreflight(flight, preflight);
     accumulator = 0; world.setCameraMode(world.cameraMode);
     unlockAudio(); showPanel();
     const help = aircraftControlHelp(controlSettings);
-    notify(airborne ? `已进入空中 · ${help.pitch} 升降 · V 进入驾驶舱` : `油门推满，达到 ${Math.round(aircraftEnvelope(flight).takeoff * 3.6)} km/h 后按 ${help.pitch.split(' / ')[0]} 拉升`);
+    notify(apron ? '机坪已登机 · N 释放驻车 · 低油门滑行 · Q / E 转向 · 进入跑道再加速' : airborne ? `已进入空中 · ${help.pitch} 升降 · V 进入驾驶舱` : `油门推满，达到 ${Math.round(aircraftEnvelope(flight).takeoff * 3.6)} km/h 后按 ${help.pitch.split(' / ')[0]} 拉升`);
   }
 
   function pause(onlyPause = false) {
@@ -576,6 +578,11 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       text(values.guide, flight.systems.parkingBrake ? '驻车制动锁定 · 按 N 释放' : !flight.systems.engineOn ? engineStartAvailability(flight) ? '发动机关闭 · 按 I 检查电源与 APU' : '发动机关闭 · 按 K 启动' : flight.systems.reverse ? '反推展开 · 起飞前按 M 收起' : flight.hasFlown ? flight.systems.autoBrakeActive ? '自动轮刹制动中' : '油门归零，按住制动停车' : flight.speedBrake ? '按 B 收起减速板后再起飞' : flight.speed < envelope.takeoff ? '推满油门，沿中线加速' : '拉升机头，离开跑道');
       const remaining = Math.max(0, Math.cos(flight.heading) >= 0 ? flight.z - RUNWAY.end : RUNWAY.start - flight.z);
       text(values.target, flight.hasFlown ? `跑道剩余 ${Math.round(remaining)} m · 关闭油门，按住空格制动` : `起飞 ≥ ${Math.round(envelope.takeoff * 3.6)} km/h · 剩余 ${Math.round(remaining)} m · ${aircraftControlHelp(controlSettings).pitch.split(' / ')[0]} 拉升`);
+      if (!flight.hasFlown && (Math.abs(flight.x) > RUNWAY.width / 2 || flight.z < RUNWAY.end || flight.z > RUNWAY.start)) {
+        text(values.phase, '机坪与滑行道 / TAXI');
+        if (!flight.systems.parkingBrake) text(values.guide, '低油门滑行 · Q / E 控制前轮转向');
+        text(values.target, '沿黄色滑行线进入跑道 · 建议低于 55 km/h · 空格轮刹');
+      }
     } else if (flight.stalling) {
       const highAngle = Math.abs(flight.angleOfAttack) > flight.performance.stallAngle;
       text(values.guide, highAngle ? '减小迎角幅度，卸载恢复' : '减小坡度，降低机头并加油门');
@@ -626,6 +633,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       case 'exit': dispose(); break;
       case 'pause': case 'resume': pause(); break;
       case 'runway': start(false); break;
+      case 'apron': start(false, true); chooseCamera(2); break;
       case 'airborne': start(true); break;
       case 'gear': gear(); break;
       case 'flaps': flaps(); break;
@@ -809,7 +817,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     event.preventDefault(); graphicsLost = true; loaded = false; world.loadController?.abort();
     if (flight.status === 'running') toggleAircraftPause(flight);
     accumulator = 0; audio.setState('paused'); showPanel();
-    action('resume').disabled = true; action('runway').disabled = true; action('airborne').disabled = true;
+    action('resume').disabled = true; action('runway').disabled = true; action('airborne').disabled = true; action('apron').disabled = true;
   });
 
   function update(dt) {
@@ -863,6 +871,8 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       dirty = false;
     }
   }
-  syncControlHelp(); syncViewSettings(); syncEnvironmentSettings(); selectAircraft('a380');
+  let initialBoarding = !!host.departure?.apron;
+  if (host.departure?.airport) { $('[data-setting="airport"]').value = host.departure.airport; world.setAirport(host.departure.airport); }
+  syncControlHelp(); syncViewSettings(); syncEnvironmentSettings(); selectAircraft(host.departure?.aircraft ?? host.world.airports.aircraftId);
   return { dispose, update };
 }

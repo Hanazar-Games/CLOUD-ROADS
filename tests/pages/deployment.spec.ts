@@ -33,6 +33,7 @@ test('loads built scripts, styles, workers and the world under the Pages project
   await expect(page.locator('[data-metric="Pending / queued"]')).toHaveText('0 / 0', { timeout: 90_000 });
   await expect(page.locator('[data-metric="Active chunks"]')).toHaveText('289');
   await (await control(page, page.locator('#vegetation-toggle'))).click();
+  await (await control(page, page.locator('#road-view'))).click();
   await closeSettings(page);
   await expect.poll(async () => Number(await page.locator('[data-metric="Tree canopies"]').textContent()), { timeout: 15_000 }).toBeGreaterThan(2000);
   await page.screenshot();

@@ -29,8 +29,9 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
       if (!surfaceMaterials[material]) { const surface = paint.clone(); surface.polygonOffset = true; surface.polygonOffsetFactor = surface.polygonOffsetUnits = material === 'asphalt' ? -1 : -3; surfaceMaterials[material] = surface; }
       paint = surfaceMaterials[material];
     }
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), paint);
-    mesh.position.set(x, y, z); group.add(mesh); return mesh;
+    const flat = distant && group === pavement;
+    const mesh = new THREE.Mesh(flat ? new THREE.PlaneGeometry(width, depth).rotateX(-Math.PI / 2) : new THREE.BoxGeometry(width, height, depth), paint);
+    mesh.position.set(x, y + (flat ? height / 2 : 0), z); group.add(mesh); return mesh;
   }
   const cylinders = new Map();
   function cylinder(material, x, y, z, radius, height, sides = 16) {
@@ -43,7 +44,7 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
   if (distant) {
     for (const { x, z, width, depth } of TAXIWAYS) box(pavement, 'asphalt', x, .29, z, width, .22, depth);
     for (const { kind, x, z, width, depth, height } of AIRPORT_BUILDINGS) {
-      if (['windsock', 'jetway', 'city', 'service-vehicle', 'fire-truck', 'parked-car', 'fence'].includes(kind)) continue;
+      if (!['terminal', 'tower', 'hangar', 'cargo'].includes(kind)) continue;
       box(architecture, 'concrete', x, height / 2, z, width, height, depth);
     }
     const cities = AIRPORT_BUILDINGS.filter(building => building.kind === 'city');
