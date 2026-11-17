@@ -5,13 +5,16 @@ import { MountainRanges } from './MountainRanges';
 import { planetHeight } from './PlanetTerrain';
 import { mountainIncision } from './MountainErosion';
 import { stratifiedHeight } from './RockStrata';
+import { createAirportPlacements, airportTerrainHeight, type AirportPlacement } from '../aviation/AirportPlacement';
 
 export class HeightFunction {
   readonly noise: Noise;
   readonly ranges: MountainRanges;
+  readonly airports: readonly AirportPlacement[];
 
-  constructor(seed: string, readonly terrain: TerrainKind = 'alpine', roadType: WorldOptions['roadType'] = 'mountain', private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
+  constructor(readonly seed: string, readonly terrain: TerrainKind = 'alpine', roadType: WorldOptions['roadType'] = 'mountain', private readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.noise = new Noise(hashSeed(seed)); this.ranges = new MountainRanges(seed, (roadType === 'highway' ? 64000 : 32000) / options.mountainDensity);
+    this.airports = createAirportPlacements(seed, (x, z) => this.naturalSample(x, z), z => this.ranges.sample(z).x);
   }
 
   route(z: number) {
@@ -25,6 +28,10 @@ export class HeightFunction {
   }
 
   sample(x: number, z: number): number {
+    return airportTerrainHeight(this.airports, x, z, this.naturalSample(x, z));
+  }
+
+  naturalSample(x: number, z: number): number {
     return this.remapHeight(this.naturalHeight(x, z));
   }
 

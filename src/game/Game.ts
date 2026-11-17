@@ -81,6 +81,9 @@ export class Game {
   private audioPreviewPending = false;
   private audioTestPending = false;
   private windowFocused = true;
+  private aviation?: { update(dt: number): void; dispose(): void };
+  private aviationLoading = false;
+  private resumeGround?: () => void;
 
   constructor() {
     this.scene.background = this.sky.sun.haze;
@@ -126,7 +129,7 @@ export class Game {
     window.addEventListener('resize', this.resize, { signal: this.events.signal });
     this.audio.onDiagnostic = (level, message) => runtimeLog.write(level, 'audio', message);
     for (const type of ['click', 'keydown']) window.addEventListener(type, event => {
-      if (!event.isTrusted || !this.audio.awaitingActivation) return;
+      if (this.aviation || !event.isTrusted || !this.audio.awaitingActivation) return;
       this.refreshAudioFocus(); this.audio.unlock(); this.syncAudioUI();
     }, { signal: this.events.signal });
     element('audio-toggle').addEventListener('click', () => { this.refreshAudioFocus(); this.audio.toggle(); this.syncAudioUI(); }, { signal: this.events.signal });
@@ -254,6 +257,7 @@ export class Game {
         const input = element<HTMLInputElement>(`traffic-${key}`); input.value = String(value); input.dispatchEvent(new Event('input'));
       }
     }, { signal: this.events.signal });
+    for (const id of ['aircraft-toggle', 'aircraft-settings']) element(id).addEventListener('click', () => { void this.openAircraft(); }, { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
       else if (this.walking.active && (this.driving.canBoard(this.walking.person, true) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
@@ -467,6 +471,7 @@ export class Game {
     this.canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       this.contextLost = true;
+      this.aviation?.dispose();
       this.audio.setActive(false);
       element<HTMLButtonElement>('retry-world').disabled = true;
       this.loop.stop();
@@ -496,6 +501,7 @@ export class Game {
 
   private loadSeed(seed: string, options: Readonly<WorldOptions> = this.world.options): boolean {
     if (this.contextLost) return false;
+    this.aviation?.dispose(); this.resumeGround = undefined;
     this.flushGraphics();
     this.settings.close();
     try {
@@ -601,6 +607,56 @@ export class Game {
 
   private stopTravel(): void { this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
 
+  private async openAircraft(): Promise<void> {
+    if (this.aviation || this.aviationLoading || this.contextLost || !this.input.enabled) return;
+    this.aviationLoading = true;
+    const button = element<HTMLButtonElement>('aircraft-toggle');
+    button.disabled = true; button.setAttribute('aria-busy', 'true');
+    try {
+      const { createAviationSession } = await import('../aviation/AviationSession');
+      if (this.events.signal.aborted || this.contextLost) return;
+      this.flushGraphics(); this.settings.close(); this.cabinDialogs.close(); element<HTMLDialogElement>('roadbook-dialog').close(); this.releaseNotes.close();
+      const position = this.camera.position.clone(); position.x += this.world.origin.x; position.z += this.world.origin.z;
+      const rotation = this.camera.quaternion.clone(), paused = this.paused, driving = this.driving.active;
+      const walking = this.walking.active ? { ...this.walking.person } : undefined;
+      this.cancelAccess();
+      if (driving) this.driving.stop(true);
+      this.walking.stop(); this.input.clear(); this.input.enabled = false; this.audio.setActive(false);
+      if (document.pointerLockElement) document.exitPointerLock();
+      element('app').inert = true; this.loop.setFrameLimit(0);
+      const restore = () => {
+        this.aviation = undefined; element('app').inert = false; this.input.enabled = !this.contextLost; this.input.clear();
+        this.camera.position.copy(position); this.camera.position.x -= this.world.origin.x; this.camera.position.z -= this.world.origin.z;
+        this.camera.quaternion.copy(rotation); this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
+        this.setPaused(paused); this.loop.setFrameLimit(this.graphicsSetting('frame-limit')); this.resize();
+        if (!this.contextLost) this.world.update(this.camera, false);
+        this.resumeGround = driving ? () => { this.driving.start(true); } : walking ? () => { this.walking.start(walking); } : undefined;
+        for (const [name, field] of audioChannels.slice(0, 3)) {
+          const input = element<HTMLInputElement>(`${name}-volume`); input.value = String(Math.round(this.audio[field] * 100));
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        this.syncAudioUI(); this.canvas.focus();
+      };
+      try {
+        this.aviation = createAviationSession({ scene: this.scene, camera: this.camera, renderer: this.renderer, world: this.world, audio: this.audio,
+          resize: (width, height) => this.clouds.resize(width, height),
+          render: (dt, running, distance) => {
+            this.interior.update(undefined, this.camera.position);
+            this.weather.update(running ? dt : 0, this.camera, this.world.shelter, this.world.origin);
+            this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
+            this.clouds.update(running ? dt : 0, this.camera, this.world.origin, this.weather.profile, this.world.shelter, distance);
+            this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
+            this.world.modelLoads.pump();
+            this.renderer.info.reset(); this.clouds.render(this.renderer, this.scene, this.camera);
+            this.weather.render(this.renderer, this.camera, this.clouds.target.depthTexture!);
+          }, onExit: restore });
+      } catch (error) { restore(); throw error; }
+    } catch (error) {
+      runtimeLog.write('error', 'aviation', error);
+      element('notice').textContent = '飞机模式未能加载，请重试；详细原因见诊断日志。';
+    } finally { this.aviationLoading = false; button.disabled = this.contextLost; button.removeAttribute('aria-busy'); }
+  }
+
   private access?: { car: DrivingSystem['car']; sequence: VehicleAccess; compartment?: CabinLayout };
 
   private cancelAccess(): void { this.access?.sequence.cancel(); this.access = undefined; }
@@ -649,7 +705,7 @@ export class Game {
   }
 
   private readonly resize = (): void => {
-    if (this.contextLost) return;
+    if (this.contextLost || this.aviation) return;
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     const gl = this.renderer.getContext(), viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
@@ -749,6 +805,8 @@ export class Game {
   }
 
   private update(dt: number): void {
+    if (this.aviation) { this.aviation.update(dt); return; }
+    if (this.resumeGround && this.world.roadReady && !this.world.searching) { const resume = this.resumeGround; this.resumeGround = undefined; resume(); }
     if (this.world.chunks.error && element('error').hidden) this.setError(`地形生成失败，请重试当前世界。${this.world.chunks.error}`);
     const silent = this.paused || this.releaseNotes.open || this.cabinDialogs.open || !this.input.enabled;
     const frozen = silent || this.settings.open;
@@ -1104,6 +1162,7 @@ export class Game {
   }
 
   dispose(): void {
+    this.aviation?.dispose(); this.resumeGround = undefined;
     clearTimeout(this.graphicsTimer);
     this.garagePanel.dispose();
     this.trafficControls.dispose();

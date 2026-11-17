@@ -7,6 +7,7 @@ import { DEFAULT_OPTIONS, type WorldOptions } from '../world/WorldOptions';
 import { generateVegetation } from '../vegetation/VegetationGenerator';
 import type { ServiceGround } from '../service/ServiceTerrain';
 import { excavateTunnelMouths } from './TunnelExcavation';
+import { airportClearance } from '../aviation/AirportPlacement';
 
 export interface TerrainData {
   positions: Float32Array<ArrayBuffer>;
@@ -53,7 +54,12 @@ export class TerrainGenerator {
       this.biomes.sample(x, z, y, 4 / magnitude, biome);
       colors.set(biome.color, offset);
     }
-    const vegetation = generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity);
+    const plants = generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity);
+    let count = 0;
+    for (let i = 0; i < plants.length; i += 7) if (!airportClearance(this.height.airports, cx * CHUNK_SIZE + plants[i], cz * CHUNK_SIZE + plants[i + 2])) {
+      plants.copyWithin(count, i, i + 7); count += 7;
+    }
+    const vegetation = count === plants.length ? plants : plants.slice(0, count);
     return excavateTunnelMouths({ positions, normals, colors, vegetation }, layouts[cells].indices, road, this.options, cx * CHUNK_SIZE, cz * CHUNK_SIZE);
   }
 }

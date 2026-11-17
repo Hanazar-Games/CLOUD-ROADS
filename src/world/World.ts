@@ -45,6 +45,7 @@ import { placeRoadGarage } from '../garage/GarageAccess';
 import { PavementTextures } from '../road/PavementTextures';
 import { CollisionEffects } from '../vehicle/CollisionEffects';
 import { roadRenderWindows } from '../road/RoadRenderWindow';
+import { AirportWorld } from '../aviation/AirportWorld';
 
 export interface GroundSample {
   height: number;
@@ -61,6 +62,7 @@ export class World {
   readonly origin = new FloatingOrigin();
   readonly chunks: ChunkManager;
   readonly height: HeightFunction;
+  readonly airports: AirportWorld;
   readonly network: RoadNetwork;
   get road(): RoadSpine { return this.network.active.road; }
   readonly roadDebug: RoadDebug;
@@ -117,6 +119,7 @@ export class World {
 
   constructor(private readonly scene: Scene, readonly seed: string, readonly options: Readonly<WorldOptions> = DEFAULT_OPTIONS) {
     this.height = new HeightFunction(seed, options.terrain, options.roadType, options);
+    this.airports = new AirportWorld(scene, this.height, (x, z) => this.groundHeight(x, z));
     this.garage = new Garage(seed, { x: 640, y: this.height.sample(640, 128), z: 128 });
     this.garages = [this.garage];
     this.garageMesh = new GarageMesh(scene, this.garage);
@@ -171,6 +174,7 @@ export class World {
 
   update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }): void {
     if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
+    this.airports.update(this.origin);
     this.season.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
     if (travelHeading !== undefined) this.forward.set(Math.sin(travelHeading), 0, -Math.cos(travelHeading));
@@ -550,6 +554,7 @@ export class World {
   }
 
   dispose(): void {
+    this.airports.dispose();
     this.modelLoads.dispose();
     this.garageMesh.dispose();
     for (const mesh of this.serviceGarages.values()) mesh.dispose(); this.serviceGarages.clear();

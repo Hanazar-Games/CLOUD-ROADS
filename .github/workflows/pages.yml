@@ -29,6 +29,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test -- --maxWorkers=2
+      - run: npm run test:aviation
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pages
         id: pages_tests

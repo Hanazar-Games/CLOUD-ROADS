@@ -13,7 +13,7 @@
       <canvas id="world" aria-label="无限山地 3D 视图；拖动鼠标观察，WASD 飞行" tabindex="0"></canvas>
       <header class="masthead">
         <div class="brand"><svg viewBox="0 0 46 32" aria-hidden="true"><path d="M2 28 18 4 29 20 35 12 44 28" /></svg><span>CLOUD ROADS<small>INFINITE MOUNTAINS</small></span></div>
-        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="roadbook-open" type="button" aria-haspopup="dialog" aria-controls="roadbook-dialog">路书</button><button id="menu-open" type="button" aria-haspopup="dialog">菜单 · M</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
+        <div class="header-actions"><span class="phase"><i></i> ROAD TRIP <span id="phase-label">/ DRIVE</span></span><button id="drive-toggle" type="button" aria-pressed="false" disabled>开始驾驶</button><button id="aircraft-toggle" type="button">飞机 / 机场</button><button id="walk-toggle" type="button" aria-pressed="false" disabled>开始步行</button><button id="roadbook-open" type="button" aria-haspopup="dialog" aria-controls="roadbook-dialog">路书</button><button id="menu-open" type="button" aria-haspopup="dialog">菜单 · M</button><button id="controls-toggle" type="button" aria-expanded="false" aria-controls="explorer" aria-haspopup="dialog">设置</button><button id="release-open" type="button" aria-label="版本公告" aria-haspopup="dialog">版本公告</button></div>
       </header>
       <dialog id="explorer" class="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-help">
         <header class="settings-header"><div><p class="eyebrow">CLOUD ROADS / CONTROL CENTER</p><h2 id="settings-title">旅程设置</h2></div><button id="settings-close" type="button" aria-label="关闭设置">返回旅程 <kbd>Esc</kbd></button></header>
@@ -28,6 +28,8 @@
         <p class="panel-help">版本公告与开发日志保留原文。</p>
 </section>
 <section class="settings-category" id="settings-driving" aria-labelledby="heading-driving"><h3 id="heading-driving">驾驶与视角</h3>
+        <button id="aircraft-settings" type="button">进入飞机与机场</button>
+        <p class="panel-help">12 款飞机、3 座机场与当前山路共用世界种子、地形和天气。在飞机模式内选择机场、跑道方向、座舱操作与飞行调校；返回后继续原来的山路旅程。</p>
         <label class="check-label"><input id="beginner-mode" type="checkbox" checked /> 新手模式 · 底部显示当前可用快捷键</label>
         <p class="panel-help">F 下到车外；{CabinWalk} 在客车 / 房车中离座、就近坐下，或从货厢尾门进入。{Powertrain} 切换燃油 / 电动。均可在快捷键分类修改。</p>
         <details class="world-options" open>
