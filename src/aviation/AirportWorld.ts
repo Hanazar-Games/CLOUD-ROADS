@@ -7,6 +7,7 @@ import { disposeAircraftObject, loadAircraftModel } from './aircraft-models.js';
 import { AIRCRAFT } from './aircraft-flight.js';
 import { AIRPORT_STAND, airportPavementHeight, constrainAirport } from './AirportGround';
 import { createAirportAccess } from './AirportAccessView';
+import { BiomeSystem } from '../biome/BiomeSystem';
 
 export class AirportWorld {
   readonly sites;
@@ -19,10 +20,12 @@ export class AirportWorld {
   private detailDistance = -1;
 
   constructor(scene: Scene, height: HeightFunction, surface: (x: number, z: number) => number) {
+    const biomes = new BiomeSystem(height.seed, height.terrain);
     this.sites = height.airports.map((placement, i) => {
       const site = { ...AIRPORTS[i], name: ['云海国际机场', '远山高原机场', '天际货运机场'][i],
-        description: i === 0 ? 'Cloud Roads 起点 · 大型国际机场 · 航站楼、机坪与山路接驳' : '当前 Cloud Roads 世界 · 地形整平与三档机场模型',
+        description: i === 0 ? 'Cloud Roads 双跑道枢纽 · 两条 5 km 跑道、中央航站区与公路接驳' : '当前 Cloud Roads 世界 · 地形整平与三档机场模型',
         elevation: placement.elevation, worldX: placement.x, worldZ: placement.z,
+        airfieldColor: [...biomes.sample(placement.x, placement.z, placement.elevation, 1).color],
         terrainHeight: (x: number, z: number) => surface(x + placement.x, z + placement.z) };
       site.gates = site.gates.map((gate: { x: number; y: number; z: number; radius: number; normal: readonly number[] }) => ({ ...gate, y: Math.max(placement.elevation + gate.y - AIRPORTS[i].elevation,
         height.sample(placement.x + gate.x, placement.z + gate.z) + 250) }));
@@ -77,7 +80,7 @@ export class AirportWorld {
 
   surface(x: number, z: number, ceiling = Infinity): number | undefined {
     for (const site of this.sites) {
-      if (x < site.worldX - (site.id === 'coast' ? 4500 : 3000) || x > site.worldX + 3000 || Math.abs(z - site.worldZ) > 4000) continue;
+      if (x < site.worldX - Math.max(site.bounds.x, site.id === 'coast' ? 4500 : 0) || x > site.worldX + site.bounds.x || Math.abs(z - site.worldZ) > site.bounds.z) continue;
       const height = airportPavementHeight(site, x, z);
       if (height !== undefined && height <= ceiling) return height;
     }

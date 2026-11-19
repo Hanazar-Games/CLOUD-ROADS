@@ -25,7 +25,7 @@ test('parking vehicles have matching collision envelopes at every airport and cl
     const car = cars[0], hit = createAircraftFlight('t6', true, { airport: airport.id });
     Object.assign(hit, { x: car.x, z: car.z, y: airport.elevation + 2.5, speed: 0 });
     updateAircraftFlight(hit, {}, 1 / 120);
-    assert.equal(hit.status, 'crashed');
+    assert.equal(hit.status, 'running'); assert.ok(hit.events.includes('recovery'));
     const clear = createAircraftFlight('t6', true, { airport: airport.id });
     Object.assign(clear, { x: car.x, z: car.z, y: airport.elevation + 12, speed: 0 });
     updateAircraftFlight(clear, {}, 1 / 120);
@@ -77,7 +77,7 @@ test('each airport supports elevated starts, takeoff, landing and building colli
     const building = airport.buildings.find(item => item.kind === 'terminal');
     const hit = createAircraftFlight('t6', true, { airport: airport.id });
     Object.assign(hit, { x: building.x, z: building.z, y: airport.elevation + 20, speed: 0 });
-    updateAircraftFlight(hit, {}, 1 / 120);assert.equal(hit.status, 'crashed');
+    updateAircraftFlight(hit, {}, 1 / 120);assert.equal(hit.status, 'running'); assert.ok(hit.events.includes('recovery'));
   }
 });
 

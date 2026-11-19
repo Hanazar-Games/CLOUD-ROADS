@@ -8,16 +8,17 @@ import { aircraftElectrical } from './aircraft-systems.js';
 export const AVIATION_ENVIRONMENT_DEFAULTS = Object.freeze({ viewDistance: 30000, detailDistance: 4500, groundDetail: 'low' });
 
 const UP = new THREE.Vector3(0, 1, 0);
+const RIGHT = new THREE.Vector3(1, 0, 0);
 const forward = new THREE.Vector3(), offset = new THREE.Vector3(), target = new THREE.Vector3();
 const cockpitLook = new THREE.Quaternion(), lookRotation = new THREE.Euler(0, 0, 0, 'YXZ');
 const cockpitRay = new THREE.Raycaster(), pointer = new THREE.Vector2();
-export const AVIATION_CAMERAS = ['追随机位', '近距跟随', '驾驶舱', '机首观察', '左翼观察', '俯视机位'];
+export const AVIATION_CAMERAS = ['追随机位', '近距跟随', '驾驶舱', '机首观察', '左翼观察', '俯视机位', '右翼观察', '尾部观察', '机场总览'];
 export const AVIATION_VIEW_DEFAULTS = Object.freeze({
-  cockpitFov: 68, exteriorFov: 55, chaseDistance: 1, chaseHeight: 1, orbitAngle: 0,
+  cockpitFov: 68, exteriorFov: 55, chaseDistance: 1, chaseHeight: 1, orbitAngle: 0, orbitTilt: 0,
   followResponse: 5, lookResponse: 9, lookAngle: 55, speedFov: true, speedFovAmount: 18,
   seatHeight: 0, seatForward: 0, lookPitch: 0, panelScale: 1, panelHeight: 0, panelDistance: 0,
 });
-const CAMERA_OFFSETS = [[.4, .52, 1.8], [.15, .24, 1.05], null, [.08, .35, -1.8], [-1.8, .35, .08], [0, 2.4, .3]];
+const CAMERA_OFFSETS = [[.4, .52, 1.8], [.15, .24, 1.05], null, [.08, .35, -1.8], [-1.8, .35, .08], [0, 2.4, .3], [1.8, .35, .08], [0, .2, 1.45]];
 
 export class AviationWorld {
   constructor(container, host) {
@@ -111,10 +112,30 @@ export class AviationWorld {
     this.cameraMode = AVIATION_CAMERAS[mode] ? mode : 0;
     this.cameraLocked = false; this.lockedOffset = null;
     this.resetCamera = true; this.lookTarget = 0; this.lookAngle = 0;
+    this.viewSettings.orbitTilt = 0;
+  }
+
+  orbitCamera(dx, dy) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const view = this.viewSettings;
+    if (this.cameraMode === 2) {
+      this.lookTarget = THREE.MathUtils.clamp(this.lookTarget - dx * .005, -Math.PI * .85, Math.PI * .85);
+      view.lookPitch = THREE.MathUtils.clamp(view.lookPitch - dy * .2, -60, 70);
+    } else {
+      this.cameraLocked = false; this.lockedOffset = null;
+      view.orbitAngle = ((view.orbitAngle - dx * .25 + 180) % 360 + 360) % 360 - 180;
+      view.orbitTilt = THREE.MathUtils.clamp(view.orbitTilt + dy * .004, -1.1, 1.1);
+    }
+  }
+
+  zoomCamera(delta) {
+    if (!Number.isFinite(delta)) return;
+    if (this.cameraMode === 2) this.viewSettings.cockpitFov = THREE.MathUtils.clamp(this.viewSettings.cockpitFov + delta * .03, 40, 100);
+    else this.viewSettings.chaseDistance = THREE.MathUtils.clamp(this.viewSettings.chaseDistance * Math.exp(THREE.MathUtils.clamp(delta * .001, -3, 3)), .6, 5);
   }
 
   toggleCameraLock() {
-    if (this.cameraMode === 2) return false;
+    if (this.cameraMode === 2 || this.cameraMode === 8) return false;
     this.cameraLocked = !this.cameraLocked;
     this.lockedOffset = this.cameraLocked && !this.resetCamera ? this.camera.position.clone().sub(this.aircraftRoot.position) : null;
     this.resetCamera = true;
@@ -152,9 +173,15 @@ export class AviationWorld {
     const view = this.viewSettings;
     const inside = this.cameraMode === 2 && flight.status !== 'ready';
     this.host.updateWorld(flight, dt);
+    if (this.airportSite && this.airportSite !== flight.airport) this.setAirport(flight.airport.id);
     const origin = this.host.world.origin, site = flight.airport;
     const dx = site.worldX - origin.x, dz = site.worldZ - origin.z;
     this.environmentRoot.position.set(dx, 0, dz);
+    if (this.beacon) {
+      const runway = site.runways[flight.runwayIndex];
+      this.beacon.visible = !!this.navigationHome;
+      this.beacon.position.set(runway.x, site.elevation, runway.start - 180);
+    }
     this.aircraftRoot.position.set(flight.x + dx, flight.y + (flight.onGround ? Math.max(0, Math.sin(flight.pitch)) * length * .12 : 0), flight.z + dz);
     this.aircraftRoot.rotation.set(flight.pitch, -flight.heading, -flight.roll, 'YXZ');
     if (this.aircraftLights) updateAircraftLights(this.aircraftLights, flight, dt, inside);
@@ -163,10 +190,11 @@ export class AviationWorld {
       updateAircraftGearModel(this.model, flight.gearPosition);
       if (flight.status === 'running') for (const propeller of this.model.userData.propellers) propeller.rotation.z = (propeller.rotation.z + flight.engineOutput * dt * 70) % (Math.PI * 2);
     }
-    if (this.lastGates !== flight.gates) {
+    if (this.lastGates !== flight.gates || this.lastTraining !== this.trainingEnabled) {
       this.lastGates = flight.gates;
+      this.lastTraining = this.trainingEnabled;
       this.gateMeshes.forEach((mesh, index) => {
-        mesh.visible = index >= flight.gates;
+        mesh.visible = !!this.trainingEnabled && index >= flight.gates;
         const active = index === flight.gates;
         mesh.material.color.set(active ? 0x57e4e3 : 0xe5cf91);
         mesh.material.emissive.set(active ? 0x146e72 : 0x463b16);
@@ -182,6 +210,7 @@ export class AviationWorld {
     if (flight.status === 'ready') offset.set(length * 1.4, length * .5, -length * 1.1);
     else {
       offset.fromArray(CAMERA_OFFSETS[this.cameraMode] || CAMERA_OFFSETS[0]);
+      offset.applyAxisAngle(RIGHT, view.orbitTilt);
       offset.y *= view.chaseHeight;
       offset.multiplyScalar(length * view.chaseDistance).applyAxisAngle(UP, view.orbitAngle * Math.PI / 180).clampLength(clearance, Infinity);
       if (flight.physics.mode === 'maneuver') offset.applyQuaternion(this.aircraftRoot.quaternion);
@@ -196,7 +225,9 @@ export class AviationWorld {
       this.cockpit.userData.panel.scale.setScalar(view.panelScale);
       this.cockpit.userData.panel.position.set(0, view.panelHeight, view.panelDistance);
       this.lookAngle += ((look ?? this.lookTarget) - this.lookAngle) * (this.resetCamera ? 1 : 1 - Math.exp(-dt * view.lookResponse));
-      cockpitLook.setFromEuler(lookRotation.set(-.08 + view.lookPitch * Math.PI / 180, this.lookAngle, 0));
+      this.lookPitchAngle ??= view.lookPitch;
+      this.lookPitchAngle += (view.lookPitch - this.lookPitchAngle) * (this.resetCamera ? 1 : 1 - Math.exp(-dt * view.lookResponse));
+      cockpitLook.setFromEuler(lookRotation.set(-.08 + this.lookPitchAngle * Math.PI / 180, this.lookAngle, 0));
       this.camera.quaternion.copy(this.aircraftRoot.quaternion).multiply(cockpitLook);
       updateCockpitControls(this.cockpit, flight, flight.systems.controls);
       const powered = aircraftElectrical(flight).avionics;
@@ -207,6 +238,12 @@ export class AviationWorld {
         this.displayTime = this.resetCamera || !this.displayPowered ? 0 : Math.max(0, this.displayTime - Math.floor((this.displayTime + 1e-9) / interval) * interval);
       }
       this.displayPowered = powered;
+    } else if (this.cameraMode === 8) {
+      target.set(dx + (site.id === 'coast' ? 1050 : 0), site.elevation, dz + site.runway.center);
+      offset.set(0, 5800, 4500).applyAxisAngle(RIGHT, view.orbitTilt).applyAxisAngle(UP, view.orbitAngle * Math.PI / 180).multiplyScalar(Math.min(view.chaseDistance, this.camera.far / 10000));
+      this.camera.position.copy(target).add(offset);
+      this.camera.position.y = Math.max(this.camera.position.y, site.elevation + 1200, airportHeight(this.camera.position.x - dx, this.camera.position.z - dz, site) + 200);
+      this.camera.up.copy(UP); this.camera.lookAt(target);
     } else {
       if (this.cameraLocked && flight.status !== 'ready') {
         this.lockedOffset ??= offset.clone();
@@ -227,7 +264,7 @@ export class AviationWorld {
     if (Math.abs(this.camera.fov - fov) > .1) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     if (inside && Math.abs(this.cockpitCamera.fov - fov) > .1) { this.cockpitCamera.fov = fov; this.cockpitCamera.updateProjectionMatrix(); }
     this.resetCamera = false;
-    this.host.renderWorld(dt, flight);
+    this.host.renderWorld(dt, flight, this.cameraMode);
     if (inside && this.cockpit) {
       this.cockpitCamera.position.copy(this.camera.position); this.cockpitCamera.quaternion.copy(this.camera.quaternion);
       this.renderer.autoClear = false; this.renderer.clearDepth();

@@ -2,7 +2,8 @@ import { constrainObstacle } from '../service/ServiceCollision';
 
 export interface AirportGroundSite {
   id: string; worldX: number; worldZ: number; elevation: number;
-  runway: { width: number; start: number; end: number; surfaceHeight: number };
+  runways: readonly { x: number; width: number; start: number; end: number; surfaceHeight: number }[];
+  bounds: { x: number; z: number };
   pavements: readonly { x: number; z: number; width: number; depth: number; surfaceHeight: number }[];
   buildings: readonly { x: number; z: number; width: number; depth: number; base: number; height: number }[];
 }
@@ -12,9 +13,8 @@ export const AIRPORT_ACCESS = Object.freeze({ start: -4480, ramp: -4380, end: -6
 
 export function airportPavementHeight(site: AirportGroundSite, x: number, z: number): number | undefined {
   x -= site.worldX; z -= site.worldZ;
-  const runway = site.runway;
   let surface: number | undefined;
-  if (Math.abs(x) <= runway.width / 2 && z >= runway.end && z <= runway.start) surface = runway.surfaceHeight;
+  for (const runway of site.runways) if (Math.abs(x - runway.x) <= runway.width / 2 && z >= runway.end && z <= runway.start) surface = runway.surfaceHeight;
   for (const pad of site.pavements) if (Math.abs(x - pad.x) <= pad.width / 2 && Math.abs(z - pad.z) <= pad.depth / 2)
     surface = Math.max(surface ?? -Infinity, pad.surfaceHeight);
   const access = AIRPORT_ACCESS;
@@ -29,8 +29,8 @@ export function airportSpawn(site: AirportGroundSite) {
 
 export function constrainAirport(site: AirportGroundSite, body: { x: number; z: number }, previousX: number, previousZ: number,
   radius: number, feet: number, height: number): boolean {
-  if (Math.max(body.x, previousX) < site.worldX - 3000 || Math.min(body.x, previousX) > site.worldX + 3000
-    || Math.max(body.z, previousZ) < site.worldZ - 4000 || Math.min(body.z, previousZ) > site.worldZ + 4000) return false;
+  if (Math.max(body.x, previousX) < site.worldX - site.bounds.x || Math.min(body.x, previousX) > site.worldX + site.bounds.x
+    || Math.max(body.z, previousZ) < site.worldZ - site.bounds.z || Math.min(body.z, previousZ) > site.worldZ + site.bounds.z) return false;
   let hit = false;
   for (const building of site.buildings) {
     if (feet >= site.elevation + building.height || feet + height <= site.elevation + building.base) continue;

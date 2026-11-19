@@ -61,12 +61,13 @@ test('wheel braking and air braking tune the corresponding systems', () => {
 });
 
 test('actual touchdown uses the customized landing speed instead of the factory limit', () => {
-  for (const [physics, expected] of [[{ mass: 2 }, 'running'], [{ mass: .5, lift: 1.75 }, 'crashed']]) {
+  for (const [physics, safe] of [[{ mass: 2 }, true], [{ mass: .5, lift: 1.75 }, false]]) {
     const flight = airborne(physics);
     Object.assign(flight, { x: 0, y: flight.aircraft.gearHeight + .01, z: 0, gearDown: true, gearPosition: 1, verticalSpeed: -2, speed: 150, throttle: 0 });
     updateAircraftFlight(flight, {}, 1 / 60);
-    assert.equal(flight.status, expected);
-    if (expected === 'running') assert.equal(flight.onGround, true);
+    assert.equal(flight.status, 'running');
+    assert.equal(flight.onGround, safe);
+    assert.equal(flight.events.includes('recovery'), !safe);
   }
 });
 

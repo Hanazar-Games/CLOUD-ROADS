@@ -19,17 +19,24 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
   const AIRPORT_BUILDINGS = airport.localBuildings, TAXIWAYS = airport.taxiways.map(item => ({ ...item, x: item.x * airport.side, z: item.z - airport.offsetZ }));
   const architecture = new THREE.Group(), pavement = new THREE.Group();
   architecture.name = 'airport-architecture'; pavement.name = 'airport-pavement'; root.add(architecture, pavement);
-  const materials = Object.fromEntries(Object.entries({ concrete: 0xc1c8c2, roof: 0xe2e0cb, metal: 0x647b83, glass: 0x355d70, dark: 0x263a45, yellow: 0xe1bd63, white: 0xf1ecdc, orange: 0xf1874e, asphalt: 0x404f58, line: 0xceb161 }).map(([name, color]) => [name, new THREE.MeshStandardMaterial({ color, roughness: name === 'glass' ? .25 : .8, metalness: name === 'glass' ? .35 : .05 })]));
+  const materials = Object.fromEntries(Object.entries({ infield: 0x637651, concrete: 0xc1c8c2, roof: 0xe2e0cb, metal: 0x647b83, glass: 0x355d70, dark: 0x263a45, yellow: 0xe1bd63, white: 0xf1ecdc, orange: 0xf1874e, asphalt: 0x404f58, line: 0xceb161 }).map(([name, color]) => [name, new THREE.MeshStandardMaterial({ color, roughness: name === 'glass' ? .25 : .8, metalness: name === 'glass' ? .35 : .05 })]));
   const surfaceMaterials = {};
+  if (airport.airfieldColor) materials.infield.color.setRGB(...airport.airfieldColor);
+  if (airport.id === 'coast') box(pavement, 'infield', 1100, -.019, -400, 4400, .04, 6500);
   if (airport.biome === 'alpine') materials.roof.color.setHex(0x456a78);
   if (airport.biome === 'desert') { materials.concrete.color.setHex(0xcbb38e);materials.roof.color.setHex(0xe9d6b3); }
   function box(group, material, x, y, z, width, height, depth) {
     let paint = materials[material];
     if (group === pavement) {
-      if (!surfaceMaterials[material]) { const surface = paint.clone(); surface.polygonOffset = true; surface.polygonOffsetFactor = surface.polygonOffsetUnits = material === 'asphalt' ? -1 : -3; surfaceMaterials[material] = surface; }
+      if (!surfaceMaterials[material]) {
+        const surface = paint.clone(); surface.polygonOffset = true;
+        surface.polygonOffsetFactor = material === 'infield' ? 0 : material === 'asphalt' ? -1 : -3;
+        surface.polygonOffsetUnits = material === 'infield' ? -1 : surface.polygonOffsetFactor;
+        surfaceMaterials[material] = surface;
+      }
       paint = surfaceMaterials[material];
     }
-    const flat = distant && group === pavement;
+    const flat = group === pavement && (distant || material === 'infield');
     const mesh = new THREE.Mesh(flat ? new THREE.PlaneGeometry(width, depth).rotateX(-Math.PI / 2) : new THREE.BoxGeometry(width, height, depth), paint);
     mesh.position.set(x, y + (flat ? height / 2 : 0), z); group.add(mesh); return mesh;
   }

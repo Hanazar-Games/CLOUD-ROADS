@@ -14,12 +14,12 @@ export class AirportDock {
   constructor(private readonly world: () => World, locate: (point: ReturnType<typeof airportSpawn>) => void,
     board: (aircraft: string) => void) {
     this.root.id = 'airport-dock'; this.root.hidden = true;
-    this.root.setAttribute('aria-label', '起点机场登机');
-    this.root.innerHTML = `<small>CLOUD ROADS / DEPARTURES</small><strong>云海国际 · 起点机场</strong>
-      <p>4000 m 跑道 · 航站楼与机坪已生成在当前世界</p>
+    this.root.setAttribute('aria-label', '国际机场登机');
+    this.root.innerHTML = `<small>CLOUD ROADS / DEPARTURES</small><strong>云海国际 · 双跑道枢纽</strong>
+      <p>两条 5000 × 60 m 跑道 · 中央航站楼与大型机坪</p>
       <label for="airport-aircraft">选择机位上的飞机</label><select id="airport-aircraft"></select>
       <span id="airport-model-status" role="status"></span><div><button id="airport-walk" type="button">机坪步行</button><button id="airport-board" type="button">登机驾驶</button></div>
-      <p>登机后 N 松驻车，Q / E 滑行转向；可在机库选择跑道起飞。</p>`;
+      <p>N 松驻车，Q / E 滑行转向；Esc 调整飞机。自由飞行没有终点。</p>`;
     const select = this.select = this.root.querySelector<HTMLSelectElement>('select')!;
     select.replaceChildren(...AIRCRAFT.map(aircraft => new Option(`${aircraft.name} · ${aircraft.configuration}`, aircraft.id)));
     this.board = this.root.querySelector<HTMLButtonElement>('#airport-board')!;

@@ -5,13 +5,14 @@ import type { createAircraftFlight } from './aircraft-flight.js';
 import { mountAviation } from './aviation.js';
 import { AudioEngine } from './audio.js';
 import { FlightHorizon } from './FlightHorizon';
+import { navigateAirport } from './airport.js';
 
 type Flight = ReturnType<typeof createAircraftFlight>;
 interface Environment { viewDistance: number; detailDistance: number; groundDetail: string }
 interface AviationHost {
   scene: Scene; camera: PerspectiveCamera; renderer: WebGLRenderer; world: World; audio: AudioSystem;
   resize(width: number, height: number): void;
-  render(dt: number, running: boolean, distance: number): void;
+  render(dt: number, running: boolean, distance: number, overview: boolean): void;
   onExit(): void;
   departure?: { aircraft: string; airport: string; apron: boolean };
 }
@@ -34,11 +35,12 @@ export function createAviationSession(host: AviationHost) {
         world.detailDistance = settings.detailDistance / 4500;
       },
       updateWorld(flight: Flight) {
+        navigateAirport(flight, world.airports.sites);
         const x = flight.airport.worldX + flight.x, z = flight.airport.worldZ + flight.z;
         world.update(host.camera, false, flight.heading, { x, y: flight.y, z });
-        horizon.update(x, z, distance);
+        horizon.update(host.camera.position.x + world.origin.x, host.camera.position.z + world.origin.z, distance);
       },
-      renderWorld(dt: number, flight: Flight) { host.render(dt, flight.status === 'running', distance); },
+      renderWorld(dt: number, flight: Flight, cameraMode: number) { host.render(dt, flight.status === 'running', distance, cameraMode === 8); },
     },
     onExit() {
       if (disposed) return;

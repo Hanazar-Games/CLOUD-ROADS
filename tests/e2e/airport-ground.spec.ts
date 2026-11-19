@@ -1,16 +1,19 @@
 import { expect, test } from '@playwright/test';
 
-test('starts at a real airport, changes the parked aircraft and boards from the same apron', async ({ page }, info) => {
+test('teleports from the road world, changes the parked aircraft and boards from the same apron', async ({ page }, info) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=CLOUD-AIRPORT-GROUND');
+  await expect(page.locator('#airport-dock')).toBeHidden();
+  await page.locator('#aircraft-toggle').click();
+  await expect(page.locator('#aviation')).toHaveCount(0);
   await expect(page.locator('#airport-dock')).toBeVisible();
   await expect(page.locator('#airport-dock')).toHaveAttribute('data-state', 'ready');
   await expect(page.locator('#airport-aircraft option')).toHaveCount(12);
   await page.locator('#airport-aircraft').selectOption('su30');
   await expect(page.locator('#airport-dock')).toHaveAttribute('data-state', 'ready');
   await expect(page.locator('#airport-board')).toBeEnabled();
-  await page.locator('#walk-toggle').click();
   await expect(page.locator('body')).toHaveClass(/walking/);
+  await expect.poll(async () => Number((await page.locator('[data-metric="Walking position"]').textContent())!.split(',')[0])).toBeGreaterThan(4000);
   const walking = (await page.locator('[data-metric="Walking position"]').textContent())!.split(',').map(Number);
   expect(walking[0]).toBeGreaterThan(4000);
   const position = await page.locator('[data-metric="Walking position"]').textContent();
@@ -37,6 +40,7 @@ test('airport boarding stays reachable on a phone', async ({ browser }) => {
   try {
     const page = await context.newPage();
     await page.goto('/?seed=CLOUD-AIRPORT-PHONE');
+    await page.locator('#aircraft-toggle').tap();
     await page.locator('#airport-aircraft').selectOption('t6');
     await expect(page.locator('#airport-board')).toBeEnabled();
     await expect(page.locator('#airport-board')).toBeInViewport({ ratio: 1 });

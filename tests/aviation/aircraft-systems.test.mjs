@@ -223,7 +223,7 @@ test('pause preserves autopilot but a collision clears its active state for ever
     assert.equal(flight.systems.autopilot.mode, 'hold');
     flight.status = 'running';flight.x = 4000;flight.z = -6000;flight.y = airportHeight(flight.x, flight.z) + .1;
     updateAircraftFlight(flight, {}, 1 / 60);
-    assert.equal(flight.status, 'crashed', aircraft.id);assert.equal(flight.systems.autopilot.mode, 'off', aircraft.id);
-    assert.equal(flight.systems.autopilot.reason, 'status');assert.ok(flight.events.includes('crash'));
+    assert.equal(flight.status, 'running', aircraft.id);assert.equal(flight.systems.autopilot.mode, 'off', aircraft.id);
+    assert.equal(flight.systems.autopilot.reason, 'recovery');assert.ok(flight.events.includes('recovery'));
   }
 });

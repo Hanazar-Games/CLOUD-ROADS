@@ -1,5 +1,6 @@
 #aviation{position:fixed;inset:0;z-index:100;background:transparent;color:#102f40;font-family:inherit;overflow:hidden;outline:none;--av-ink:#173c4a;--av-accent:#087f82}
 #aviation *{box-sizing:border-box}
+.av-training-choice{display:flex;align-items:center;gap:8px;font-size:12px;margin:14px 0}.av-training-choice input{width:18px;height:18px;accent-color:#087f82}
 #aviation .av-navigation{padding:12px 14px;background:#f3f8f0e8;border:1px solid #ffffff80;border-radius:12px;text-shadow:none}
 #aviation .av-viewport #world{position:absolute;inset:0;touch-action:none}
 #aviation button,#aviation select,#aviation input{font:inherit}
@@ -69,3 +70,5 @@
 @media(max-width:420px) and (max-height:680px),(min-width:480px) and (max-height:550px){.av-notice{top:auto;bottom:max(8px,env(safe-area-inset-bottom));max-width:calc(100% - 28px);padding:7px 10px;font-size:10px;line-height:1.4}.av-notice.visible~.av-footer{visibility:hidden}}
 @media(min-width:480px) and (max-width:559px) and (max-height:550px){.av-header nav{max-width:220px}.av-instruments{gap:10px}.av-instruments strong{font-size:20px}.av-flying .av-navigation{left:145px;top:146px;width:100px;max-width:100px}.av-flight-tools{width:200px}#aviation .av-throttle-presets button{padding-inline:1px;font-size:9px!important;white-space:nowrap}#aviation .av-brake{left:205px;width:50px;padding:4px;font-size:9px}}
 @media(min-width:480px) and (max-width:700px) and (max-height:550px){.av-panel{top:92px}.av-camera-panel,.av-systems-panel{top:92px;max-height:calc(100% - 132px)}}
+@media(max-width:479px){.av-header{flex-wrap:wrap;gap:7px}.av-brand{width:100%;font-size:12px}.av-brand small{display:none}.av-header nav{width:100%;grid-template-columns:repeat(4,minmax(0,1fr))}.av-header button{min-width:0;white-space:nowrap}#aviation .av-header button{padding:6px 3px;font-size:9px!important}.av-instruments{top:128px}.av-navigation{top:218px}.av-panel{top:128px}.av-camera-panel,.av-systems-panel{top:128px;max-height:calc(100% - 175px)}}
+@media(max-width:479px) and (max-height:680px){.av-navigation{top:212px;padding:7px;gap:3px}.av-navigation>span,.av-attitude{display:none}.av-navigation>strong{font-size:12px}}

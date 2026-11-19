@@ -9,6 +9,11 @@ test('aircraft GLBs and distant mountain workers load from the Pages project pat
   });
   await page.goto('./?seed=PAGES-FLIGHT');
   await page.locator('#aircraft-toggle').click();
+  await expect(page.locator('#airport-board')).toBeEnabled();
+  await page.locator('#airport-board').click();
+  await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
+  await page.locator('[data-action="pause"]').click();
+  await page.locator('[data-action="hangar"]').click();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready', { timeout: 60000 });
   await page.locator('[data-aircraft="su30"]').click();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');

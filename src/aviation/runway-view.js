@@ -3,6 +3,15 @@ import { AIRPORTS } from './airport.js';
 import { batchMeshes } from './model-utils.js';
 
 export function createRunway(airport = AIRPORTS[0]) {
+  const root = new THREE.Group(); root.name = 'airport-runways';
+  airport.runways.forEach((runway, index) => {
+    const strip = createRunwayStrip({ ...airport, runway, taxiways: index === 0 ? airport.taxiways : [] });
+    strip.position.x = runway.x; root.add(strip);
+  });
+  return root;
+}
+
+function createRunwayStrip(airport) {
   const root = new THREE.Group(); root.name = 'airport-runway';
   root.position.y = airport.elevation;
   const RUNWAY = airport.runway, TAXIWAYS = airport.taxiways;
@@ -27,6 +36,12 @@ export function createRunway(airport = AIRPORTS[0]) {
   const digits = { 1: 'bc', 3: 'abgcd', 6: 'afgecd', 8: 'abcdefg' };
   const segments = { a: [0, -10, 6, 1.5], b: [3, -5, 1.5, 9], c: [3, 5, 1.5, 9], d: [0, 10, 6, 1.5], e: [-3, 5, 1.5, 9], f: [-3, -5, 1.5, 9], g: [0, 0, 6, 1.5] };
   for (const [threshold, direction, number] of [[start, -1, '36'], [end, 1, '18']]) {
+    const suffix = (number === '36' ? RUNWAY.north : RUNWAY.south).slice(2);
+    const strokes = suffix === 'L' ? [[-3, -6, -3, 6], [-3, 6, 3, 6]] : suffix === 'R' ? [[-3, -6, -3, 6], [-3, -6, 3, -6], [3, -6, 3, 0], [3, 0, -3, 0], [-3, 0, 3, 6]] : [];
+    for (const [x1, z1, x2, z2] of strokes) {
+      const line = mark(-(x1 + x2) * direction / 2, threshold + direction * (140 + (z1 + z2) / 2), 1.2, Math.hypot(x2 - x1, z2 - z1));
+      line.rotation.y = Math.atan2(-(x2 - x1) * direction, (z2 - z1) * direction);
+    }
     const stripes = width >= 60 ? 8 : 6, stripeSpacing = (width / 2 - 4) / (stripes - 1);
     for (const side of [-1, 1]) for (let i = 0; i < stripes; i++) mark(side * (2.7 + i * stripeSpacing), threshold + direction * 35, 1.8, 30);
     for (let digit = 0; digit < 2; digit++) for (const segment of digits[number[digit]]) {
@@ -60,7 +75,7 @@ export function createRunway(airport = AIRPORTS[0]) {
     for (let d = -distance / 2 + 8; d < distance / 2; d += 60) for (const side of [-1, 1]) {
       const x = taxiway.x + (horizontal ? d : side * (taxiway.width / 2 + 1));
       const z = taxiway.z + (horizontal ? side * (taxiway.depth / 2 + 1) : d);
-      if (Math.abs(x) > width / 2 + shoulder + 5) box('taxiway-edge-lights', 'blue', x, .65, z, 1, .5, 1);
+      if (!airport.runways.some(strip => Math.abs(x - strip.x) <= strip.width / 2 + strip.shoulder + 5 && z >= strip.end && z <= strip.start)) box('taxiway-edge-lights', 'blue', x, .65, z, 1, .5, 1);
     }
   }
   for (const group of Object.values(groups)) batchMeshes(group);

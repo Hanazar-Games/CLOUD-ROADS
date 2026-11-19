@@ -58,7 +58,9 @@ describe('airports in the Cloud Roads world', () => {
     const airport = airports.sites[0], flight = createAircraftFlight('su30', true, { airport });
     Object.assign(flight, { x: 12000, z: 8000, y: height.sample(airport.worldX + 12000, airport.worldZ + 8000) - 1, speed: 0 });
     updateAircraftFlight(flight, {}, 1 / 60);
-    expect(flight.status).toBe('crashed');
+    expect(flight.status).toBe('running');
+    expect(flight.events).toContain('recovery');
+    expect(flight.y).toBeGreaterThan(height.sample(airport.worldX + flight.x, airport.worldZ + flight.z) + 200);
     airports.dispose();
   });
 });

@@ -145,23 +145,23 @@ test('steep maneuver attitudes collide using their rotated airframe rather than 
   const flight = createAircraftFlight('a380', true, { physics: { mode: 'maneuver', stability: 0 } });
   Object.assign(flight, { y: 22, pitch: Math.PI / 2, gearDown: true, speed: 100, verticalSpeed: 0 });
   updateAircraftFlight(flight, {}, 1 / 120);
-  assert.equal(flight.status, 'crashed', 'vertical airframe must not pass through the runway');
+  assert.equal(flight.status, 'running'); assert.ok(flight.events.includes('recovery'), 'vertical airframe contact triggers recovery');
 });
 
-test('touchdown and rollout finish a flight, unsafe impact stays crashed', () => {
+test('touchdown and rollout continue exploration and unsafe impact recovers', () => {
   const flight = createAircraftFlight('a380', true);
   Object.assign(flight, { x: 0, y: AIRCRAFT[0].gearHeight + .01, z: 0, verticalSpeed: -2, speed: 65, throttle: 0, gearDown: true, gearPosition: 1, hasFlown: true });
   advance(flight, { brake: true }, 6);
-  assert.equal(flight.status, 'completed');
+  assert.equal(flight.status, 'running');
   assert.equal(flight.onGround, true);
   assert.equal(flight.loadFactor, 0);assert.equal(flight.stalling, false);
   const crashed = createAircraftFlight('su30', true);
   Object.assign(crashed, { y: 2.6, verticalSpeed: -20, gearDown: false });
   updateAircraftFlight(crashed, {}, .1);
-  assert.equal(crashed.status, 'crashed');
-  const snapshot = structuredClone(crashed);
-  advance(crashed, { throttle: 1, pitch: 1 }, 5);
-  assert.deepEqual(crashed, { ...snapshot, events: [] });
+  assert.equal(crashed.status, 'running'); assert.ok(crashed.events.includes('recovery'));
+  const elapsed = crashed.elapsed;
+  advance(crashed, { throttle: 1, pitch: .1 }, 5);
+  assert.equal(crashed.status, 'running'); assert.ok(crashed.elapsed > elapsed + 4);
 });
 
 test('gear cannot retract on the ground and pause freezes all flight motion', () => {
@@ -205,7 +205,7 @@ test('airport and city buildings collide, while flying above their roofs is clea
     const flight = createAircraftFlight('su30', true);
     Object.assign(flight, { x: building.x, z: building.z, y: building.height / 2, speed: 30 });
     updateAircraftFlight(flight, {}, 1 / 120);
-    assert.equal(flight.status, 'crashed');
+    assert.equal(flight.status, 'running'); assert.ok(flight.events.includes('recovery'));
     const clear = createAircraftFlight('su30', true);
     Object.assign(clear, { x: building.x, z: building.z, y: building.height + 50, speed: 80 });
     updateAircraftFlight(clear, {}, 1 / 120);
@@ -237,7 +237,7 @@ test('every aircraft can take off and land from both runway directions', () => {
     assert.equal(Math.sign(flight.z - initialZ), runwayDirection === '18' ? 1 : -1);
     Object.assign(flight, { x: 0, z: RUNWAY.center, y: aircraft.gearHeight + .01, speed: Math.min(65, aircraft.landingSpeed * .8), pitch: .03, roll: 0, verticalSpeed: -2, gearDown: true, throttle: 0 });
     advance(flight, { brake: true }, 6);
-    assert.equal(flight.status, 'completed');
+    assert.equal(flight.status, 'running');
   }
 });
 
@@ -274,7 +274,7 @@ test('independent speed brake slows flight, survives pause and resets for a new 
     advance(braking, {}, 2);
     assert.deepEqual(braking, { ...snapshot, events: [] });
     assert.equal(toggleAircraftSpeedBrake(braking), true); assert.equal(braking.speedBrake, false);
-    braking.status = 'crashed';
+    braking.status = 'invalid';
     assert.equal(toggleAircraftSpeedBrake(braking), false); assert.equal(setAircraftFlaps(braking, 1), false);
     assert.equal(createAircraftFlight(aircraft.id).speedBrake, false);
     const ground = createAircraftFlight(aircraft.id);

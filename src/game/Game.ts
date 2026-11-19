@@ -10,6 +10,7 @@ import { InputManager } from '../input/InputManager';
 import { GameLoop } from './GameLoop';
 import { World } from '../world/World';
 import { AirportDock } from '../aviation/AirportDock';
+import { airportSpawn } from '../aviation/AirportGround';
 import { randomSeed, startingSeed } from '../world/WorldSeed';
 import { CHUNK_SIZE, VIEW_RADIUS } from '../world/ChunkPlanner';
 import { absoluteElevation, roadNames, routeNames, terrainNames, type WorldOptions } from '../world/WorldOptions';
@@ -263,7 +264,7 @@ export class Game {
         const input = element<HTMLInputElement>(`traffic-${key}`); input.value = String(value); input.dispatchEvent(new Event('input'));
       }
     }, { signal: this.events.signal });
-    for (const id of ['aircraft-toggle', 'aircraft-settings']) element(id).addEventListener('click', () => { void this.openAircraft(); }, { signal: this.events.signal });
+    for (const id of ['aircraft-toggle', 'aircraft-settings']) element(id).addEventListener('click', () => this.teleportAirport(), { signal: this.events.signal });
     element('drive-toggle').addEventListener('click', () => {
       if (this.driving.active) this.stopDriving();
       else if (this.walking.active && (this.driving.canBoard(this.walking.person, true) || this.driving.nearbyVehicle(this.walking.person))) this.interactVehicle();
@@ -613,6 +614,18 @@ export class Game {
 
   private stopTravel(): void { this.cabinDialogs.close(); this.stopDriving(); this.stopWalking(); }
 
+  private teleportAirport(): void {
+    if (this.aviation || this.aviationLoading || this.contextLost || !this.input.enabled) return;
+    this.flushGraphics(); this.settings.close(); this.stopTravel(); this.releaseNotes.close();
+    element<HTMLDialogElement>('roadbook-dialog').close();
+    const spawn = airportSpawn(this.world.airports.sites[0]);
+    this.camera.position.set(spawn.x - this.world.origin.x, spawn.y + 1.7, spawn.z - this.world.origin.z);
+    this.flight.reset(spawn.heading, 0);
+    this.setPaused(false); this.world.update(this.camera, false);
+    this.resumeGround = () => { this.walking.start(spawn); };
+    this.input.clear(); this.canvas.focus();
+  }
+
   private async openAircraft(departure?: { aircraft: string; airport: string; apron: boolean }): Promise<void> {
     if (this.aviation || this.aviationLoading || this.contextLost || !this.input.enabled) return;
     this.aviationLoading = true;
@@ -648,11 +661,16 @@ export class Game {
       try {
         this.aviation = createAviationSession({ scene: this.scene, camera: this.camera, renderer: this.renderer, world: this.world, audio: this.audio, departure,
           resize: (width, height) => this.clouds.resize(width, height),
-          render: (dt, running, distance) => {
+          render: (dt, running, distance, overview) => {
             this.interior.update(undefined, this.camera.position);
             this.weather.update(running ? dt : 0, this.camera, this.world.shelter, this.world.origin);
             this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);
             this.clouds.update(running ? dt : 0, this.camera, this.world.origin, this.weather.profile, this.world.shelter, distance);
+            if (overview) {
+              const uniforms = this.clouds.material.uniforms;
+              uniforms.cloudsEnabled.value = false; uniforms.immersion.value = uniforms.mistStrength.value = 0;
+              uniforms.fogRange.value.set(distance * .5, distance);
+            }
             this.world.furniture.illuminate(this.camera, this.sky.sun.night, this.world.tunnelMesh.lampPositions, this.world.origin.x, this.world.origin.z, this.world.serviceMesh.lampPositions);
             this.world.modelLoads.pump();
             this.renderer.info.reset(); this.clouds.render(this.renderer, this.scene, this.camera);

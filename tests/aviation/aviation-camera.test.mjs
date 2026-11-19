@@ -36,11 +36,11 @@ test('aircraft and cameras retain absolute placement through Cloud Roads origin 
   assert.equal(world.environmentRoot.position.x, -288);
 });
 
-test('six distinct camera presets frame every aircraft outside its near clipping envelope', () => {
-  assert.equal(AVIATION_CAMERAS.length, 6);
+test('nine distinct camera presets frame every aircraft outside its near clipping envelope', () => {
+  assert.equal(AVIATION_CAMERAS.length, 9);
   for (const aircraft of AIRCRAFT) {
     const { world, flight } = fixture(aircraft.id), positions = [];
-    for (const mode of [0, 1, 3, 4, 5]) {
+    for (const mode of [0, 1, 3, 4, 5, 6, 7]) {
       world.setCameraMode(mode); world.render(flight, 1 / 60);
       const relative = world.camera.position.clone().sub(world.aircraftRoot.position);
       assert.ok(relative.length() >= Math.hypot(aircraft.length, aircraft.span) / 2 + 10 - 1e-8);
@@ -50,8 +50,40 @@ test('six distinct camera presets frame every aircraft outside its near clipping
     assert.ok(positions[2].z < 0, 'nose view looks back toward the aircraft');
     assert.ok(positions[3].x < 0, 'left wing view is on the port side');
     assert.ok(positions[4].y > Math.abs(positions[4].z) * 3, 'overhead view is elevated');
+    assert.ok(positions[5].x > 0, 'right wing view is on the starboard side');
+    assert.ok(positions[6].z > 0, 'tail view follows from behind');
     for (let a = 0; a < positions.length; a++) for (let b = a + 1; b < positions.length; b++) assert.ok(positions[a].distanceTo(positions[b]) > 1);
   }
+});
+
+test('airport overview frames the full hub independently of aircraft size and rebasing', () => {
+  for (const id of ['a380', 't6']) {
+    const { world, flight } = fixture(id);
+    world.setCameraMode(8); world.render(flight, 0);
+    assert.ok(world.camera.position.y > flight.airport.elevation + 3500);
+    const original = world.camera.position.clone();
+    world.host.world.origin = { x: 5120, z: -8192 };
+    world.render(flight, 0);
+    assert.ok(world.camera.position.clone().add(new THREE.Vector3(5120, 0, -8192)).distanceTo(original) < 1e-7);
+    world.host.world.origin = { x: 0, z: 0 }; world.camera.far = 30000; world.viewSettings.chaseDistance = 5;
+    world.render(flight, 0);
+    assert.ok(world.camera.position.distanceTo(new THREE.Vector3(1050, flight.airport.elevation, -400)) + 5000 < world.camera.far);
+  }
+});
+
+test('drag orbit and zoom affect exterior and cockpit views with safe limits', () => {
+  const { world, flight } = fixture();
+  world.render(flight, 0); const before = world.camera.position.clone();
+  world.orbitCamera(200, -70); world.render(flight, 1);
+  assert.ok(world.camera.position.distanceTo(before) > 10);
+  world.zoomCamera(1e8); assert.equal(world.viewSettings.chaseDistance, 5);
+  world.zoomCamera(-1e8); assert.equal(world.viewSettings.chaseDistance, .6);
+  world.setCameraMode(2); world.orbitCamera(1e5, 1e5);
+  assert.ok(Math.abs(world.lookTarget) <= Math.PI * .85);
+  assert.ok(Math.abs(world.viewSettings.lookPitch) <= 70);
+  world.zoomCamera(-1e8); assert.equal(world.viewSettings.cockpitFov, 40);
+  world.zoomCamera(1e8); assert.equal(world.viewSettings.cockpitFov, 100);
+  world.setCameraMode(0); assert.equal(world.viewSettings.orbitTilt, 0);
 });
 
 test('locked direction follows translation while preserving its world bearing and upright horizon', () => {

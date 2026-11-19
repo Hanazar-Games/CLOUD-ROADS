@@ -22,12 +22,12 @@ const load = (world: World, camera: PerspectiveCamera) => {
   throw new Error('World did not finish its terrain and preloading corridor');
 };
 
-it('starts at the airport and shares its visible pavement with ground vehicles', () => {
+it('starts above the original road and shares airport pavement with ground vehicles', () => {
   const world = new World(new Scene(), 'STARTING-HUB'), camera = new PerspectiveCamera();
   world.resetCamera(camera);
   const site = world.airports.sites[0];
-  expect(camera.position.x).toBe(site.worldX - 265);
-  expect(Math.abs(camera.position.z - site.worldZ)).toBeLessThan(400);
+  expect(camera.position.x).toBe(128);
+  expect(camera.position.z).toBe(128);
   const x = site.worldX, z = site.worldZ + site.runway.center;
   expect(world.groundHeight(x, z)).toBeCloseTo(site.elevation + .45);
   expect(world.sampleGround(x, z).height).toBeCloseTo(site.elevation);

@@ -1,12 +1,54 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-test('all aircraft and airports load inside Cloud Roads and return to the parked road vehicle', async ({ page }) => {
+async function openFlightSettings(page: Page) {
+  await page.locator('#aircraft-toggle').click();
+  await expect(page.locator('#airport-board')).toBeEnabled();
+  await page.locator('#airport-board').click();
+  await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
+  await page.locator('[data-action="pause"]').click();
+  await page.locator('[data-action="hangar"]').click();
+}
+
+test('free flight supports orbit, zoom, airport overview, recovery and repeat departures', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?seed=CLOUD-FREE-FLIGHT');
+  await openFlightSettings(page);
+  await page.locator('[data-aircraft="t6"]').click();
+  await expect(page.locator('[data-action="runway"]')).toBeEnabled();
+  await page.locator('[data-setting="runway-strip"]').selectOption('1');
+  await page.locator('[data-action="runway"]').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await page.mouse.move(700, 400); await page.mouse.down({ button: 'right' });
+  await page.mouse.move(900, 460, { steps: 8 }); await page.mouse.up({ button: 'right' });
+  await page.mouse.wheel(0, 500);
+  await expect(page.locator('[data-view="orbitAngle"]')).not.toHaveValue('0');
+  expect(Number(await page.locator('[data-view="chaseDistance"]').inputValue())).toBeGreaterThan(100);
+  await page.locator('[data-action="camera"]').click();
+  await expect(page.locator('[data-camera]')).toHaveCount(9);
+  await page.locator('[data-camera="8"]').click();
+  await expect(page.locator('[data-action="camera"]')).toContainText('机场总览');
+  await page.locator('[data-action="camera"]').click();
+  await page.locator('[data-action="recover"]').click();
+  await expect(page.locator('[data-value="phase"]')).toContainText('AIRBORNE');
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await expect(page.locator('[data-value="guide"]')).toContainText('自由探索');
+  await page.locator('[data-action="airport"]').click();
+  await expect(page.locator('[data-value="phase"]')).toContainText('TAXI');
+  await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await page.locator('[data-action="exit"]').click();
+  await expect(page.locator('[data-metric="Seed"]')).toHaveText('CLOUD-FREE-FLIGHT');
+  await expect(page.locator('#airport-dock')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('all aircraft and airports load after teleporting within the road world', async ({ page }) => {
   test.setTimeout(120000);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=CLOUD-FLIGHT-FLEET');
   await page.locator('#drive-toggle').click();
   await expect(page.locator('body')).toHaveClass(/driving/);
-  await page.locator('#aircraft-toggle').click();
+  await openFlightSettings(page);
   await expect(page.locator('#aviation')).toBeVisible();
   await expect(page.locator('#aviation #world')).toHaveCount(1);
   await expect(page.locator('#app')).toHaveAttribute('inert');
@@ -28,7 +70,7 @@ test('all aircraft and airports load inside Cloud Roads and return to the parked
   await expect(page.locator('#aviation')).toHaveCount(0);
   await expect(page.locator('#app > #world')).toHaveCount(1);
   await expect(page.locator('#app')).not.toHaveAttribute('inert');
-  await expect(page.locator('body')).toHaveClass(/driving/);
+  await expect(page.locator('body')).toHaveClass(/walking/);
   await expect(page.locator('[data-metric="Seed"]')).toHaveText('CLOUD-FLIGHT-FLEET');
   await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);
@@ -37,7 +79,7 @@ test('all aircraft and airports load inside Cloud Roads and return to the parked
 test('airborne cockpit controls, precision input and pause remain isolated from road bindings', async ({ page }, info) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?seed=CLOUD-FLIGHT-CONTROLS');
-  await page.locator('#aircraft-toggle').click(); await page.locator('[data-aircraft="su30"]').click();
+  await openFlightSettings(page); await page.locator('[data-aircraft="su30"]').click();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
   await page.locator('[data-action="airborne"]').click(); await page.keyboard.press('KeyV');
   await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
@@ -56,7 +98,7 @@ test('airborne cockpit controls, precision input and pause remain isolated from 
   await page.locator('[data-action="resume"]').click();
   await page.screenshot({ path: info.outputPath('cloud-roads-cockpit.png') });
   await page.locator('[data-action="exit"]').click();
-  await page.locator('#aircraft-toggle').click();
+  await openFlightSettings(page);
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
   await page.locator('[data-action="exit"]').click();
   await expect(page.locator('#world')).toBeFocused();
@@ -68,14 +110,17 @@ test('touch flight fits a phone and keeps the exit and throttle reachable', asyn
   const page = await context.newPage();
   try {
     await page.goto('/?seed=CLOUD-TOUCH-FLIGHT');
-    await page.locator('#aircraft-toggle').tap(); await page.locator('[data-aircraft="t6"]').tap();
+    await openFlightSettings(page); await page.locator('[data-aircraft="t6"]').tap();
     await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
     await page.locator('[data-action="airborne"]').tap();
     await expect(page.locator('[data-action="exit"]')).toBeInViewport({ ratio: 1 });
     await expect(page.locator('.av-stick-pad')).toBeVisible();
+    const header = await page.locator('.av-header').boundingBox(), instruments = await page.locator('.av-instruments').boundingBox();
+    expect(instruments!.y).toBeGreaterThan(header!.y + header!.height);
     await page.locator('[data-throttle="1"]').tap();
     await expect(page.locator('[data-value="throttle"]')).toHaveText('100%');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    await page.screenshot({ path: test.info().outputPath('flight-phone.png') });
     await page.locator('[data-action="exit"]').tap();
     await expect(page.locator('#error')).toBeHidden();
   } finally { await context.close(); }
@@ -83,7 +128,7 @@ test('touch flight fits a phone and keeps the exit and throttle reachable', asyn
 
 test('returns the shared canvas safely when WebGL is lost during flight', async ({ page }) => {
   await page.goto('/?seed=CLOUD-FLIGHT-CONTEXT');
-  await page.locator('#aircraft-toggle').click(); await page.locator('[data-aircraft="su30"]').click();
+  await openFlightSettings(page); await page.locator('[data-aircraft="su30"]').click();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
   await page.locator('[data-action="airborne"]').click();
   const extension = await page.locator('#world').evaluateHandle(canvas => (canvas as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!);
@@ -91,7 +136,7 @@ test('returns the shared canvas safely when WebGL is lost during flight', async 
   await expect(page.locator('#aviation')).toHaveCount(0); await expect(page.locator('#error')).toBeVisible();
   await page.waitForTimeout(200); await extension.evaluate(ext => ext.restoreContext());
   await expect(page.locator('#error')).toBeHidden(); await expect(page.locator('#app > #world')).toHaveCount(1);
-  await page.locator('#aircraft-toggle').click();
+  await openFlightSettings(page);
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
   await page.locator('[data-action="exit"]').click();
 });

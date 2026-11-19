@@ -57,12 +57,14 @@ export const AIRCRAFT = Object.freeze([
 
 export const AIR_GATES = AIRPORTS[0].gates;
 
-export function createAircraftFlight(id = 'a380', airborne = false, { runwayDirection = '36', airport = 'coast', departure = 'runway', physics, systems } = {}) {
+export function createAircraftFlight(id = 'a380', airborne = false, { runwayDirection = '36', runwayIndex = 0, airport = 'coast', departure = 'runway', physics, systems } = {}) {
   const aircraft = AIRCRAFT.find(item => item.id === id) ?? AIRCRAFT[0];
-  const site = typeof airport === 'object' ? airport : AIRPORTS.find(item => item.id === airport) ?? AIRPORTS[0], RUNWAY = site.runway;
+  const site = typeof airport === 'object' ? airport : AIRPORTS.find(item => item.id === airport) ?? AIRPORTS[0];
+  runwayIndex = Number.isInteger(runwayIndex) && site.runways[runwayIndex] ? runwayIndex : 0;
+  const RUNWAY = site.runways[runwayIndex];
   const south = runwayDirection === '18';
   const flight = {
-    aircraft, airport: site, status: airborne ? 'running' : 'ready', x: 0, y: site.elevation + (airborne ? 420 : aircraft.gearHeight + RUNWAY.surfaceHeight), z: airborne ? RUNWAY.center : south ? RUNWAY.end + 180 : RUNWAY.start - 180,
+    aircraft, airport: site, runwayIndex, status: airborne ? 'running' : 'ready', x: RUNWAY.x, y: site.elevation + (airborne ? 420 : aircraft.gearHeight + RUNWAY.surfaceHeight), z: airborne ? RUNWAY.center : south ? RUNWAY.end + 180 : RUNWAY.start - 180,
     heading: south ? Math.PI : 0, trackHeading: south ? Math.PI : 0, sideslip: 0, pitch: 0, roll: 0, speed: 0,
     verticalSpeed: 0, throttle: airborne ? .65 : 0, engineOutput: airborne ? .65 : 0, gearDown: !airborne, gearPosition: airborne ? 0 : 1, onGround: !airborne,
     flaps: 0, speedBrake: false, runwayDirection: south ? '18' : '36',
@@ -107,11 +109,10 @@ export function toggleAircraftPause(flight) {
 }
 
 export function runwayContact(flight, aircraft) {
-  const RUNWAY = flight.airport.runway;
   const alignment = Math.abs(Math.sin(flight.heading));
   const extentY = Math.abs(Math.sin(flight.roll) * Math.cos(flight.pitch)) * aircraft.span * .42 + Math.abs(Math.sin(flight.pitch)) * aircraft.length * .35 + Math.abs(Math.cos(flight.roll) * Math.cos(flight.pitch)) * aircraft.gearHeight * .45;
-  return flight.gearDown && flight.gearPosition >= .999 && Math.abs(flight.x) < RUNWAY.width / 2 - aircraft.span * .12
-    && flight.z > RUNWAY.end && flight.z < RUNWAY.start && alignment < .28
+  return flight.gearDown && flight.gearPosition >= .999 && flight.airport.runways.some(runway => Math.abs(flight.x - runway.x) < runway.width / 2 - aircraft.span * .12
+    && flight.z > runway.end && flight.z < runway.start) && alignment < .28
     && Math.abs(Math.sin(flight.trackHeading)) < .28 && Math.cos(flight.trackHeading - flight.heading) > .98
     && Math.abs(flight.roll) < .2 && flight.pitch > -.12 && flight.pitch < .3
     && flight.speed <= flight.performance.landingSpeed && flight.verticalSpeed >= -aircraft.sinkLimit && extentY <= aircraft.gearHeight + .2;
@@ -126,15 +127,28 @@ export function crossesAirGate(from, to, gate) {
   return Math.hypot(from.x + (to.x - from.x) * fraction - gate.x, from.y + (to.y - from.y) * fraction - gate.y, from.z + (to.z - from.z) * fraction - gate.z) < gate.radius - 12;
 }
 
-function crash(flight, reason) {
-  flight.status = 'crashed';
+export function recoverAircraftFlight(flight, reason = '已恢复安全高度，可继续自由飞行。') {
+  const site = flight.airport, aircraft = flight.aircraft;
+  let floor = airportSurfaceHeight(flight.x, flight.z, site);
+  for (const building of site.buildings) if (Math.abs(flight.x - building.x) < building.width / 2 + aircraft.span
+    && Math.abs(flight.z - building.z) < building.depth / 2 + aircraft.length) floor = Math.max(floor, site.elevation + building.height);
+  Object.assign(flight, { y: floor + Math.max(250, aircraft.length * 2), pitch: .04, roll: 0, pitchRate: 0, rollRate: 0, yawRate: 0,
+    verticalSpeed: 0, trackHeading: flight.heading, sideslip: 0, angleOfAttack: .04, loadFactor: 1, onGround: false,
+    hasFlown: true, stalling: false, speed: Math.max(aircraft.cruiseSpeed, flight.performance.stall * 1.5),
+    throttle: .7, engineOutput: .7, speedBrake: false, status: 'running' });
+  const systems = flight.systems;
+  systems.autopilot.mode = 'off'; systems.autopilot.reason = 'recovery';
+  systems.autothrottle.enabled = false; systems.autothrottle.reason = 'recovery'; systems.autoBrakeActive = false;
+  systems.trim.pitch = systems.trim.roll = systems.trim.yaw = 0;
+  systems.reverse = false; systems.parkingBrake = false;
+  systems.engineOn = true; systems.batteryOn = true; systems.generatorOn = true;
   flight.reason = reason;
-  flight.events.push('crash');
+  flight.events.push('recovery');
 }
 
 function stepFlight(flight, input, dt) {
   const aircraft = flight.aircraft, physics = flight.physics, performance = flight.performance, gravity = 9.81 * physics.gravity;
-  const site = flight.airport, RUNWAY = site.runway;
+  const site = flight.airport;
   const gearTarget = flight.gearDown ? 1 : 0, gearStep = dt / (aircraft.cockpit === 'airliner' ? 7 : 4);
   const previousGear = flight.gearPosition;
   flight.gearPosition += clamp(gearTarget - flight.gearPosition, -gearStep, gearStep);
@@ -237,7 +251,7 @@ function stepFlight(flight, input, dt) {
     const extentZ = Math.abs(right.z) * sideways + Math.abs(forward.z) * lengthwise + Math.abs(up.z) * depth;
     for (const building of site.buildings) {
       if (flight.y - extentY < site.elevation + building.height && flight.y + extentY > site.elevation + building.base && Math.abs(flight.x - building.x) < building.width / 2 + extentX && Math.abs(flight.z - building.z) < building.depth / 2 + extentZ) {
-        crash(flight, '碰到机场建筑或城市。拉起机头，保持足够净空。');
+        recoverAircraftFlight(flight, '建筑碰撞 · 已恢复安全高度，继续飞行。');
         return;
       }
     }
@@ -246,29 +260,22 @@ function stepFlight(flight, input, dt) {
     flight.y = contactHeight;
     if (!flight.onGround) {
       if (!runwayContact(flight, aircraft)) {
-        crash(flight, surface < -1 ? '飞机触水。保持高度后再进近跑道。' : !flight.gearDown || flight.gearPosition < .999 ? '起落架未放下锁定。提前按 G 放轮，等待锁定后着陆。' : '着地过重或偏离跑道。降低下降率、速度并摆正机翼。');
+        recoverAircraftFlight(flight, surface < -1 ? '触水保护 · 已恢复安全高度。' : !flight.gearDown || flight.gearPosition < .999 ? '未放轮接地 · 已恢复安全高度；着陆前按 G 放轮锁定。' : '接地保护 · 已恢复安全高度；减小下降率并对准跑道。');
         return;
       }
       flight.events.push('touchdown');
       flight.touchdownSpeed = Math.max(0, -flight.verticalSpeed);
       flight.onGround = true;
+      flight.runwayIndex = site.runways.findIndex(runway => Math.abs(flight.x - runway.x) < runway.width / 2 && flight.z >= runway.end && flight.z <= runway.start);
       deployArmedSpoilers(flight);
       flight.verticalSpeed = 0;
       flight.loadFactor = 0;flight.stalling = false;
-    }
-    if ((Math.abs(flight.x) > RUNWAY.width / 2 || flight.z < RUNWAY.end || flight.z > RUNWAY.start) && speed > 30) {
-      crash(flight, '冲出跑道。保持中线，及时制动或重新起飞。');
-      return;
     }
   }
   flight.distance += Math.hypot(flight.x - from.x, flight.y - from.y, flight.z - from.z);
   if (site.gates[flight.gates] && crossesAirGate(from, flight, site.gates[flight.gates])) {
     flight.gates++;
     flight.events.push('gate');
-  }
-  if (flight.hasFlown && flight.onGround && flight.speed < 2 && flight.throttle < .15 && runwayContact(flight, aircraft)) {
-    flight.status = 'completed';
-    flight.events.push('completed');
   }
 }
 
@@ -279,6 +286,7 @@ export function updateAircraftFlight(flight, input = {}, dt) {
   while (remaining > 1e-10 && flight.status === 'running') {
     const step = Math.min(remaining, 1 / 120);
     stepFlight(flight, input, step);
+    if (flight.events.includes('recovery')) break;
     remaining -= step;
   }
   if (flight.status !== 'running' && flight.systems.autopilot.mode !== 'off') {

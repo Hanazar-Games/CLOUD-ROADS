@@ -1,6 +1,5 @@
 import { Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { HeightFunction } from '../terrain/HeightFunction';
-import { airportSpawn } from '../aviation/AirportGround';
 import { TerrainWorkers } from '../terrain/TerrainWorkers';
 import { ChunkManager } from './ChunkManager';
 import { FloatingOrigin } from './FloatingOrigin';
@@ -171,8 +170,7 @@ export class World {
     this.roadReady = false;
     this.origin.reset();
     this.chunks.setOrigin(0, 0);
-    const spawn = airportSpawn(this.airports.sites[0]);
-    camera.position.set(spawn.x + 45, spawn.y + 40, spawn.z + 80);
+    camera.position.set(128, this.height.sample(128, 128) + 450, 128);
   }
 
   update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }): void {
