@@ -82,7 +82,7 @@ function createSite(config) {
       { x: 2020, z: -400, width: 38, depth: length - 200 },
       ...[-2600, 1800].flatMap(z => [
         { x: 900, z, width: 1800, depth: 45 },
-        { x: 2150, z, width: 700, depth: 45 },
+        { x: 2110, z, width: 620, depth: 45 },
       ]),
       ...[-1700, -500, 800].map(z => ({ x: 1800, z, width: 500, depth: 38 })),
     ] : []),

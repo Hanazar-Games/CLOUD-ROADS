@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { AIRPORTS } from './airport.js';
 import { batchMeshes } from './model-utils.js';
+import { runwayJunctions } from './airport-layout.js';
 
 export function createRunway(airport = AIRPORTS[0]) {
   const root = new THREE.Group(); root.name = 'airport-runways';
   airport.runways.forEach((runway, index) => {
-    const strip = createRunwayStrip({ ...airport, runway, taxiways: index === 0 ? airport.taxiways : [] });
+    const strip = createRunwayStrip({ ...airport, runway, junctions: runwayJunctions(airport, runway), taxiways: index === 0 ? airport.taxiways : [] });
     strip.position.x = runway.x; root.add(strip);
   });
   return root;
@@ -28,10 +29,27 @@ function createRunwayStrip(airport) {
     mesh.position.set(x, y, z); groups[group].add(mesh); return mesh;
   }
   const { width, length, start, end, center, shoulder } = RUNWAY;
+  const junctions = airport.junctions;
+  function sideSegments(side) {
+    const segments = []; let cursor = end;
+    for (const junction of junctions.filter(item => item.side === side).sort((a, b) => a.z - b.z)) {
+      const from = Math.max(end, junction.z - junction.depth / 2 - 2), to = Math.min(start, junction.z + junction.depth / 2 + 2);
+      if (from > cursor) segments.push([cursor, from]);
+      cursor = Math.max(cursor, to);
+    }
+    if (cursor < start) segments.push([cursor, start]);
+    return segments;
+  }
   box('surface', 'surface', 0, RUNWAY.surfaceHeight - .15, center, width, .3, length);
-  for (const side of [-1, 1]) box('shoulders', 'shoulder', side * (width + shoulder) / 2, .24, center, shoulder, .2, length);
-  const mark = (x, z, w, d) => box('markings', 'marking', x, .5, z, w, .04, d);
-  for (const side of [-1, 1]) mark(side * (width / 2 - .75), center, .9, length - 10);
+  const mark = (x, z, w, d) => {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), materials.marking);
+    mesh.position.set(x, .52, z); groups.markings.add(mesh); return mesh;
+  };
+  for (const side of [-1, 1]) for (const [from, to] of sideSegments(side)) {
+    box('shoulders', 'shoulder', side * (width + shoulder) / 2, .24, (from + to) / 2, shoulder, .2, to - from);
+    const a = Math.max(from, end + 5), b = Math.min(to, start - 5);
+    if (b > a) mark(side * (width / 2 - .75), (a + b) / 2, .9, b - a);
+  }
   for (let z = end + 180; z < start - 180; z += 60) mark(0, z, .9, 30);
   const digits = { 1: 'bc', 3: 'abgcd', 6: 'afgecd', 8: 'abcdefg' };
   const segments = { a: [0, -10, 6, 1.5], b: [3, -5, 1.5, 9], c: [3, 5, 1.5, 9], d: [0, 10, 6, 1.5], e: [-3, 5, 1.5, 9], f: [-3, -5, 1.5, 9], g: [0, 0, 6, 1.5] };
@@ -65,6 +83,7 @@ function createRunwayStrip(airport) {
     }
   }
   for (let z = end + 5; z < start; z += 60) for (const side of [-1, 1]) for (const normal of [-1, 1]) {
+    if (junctions.some(item => item.side === side && Math.abs(z - item.z) <= item.depth / 2 + 3)) continue;
     const remaining = normal > 0 ? z - end : start - z;
     const lens = new THREE.Mesh(new THREE.PlaneGeometry(1.4, .7), materials[remaining < 600 ? 'amber' : 'white']);
     lens.position.set(side * (width / 2 + 2), .75, z); lens.rotation.y = normal > 0 ? 0 : Math.PI; groups['edge-lights'].add(lens);
@@ -75,7 +94,8 @@ function createRunwayStrip(airport) {
     for (let d = -distance / 2 + 8; d < distance / 2; d += 60) for (const side of [-1, 1]) {
       const x = taxiway.x + (horizontal ? d : side * (taxiway.width / 2 + 1));
       const z = taxiway.z + (horizontal ? side * (taxiway.depth / 2 + 1) : d);
-      if (!airport.runways.some(strip => Math.abs(x - strip.x) <= strip.width / 2 + strip.shoulder + 5 && z >= strip.end && z <= strip.start)) box('taxiway-edge-lights', 'blue', x, .65, z, 1, .5, 1);
+      if (!airport.runways.some(strip => Math.abs(x - strip.x) <= strip.width / 2 + strip.shoulder + 5 && z >= strip.end && z <= strip.start)
+        && !airport.pavements.some(pad => Math.abs(x - pad.x) < pad.width / 2 + .55 && Math.abs(z - pad.z) < pad.depth / 2 + .55)) box('taxiway-edge-lights', 'blue', x, .65, z, 1, .5, 1);
     }
   }
   for (const group of Object.values(groups)) batchMeshes(group);

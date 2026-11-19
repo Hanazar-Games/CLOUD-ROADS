@@ -117,6 +117,8 @@ test('shows the current release, archives the previous baseline and isolates dia
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-release="current"]')).toContainText(version);
   await expect(dialog.locator('[data-release="current"]')).toContainText(releaseTitle);
+  await expect(dialog.locator('[data-release="history"]')).toContainText('0.3.0');
+  await expect(dialog.locator('[data-release="history"]')).toContainText('双跑道枢纽 · 同世界自由飞行');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.62');
   await expect(dialog.locator('[data-release="history"]')).toContainText('行驶与声场 · 道路细节回归');
   await expect(dialog.locator('[data-release="history"]')).toContainText('0.1.61');

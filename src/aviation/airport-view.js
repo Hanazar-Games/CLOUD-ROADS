@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AIRPORTS } from './airport.js';
 import { batchMeshes } from './model-utils.js';
+import { runwayJunctions } from './airport-layout.js';
 
 export function createAirportLod(airport = AIRPORTS[0]) {
   const lod = new THREE.LOD().addLevel(createAirport({ airport }), 0).addLevel(createAirport({ airport, lowDetail: true }), 2000, .15).addLevel(createAirport({ airport, distant: true }), 9000, .15);
@@ -36,7 +37,7 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
       }
       paint = surfaceMaterials[material];
     }
-    const flat = group === pavement && (distant || material === 'infield');
+    const flat = group === pavement && (distant || ['infield', 'line', 'white'].includes(material));
     const mesh = new THREE.Mesh(flat ? new THREE.PlaneGeometry(width, depth).rotateX(-Math.PI / 2) : new THREE.BoxGeometry(width, height, depth), paint);
     mesh.position.set(x, y + (flat ? height / 2 : 0), z); group.add(mesh); return mesh;
   }
@@ -74,15 +75,15 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
   }
   for (const taxiway of TAXIWAYS) {
     box(pavement, 'asphalt', taxiway.x, .29, taxiway.z, taxiway.width, .22, taxiway.depth);
-    const horizontal = taxiway.width > taxiway.depth, length = horizontal ? taxiway.width : taxiway.depth;
-    for (let d = -length / 2 + 10; d < length / 2; d += 26) box(pavement, 'line', taxiway.x + (horizontal ? d : 0), .45, taxiway.z + (horizontal ? 0 : d), horizontal ? 14 : .65, .03, horizontal ? .65 : 14);
-    if (horizontal && taxiway.x < 0) {
-      for (const dx of [-1.5, -.5, .5, 1.5]) for (let dz = -11; dz <= 11; dz += 3) {
-        if (dx < 0 || dz % 2) box(pavement, 'line', -92 + dx, .48, taxiway.z + dz, .3, .04, dx < 0 ? 3 : 1.5);
-      }
-      box(architecture, 'dark', -111, 1.6, taxiway.z + 22, 12, 2.4, .6);
-      box(architecture, 'yellow', -111, 2.5, taxiway.z + 22.35, 11, .25, .1);
-      for (const dx of [-4, 0, 4]) box(architecture, 'yellow', -111 + dx, 1.6, taxiway.z + 22.35, 1, 1.1, .1);
+    const horizontal = taxiway.width > taxiway.depth;
+    box(pavement, 'line', taxiway.x, .45, taxiway.z, horizontal ? taxiway.width : .65, .03, horizontal ? .65 : taxiway.depth);
+  }
+  for (const runway of airport.runways) for (const junction of runwayJunctions(airport, runway)) {
+    const x = junction.holdX * airport.side, z = junction.z - airport.offsetZ, side = junction.side * airport.side;
+    for (const offset of [-1.5, -.5, .5, 1.5]) {
+      const dx = x + offset * side;
+      if (offset > 0) box(pavement, 'line', dx, .48, z, .3, .04, junction.depth - 4);
+      else for (let dz = -junction.depth / 2 + 3; dz < junction.depth / 2 - 2; dz += 3) box(pavement, 'line', dx, .48, z + dz, .3, .04, 1.5);
     }
   }
   for (const building of AIRPORT_BUILDINGS) {
@@ -154,6 +155,11 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
         for (let dz = -depth / 2 + 12; dz < depth / 2; dz += 25) box(architecture, 'white', x + width / 2 + .3, height * .54, z + dz, .6, height * .57, .9);
         box(architecture, 'white', x + width / 2 + .6, height * .4, z, 1.2, 1, depth - 8);
         for (let dz = -depth / 2 + 30; dz < depth / 2; dz += 65) box(architecture, 'glass', x, height + .15, z + dz, width * .7, .3, 12);
+        for (const side of [-1, 1]) {
+          box(architecture, 'glass', x + 4, height * .54, z + side * (depth / 2 + .1), width - 28, height * .55, .2);
+          for (let dx = -width / 2 + 18; dx < width / 2 - 8; dx += 25) box(architecture, 'white', x + dx, height * .54, z + side * (depth / 2 + .25), .65, height * .57, .4);
+        }
+        for (let dz = -depth / 2 + 8; dz < depth / 2; dz += 65) box(architecture, 'metal', x, height + .3, z + dz, width - 8, .6, 1.2);
         for (let dz = -depth / 2 + 40; dz < depth / 2; dz += 100) {
           box(architecture, 'metal', x - 65, height + 1, z + dz, 13, 2, 10);
           for (const dx of [-3, 3]) cylinder('dark', x - 65 + dx, height + 2.1, z + dz, 2.2, .2, 10);
@@ -169,9 +175,9 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
         }
       } else if (kind === 'hangar') {
         box(architecture, 'dark', x - width / 2 - .15, 21, z, .3, 38, depth - 22);
-        for (let dz = -70; dz <= 70; dz += 23.3) box(architecture, 'metal', x - width / 2 - .4, 21, z + dz, .6, 38, 1.2);
+        for (let dz = -depth / 2 + 14; dz <= depth / 2 - 14; dz += 23.3) box(architecture, 'metal', x - width / 2 - .4, 21, z + dz, .6, 38, 1.2);
         box(architecture, 'glass', x - width / 2 - .6, 33, z, .3, 6, depth - 25);
-        for (const dx of [-60, 0, 60]) box(architecture, 'dark', x + dx, height + .08, z, 8, .16, depth - 15);
+        for (let dx = -width / 2 + 20; dx < width / 2; dx += 60) box(architecture, 'dark', x + dx, height + .08, z, 8, .16, depth - 15);
         for (const side of [-1, 1]) {
           box(architecture, 'glass', x, 35, z + side * (depth / 2 + .1), width - 12, 7, .15);
           for (let dx = -width / 2 + 10; dx < width / 2; dx += 14) box(architecture, 'white', x + dx, 23, z + side * (depth / 2 + .25), .65, 44, .4);
@@ -193,6 +199,14 @@ export function createAirport({ lowDetail = false, distant = false, airport = AI
     box(architecture, 'white', -320, 32, z + 90, 8, 1.5, 2);
     for (let dx = -300; dx <= -220; dx += 10) box(pavement, 'line', dx, .51, z + 108, 5, .03, .6);
     for (const dx of [-213, -203]) box(pavement, 'line', dx, .51, z + 65, .6, .03, 105);
+  }
+  for (const bridge of AIRPORT_BUILDINGS.filter(building => building.kind === 'jetway' && building.width > 20 && building.x > 0)) {
+    const x = bridge.x + bridge.width / 2 + 35, z = bridge.z + 65;
+    box(pavement, 'line', (x + 1550) / 2, .48, z, 1550 - x, .04, .65);
+    box(pavement, 'line', x, .49, z, .7, .04, 14);
+    for (const dz of [-50, 50]) box(pavement, 'white', x + 10, .48, z + dz, 100, .04, .7);
+    for (const dx of [-40, 60]) box(pavement, 'white', x + dx, .48, z, .7, .04, 100);
+    for (let dz = -45; dz <= 45; dz += 10) box(pavement, 'line', x - 50, .49, z + dz, 6, .04, .65);
   }
   for (let z = -380; z < 200; z += 34) for (const x of [-880, -820, -740]) {
     box(pavement, 'white', x, .34, z, 12, .04, .6);
