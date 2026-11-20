@@ -23,6 +23,8 @@ test('waits for real terrain preparation and keeps streaming attached to the air
   await expect(page.locator('#airport-board')).toBeEnabled();
   await page.locator('#airport-board').click();
   await expect(page.locator('.av-load-status')).toContainText('预加载地图');
+  await expect(page.getByRole('progressbar', { name: '出发准备步骤' })).toBeVisible();
+  await expect(page.locator('[data-action="cancel-departure"]')).toBeVisible();
   await expect(page.locator('.av-panel')).toBeVisible();
   await expect(page.locator('[data-action="runway"]')).toBeDisabled();
   await expect(page.locator('.av-panel')).toBeHidden();
@@ -38,6 +40,26 @@ test('waits for real terrain preparation and keeps streaming attached to the air
   expect(requests.filter(request => request.kind === 'terrain').slice(-10).every(request => request.z < 6)).toBe(true);
   await page.locator('[data-action="exit"]').click();
   await expect(page.locator('#airport-dock')).toBeVisible();
+});
+
+test('can cancel automatic boarding while the map prepares without stopping preparation', async ({ page }) => {
+  await page.route('**/FlightHorizonWorker-*.js', async route => {
+    await new Promise(resolve => setTimeout(resolve, 3000)); await route.continue();
+  });
+  await page.goto('/?seed=CLOUD-STREAMING-CANCEL');
+  await page.locator('#aircraft-toggle').click();
+  await page.locator('#airport-board').click();
+  await expect(page.locator('[data-action="cancel-departure"]')).toBeVisible();
+  await page.locator('[data-action="cancel-departure"]').click();
+  await expect(page.locator('[data-action="cancel-departure"]')).toBeHidden();
+  await expect(page.locator('#av-panel-title')).toBeFocused();
+  await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready', { timeout: 20000 });
+  await expect(page.getByRole('progressbar', { name: '出发准备步骤' })).toHaveAttribute('value', '12');
+  await expect(page.locator('.av-panel')).toBeVisible();
+  await page.locator('[data-action="apron"]').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await page.locator('[data-action="exit"]').click();
+  await expect(page.locator('#airport-board')).toBeEnabled();
 });
 
 test('reports failed distant terrain before departure and keeps returning to ground available', async ({ page }) => {

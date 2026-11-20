@@ -39,6 +39,35 @@ async function setup() {
 }
 const running = { status: 'running', speed: 36, boosting: false };
 
+test('layer volume changes affect playing and scheduled effects without muting alerts', async () => {
+  const audio = await setup();
+  audio.setState('running');
+  for (const [layer, event] of [['mechanical', 'flaps'], ['wind', 'takeoff'], ['runway', 'touchdown']]) {
+    audio.event(event);
+    const voices = [...audio.voices];
+    const bus = voices.at(-1).gain.connections[0];
+    assert.notEqual(bus, audio.sfx, 'layer effects need a live volume bus');
+    audio.setLayerVolume(layer, 0); assert.equal(bus.gain.value, 0);
+    audio.setLayerVolume(layer, .35); assert.equal(bus.gain.value, .35);
+    audio.stopVoices();
+  }
+  audio.event('stall');
+  assert.ok([...audio.voices].every(voice => voice.gain.connections[0] === audio.sfx));
+  audio.dispose();
+});
+
+test('rapid theme changes keep fading sources bounded and dispose every connection', async () => {
+  const audio = await setup();
+  for (let i = 0; i < 100; i++) {
+    audio.update({ ...running, mission: { music: { root: 40 + i, bpm: 120 } } });
+    assert.ok(audio.context.oscillators.filter(source => source.connections.length).length <= 38);
+  }
+  audio.stopVoices();
+  const sources = [...audio.context.oscillators];
+  audio.dispose();
+  assert.ok(sources.every(source => source.connections.length === 0));
+});
+
 test('flight ambience follows airspeed, engine spool, ground contact and reverse thrust', async () => {
   const audio = await setup(), frame = { ...flightFrame(createAircraftFlight('su30', true)), speed: 0, engineOutput: 0, onGround: true };
   audio.setVolume('music', 0); audio.update(frame);

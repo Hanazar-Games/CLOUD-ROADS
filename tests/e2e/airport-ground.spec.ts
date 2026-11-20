@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('teleports from the road world, changes the parked aircraft and boards from the same apron', async ({ page }, info) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  const models: string[] = []; page.on('request', request => { if (/su30.*\.glb/.test(request.url())) models.push(request.url()); });
   await page.goto('/?seed=CLOUD-AIRPORT-GROUND');
   await expect(page.locator('#airport-dock')).toBeHidden();
   await page.locator('#aircraft-toggle').click();
@@ -32,6 +33,12 @@ test('teleports from the road world, changes the parked aircraft and boards from
   await expect(page.locator('#airport-dock')).toBeVisible();
   await expect(page.locator('#airport-aircraft')).toHaveValue('su30');
   await expect(page.locator('[data-metric="Walking position"]')).toHaveText(position!);
+  await expect(page.locator('#airport-board')).toBeEnabled();
+  await page.locator('#airport-board').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await page.locator('[data-action="exit"]').click();
+  await expect(page.locator('#airport-board')).toBeEnabled();
+  expect(models).toHaveLength(1);
   await expect(page.locator('#error')).toBeHidden();
   expect(errors).toEqual([]);
 });

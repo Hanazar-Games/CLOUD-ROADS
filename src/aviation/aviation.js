@@ -103,9 +103,10 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     <button class="av-brake" data-hold="brake" aria-pressed="false">按住制动</button>
     <aside class="av-panel" aria-labelledby="av-panel-title" aria-describedby="av-panel-copy">
       <span class="av-eyebrow">CLOUD ROADS / 自由飞行</span><h1 id="av-panel-title" tabindex="-1">飞机与飞行设置</h1><p id="av-panel-copy">选择机场与飞机，探索当前山地世界。</p>
+      <div class="av-preload"><p class="av-load-status" role="status" aria-live="polite">正在载入飞机模型…</p><progress max="12" aria-label="出发准备步骤"></progress><button data-action="cancel-departure" hidden>取消自动出发</button></div>
       <label class="av-runway-choice av-airport-choice">出发机场 <select data-setting="airport">${AIRPORTS.map(site => `<option value="${site.id}">${site.name}</option>`).join('')}</select><small data-value="airport-description"></small></label>
       <div class="av-aircraft-list" role="group" aria-label="选择飞机">${AIRCRAFT.map(aircraft => `<button data-aircraft="${aircraft.id}" aria-pressed="${aircraft.id === 'a380'}"><span class="av-plane-icon" aria-hidden="true">${aircraft.cockpit === 'fighter' ? '➤' : '✈'}</span><span><strong>${aircraft.name}</strong><small>${aircraft.role} · ${aircraft.configuration}</small></span></button>`).join('')}</div>
-      <label class="av-training-choice"><input type="checkbox" data-setting="training">显示可选导航环练习</label><p class="av-specs" data-value="specs"></p><p class="av-load-status" role="status" aria-live="polite">正在载入飞机模型…</p>
+      <label class="av-training-choice"><input type="checkbox" data-setting="training">显示可选导航环练习</label><p class="av-specs" data-value="specs"></p>
       <label class="av-runway-choice">出发跑道 <select data-setting="runway-strip"><option value="0">西侧跑道</option><option value="1">东侧跑道</option></select></label>
       <label class="av-runway-choice">起飞方向 <select data-setting="runway"><option value="36">跑道 36 · 向北</option><option value="18">跑道 18 · 向南</option></select><small data-value="runway-dimensions"></small></label>
       <div class="av-panel-actions"><button data-action="resume" hidden>继续飞行</button><button data-action="apron" disabled>机坪登机 · 自行滑行</button><button data-action="runway" disabled>跑道起飞 <span>↗</span></button><button data-action="airborne" disabled>直接空中试飞</button><button data-action="retry" hidden>重试模型加载</button><button data-action="hangar" hidden>更换飞机 / 出发点</button></div>
@@ -147,6 +148,8 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   const action = name => actions[name];
   const values = Object.fromEntries([...root.querySelectorAll('[data-value]')].map(element => [element.dataset.value, element]));
   const panel = $('.av-panel'), loadStatus = $('.av-load-status'), stick = $('.av-stick-pad'), knob = $('.av-stick-knob'), systemPanel = $('.av-systems-panel');
+  const preload = $('.av-preload'), loadProgress = preload.querySelector('progress');
+  let preflightTime = 0;
   const systemSettings = { ...SYSTEM_DEFAULTS };
   const systemDetails = $('.av-system-settings');
   const systemViews = [systemPanel, systemDetails].map(element => ({
@@ -472,7 +475,8 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     panel.hidden = flight.status === 'running';
     if (!panel.hidden) syncPerformance();
     if (!panel.hidden) { clearTimeout(noticeTimer); $('.av-notice').classList.remove('visible'); }
-    $('.av-aircraft-list').hidden = !ready; for (const choice of root.querySelectorAll('.av-runway-choice')) choice.hidden = !ready; values.specs.hidden = !ready; loadStatus.hidden = !ready;
+    $('.av-aircraft-list').hidden = !ready; for (const choice of root.querySelectorAll('.av-runway-choice')) choice.hidden = !ready; values.specs.hidden = !ready; preload.hidden = !ready;
+    action('cancel-departure').hidden = !ready || !pendingDeparture;
     action('resume').hidden = !paused;
     action('runway').hidden = !ready; action('airborne').hidden = !ready; action('apron').hidden = !ready;
     action('hangar').hidden = ready || graphicsLost;
@@ -499,7 +503,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     physicsSettings = aircraftSettings[id];
     flight = createFlight(id, false, { airport: $('[data-setting="airport"]').value, departure: initialBoarding ? 'apron' : 'runway', runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); loaded = false; returning = false;
     syncPhysics();
-    text(loadStatus, '正在载入飞机模型并准备座舱着色器…'); loadStatus.dataset.state = 'loading';
+    text(loadStatus, '步骤 1 / 3 · 正在准备飞机模型…'); loadStatus.dataset.state = 'loading'; loadStatus.dataset.stage = 'model'; loadProgress.removeAttribute('value');
     action('runway').disabled = true; action('airborne').disabled = true; action('apron').disabled = true;
     for (const button of root.querySelectorAll('[data-aircraft]')) button.setAttribute('aria-pressed', String(button.dataset.aircraft === id));
     text(values.aircraft, flight.aircraft.name);
@@ -507,7 +511,10 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     world.setCameraMode(0); lastExterior = 0;
     showPanel();
     try {
-      const installed = await world.setAircraft(flight.aircraft);
+      const installed = await world.setAircraft(flight.aircraft, () => {
+        if (disposed || graphicsLost || version !== loadVersion) return;
+        text(loadStatus, '步骤 2 / 3 · 正在准备飞机与座舱画面…'); loadStatus.dataset.stage = 'graphics'; loadProgress.value = 1; dirty = true;
+      });
       if (disposed || graphicsLost || version !== loadVersion || !installed) return;
       loaded = true; action('retry').hidden = true; dirty = true;
       if (initialBoarding) { initialBoarding = false; start(false, true); chooseCamera(2); }
@@ -515,6 +522,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       if (disposed || graphicsLost || version !== loadVersion || error.name === 'AbortError') return;
       console.error('Unable to load aircraft:', error);
       text(loadStatus, '模型载入失败，请重试或选择另一架飞机。'); loadStatus.dataset.state = 'error';
+      loadProgress.value = 0;
       action('retry').hidden = false; dirty = true;
     }
   }
@@ -524,20 +532,25 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     const preflight = flight; touchInput.precision = false;
     flight = createFlight(flight.aircraft.id, airborne, { airport: flight.airport.id, departure: apron ? 'apron' : 'runway', runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); flight.status = 'ready'; returning = false;
     if (!airborne && !apron) restoreAircraftPreflight(flight, preflight);
-    pendingDeparture = { airborne, apron };
+    pendingDeparture = { airborne, apron }; preflightTime = .1;
     accumulator = 0; world.setCameraMode(world.cameraMode);
     unlockAudio(); showPanel();
   }
 
-  function prepareDeparture() {
+  function prepareDeparture(dt) {
     if (!loaded || flight.status !== 'ready' || graphicsLost) return;
+    preflightTime += dt;
+    if (preflightTime < .1 && !dirty) return;
+    preflightTime = 0;
     const status = host.preflightStatus(flight);
     const message = status.error ? '地图加载失败，请返回地面重新进入；可在诊断日志查看原因。' : !status.ready
-      ? `正在预加载地图 · 近景 ${status.completed} / ${status.total} · 远景${status.distant ? '已就绪' : '准备中'}`
+      ? `步骤 3 / 3 · 正在预加载地图 · 近景 ${status.completed} / ${status.total} · 远景${status.distant ? '已就绪' : '准备中'}`
       : '飞机与地图已就绪 · 出发区域已确认加载，前方地形将持续预加载';
     const state = status.error ? 'error' : status.ready ? 'ready' : 'loading';
     if (loadStatus.dataset.state !== state) { loadStatus.dataset.state = state; dirty = true; }
     text(loadStatus, message);
+    loadStatus.dataset.stage = 'terrain';
+    loadProgress.max = status.total + 3; loadProgress.value = 2 + status.completed + Number(status.distant);
     for (const name of ['runway', 'airborne', 'apron']) action(name).disabled = !status.ready || !!status.error;
     if (!pendingDeparture || !status.ready || status.error) return;
     const { airborne, apron } = pendingDeparture; pendingDeparture = null;
@@ -578,7 +591,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       strip.dataset.airport = flight.airport.id;
     }
     strip.value = flight.runwayIndex;
-    text(values['airport-description'], `${flight.airport.description} · 海拔 ${flight.airport.elevation} m`);
+    text(values['airport-description'], `${flight.airport.description} · 海拔 ${Math.round(flight.airport.elevation)} m`);
     text(values['runway-dimensions'], `${RUNWAY.length.toLocaleString('en-US')} × ${RUNWAY.width} m · 两侧各 ${RUNWAY.shoulder} m 道肩`);
     root.classList.toggle('av-cockpit', world.cameraMode === 2);
     $('.av-look').hidden = world.cameraMode !== 2;
@@ -629,7 +642,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       const bearing = Math.atan2(RUNWAY.x - flight.x, flight.z - RUNWAY.center);
       const angle = Math.atan2(Math.sin(bearing - flight.heading), Math.cos(bearing - flight.heading)) * 180 / Math.PI;
       text(values.guide, `返航机场 · ${Math.abs(angle) < 8 ? '保持航向' : `${angle > 0 ? '右转' : '左转'} ${Math.round(Math.abs(angle))}°`}`);
-      text(values.target, `${flight.airport.name} ${(Math.hypot(flight.x - RUNWAY.x, flight.z - RUNWAY.center) / 1000).toFixed(1)} km · 海拔 ${flight.airport.elevation} m · 跑道 ${RUNWAY.length / 1000} km · 放轮锁定后着陆`);
+      text(values.target, `${flight.airport.name} ${(Math.hypot(flight.x - RUNWAY.x, flight.z - RUNWAY.center) / 1000).toFixed(1)} km · 海拔 ${Math.round(flight.airport.elevation)} m · 跑道 ${RUNWAY.length / 1000} km · 放轮锁定后着陆`);
     } else {
       text(values.guide, '自由探索 · 随时着陆或继续远行');
       text(values.target, `已飞行 ${(flight.distance / 1000).toFixed(1)} km · V 驾驶舱 · C 切换机位 · 点击返航导航寻找机场`);
@@ -679,6 +692,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       case 'speed-brake': speedBrake(); break;
       case 'navigation': returning = !returning; updateUI(); break;
       case 'retry': selectAircraft(flight.aircraft.id); break;
+      case 'cancel-departure': pendingDeparture = null; action('cancel-departure').hidden = true; $('#av-panel-title').focus({ preventScroll: true }); dirty = true; notify('已取消自动出发 · 地图继续准备，可稍后选择出发位置'); break;
       case 'hangar': flight = createFlight(flight.aircraft.id, false, { airport: flight.airport.id, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); audio.setState('menu'); world.setCameraMode(0); lastExterior = 0; showPanel(); break;
       case 'systems': setSystemPanel(systemPanel.hidden);break;
       case 'systems-close': setSystemPanel(false);break;
@@ -908,7 +922,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     if (disposed) return;
     dt = Math.max(0, Math.min(dt, .1));
     if (!document.hidden) {
-      prepareDeparture();
+      prepareDeparture(dt);
       if (flight.status === 'running') {
         touchInput.pitch = stickPitch; touchInput.roll = stickRoll;
         touchInput.yaw = Number(holdControls['yaw-right'].active) - Number(holdControls['yaw-left'].active);

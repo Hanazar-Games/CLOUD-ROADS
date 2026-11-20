@@ -85,15 +85,22 @@ export class AviationWorld {
     this.environmentSettings = next;
   }
 
-  async setAircraft(aircraft) {
+  releaseAircraft() {
+    if (!this.model) return;
+    if (!this.host.world.airports.parkAircraft(this.modelAircraftId, this.model)) disposeAircraftObject(this.model);
+    this.model = null; this.modelAircraftId = null;
+  }
+
+  async setAircraft(aircraft, onProgress = () => {}) {
     this.loadController?.abort();
     const controller = new AbortController(); this.loadController = controller;
-    if (this.model) { disposeAircraftObject(this.model); this.model = null; }
+    this.releaseAircraft();
     if (this.aircraftLights) { disposeAircraftObject(this.aircraftLights); this.aircraftLights = null; }
     if (this.cockpit) { disposeAircraftObject(this.cockpit); this.cockpit = null; }
-    const model = await loadAircraftModel(aircraft, controller.signal);
+    const model = this.host.world.airports.takeAircraft(aircraft.id) ?? await loadAircraftModel(aircraft, controller.signal);
     if (this.disposed || controller !== this.loadController) { disposeAircraftObject(model); return false; }
-    this.model = model; this.aircraftRoot.add(model); this.resetCamera = true;
+    this.model = model; this.modelAircraftId = aircraft.id; this.aircraftRoot.add(model); this.resetCamera = true;
+    onProgress('graphics');
     this.aircraftLights = createAircraftLights(aircraft, model);this.aircraftRoot.add(this.aircraftLights);
     this.cockpitCanvas = document.createElement('canvas'); this.cockpitCanvas.width = ['airliner', 'transport'].includes(aircraft.cockpit) ? 1536 : 960; this.cockpitCanvas.height = 320;
     this.cockpitContext = this.cockpitCanvas.getContext('2d');
@@ -278,7 +285,9 @@ export class AviationWorld {
   }
 
   dispose() {
+    if (this.disposed) return;
     this.disposed = true; this.loadController?.abort();
+    this.releaseAircraft();
     disposeAircraftObject(this.environmentRoot); disposeAircraftObject(this.aircraftRoot);
     disposeAircraftObject(this.cockpitScene);
     Object.assign(this.camera, { near: this.savedCamera.near, far: this.savedCamera.far, fov: this.savedCamera.fov });

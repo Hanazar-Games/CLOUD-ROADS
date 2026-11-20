@@ -21,6 +21,7 @@ test('aircraft GLBs and distant mountain workers load from the Pages project pat
   await expect(page.locator('.av-panel')).toBeHidden(); await page.keyboard.press('KeyV');
   await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
   expect(paths.some(path => /^\/CLOUD-ROADS\/assets\/a380-.+\.glb$/.test(path))).toBe(true);
+  expect(paths.filter(path => /^\/CLOUD-ROADS\/assets\/a380-.+\.glb$/.test(path))).toHaveLength(1);
   expect(paths.some(path => /^\/CLOUD-ROADS\/assets\/su30-.+\.glb$/.test(path))).toBe(true);
   expect(paths.some(path => /^\/CLOUD-ROADS\/assets\/FlightHorizonWorker-.+\.js$/.test(path))).toBe(true);
   await page.locator('[data-action="exit"]').click();

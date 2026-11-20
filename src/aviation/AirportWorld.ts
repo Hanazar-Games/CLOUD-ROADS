@@ -3,7 +3,7 @@ import type { HeightFunction } from '../terrain/HeightFunction';
 import { AIRPORTS } from './airport.js';
 import { createAirportLod, setAirportDetailDistance } from './airport-view.js';
 import { createRunway } from './runway-view.js';
-import { disposeAircraftObject, loadAircraftModel } from './aircraft-models.js';
+import { disposeAircraftObject, loadAircraftModel, updateAircraftGearModel } from './aircraft-models.js';
 import { AIRCRAFT } from './aircraft-flight.js';
 import { AIRPORT_STAND, airportPavementHeight, constrainAirport } from './AirportGround';
 import { createAirportAccess } from './AirportAccessView';
@@ -18,6 +18,7 @@ export class AirportWorld {
   private parkedAircraft?: Group;
   private loadController?: AbortController;
   private detailDistance = -1;
+  private disposed = false;
 
   constructor(scene: Scene, height: HeightFunction, surface: (x: number, z: number) => number) {
     const biomes = new BiomeSystem(height.seed, height.terrain);
@@ -57,10 +58,34 @@ export class AirportWorld {
   }
 
   selectAircraft(id: string): void {
+    if (this.disposed) return;
     if (!AIRCRAFT.some(aircraft => aircraft.id === id) || id === this.aircraftId && this.aircraftState !== 'error') return;
     this.loadController?.abort();
     if (this.parkedAircraft) disposeAircraftObject(this.parkedAircraft);
     this.parkedAircraft = undefined; this.aircraftId = id; this.aircraftState = 'idle';
+  }
+
+  takeAircraft(id: string): Group | undefined {
+    if (this.disposed || id !== this.aircraftId) return;
+    this.loadController?.abort();
+    const model = this.parkedAircraft;
+    this.parkedAircraft = undefined; this.aircraftState = 'idle';
+    if (!model) return;
+    model.removeFromParent(); model.position.set(0, 0, 0); model.rotation.set(0, 0, 0); model.visible = true;
+    return model;
+  }
+
+  parkAircraft(id: string, model: Group): boolean {
+    if (this.disposed || id !== this.aircraftId) return false;
+    this.loadController?.abort();
+    if (this.parkedAircraft && this.parkedAircraft !== model) disposeAircraftObject(this.parkedAircraft);
+    const aircraft = AIRCRAFT.find(aircraft => aircraft.id === id)!, site = this.sites[0];
+    model.name = 'airport-player-aircraft';
+    model.position.set(AIRPORT_STAND.x, site.elevation + .34 + aircraft.gearHeight, AIRPORT_STAND.z);
+    model.rotation.set(0, -Math.PI / 2, 0); model.visible = this.groundAircraftVisible;
+    updateAircraftGearModel(model, 1);
+    this.roots[0].add(model); this.parkedAircraft = model; this.aircraftState = 'ready';
+    return true;
   }
 
   private async loadParkedAircraft(): Promise<void> {
@@ -69,12 +94,7 @@ export class AirportWorld {
     try {
       const model = await loadAircraftModel(aircraft, controller.signal);
       if (controller.signal.aborted) { disposeAircraftObject(model); return; }
-      const site = this.sites[0];
-      model.name = 'airport-player-aircraft';
-      model.position.set(AIRPORT_STAND.x, site.elevation + .34 + aircraft.gearHeight, AIRPORT_STAND.z);
-      model.rotation.y = -Math.PI / 2;
-      model.visible = this.groundAircraftVisible;
-      this.roots[0].add(model); this.parkedAircraft = model; this.aircraftState = 'ready';
+      if (!this.parkAircraft(aircraft.id, model)) disposeAircraftObject(model);
     } catch { if (!controller.signal.aborted) this.aircraftState = 'error'; }
   }
 
@@ -92,5 +112,10 @@ export class AirportWorld {
     return hit;
   }
 
-  dispose(): void { this.loadController?.abort(); for (const root of this.roots) disposeAircraftObject(root); }
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true; this.loadController?.abort();
+    for (const root of this.roots) disposeAircraftObject(root);
+    this.parkedAircraft = undefined;
+  }
 }

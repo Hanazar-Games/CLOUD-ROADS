@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Scene } from 'three';
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Scene } from 'three';
 import { HeightFunction } from '../src/terrain/HeightFunction';
 import { TerrainGenerator } from '../src/terrain/TerrainGenerator';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
@@ -7,6 +7,39 @@ import { AirportWorld } from '../src/aviation/AirportWorld';
 import { AIRCRAFT, createAircraftFlight, updateAircraftFlight } from '../src/aviation/aircraft-flight.js';
 
 describe('airports in the Cloud Roads world', () => {
+  it('hands the same model between apron and flight without releasing its resources', () => {
+    const height = new HeightFunction('CLOUD-AIRPORT'), airports = new AirportWorld(new Scene(), height, (x, z) => height.sample(x, z));
+    const model = new Group(), gear = new Group(), geometry = new BoxGeometry();
+    let disposals = 0; geometry.addEventListener('dispose', () => disposals++);
+    gear.add(new Mesh(geometry, new MeshBasicMaterial())); model.add(gear); model.userData.gear = [gear];
+    expect(airports.parkAircraft('a380', model)).toBe(true);
+    const stand = model.position.clone();
+    expect(model.parent).toBe(airports.roots[0]);
+    expect(airports.takeAircraft('su30')).toBeUndefined();
+    expect(airports.takeAircraft('a380')).toBe(model);
+    expect(model.position.length()).toBe(0); expect(model.rotation.y).toBe(0);
+    expect(model.parent).toBeNull(); expect(airports.aircraftState).toBe('idle');
+    model.visible = false; gear.visible = false; model.rotation.set(.2, .4, .6);
+    expect(airports.parkAircraft('a380', model)).toBe(true);
+    expect(model.position).toEqual(stand); expect(model.rotation.x).toBe(0); expect(model.rotation.z).toBe(0);
+    expect(model.visible).toBe(true); expect(gear.visible).toBe(true); expect(disposals).toBe(0);
+    expect(airports.takeAircraft('a380')).toBe(model);
+    airports.dispose(); expect(disposals).toBe(0);
+    expect(airports.parkAircraft('a380', model)).toBe(false);
+    geometry.dispose();
+  });
+
+  it('rejects obsolete aircraft and disposes a parked model exactly once when changing selection', () => {
+    const height = new HeightFunction('CLOUD-AIRPORT'), airports = new AirportWorld(new Scene(), height, (x, z) => height.sample(x, z));
+    const model = new Group(), geometry = new BoxGeometry(); model.userData.gear = [];
+    model.add(new Mesh(geometry, new MeshBasicMaterial()));
+    let disposals = 0; geometry.addEventListener('dispose', () => disposals++);
+    airports.parkAircraft('a380', model); airports.selectAircraft('su30');
+    expect(disposals).toBe(1); expect(airports.takeAircraft('a380')).toBeUndefined();
+    expect(airports.parkAircraft('a380', model)).toBe(false);
+    airports.dispose(); expect(disposals).toBe(1);
+  });
+
   it('places the starting hub deterministically and preserves terrain outside airports', () => {
     const a = new HeightFunction('CLOUD-AIRPORT'), b = new HeightFunction('CLOUD-AIRPORT');
     expect(a.airports).toEqual(b.airports);

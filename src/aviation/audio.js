@@ -21,6 +21,8 @@ export class AudioEngine {
     this.volumes = { music: 0.45, sfx: 0.8 };
     this.layers = { engine: 1, wind: .65, runway: .75, mechanical: .8 };
     this.voices = new Set();
+    this.retiringVoices = new Set();
+    this.layerBuses = {};
     this.targets = new WeakMap();
     this.beat = 0;
     this.nextBeat = 0;
@@ -63,6 +65,11 @@ export class AudioEngine {
           this.exteriorFilter = this.context.createBiquadFilter();
           this.exteriorFilter.type = 'lowpass'; this.exteriorFilter.frequency.value = 12000; this.exteriorFilter.Q.value = .5;
           this.exteriorFilter.connect(this.exterior);
+          for (const key of ['wind', 'runway', 'mechanical']) {
+            const gain = this.context.createGain(); gain.gain.value = this.layers[key];
+            gain.connect(key === 'mechanical' ? this.sfx : this.exteriorFilter);
+            this.layerBuses[key] = gain;
+          }
           this.engine = this.context.createOscillator();
           this.engine.type = 'sawtooth';
           this.filter = this.context.createBiquadFilter();
@@ -115,11 +122,12 @@ export class AudioEngine {
   }
 
   releaseGraph() {
-    for (const voice of this.voices) { voice.oscillator.stop(); voice.oscillator.disconnect(); voice.gain.disconnect(); voice.filter?.disconnect(); voice.oscillator.onended = null; }
-    this.voices.clear();
+    for (const voice of [...this.voices, ...this.retiringVoices]) this.releaseVoice(voice);
     for (const source of [this.engine, this.noiseSource]) { try { source?.stop(); } catch { /* A failed graph may contain an unstarted source. */ } }
     for (const key of graphKeys) { this[key]?.disconnect(); this[key] = null; }
     for (const key of layerKeys) { this[key]?.filter.disconnect(); this[key]?.gain.disconnect(); this[key] = null; }
+    for (const bus of Object.values(this.layerBuses)) bus.disconnect();
+    this.layerBuses = {};
     this.context = null; this.noiseBuffer = null; this.targets = new WeakMap();
   }
 
@@ -131,6 +139,7 @@ export class AudioEngine {
   setLayerVolume(layer, value) {
     if (!Object.hasOwn(this.layers, layer) || !Number.isFinite(value)) return;
     this.layers[layer] = bounded(value);
+    if (this.layerBuses[layer]) this.target(this.layerBuses[layer].gain, this.layers[layer], .01);
   }
 
   toggle() {
@@ -194,13 +203,23 @@ export class AudioEngine {
       voice.gain.gain.linearRampToValueAtTime(0, now + 0.02);
       voice.oscillator.stop(now + 0.025);
       this.voices.delete(voice);
+      this.retiringVoices.add(voice);
     }
     if (!bus || bus === 'music') this.nextBeat = 0;
     if (!bus || bus === 'sfx') { this.alertUntil = 0; this.nextStall = 0; this.mixMusic(); }
   }
 
-  tone(frequency, duration = 0.15, offset = 0, type = 'sine', bus = 'sfx', volume = 0.3, kind = 'tone') {
-    if (!this.context || this.context.state !== 'running' || !this.enabled || this.background || this.state === 'paused' || !this.volumes[bus] || this.voices.size >= (bus === 'music' ? 36 : kind === 'alert' ? 48 : 44)) return;
+  releaseVoice(voice) {
+    voice.oscillator.onended = null;
+    voice.oscillator.stop(); voice.oscillator.disconnect(); voice.filter?.disconnect(); voice.gain.disconnect();
+    this.voices.delete(voice); this.retiringVoices.delete(voice);
+  }
+
+  tone(frequency, duration = 0.15, offset = 0, type = 'sine', bus = 'sfx', volume = 0.3, kind = 'tone', layer) {
+    if (!this.context || this.context.state !== 'running' || !this.enabled || this.background || this.state === 'paused' || !this.volumes[bus]) return;
+    const limit = bus === 'music' ? 36 : kind === 'alert' ? 48 : 44;
+    if (this.voices.size + this.retiringVoices.size >= limit && this.retiringVoices.size) this.releaseVoice(this.retiringVoices.values().next().value);
+    if (this.voices.size + this.retiringVoices.size >= limit) return;
     const start = this.context.currentTime + offset;
     const noise = kind === 'hat' || kind === 'snare' || kind === 'mechanical' || kind === 'air';
     const oscillator = noise ? this.context.createBufferSource() : this.context.createOscillator();
@@ -223,7 +242,7 @@ export class AudioEngine {
     gain.gain.setValueAtTime(0, start);
     gain.gain.linearRampToValueAtTime(volume, start + (kind === 'pad' ? 0.18 : kind === 'hat' || kind === 'kick' ? 0.004 : 0.01));
     gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-    gain.connect(this[bus]);
+    gain.connect(this.layerBuses[layer] ?? this[bus]);
     oscillator.start(start);
     oscillator.stop(start + duration + 0.02);
     const voice = { oscillator, gain, filter, bus, start };
@@ -232,22 +251,22 @@ export class AudioEngine {
       this.alertUntil = Math.max(this.alertUntil, start + duration + .12);
       this.mixMusic();
     }
-    oscillator.onended = () => { oscillator.disconnect(); filter?.disconnect(); gain.disconnect(); this.voices.delete(voice); };
+    oscillator.onended = () => { oscillator.disconnect(); filter?.disconnect(); gain.disconnect(); this.voices.delete(voice); this.retiringVoices.delete(voice); };
   }
 
   event(type, kind) {
     const mechanical = this.layers.mechanical;
     if (mechanical) {
-      if (type === 'cockpit-switch') this.tone(920, .045, 0, 'triangle', 'sfx', .08 * mechanical);
-      if (type === 'gear-locked') this.tone(240, .11, 0, 'triangle', 'sfx', .1 * mechanical);
-      if (type === 'gear-retracted') this.tone(180, .08, 0, 'triangle', 'sfx', .08 * mechanical);
-      if (type === 'flaps' || type === 'speed-brake') this.tone(type === 'flaps' ? 460 : 850, .5, 0, 'sine', 'sfx', .12 * mechanical, 'mechanical');
+      if (type === 'cockpit-switch') this.tone(920, .045, 0, 'triangle', 'sfx', .08, 'tone', 'mechanical');
+      if (type === 'gear-locked') this.tone(240, .11, 0, 'triangle', 'sfx', .1, 'tone', 'mechanical');
+      if (type === 'gear-retracted') this.tone(180, .08, 0, 'triangle', 'sfx', .08, 'tone', 'mechanical');
+      if (type === 'flaps' || type === 'speed-brake') this.tone(type === 'flaps' ? 460 : 850, .5, 0, 'sine', 'sfx', .12, 'mechanical', 'mechanical');
     }
-    if (type === 'takeoff' && this.layers.wind) this.tone(650, .6, 0, 'sine', 'sfx', .08 * this.layers.wind, 'air');
+    if (type === 'takeoff' && this.layers.wind) this.tone(650, .6, 0, 'sine', 'sfx', .08, 'air', 'wind');
     if (type === 'touchdown' && this.layers.runway) {
       const strength = bounded((Number.isFinite(kind) ? kind : 11) / 18);
-      this.tone(80 - strength * 25, .08 + strength * .08, 0, 'triangle', 'sfx', (.08 + strength * .2) * this.layers.runway);
-      this.tone(900, .12 + strength * .16, .02, 'sine', 'sfx', (.05 + strength * .1) * this.layers.runway, 'mechanical');
+      this.tone(80 - strength * 25, .08 + strength * .08, 0, 'triangle', 'sfx', .08 + strength * .2, 'tone', 'runway');
+      this.tone(900, .12 + strength * .16, .02, 'sine', 'sfx', .05 + strength * .1, 'mechanical', 'runway');
     }
     if (type === 'ap-disconnect') { this.tone(880, .12, 0, 'triangle', 'sfx', .16, 'alert');this.tone(660, .16, .15, 'triangle', 'sfx', .16, 'alert'); }
     const alertTone = (frequency, duration, offset = 0, wave = 'triangle') => this.tone(frequency, duration, offset, wave, 'sfx', .3, 'alert');
