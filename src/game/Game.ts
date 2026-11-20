@@ -637,6 +637,7 @@ export class Game {
       this.flushGraphics(); this.settings.close(); this.cabinDialogs.close(); element<HTMLDialogElement>('roadbook-dialog').close(); this.releaseNotes.close();
       const position = this.camera.position.clone(); position.x += this.world.origin.x; position.z += this.world.origin.z;
       const rotation = this.camera.quaternion.clone(), paused = this.paused, driving = this.driving.active;
+      const groundCloudSteps = this.clouds.material.uniforms.cloudSteps.value;
       const walking = this.walking.active ? { ...this.walking.person } : undefined;
       this.cancelAccess();
       if (driving) this.driving.stop(true);
@@ -647,6 +648,7 @@ export class Game {
       const restore = () => {
         this.aviation = undefined; element('app').inert = false; this.input.enabled = !this.contextLost; this.input.clear();
         this.world.airports.groundAircraftVisible = true;
+        this.clouds.material.uniforms.cloudSteps.value = groundCloudSteps;
         this.camera.position.copy(position); this.camera.position.x -= this.world.origin.x; this.camera.position.z -= this.world.origin.z;
         this.camera.quaternion.copy(rotation); this.flight.reset(-this.camera.rotation.y, this.camera.rotation.x);
         this.setPaused(paused); this.loop.setFrameLimit(this.graphicsSetting('frame-limit')); this.resize();
@@ -661,7 +663,8 @@ export class Game {
       try {
         this.aviation = createAviationSession({ scene: this.scene, camera: this.camera, renderer: this.renderer, world: this.world, audio: this.audio, departure,
           resize: (width, height) => this.clouds.resize(width, height),
-          render: (dt, running, distance, overview) => {
+          render: (dt, running, distance, overview, cloudSteps) => {
+            this.clouds.material.uniforms.cloudSteps.value = cloudSteps;
             this.interior.update(undefined, this.camera.position);
             this.weather.update(running ? dt : 0, this.camera, this.world.shelter, this.world.origin);
             this.sky.update(this.camera, this.world.origin, this.weather.profile.sunlight, this.world.shelter, this.world.season);

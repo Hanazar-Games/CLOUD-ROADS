@@ -135,7 +135,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       <details class="av-help av-cockpit-settings"><summary>座椅与实体仪表面板 · 6 项调节</summary>${viewSliders(cockpitFields)}<button data-action="cockpit-reset">恢复默认座椅与面板</button><p id="av-cockpit-note">座椅高低、前后与视线改变实际驾驶舱视点；面板缩放、位置同时作用于屏幕、按钮、标签和起落架手柄，点按位置随之同步。外部机位不受影响。调整后继续飞行并按 V 查看；视野被挡时可降低面板或升高座椅。设置对所有机型共用，仅保留在本次飞机模式。</p></details>
       <details class="av-help av-environment-settings"><summary>远景视距与地景 LOD</summary>
       ${environmentFields.map(([key, label, min, max, step]) => `<label>${label}<output data-environment-value="${key}"></output><input data-environment="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${AVIATION_ENVIRONMENT_DEFAULTS[key] / 1000}" aria-label="飞机${label}，千米"></label>`).join('')}
-      <label>地面模型精度<select data-setting="ground-detail"><option value="low">低模 · 默认省性能</option><option value="balanced">均衡 · 中等细节</option><option value="high">精细 · 近景高细节</option></select></label><button data-action="environment-reset">恢复默认地景</button><p>默认远景 30 km，可调 30–160 km，沿当前种子地图延伸山地。远处地形与机场使用简模，接近后恢复细节。地景细节目标越小越省性能；超出近景预算的部分仍保留简模。低模不影响飞机、座舱和物理碰撞。</p></details>
+      <label>地面模型精度<select data-setting="ground-detail"><option value="low">低模 · 默认省性能</option><option value="balanced">均衡 · 中等细节</option><option value="high">精细 · 近景高细节</option></select></label><label>远景云层采样<select data-setting="cloud-steps"><option value="6">6 步 · 极省电</option><option value="8">8 步 · 省电</option><option value="12">12 步 · 默认</option><option value="20">20 步 · 精细</option><option value="32">32 步 · 高精细</option></select></label><button data-action="environment-reset">恢复默认地景</button><p>默认远景 30 km，可调 30–160 km。出发前确认近景与远景已加载；飞行中按航向和速度提前准备约 8 秒地形，最多前探 4 km。高空地形使用简模并省略细小植被，下降后恢复；切换镜头不移动地面加载中心。云层采样越少越省性能，与地面设置独立。低模不影响飞机、座舱和物理碰撞。</p></details>
       <details class="av-help av-audio-settings"><summary>画面与声音</summary><label>渲染比例上限<select data-setting="quality"><option value="0.5">0.5× · 极省电</option><option value="0.75">0.75× · 省电</option><option value="1">1× · 原生</option><option value="1.25">1.25× · 标准</option><option value="1.75">1.75× · 精细</option><option value="2">2× · 高精细</option></select></label><label>画面帧率上限<select data-setting="frame-limit"><option value="30">30 FPS · 省电</option><option value="45">45 FPS</option><option value="60" selected>60 FPS · 标准</option><option value="90">90 FPS</option><option value="120">120 FPS</option><option value="0">跟随屏幕刷新率</option></select></label><label>舱内仪表刷新<select data-setting="display-hz"><option value="5">5 Hz · 省电</option><option value="10" selected>10 Hz · 标准</option><option value="20">20 Hz · 精细</option></select></label><p>渲染比例不超过设备像素比。降低画面帧率或舱内仪表刷新可减少绘制负担，飞行物理与输入继续独立更新。</p><label>背景音乐 <output data-volume-value="music"></output><input data-volume="music" type="range" min="0" max="100" aria-label="飞机背景音乐音量"></label><label>引擎与音效 <output data-volume-value="sfx"></output><input data-volume="sfx" type="range" min="0" max="100" aria-label="飞机引擎与音效音量"></label><p data-value="audio-status" role="status" aria-live="polite"></p><button data-action="audio-retry" hidden>重新启用声音</button><small>暂停与离开页面时停止声音；失速警报会暂时降低音乐音量。声音设置与山路共用，仅保留在当前页面；画面和飞行设置仅保留在本次飞机模式。机场尺寸与飞行参数为游戏设计，驾驶舱为原创简化内饰。</small></details>
       <details class="av-credits"><summary>模型署名</summary><p>Airbus A380：<a href="https://sketchfab.com/3d-models/singapore-airlines-a380-fd047ccf175c4db5b7e3e400c67c47a0" target="_blank" rel="noopener noreferrer">Singapore Airlines A380</a>，作者 zairiq-zairiq-123-pixar-cars-bfdi，用户提供，<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>。游戏中调整了大小、朝向和起落架显示。</p><p>Su-30：本项目原创简化模型（CC0），依据双发、双垂尾与前翼轮廓制作。</p><p>${AIRCRAFT.filter(aircraft => !['a380', 'su30'].includes(aircraft.id)).map(aircraft => aircraft.name).join('、')}：本项目原创架空机型与简化 GLB，采用 CC0。</p></details>
     </aside>
@@ -173,6 +173,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   let flight = createFlight(), loaded = false, disposed = false, graphicsLost = false, returning = false, loadVersion = 0;
   let accumulator = 0, uiTime = 0, dirty = true, stickPointer = null, stickPitch = 0, stickRoll = 0, noticeTimer;
   let frameLimit = 60, lastExterior = 0;
+  let pendingDeparture = null;
   let cameraDrag = null, suppressCockpitClick = false;
   const listen = (target, event, callback, options = {}) => target.addEventListener(event, callback, { ...options, signal: listeners.signal });
   const disable = (element, disabled) => { if (element.disabled !== disabled) element.disabled = disabled; };
@@ -460,6 +461,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       slider.value = world.environmentSettings[key] / 1000;text(output, `${slider.value} km`);
     }
     $('[data-setting="ground-detail"]').value = world.environmentSettings.groundDetail;
+    $('[data-setting="cloud-steps"]').value = world.environmentSettings.cloudSteps;
   }
 
   function showPanel() {
@@ -492,10 +494,11 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     if (graphicsLost) return;
     host.world.airports.selectAircraft(id);
     const version = ++loadVersion;
+    pendingDeparture = null;
     physicsSettings = aircraftSettings[id];
-    flight = createFlight(id, false, { airport: $('[data-setting="airport"]').value, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); loaded = false; returning = false;
+    flight = createFlight(id, false, { airport: $('[data-setting="airport"]').value, departure: initialBoarding ? 'apron' : 'runway', runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); loaded = false; returning = false;
     syncPhysics();
-    text(loadStatus, '正在载入飞机模型…'); loadStatus.dataset.state = 'loading';
+    text(loadStatus, '正在载入飞机模型并准备座舱着色器…'); loadStatus.dataset.state = 'loading';
     action('runway').disabled = true; action('airborne').disabled = true; action('apron').disabled = true;
     for (const button of root.querySelectorAll('[data-aircraft]')) button.setAttribute('aria-pressed', String(button.dataset.aircraft === id));
     text(values.aircraft, flight.aircraft.name);
@@ -505,8 +508,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     try {
       const installed = await world.setAircraft(flight.aircraft);
       if (disposed || graphicsLost || version !== loadVersion || !installed) return;
-      loaded = true; text(loadStatus, '飞机就绪 · 选择跑道起飞或直接空中试飞'); loadStatus.dataset.state = 'ready';
-      action('runway').disabled = false; action('airborne').disabled = false; action('apron').disabled = false; action('retry').hidden = true; dirty = true;
+      loaded = true; action('retry').hidden = true; dirty = true;
       if (initialBoarding) { initialBoarding = false; start(false, true); chooseCamera(2); }
     } catch (error) {
       if (disposed || graphicsLost || version !== loadVersion || error.name === 'AbortError') return;
@@ -519,12 +521,28 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   function start(airborne, apron = false) {
     if (!loaded || graphicsLost) return;
     const preflight = flight; touchInput.precision = false;
-    flight = createFlight(flight.aircraft.id, airborne, { airport: flight.airport.id, departure: apron ? 'apron' : 'runway', runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); flight.status = 'running'; returning = false;
+    flight = createFlight(flight.aircraft.id, airborne, { airport: flight.airport.id, departure: apron ? 'apron' : 'runway', runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); flight.status = 'ready'; returning = false;
     if (!airborne && !apron) restoreAircraftPreflight(flight, preflight);
+    pendingDeparture = { airborne, apron };
     accumulator = 0; world.setCameraMode(world.cameraMode);
     unlockAudio(); showPanel();
+  }
+
+  function prepareDeparture() {
+    if (!loaded || flight.status !== 'ready' || graphicsLost) return;
+    const status = host.preflightStatus(flight);
+    const message = status.error ? '地图加载失败，请返回地面重新进入；可在诊断日志查看原因。' : !status.ready
+      ? `正在预加载地图 · 近景 ${status.completed} / ${status.total} · 远景${status.distant ? '已就绪' : '准备中'}`
+      : '飞机与地图已就绪 · 出发区域已确认加载，前方地形将持续预加载';
+    const state = status.error ? 'error' : status.ready ? 'ready' : 'loading';
+    if (loadStatus.dataset.state !== state) { loadStatus.dataset.state = state; dirty = true; }
+    text(loadStatus, message);
+    for (const name of ['runway', 'airborne', 'apron']) action(name).disabled = !status.ready || !!status.error;
+    if (!pendingDeparture || !status.ready || status.error) return;
+    const { airborne, apron } = pendingDeparture; pendingDeparture = null;
+    flight.status = 'running'; accumulator = 0; unlockAudio(); showPanel();
     const help = aircraftControlHelp(controlSettings);
-    notify(apron ? '机坪已登机 · N 释放驻车 · 低油门滑行 · Q / E 转向 · 进入跑道再加速' : airborne ? `已进入空中 · ${help.pitch} 升降 · V 进入驾驶舱` : `油门推满，达到 ${Math.round(aircraftEnvelope(flight).takeoff * 3.6)} km/h 后按 ${help.pitch.split(' / ')[0]} 拉升`);
+    notify(apron ? '机坪已登机 · 地图已准备 · N 释放驻车 · 低油门滑行 · Q / E 转向' : airborne ? `地图已准备 · 已进入空中 · ${help.pitch} 升降 · V 进入驾驶舱` : `地图已准备 · 油门推满，达到 ${Math.round(aircraftEnvelope(flight).takeoff * 3.6)} km/h 后按 ${help.pitch.split(' / ')[0]} 拉升`);
   }
 
   function pause(onlyPause = false) {
@@ -764,14 +782,17 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     world.setEnvironment({ [key]: Number(slider.value) * 1000 });text(output, `${slider.value} km`);dirty = true;
   });
   listen($('[data-setting="ground-detail"]'), 'change', event => { world.setEnvironment({ groundDetail: event.target.value });dirty = true; });
+  listen($('[data-setting="cloud-steps"]'), 'change', event => { world.setEnvironment({ cloudSteps: Number(event.target.value) });dirty = true; });
   listen($('[data-setting="runway"]'), 'change', event => {
     if (flight.status !== 'ready') return;
+    pendingDeparture = null; initialBoarding = false;
     const preflight = flight;
     flight = createFlight(flight.aircraft.id, false, { airport: flight.airport.id, runwayDirection: event.target.value, physics: physicsSettings, systems: systemSettings });
     restoreAircraftPreflight(flight, preflight);world.resetCamera = true;dirty = true;
   });
   listen($('[data-setting="airport"]'), 'change', event => {
     if (flight.status !== 'ready') return;
+    pendingDeparture = null; initialBoarding = false;
     const preflight = flight;
     world.setAirport(event.target.value);
     flight = createFlight(flight.aircraft.id, false, { airport: event.target.value, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings });
@@ -779,6 +800,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   });
   listen($('[data-setting="runway-strip"]'), 'change', () => {
     if (flight.status !== 'ready') return;
+    pendingDeparture = null; initialBoarding = false;
     const preflight = flight;
     flight = createFlight(flight.aircraft.id, false, { airport: flight.airport.id, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings });
     restoreAircraftPreflight(flight, preflight); world.resetCamera = true; dirty = true;
@@ -880,6 +902,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     if (disposed) return;
     dt = Math.max(0, Math.min(dt, .1));
     if (!document.hidden) {
+      prepareDeparture();
       if (flight.status === 'running') {
         touchInput.pitch = stickPitch; touchInput.roll = stickRoll;
         touchInput.yaw = Number(holdControls['yaw-right'].active) - Number(holdControls['yaw-left'].active);

@@ -78,6 +78,16 @@ it('preloads along the driving direction even when the camera looks the other wa
   world.dispose();
 });
 
+it('keeps flight terrain centered on the aircraft and streams before distant roads finish', () => {
+  const world = new World(new Scene(), 'FLIGHT-CENTER'), camera = new PerspectiveCamera();
+  world.resetCamera(camera); camera.position.y = 6000;
+  const update = vi.spyOn(world.chunks, 'update');
+  world.update(camera, false, 0, { x: 4608, y: 700, z: 228 }, true);
+  const [x, z, , corridor] = update.mock.calls.at(-1)!;
+  expect([x, z]).toEqual([4608, 228]); expect(corridor).not.toBeNull();
+  world.dispose();
+});
+
 it('pauses and cancels service searches, visits consecutive sites and replays the first location', () => {
   const scene = new Scene(), world = new World(scene, 'CLOUD-ROAD-001'), camera = new PerspectiveCamera();
   world.resetCamera(camera);

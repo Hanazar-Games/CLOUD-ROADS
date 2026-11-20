@@ -7,6 +7,13 @@ import { BiomeSystem } from '../src/biome/BiomeSystem';
 import { RoadCorridor } from '../src/road/RoadCorridor';
 
 describe('seeded terrain', () => {
+  it('skips airborne vegetation generation without changing terrain or its collision surface', () => {
+    const terrain = new TerrainGenerator('CLOUD-ROAD-001');
+    const ground = terrain.generate(0, 0, 16), airborne = terrain.generate(0, 0, 16, [], [], false);
+    expect(ground.vegetation.length).toBeGreaterThan(0);
+    expect(airborne.vegetation.length).toBe(0);
+    for (const key of ['positions', 'normals', 'colors'] as const) expect(airborne[key]).toEqual(ground[key]);
+  });
   it('reproduces PRNG streams and separates seeds', () => {
     const stream = (seed: string) => {
       const rng = createRng(hashSeed(seed));

@@ -5,14 +5,14 @@ import type { createAircraftFlight } from './aircraft-flight.js';
 import { mountAviation } from './aviation.js';
 import { AudioEngine } from './audio.js';
 import { FlightHorizon } from './FlightHorizon';
-import { navigateAirport } from './airport.js';
+import { airportHeight, navigateAirport } from './airport.js';
 
 type Flight = ReturnType<typeof createAircraftFlight>;
-interface Environment { viewDistance: number; detailDistance: number; groundDetail: string }
+interface Environment { viewDistance: number; detailDistance: number; groundDetail: string; cloudSteps: number }
 interface AviationHost {
   scene: Scene; camera: PerspectiveCamera; renderer: WebGLRenderer; world: World; audio: AudioSystem;
   resize(width: number, height: number): void;
-  render(dt: number, running: boolean, distance: number, overview: boolean): void;
+  render(dt: number, running: boolean, distance: number, overview: boolean, cloudSteps: number): void;
   onExit(): void;
   departure?: { aircraft: string; airport: string; apron: boolean };
 }
@@ -22,7 +22,7 @@ export function createAviationSession(host: AviationHost) {
   const sound = new AudioEngine(); sound.enabled = audio.enabled; sound.masterVolume = audio.masterVolume;
   sound.setVolume('music', audio.musicVolume); sound.setVolume('sfx', audio.sfxVolume);
   const saved = { radius: world.chunks.viewRadius, detail: world.detailDistance };
-  let distance = 30000, disposed = false;
+  let distance = 30000, cloudSteps = 12, highDetail = false, disposed = false, worldTime = .1;
   const unlock = () => { sound.setBackground(document.hidden || !document.hasFocus()); void sound.unlock(); };
   const session = mountAviation({
     audio: sound, unlockAudio: unlock, onToggleAudio: () => { sound.toggle(); unlock(); },
@@ -30,17 +30,30 @@ export function createAviationSession(host: AviationHost) {
       ...host,
       configureEnvironment(settings: Environment) {
         distance = settings.viewDistance;
-        const radius = settings.groundDetail === 'high' ? 12 : settings.groundDetail === 'balanced' ? 8 : 6;
-        world.chunks.setViewRadius(Math.max(radius, settings.detailDistance > 8000 ? 12 : settings.detailDistance > 4000 ? 8 : 6));
+        cloudSteps = settings.cloudSteps;
+        highDetail = settings.groundDetail === 'high';
+        world.chunks.setViewRadius(highDetail ? 8 : settings.groundDetail === 'balanced' ? 6 : 4);
         world.detailDistance = settings.detailDistance / 4500;
       },
-      updateWorld(flight: Flight) {
+      preflightStatus(flight: Flight) {
+        const x = flight.airport.worldX + flight.x, z = flight.airport.worldZ + flight.z;
+        const terrain = world.chunks.readyAt(x, z), distant = horizon.readyAt(x, z, distance);
+        return { ...terrain, ready: terrain.ready && distant, distant, error: terrain.error || horizon.error };
+      },
+      updateWorld(flight: Flight, dt: number) {
         navigateAirport(flight, world.airports.sites);
         const x = flight.airport.worldX + flight.x, z = flight.airport.worldZ + flight.z;
-        world.update(host.camera, false, flight.heading, { x, y: flight.y, z });
-        horizon.update(host.camera.position.x + world.origin.x, host.camera.position.z + world.origin.z, distance);
+        world.chunks.setFlightStreaming(flight.y - airportHeight(flight.x, flight.z, flight.airport), flight.speed, highDetail);
+        worldTime += dt;
+        const streamOnly = worldTime < .1;
+        if (!streamOnly) worldTime = 0;
+        world.update(host.camera, false, flight.heading, { x, y: flight.y, z }, streamOnly);
+        horizon.update(x, z, distance);
       },
-      renderWorld(dt: number, flight: Flight, cameraMode: number) { host.render(dt, flight.status === 'running', distance, cameraMode === 8); },
+      renderWorld(dt: number, flight: Flight, cameraMode: number) {
+        host.render(dt, flight.status === 'running', distance, cameraMode === 8, cloudSteps);
+        horizon.confirmRendered();
+      },
     },
     onExit() {
       if (disposed) return;
@@ -48,6 +61,7 @@ export function createAviationSession(host: AviationHost) {
       audio.masterVolume = sound.masterVolume; audio.sfxVolume = sound.volumes.sfx; audio.musicVolume = sound.volumes.music;
       if (audio.enabled !== sound.enabled) audio.toggle();
       sound.dispose(); horizon.dispose();
+      world.chunks.setFlightStreaming();
       world.chunks.setViewRadius(saved.radius); world.detailDistance = saved.detail;
       host.onExit();
     },

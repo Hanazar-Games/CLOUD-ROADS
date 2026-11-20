@@ -7,9 +7,10 @@ export interface ChunkRequest {
   x: number;
   z: number;
   cells: TerrainCells;
+  vegetation?: boolean;
 }
 
-export function planChunks(x: number, z: number, forward: { x: number; z: number }, radius = VIEW_RADIUS): ChunkRequest[] {
+export function planChunks(x: number, z: number, forward: { x: number; z: number }, radius = VIEW_RADIUS, maxCells: TerrainCells = 64, fineRadius = 2): ChunkRequest[] {
   const centerX = Math.floor(x / CHUNK_SIZE), centerZ = Math.floor(z / CHUNK_SIZE);
   const requests: (ChunkRequest & { priority: number })[] = [];
   for (let dz = -radius; dz <= radius; dz++) {
@@ -18,7 +19,7 @@ export function planChunks(x: number, z: number, forward: { x: number; z: number
       const cx = centerX + dx, cz = centerZ + dz;
       requests.push({
         key: `${cx},${cz}`, x: cx, z: cz,
-        cells: ring <= 2 ? 64 : ring <= 4 ? 16 : 8,
+        cells: Math.min(maxCells, ring <= fineRadius ? 64 : ring <= 4 ? 16 : 8) as TerrainCells,
         priority: Math.hypot(dx, dz) * 10 - (dx * forward.x + dz * forward.z) * 3,
       });
     }

@@ -17,7 +17,8 @@ test('aircraft GLBs and distant mountain workers load from the Pages project pat
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready', { timeout: 60000 });
   await page.locator('[data-aircraft="su30"]').click();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
-  await page.locator('[data-action="airborne"]').click(); await page.keyboard.press('KeyV');
+  await page.locator('[data-action="airborne"]').click();
+  await expect(page.locator('.av-panel')).toBeHidden(); await page.keyboard.press('KeyV');
   await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
   expect(paths.some(path => /^\/CLOUD-ROADS\/assets\/a380-.+\.glb$/.test(path))).toBe(true);
   expect(paths.some(path => /^\/CLOUD-ROADS\/assets\/su30-.+\.glb$/.test(path))).toBe(true);

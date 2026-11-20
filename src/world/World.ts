@@ -173,14 +173,19 @@ export class World {
     camera.position.set(128, this.height.sample(128, 128) + 450, 128);
   }
 
-  update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }): void {
-    if (this.origin.rebase(camera.position)) this.chunks.setOrigin(this.origin.x, this.origin.z);
+  update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }, streamOnly = false): void {
+    const rebased = this.origin.rebase(camera.position);
+    if (rebased) this.chunks.setOrigin(this.origin.x, this.origin.z);
     this.airports.update(this.origin, this.detailDistance, { x: camera.position.x + this.origin.x, y: camera.position.y, z: camera.position.z + this.origin.z });
     this.season.setOrigin(this.origin.x, this.origin.z);
     camera.getWorldDirection(this.forward);
     if (travelHeading !== undefined) this.forward.set(Math.sin(travelHeading), 0, -Math.cos(travelHeading));
     const x = camera.position.x + this.origin.x, z = camera.position.z + this.origin.z;
     const position = travelPosition ?? { x, y: camera.position.y, z };
+    if (streamOnly && !rebased) {
+      this.chunks.update(position.x, position.z, this.forward, this.corridor);
+      return;
+    }
     this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
     if (this.roadReady && !this.garageEntrance && this.garagePlacementVersion !== this.network.version) {
       this.garagePlacementVersion = this.network.version;
@@ -216,7 +221,7 @@ export class World {
       this.renderX = position.x; this.renderZ = position.z;
       this.prepareRoutes(position.x, position.z);
     }
-    this.chunks.update(x, z, this.forward, this.roadReady ? this.corridor : null);
+    this.chunks.update(position.x, position.z, this.forward, travelPosition || this.roadReady ? this.corridor : null);
     this.roadSample = this.road.nearest(position.x, position.z);
     const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < this.chunks.viewRadius * 256 + 1500;
     this.roadDebug.update({ version: this.corridorVersion, segments: this.road.segments, samples: this.road.samples }, this.origin.x, this.origin.z, nearRoute);

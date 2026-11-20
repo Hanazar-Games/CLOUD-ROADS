@@ -5,7 +5,7 @@ import { disposeAircraftObject, loadAircraftModel, updateAircraftGearModel } fro
 import { createAircraftLights, updateAircraftLights } from './aircraft-lights.js';
 import { aircraftElectrical } from './aircraft-systems.js';
 
-export const AVIATION_ENVIRONMENT_DEFAULTS = Object.freeze({ viewDistance: 30000, detailDistance: 4500, groundDetail: 'low' });
+export const AVIATION_ENVIRONMENT_DEFAULTS = Object.freeze({ viewDistance: 30000, detailDistance: 4500, groundDetail: 'low', cloudSteps: 12 });
 
 const UP = new THREE.Vector3(0, 1, 0);
 const RIGHT = new THREE.Vector3(1, 0, 0);
@@ -76,7 +76,7 @@ export class AviationWorld {
 
   setEnvironment(settings = {}) {
     const next = { ...AVIATION_ENVIRONMENT_DEFAULTS, ...this.environmentSettings, ...settings };
-    for (const [key, low, high] of [['viewDistance', 30000, 160000], ['detailDistance', 1500, 12000]]) {
+    for (const [key, low, high] of [['viewDistance', 30000, 160000], ['detailDistance', 1500, 12000], ['cloudSteps', 6, 32]]) {
       next[key] = Number.isFinite(next[key]) ? Math.max(low, Math.min(high, next[key])) : AVIATION_ENVIRONMENT_DEFAULTS[key];
     }
     if (!['low', 'balanced', 'high'].includes(next.groundDetail)) next.groundDetail = 'low';
@@ -104,6 +104,11 @@ export class AviationWorld {
     COCKPIT_SWITCHES.forEach((control, index) => context.fillText(control.label, (index + .5) * labels.width / COCKPIT_SWITCHES.length, labels.height / 2));
     const labelsTexture = new THREE.CanvasTexture(labels);labelsTexture.colorSpace = THREE.SRGBColorSpace;
     this.cockpit = createAircraftCockpit(aircraft, this.cockpitTexture, labelsTexture); this.cockpit.visible = false; this.cockpitScene.add(this.cockpit);
+    const cockpit = this.cockpit;
+    await this.renderer.compileAsync(model, this.camera, this.scene);
+    if (this.disposed || controller !== this.loadController) return false;
+    await this.renderer.compileAsync(cockpit, this.cockpitCamera, this.cockpitScene);
+    if (this.disposed || controller !== this.loadController) return false;
     this.displayTime = 1; this.lookAngle = 0; this.lookTarget = 0;
     return true;
   }

@@ -81,7 +81,7 @@ test('airborne cockpit controls, precision input and pause remain isolated from 
   await page.goto('/?seed=CLOUD-FLIGHT-CONTROLS');
   await openFlightSettings(page); await page.locator('[data-aircraft="su30"]').click();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready');
-  await page.locator('[data-action="airborne"]').click(); await page.keyboard.press('KeyV');
+  await page.locator('[data-action="airborne"]').click(); await expect(page.locator('.av-panel')).toBeHidden(); await page.keyboard.press('KeyV');
   await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
   await page.keyboard.press('KeyI');
   const panel = page.locator('#av-systems-panel'); await expect(panel).toBeVisible();

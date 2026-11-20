@@ -11,7 +11,7 @@ import { seasonMaterial } from '../season/SeasonMaterial';
 
 const POOL_LIMITS: Record<TerrainCells, number> = { 64: 25, 16: 56, 8: 208 };
 interface TerrainRequest extends ChunkRequest { signature: string }
-const matches = (a: TerrainRequest | undefined, b: TerrainRequest): boolean => a?.cells === b.cells && a.signature === b.signature;
+const matches = (a: TerrainRequest | undefined, b: TerrainRequest): boolean => a?.cells === b.cells && a.signature === b.signature && (a.vegetation !== false) === (b.vegetation !== false);
 
 export class ChunkManager {
   private readonly terrainOrigin = new Vector2();
@@ -36,6 +36,9 @@ export class ChunkManager {
   private completed = 0;
   private radius = VIEW_RADIUS;
   private preload = 1;
+  private flightAhead = 0;
+  private maxCells: TerrainCells = 64;
+  private fineRadius = 2;
   uploadBudget = 2;
   uploadLimit = 2;
   error = '';
@@ -46,6 +49,29 @@ export class ChunkManager {
   }
 
   get viewRadius(): number { return this.radius; }
+
+  setFlightStreaming(altitude?: number, speed = 0, highDetail = false): void {
+    let cells: TerrainCells = 64;
+    if (altitude !== undefined) {
+      if (altitude > (this.maxCells === 8 ? 700 : 1000)) cells = 8;
+      else if (altitude > (this.maxCells < 64 ? 150 : 300)) cells = 16;
+    }
+    const ahead = altitude === undefined ? 0 : Math.max(2, Math.min(16, Math.ceil(Math.max(0, speed) * 8 / CHUNK_SIZE)));
+    const fine = altitude === undefined || highDetail ? 2 : 1;
+    if (cells !== this.maxCells || ahead !== this.flightAhead || fine !== this.fineRadius) {
+      this.maxCells = cells; this.flightAhead = ahead; this.fineRadius = fine; this.center = '';
+    }
+  }
+
+  readyAt(x: number, z: number) {
+    const cx = Math.floor(x / CHUNK_SIZE), cz = Math.floor(z / CHUNK_SIZE);
+    let completed = 0;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const key = `${cx + dx},${cz + dz}`, desired = this.desired.get(key);
+      if (desired && matches(this.applied.get(key), desired)) completed++;
+    }
+    return { ready: completed === 9, completed, total: 9, error: this.error };
+  }
 
   setSeason(season: SeasonState): void {
     seasonMaterial(this.material, season, 'terrain');
@@ -73,18 +99,23 @@ export class ChunkManager {
     if (center !== this.center || direction !== this.direction || corridor !== this.plannedRoad) {
       this.center = center;
       this.direction = direction; this.plannedRoad = corridor;
-      const prepare = (requests: ChunkRequest[]): TerrainRequest[] => requests.map(request => ({ ...request,
-        cells: corridor?.needsDetail(request.x, request.z) ? 64 : request.cells, signature: corridor?.signature(request.x, request.z) ?? '' }));
-      this.plan = prepare(planChunks(x, z, forward, this.viewRadius));
+      const prepare = (requests: ChunkRequest[]): TerrainRequest[] => requests.map(request => ({ ...request, vegetation: this.maxCells === 64,
+        cells: this.maxCells === 64 && corridor?.needsDetail(request.x, request.z) ? 64 : request.cells, signature: corridor?.signature(request.x, request.z) ?? '' }));
+      this.plan = prepare(planChunks(x, z, forward, this.viewRadius, this.maxCells, this.fineRadius));
       this.desired = new Map(this.plan.map((request) => [request.key, request]));
       const angle = direction * Math.PI / 4;
       const next = new Map<string, TerrainRequest>();
-      if (corridor) for (let step = 1; step <= this.preload; step++) {
-        for (const request of prepare(planChunks(x + Math.round(Math.sin(angle)) * CHUNK_SIZE * step, z - Math.round(Math.cos(angle)) * CHUNK_SIZE * step, forward, this.viewRadius)))
+      const aheadX = this.flightAhead ? Math.sin(angle) : Math.round(Math.sin(angle)), aheadZ = this.flightAhead ? Math.cos(angle) : Math.round(Math.cos(angle));
+      if (corridor) for (let step = 1; step <= (this.flightAhead || this.preload); step++) {
+        for (const request of prepare(planChunks(x + aheadX * CHUNK_SIZE * step, z - aheadZ * CHUNK_SIZE * step, forward, this.flightAhead ? 1 : this.viewRadius, this.maxCells, this.fineRadius)))
           if (!matches(this.desired.get(request.key), request) && !next.has(request.key) && next.size < 128) next.set(request.key, request);
       }
       this.ahead = next;
-      this.queue = [...this.plan, ...this.ahead.values()];
+      if (this.flightAhead) {
+        const core = this.plan.filter(request => Math.max(Math.abs(request.x - Math.floor(x / CHUNK_SIZE)), Math.abs(request.z - Math.floor(z / CHUNK_SIZE))) <= 2);
+        const remaining = this.plan.filter(request => !core.includes(request)), ahead = [...this.ahead.values()];
+        this.queue = [...core, ...ahead.slice(0, 18), ...remaining, ...ahead.slice(18)];
+      } else this.queue = [...this.plan, ...this.ahead.values()];
       for (let i = this.ready.length - 1; i >= 0; i--) if (!matches(this.desired.get(this.ready[i].request.key), this.ready[i].request)) this.ready.splice(i, 1);
       for (const [key, result] of this.prefetched) {
         if (matches(this.desired.get(key), result.request)) { this.ready.push(result); this.prefetched.delete(key); }
@@ -121,7 +152,7 @@ export class ChunkManager {
       if (matches(this.applied.get(request.key), request) || this.pending.has(request.key) || matches(this.prefetched.get(request.key)?.request, request)
         || this.ready.some((result) => result.request.key === request.key)) continue;
       this.pending.set(request.key, request);
-      const chunkRequest: ChunkRequest = { key: request.key, x: request.x, z: request.z, cells: request.cells };
+      const chunkRequest: ChunkRequest = { key: request.key, x: request.x, z: request.z, cells: request.cells, vegetation: request.vegetation };
       void this.backend.generate(chunkRequest, this.seed, corridor.forChunk(request.x, request.z), corridor.services.forChunk(request.x, request.z)).then((data) => {
         this.pending.delete(request.key);
         if (this.disposed) return;

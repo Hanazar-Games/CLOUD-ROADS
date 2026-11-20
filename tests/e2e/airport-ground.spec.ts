@@ -18,6 +18,7 @@ test('teleports from the road world, changes the parked aircraft and boards from
   expect(walking[0]).toBeGreaterThan(4000);
   const position = await page.locator('[data-metric="Walking position"]').textContent();
   await page.locator('#airport-board').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
   await expect(page.locator('#aviation')).toHaveClass(/av-cockpit/);
   await expect(page.locator('[data-value="aircraft"]')).toContainText('Su-30');
   await expect(page.locator('[data-value="phase"]')).toContainText('TAXI');

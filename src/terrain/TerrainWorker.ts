@@ -14,7 +14,7 @@ scope.onmessage = ({ data: { id, seed, request, road, services, options } }) => 
       key = requestedKey;
       generator = new TerrainGenerator(seed, options);
     }
-    const data = generator.generate(request.x, request.z, request.cells, road, services);
+    const data = generator.generate(request.x, request.z, request.cells, road, services, request.vegetation);
     scope.postMessage({ id, data }, [data.positions.buffer, data.normals.buffer, data.colors.buffer, data.vegetation.buffer, ...data.indices ? [data.indices.buffer] : []]);
   } catch (error) {
     scope.postMessage({ id, error: error instanceof Error ? error.message : String(error) }, []);

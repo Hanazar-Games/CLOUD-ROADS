@@ -28,7 +28,7 @@ export class TerrainGenerator {
     this.biomes = new BiomeSystem(seed, options.terrain);
   }
 
-  generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = [], services: readonly ServiceGround[] = []): TerrainData {
+  generate(cx: number, cz: number, cells: TerrainCells, road: readonly CorridorEdge[] = [], services: readonly ServiceGround[] = [], plantsEnabled = true): TerrainData {
     const coordinates = layouts[cells].coordinates;
     const length = coordinates.length / 2 * 3;
     const positions = new Float32Array(length);
@@ -54,7 +54,7 @@ export class TerrainGenerator {
       this.biomes.sample(x, z, y, 4 / magnitude, biome);
       colors.set(biome.color, offset);
     }
-    const plants = generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity);
+    const plants = plantsEnabled ? generateVegetation(this.seed, cx, cz, cells, positions, corridor, this.biomes, this.options.vegetationDensity) : new Float32Array(0);
     let count = 0;
     for (let i = 0; i < plants.length; i += 7) if (!airportClearance(this.height.airports, cx * CHUNK_SIZE + plants[i], cz * CHUNK_SIZE + plants[i + 2])) {
       plants.copyWithin(count, i, i + 7); count += 7;

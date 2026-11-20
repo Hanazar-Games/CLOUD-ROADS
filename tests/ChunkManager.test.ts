@@ -18,13 +18,57 @@ class DeferredTerrain implements TerrainBackend {
   dispose(): void { this.disposed = true; }
   async complete(): Promise<void> {
     const jobs = this.jobs.splice(0);
-    for (const job of jobs) job.resolve(new TerrainGenerator('test').generate(job.request.x, job.request.z, job.request.cells));
+    for (const job of jobs) job.resolve(new TerrainGenerator('test').generate(job.request.x, job.request.z, job.request.cells, [], [], job.request.vegetation));
     await Promise.resolve();
     await Promise.resolve();
   }
 }
 
 describe('ChunkManager lifecycle', () => {
+  it('uses inexpensive terrain and no vegetation in cruise, with hysteresis before descent', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.setViewRadius(3); manager.uploadBudget = Infinity;
+    manager.setFlightStreaming(1500, 220);
+    manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+    expect(backend.jobs.every(job => job.request.cells === 8 && job.request.vegetation === false)).toBe(true);
+    await backend.complete();
+    manager.setFlightStreaming(850, 220);
+    manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+    expect(backend.jobs.every(job => job.request.cells === 8)).toBe(true);
+    await backend.complete();
+    manager.setFlightStreaming(400, 90);
+    manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+    await backend.complete();
+    manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+    expect(backend.jobs.some(job => job.request.cells === 16)).toBe(true);
+    manager.dispose();
+  });
+
+  it('prefetches a bounded flight corridor eight seconds ahead before finishing distant tiles', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.setViewRadius(4); manager.uploadBudget = Infinity;
+    manager.setFlightStreaming(1500, 250);
+    for (let i = 0; i < 25; i++) { manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor); await backend.complete(); }
+    expect(manager.stats.prefetched).toBeGreaterThan(0);
+    for (let i = 0; i < 100; i++) { manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor); await backend.complete(); }
+    expect(manager.readyAt(128, -1900).ready).toBe(false);
+    expect(manager.stats.prefetched).toBeLessThanOrEqual(128);
+    for (let i = 0; i < 12; i++) { manager.update(128, -1900, { x: 0, z: -1 }, emptyCorridor); await backend.complete(); }
+    expect(manager.readyAt(128, -1900).ready).toBe(true);
+    manager.setFlightStreaming(1500, 1000);
+    const diagonal: ChunkRequest[] = [];
+    for (let i = 0; i < 100; i++) {
+      manager.update(128, 128, { x: Math.SQRT1_2, z: -Math.SQRT1_2 }, emptyCorridor);
+      diagonal.push(...backend.jobs.map(job => job.request)); await backend.complete();
+    }
+    expect(diagonal.every(request => Math.hypot(request.x, request.z) * 256 < 4600)).toBe(true);
+    manager.setFlightStreaming();
+    manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+    expect(manager.readyAt(128, 128).ready).toBe(false);
+    expect(backend.jobs.some(job => job.request.cells === 64 && job.request.vegetation !== false)).toBe(true);
+    manager.dispose();
+  });
+
   it('uploads the highest priority result first even when workers complete out of order', async () => {
     const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
     manager.uploadLimit = 1; manager.uploadBudget = Infinity;
