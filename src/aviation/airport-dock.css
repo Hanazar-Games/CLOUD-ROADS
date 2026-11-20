@@ -11,6 +11,7 @@
 #airport-dock button:focus-visible, #airport-dock select:focus-visible { outline: 2px solid #9af5db; outline-offset: 3px; }
 #airport-dock #airport-board { background: #24665b; }
 #app > .masthead { z-index: 4; }
+#app > #debug { z-index: 5; }
 @media (max-width: 620px) { #airport-dock { right: 12px; bottom: 190px; width: 270px; padding: 12px; } #airport-dock > strong { font-size: 15px; } #airport-dock p { font-size: 10px; } }
 @media (max-height: 650px) { #airport-dock { bottom: 80px; padding: 10px 12px; } #airport-dock p:last-child { display: none; } }
 @media (max-height: 500px) { #airport-dock { width: 270px; } #airport-dock > small, #airport-dock p, #airport-dock label { display: none; } #airport-dock > strong { font-size: 13px; margin-bottom: 8px; } #airport-dock select { min-height: 32px; padding: 6px; } #airport-dock button { min-height: 34px; } }

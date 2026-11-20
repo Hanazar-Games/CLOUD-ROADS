@@ -8,6 +8,7 @@ import { setText as text, setAttribute, setHidden } from './hud.js';
 import { SYSTEM_DEFAULTS, SYSTEM_LIMITS, AUTOBRAKE_MODES, setSystemSettings, setAircraftTrim, setAutopilot, setAutopilotTarget, toggleEngine, toggleParkingBrake, autopilotAvailability, autothrottleAvailability, setAutothrottle, setAutothrottleTarget, setAircraftThrottle, reverseThrustAvailability, toggleReverseThrust, setAutobrake, commandGoAround, AIRCRAFT_SYSTEM_SWITCHES, aircraftElectrical, aircraftSystemAvailability, toggleAircraftSystem, updateAircraftElectrical, engineStartAvailability, restoreAircraftPreflight } from './aircraft-systems.js';
 
 const cameraNames = AVIATION_CAMERAS;
+const soundLayers = [['engine', '发动机与喷流'], ['wind', '风噪与气流'], ['runway', '跑道滚动与接地'], ['mechanical', '座舱开关与机械']];
 const viewFields = [
   ['cockpitFov', '驾驶舱视场角', 40, 100, 1, 1, '°'],
   ['exteriorFov', '外部视场角', 40, 100, 1, 1, '°'],
@@ -136,7 +137,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       <details class="av-help av-environment-settings"><summary>远景视距与地景 LOD</summary>
       ${environmentFields.map(([key, label, min, max, step]) => `<label>${label}<output data-environment-value="${key}"></output><input data-environment="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${AVIATION_ENVIRONMENT_DEFAULTS[key] / 1000}" aria-label="飞机${label}，千米"></label>`).join('')}
       <label>地面模型精度<select data-setting="ground-detail"><option value="low">低模 · 默认省性能</option><option value="balanced">均衡 · 中等细节</option><option value="high">精细 · 近景高细节</option></select></label><label>远景云层采样<select data-setting="cloud-steps"><option value="6">6 步 · 极省电</option><option value="8">8 步 · 省电</option><option value="12">12 步 · 默认</option><option value="20">20 步 · 精细</option><option value="32">32 步 · 高精细</option></select></label><button data-action="environment-reset">恢复默认地景</button><p>默认远景 30 km，可调 30–160 km。出发前确认近景与远景已加载；飞行中按航向和速度提前准备约 8 秒地形，最多前探 4 km。高空地形使用简模并省略细小植被，下降后恢复；切换镜头不移动地面加载中心。云层采样越少越省性能，与地面设置独立。低模不影响飞机、座舱和物理碰撞。</p></details>
-      <details class="av-help av-audio-settings"><summary>画面与声音</summary><label>渲染比例上限<select data-setting="quality"><option value="0.5">0.5× · 极省电</option><option value="0.75">0.75× · 省电</option><option value="1">1× · 原生</option><option value="1.25">1.25× · 标准</option><option value="1.75">1.75× · 精细</option><option value="2">2× · 高精细</option></select></label><label>画面帧率上限<select data-setting="frame-limit"><option value="30">30 FPS · 省电</option><option value="45">45 FPS</option><option value="60" selected>60 FPS · 标准</option><option value="90">90 FPS</option><option value="120">120 FPS</option><option value="0">跟随屏幕刷新率</option></select></label><label>舱内仪表刷新<select data-setting="display-hz"><option value="5">5 Hz · 省电</option><option value="10" selected>10 Hz · 标准</option><option value="20">20 Hz · 精细</option></select></label><p>渲染比例不超过设备像素比。降低画面帧率或舱内仪表刷新可减少绘制负担，飞行物理与输入继续独立更新。</p><label>背景音乐 <output data-volume-value="music"></output><input data-volume="music" type="range" min="0" max="100" aria-label="飞机背景音乐音量"></label><label>引擎与音效 <output data-volume-value="sfx"></output><input data-volume="sfx" type="range" min="0" max="100" aria-label="飞机引擎与音效音量"></label><p data-value="audio-status" role="status" aria-live="polite"></p><button data-action="audio-retry" hidden>重新启用声音</button><small>暂停与离开页面时停止声音；失速警报会暂时降低音乐音量。声音设置与山路共用，仅保留在当前页面；画面和飞行设置仅保留在本次飞机模式。机场尺寸与飞行参数为游戏设计，驾驶舱为原创简化内饰。</small></details>
+      <details class="av-help av-audio-settings"><summary>画面与声音</summary><label>渲染比例上限<select data-setting="quality"><option value="0.5">0.5× · 极省电</option><option value="0.75">0.75× · 省电</option><option value="1">1× · 原生</option><option value="1.25">1.25× · 标准</option><option value="1.75">1.75× · 精细</option><option value="2">2× · 高精细</option></select></label><label>画面帧率上限<select data-setting="frame-limit"><option value="30">30 FPS · 省电</option><option value="45">45 FPS</option><option value="60" selected>60 FPS · 标准</option><option value="90">90 FPS</option><option value="120">120 FPS</option><option value="0">跟随屏幕刷新率</option></select></label><label>舱内仪表刷新<select data-setting="display-hz"><option value="5">5 Hz · 省电</option><option value="10" selected>10 Hz · 标准</option><option value="20">20 Hz · 精细</option></select></label><p>渲染比例不超过设备像素比。降低画面帧率或舱内仪表刷新可减少绘制负担，飞行物理与输入继续独立更新。</p><label>背景音乐 <output data-volume-value="music"></output><input data-volume="music" type="range" min="0" max="100" aria-label="飞机背景音乐音量"></label><label>全部飞行音效 <output data-volume-value="sfx"></output><input data-volume="sfx" type="range" min="0" max="100" aria-label="飞机引擎与音效音量"></label>${soundLayers.map(([key, label]) => `<label>${label} <output data-sound-value="${key}"></output><input data-sound="${key}" type="range" min="0" max="100" aria-label="${label}音量"></label>`).join('')}<p>外部视角保留喷流与风声，驾驶舱内自动隔音。分项音量不影响失速和自动驾驶断开警报；全部飞行音效设为 0 会静音所有音效。</p><p data-value="audio-status" role="status" aria-live="polite"></p><button data-action="audio-retry" hidden>重新启用声音</button><small>暂停与离开页面时停止声音；安全警报暂时压低音乐。音乐和总音效音量与山路共用，仅保留在当前页面；四项飞行音效、画面和飞行设置仅保留在本次飞机模式。机场尺寸与飞行参数为游戏设计，驾驶舱为原创简化内饰。</small></details>
       <details class="av-credits"><summary>模型署名</summary><p>Airbus A380：<a href="https://sketchfab.com/3d-models/singapore-airlines-a380-fd047ccf175c4db5b7e3e400c67c47a0" target="_blank" rel="noopener noreferrer">Singapore Airlines A380</a>，作者 zairiq-zairiq-123-pixar-cars-bfdi，用户提供，<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>。游戏中调整了大小、朝向和起落架显示。</p><p>Su-30：本项目原创简化模型（CC0），依据双发、双垂尾与前翼轮廓制作。</p><p>${AIRCRAFT.filter(aircraft => !['a380', 'su30'].includes(aircraft.id)).map(aircraft => aircraft.name).join('、')}：本项目原创架空机型与简化 GLB，采用 CC0。</p></details>
     </aside>
     <div class="av-notice" role="status" aria-live="polite"></div><footer class="av-footer"><span data-value="aircraft">Airbus A380</span><span data-value="keyhint"></span><span data-value="time">00:00</span></footer>`;
@@ -166,7 +167,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   const aircraftSettings = Object.fromEntries(AIRCRAFT.map(aircraft => [aircraft.id, { ...AIRCRAFT_PHYSICS_DEFAULTS }]));
   let physicsSettings = aircraftSettings.a380;
   const touchInput = { pitch: 0, roll: 0, yaw: 0, brake: false, precision: false }, input = {}, targetInput = {};
-  const audioFrame = { status: 'menu', speed: 0, mission: flightMusic.a380, aircraft: AIRCRAFT[0], maxSpeed: AIRCRAFT[0].maxSpeed, engineOutput: 0, stalling: false };
+  const audioFrame = { status: 'menu', speed: 0, mission: flightMusic.a380, aircraft: AIRCRAFT[0], maxSpeed: AIRCRAFT[0].maxSpeed, engineOutput: 0, stalling: false, cockpit: true, onGround: true, gearPosition: 1, gearDown: true, flaps: 0, speedBrake: false, reverse: false };
   let world;
   try { world = new AviationWorld($('.av-viewport'), host); }
   catch (error) { root.remove(); throw error; }
@@ -559,12 +560,12 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
 
   function flaps() {
     if (!setAircraftFlaps(flight, (flight.flaps + 1) % 3)) { notify(`速度过高，请减至 ${Math.round(flight.aircraft.flapLimit * 3.6)} km/h 以下再放襟翼。`); return; }
-    audio.event('cockpit-switch');notify(`襟翼：${flapNames[flight.flaps]} · 当前起飞参考 ${Math.round(aircraftEnvelope(flight).takeoff * 3.6)} km/h`); dirty = true;
+    audio.event('flaps');notify(`襟翼：${flapNames[flight.flaps]} · 当前起飞参考 ${Math.round(aircraftEnvelope(flight).takeoff * 3.6)} km/h`); dirty = true;
   }
 
   function speedBrake() {
     if (!toggleAircraftSpeedBrake(flight)) return;
-    audio.event('cockpit-switch');notify(flight.speedBrake ? '减速板展开 · 起飞前请收起，地面停车仍需按住制动' : '减速板收起'); dirty = true;
+    audio.event('speed-brake');notify(flight.speedBrake ? '减速板展开 · 起飞前请收起，地面停车仍需按住制动' : '减速板收起'); dirty = true;
   }
 
   function updateUI() {
@@ -635,7 +636,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     }
     text(values.bank, `滚转 ${Math.round(flight.roll * 180 / Math.PI)}° · 俯仰 ${Math.round(flight.pitch * 180 / Math.PI)}°`);
     $('.av-horizon').style.transform = `translateY(${flight.pitch * 55}px) rotate(${-flight.roll}rad)`;
-    setAttribute(action('sound'), 'aria-pressed', !audio.enabled); text(action('sound'), audio.enabled ? '声音开' : '已静音');
+    setAttribute(action('sound'), 'aria-pressed', audio.enabled); text(action('sound'), audio.enabled ? '声音开' : '已静音');
   }
 
   function dispose() {
@@ -754,6 +755,11 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     const slider = $(`[data-volume="${bus}"]`); slider.value = Math.round(audio.volumes[bus] * 100);
     const output = $(`[data-volume-value="${bus}"]`); text(output, `${slider.value}%`);
     listen(slider, 'input', () => { audio.setVolume(bus, Number(slider.value) / 100); text(output, `${slider.value}%`); unlockAudio(); dirty = true; });
+  }
+  for (const [key] of soundLayers) {
+    const slider = $(`[data-sound="${key}"]`), output = $(`[data-sound-value="${key}"]`);
+    slider.value = Math.round(audio.layers[key] * 100); text(output, `${slider.value}%`);
+    listen(slider, 'input', () => { audio.setLayerVolume(key, Number(slider.value) / 100); text(output, `${slider.value}%`); unlockAudio(); dirty = true; });
   }
   listen($('[data-setting="flight-mode"]'), 'change', event => {
     physicsSettings.mode = event.target.value; physicsSettings.stability = physicsSettings.mode === 'maneuver' ? 0 : 1;
@@ -921,11 +927,11 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
           }
           for (const event of flight.events) {
             if (event === 'gate' && world.trainingEnabled) { audio.event('gate'); notify(`通过导航环 ${flight.gates} / 6 · 可继续自由飞行`); }
-            if (event === 'takeoff') { audio.event('glide'); notify('已离地 · 按 G 收起起落架'); }
+            if (event === 'takeoff') { audio.event('takeoff'); notify('已离地 · 按 G 收起起落架'); }
             if (event === 'gear-locked' || event === 'gear-retracted') { audio.event(event);notify(event === 'gear-locked' ? '起落架已放下锁定 · 请保持安全进近速度与下降率' : '起落架已完全收起'); }
-            if (event === 'flaps-limit') { audio.event('cockpit-switch');notify('襟翼超过安全速度，已自动收起。'); }
-            if (event === 'touchdown') { audio.event('land', flight.touchdownSpeed); notify(`成功接地 · 下降率 ${flight.touchdownSpeed.toFixed(1)} m/s${flight.events.includes('spoilers-deployed') ? ' · 扰流板已自动展开' : ''} · 油门归零，按住制动`); }
-            if (event === 'spoilers-deployed' && !flight.events.includes('touchdown')) { audio.event('cockpit-switch');notify('扰流板自动展开 · 已接地且油门低于 15%'); }
+            if (event === 'flaps-limit') { audio.event('flaps');notify('襟翼超过安全速度，已自动收起。'); }
+            if (event === 'touchdown') { audio.event('touchdown', flight.touchdownSpeed); notify(`成功接地 · 下降率 ${flight.touchdownSpeed.toFixed(1)} m/s${flight.events.includes('spoilers-deployed') ? ' · 扰流板已自动展开' : ''} · 油门归零，按住制动`); }
+            if (event === 'spoilers-deployed') { audio.event('speed-brake');if (!flight.events.includes('touchdown')) notify('扰流板自动展开 · 已接地且油门低于 15%'); }
             if (event === 'recovery') { audio.event('land', 4); clearInput(); world.setCameraMode(world.cameraMode); notify(flight.reason); dirty = true; }
           }
         }
@@ -940,6 +946,9 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       audioFrame.status = graphicsLost ? 'paused' : audioStates[flight.status]; audioFrame.speed = flight.speed; audioFrame.mission = flightMusic[flight.aircraft.id];
       audioFrame.aircraft = flight.aircraft; audioFrame.maxSpeed = flight.performance.maxSpeed;
       audioFrame.engineOutput = flight.engineOutput * physicsSettings.thrust; audioFrame.stalling = flight.stalling;
+      audioFrame.cockpit = world.cameraMode === 2; audioFrame.onGround = flight.onGround;
+      audioFrame.gearPosition = flight.gearPosition; audioFrame.gearDown = flight.gearDown;
+      audioFrame.flaps = flight.flaps; audioFrame.speedBrake = flight.speedBrake; audioFrame.reverse = flight.systems.reverse;
       audio.update(audioFrame);
       syncAudioStatus();
       const look = held.has('KeyZ') || held.has('KeyX') ? (Number(held.has('KeyZ')) - Number(held.has('KeyX'))) * world.viewSettings.lookAngle * Math.PI / 180 : null;

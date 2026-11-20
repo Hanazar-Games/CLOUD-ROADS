@@ -1,5 +1,6 @@
 #aviation{position:fixed;inset:0;z-index:100;background:transparent;color:#102f40;font-family:inherit;overflow:hidden;outline:none;--av-ink:#173c4a;--av-accent:#087f82}
 #aviation *{box-sizing:border-box}
+.av-audio-settings output{color:var(--av-accent);font-size:12px;font-weight:600}
 .av-training-choice{display:flex;align-items:center;gap:8px;font-size:12px;margin:14px 0}.av-training-choice input{width:18px;height:18px;accent-color:#087f82}
 #aviation .av-navigation{padding:12px 14px;background:#f3f8f0e8;border:1px solid #ffffff80;border-radius:12px;text-shadow:none}
 #aviation .av-viewport #world{position:absolute;inset:0;touch-action:none}

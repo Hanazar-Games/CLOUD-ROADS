@@ -376,9 +376,10 @@ export class AudioSystem {
     const nearbyHorn = state.trafficHorns.some(horn => horn.volume * this.npcHornVolume * state.atmosphere > 0.1);
     const priority = this.sfxVolume > 0 ? (sounding ? 1 : nearbyHorn ? 0.6 : 0) * Math.max(0, Math.min(1, this.hornFocus)) : 0;
     const engineDemand = this.engineVolume > 0 && state.ignition !== 'off' ? this.load : 0;
-    const impactDemand = this.collisionVolume > 0 ? Math.max(0, Math.min(1, state.impact / 8)) : 0;
+    const impact = Math.max(state.driving ? state.impact : 0, (state.nearbyImpact ?? 0) * state.atmosphere);
+    const impactDemand = this.collisionVolume > 0 ? Math.max(0, Math.min(1, impact / 8)) : 0;
     const duck = Math.min(1 - priority * 0.95, 1 - Math.max(0, Math.min(0.8, this.musicDucking))
-      * (state.driving && this.sfxVolume > 0 ? Math.max(engineDemand, impactDemand) : 0));
+      * (this.sfxVolume > 0 ? Math.max(state.driving ? engineDemand : 0, impactDemand) : 0));
     this.ambienceDuck += (1 - priority * 0.65 - this.ambienceDuck) * (1 - Math.exp(-Math.max(0, dt) * (priority ? 15 : 3)));
     this.musicDuck += (duck - this.musicDuck) * (1 - Math.exp(-Math.max(0, dt) * (duck < this.musicDuck ? 8 : 1 / Math.max(0.1, this.musicRecovery))));
     const ev = state.powertrain === 'ev';
@@ -401,7 +402,6 @@ export class AudioSystem {
     const slide = state.driving ? Math.max(0, Math.min(1, state.tireSlip) - 0.08) : 0;
     set(this.skidTone!.frequency, (state.mass > 4000 ? 480 : state.motorcycle ? 850 : 650) + slide * 240);
     set(this.skidGain!.gain, slide * 0.07 * (1 - state.wet * 0.55) * (0.4 + cabin * 0.6) * this.tireVolume, 0.06);
-    const impact = Math.max(state.driving ? state.impact : 0, (state.nearbyImpact ?? 0) * state.atmosphere);
     set(this.impactGain!.gain, Math.min(1, Math.max(0, impact) / 18) * 0.25 * this.collisionVolume * (0.5 + cabin * 0.5), 0.012);
     set(this.scrapeGain!.gain, state.driving ? Math.min(1, Math.max(0, state.scrape) / 25) * 0.07 * this.collisionVolume * (0.35 + cabin * 0.65) : 0, 0.06);
     set(this.wiperGain!.gain, state.driving && dt > 0 ? Math.min(0.07, Math.abs(state.wiper - this.lastWiper) / dt * 0.045) * this.cabinVolume : 0, 0.025);

@@ -429,6 +429,19 @@ it('previews an EV motor while the parked vehicle is powered off', async () => {
   audio.dispose();
 });
 
+it('nearby collisions duck music while walking and respect collision and SFX mute', async () => {
+  const context = new AudioContextStub(); vi.stubGlobal('AudioContext', function () { return context; });
+  const audio = new AudioSystem(); audio.musicDucking = .8; audio.toggle(); await Promise.resolve();
+  const mix = audio as unknown as { musicDuck: number };
+  audio.update(1, { ...idle, nearbyImpact: 12 }); expect(mix.musicDuck).toBeLessThan(.3);
+  for (const muted of ['collision', 'sfx', 'atmosphere']) {
+    audio.collisionVolume = muted === 'collision' ? 0 : 1; audio.sfxVolume = muted === 'sfx' ? 0 : 1;
+    audio.update(4, { ...idle, nearbyImpact: 12, atmosphere: muted === 'atmosphere' ? 0 : 1 });
+    expect(mix.musicDuck).toBeGreaterThan(.99);
+  }
+  audio.dispose();
+});
+
 it('ducks music under load and restores it smoothly after lifting off', async () => {
   const contexts = [new AudioContextStub(), new AudioContextStub()], levels: number[] = [], restored: number[] = [];
   for (const [index, context] of contexts.entries()) {

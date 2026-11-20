@@ -26,3 +26,12 @@ test('menu has no percussion; racing layers respond to actual speed', () => {
   assert.ok(fast.length > slow.length);
   assert.ok(fast.some(note => note.kind === 'kick'));
 });
+
+test('flight scores soften percussion at taxi speed and keep phrases in time with the tempo', () => {
+  const theme = { root: 50, bpm: 100, mode: 'major', voice: 'triangle' };
+  const slow = composeBeat(0, theme, 0), fast = composeBeat(0, theme, 1);
+  assert.ok(slow.find(n => n.kind === 'kick').volume < fast.find(n => n.kind === 'kick').volume);
+  assert.ok(composeBeat(0, { ...theme, bpm: 140 }, 0).find(n => n.kind === 'pad').duration < slow.find(n => n.kind === 'pad').duration);
+  assert.ok(MISSIONS.some(m => m.music.mode === 'major'));
+  assert.ok(MISSIONS.some(m => m.music.voice === 'triangle'));
+});

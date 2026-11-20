@@ -14,16 +14,18 @@ class Param {
 }
 class Node {
   gain = new Param(); frequency = new Param(); connections = [];
+  Q = new Param(); threshold = new Param(); knee = new Param(); ratio = new Param(); attack = new Param(); release = new Param();
   connect(node) { this.connections.push(node); return node; }
   disconnect() { this.connections = []; }
   start(time) { this.started = time; }
-  stop(time) { this.stopped = time; }
+  stop(time = 0) { this.stopped = time; }
 }
 class Context {
   sampleRate = 44100;
   currentTime = 0; state = 'suspended'; destination = new Node(); oscillators = [];
   createGain() { return new Node(); }
   createBiquadFilter() { return new Node(); }
+  createDynamicsCompressor() { return new Node(); }
   createOscillator() { const node = new Node(); this.oscillators.push(node); return node; }
   createBuffer(channels, length) { return { getChannelData: () => new Float32Array(length) }; }
   createBufferSource() { const node = new Node(); this.oscillators.push(node); return node; }
@@ -36,6 +38,100 @@ async function setup() {
   return audio;
 }
 const running = { status: 'running', speed: 36, boosting: false };
+
+test('flight ambience follows airspeed, engine spool, ground contact and reverse thrust', async () => {
+  const audio = await setup(), frame = { ...flightFrame(createAircraftFlight('su30', true)), speed: 0, engineOutput: 0, onGround: true };
+  audio.setVolume('music', 0); audio.update(frame);
+  assert.equal(audio.engineNoise.gain.gain.value, 0);
+  assert.equal(audio.wind.gain.gain.value, 0);
+  assert.equal(audio.runway.gain.gain.value, 0);
+  audio.update({ ...frame, engineOutput: 1 });
+  const engine = audio.engineNoise.gain.gain.value;
+  assert.ok(engine > 0);
+  audio.update({ ...frame, engineOutput: 1, reverse: true });
+  assert.ok(audio.engineNoise.gain.gain.value > engine);
+  audio.update({ ...frame, speed: 80 });
+  const wind = audio.wind.gain.gain.value;
+  assert.ok(wind > 0); assert.ok(audio.runway.gain.gain.value > 0);
+  assert.equal(audio.engineNoise.gain.gain.value, 0, 'gliding still has airflow without engine roar');
+  audio.update({ ...frame, speed: 160, onGround: false });
+  assert.ok(audio.wind.gain.gain.value > wind);
+  assert.equal(audio.runway.gain.gain.value, 0);
+  const clean = audio.wind.gain.gain.value;
+  audio.update({ ...frame, speed: 160, onGround: false, gearPosition: 1, flaps: 2, speedBrake: true });
+  assert.ok(audio.wind.gain.gain.value > clean);
+  audio.dispose();
+});
+
+test('cockpit acoustics filter exterior sounds without filtering music or warnings', async () => {
+  const audio = await setup(), frame = { ...flightFrame(createAircraftFlight('a380', true)), cockpit: false };
+  audio.update(frame);
+  const cutoff = audio.exteriorFilter.frequency.value, level = audio.exterior.gain.value;
+  audio.update({ ...frame, cockpit: true });
+  assert.ok(audio.exteriorFilter.frequency.value < cutoff);
+  assert.ok(audio.exterior.gain.value < level);
+  assert.deepEqual(audio.music.connections, [audio.master]);
+  audio.event('stall');
+  assert.ok([...audio.voices].filter(v => v.bus === 'sfx').every(v => v.gain.connections[0] === audio.sfx));
+  assert.deepEqual(audio.master.connections, [audio.limiter]);
+  assert.deepEqual(audio.limiter.connections, [audio.context.destination]);
+  audio.dispose();
+});
+
+test('continuous aircraft sources are reused, quiet when paused or muted and stopped on disposal', async () => {
+  const audio = await setup(), frame = { ...flightFrame(createAircraftFlight('a380', true)), onGround: true };
+  audio.setVolume('music', 0); audio.update(frame);
+  const sources = [...audio.context.oscillators];
+  for (let i = 0; i < 300; i++) audio.update(frame);
+  assert.equal(audio.context.oscillators.length, sources.length);
+  const layers = [audio.engineGain, audio.engineNoise.gain, audio.wind.gain, audio.runway.gain, audio.gearMotor.gain];
+  for (const silence of [() => audio.setState('paused'), () => audio.setBackground(true), () => audio.toggle(), () => audio.setVolume('sfx', 0)]) {
+    silence(); assert.ok(layers.every(node => node.gain.value === 0));
+    audio.update({ ...frame, status: audio.state });
+    assert.ok(layers.every(node => node.gain.value === 0));
+    audio.setState('running'); audio.setBackground(false); if (!audio.enabled) audio.toggle(); audio.setVolume('sfx', .8); audio.update(frame);
+  }
+  audio.dispose();
+  assert.ok(sources.every(source => source.stopped !== undefined && source.connections.length === 0));
+});
+
+test('individual sound layers mute independently while alerts remain audible', async () => {
+  const audio = await setup(), frame = { ...flightFrame(createAircraftFlight('a380', true)), onGround: true, gearPosition: .5, gearDown: true };
+  audio.setVolume('music', 0); audio.update(frame);
+  assert.ok(audio.gearMotor.gain.gain.value > 0);
+  for (const key of ['engine', 'wind', 'runway', 'mechanical']) audio.setLayerVolume(key, 0);
+  audio.update(frame);
+  assert.ok([audio.engineGain, audio.engineNoise.gain, audio.wind.gain, audio.runway.gain, audio.gearMotor.gain].every(node => node.gain.value === 0));
+  audio.event('cockpit-switch'); audio.event('flaps'); assert.equal(audio.voices.size, 0);
+  audio.event('stall'); assert.equal(audio.voices.size, 2);
+  audio.setLayerVolume('engine', NaN); assert.equal(audio.layers.engine, 0);
+  audio.setLayerVolume('engine', 10); assert.equal(audio.layers.engine, 1);
+  audio.setLayerVolume('mechanical', 1); audio.update({ ...frame, gearPosition: 1 });
+  assert.equal(audio.gearMotor.gain.gain.value, 0);
+  audio.dispose();
+});
+
+test('aircraft mechanical and takeoff cues use bounded noise envelopes and honor silence', async () => {
+  const audio = await setup();
+  for (const event of ['takeoff', 'touchdown', 'flaps', 'speed-brake']) {
+    audio.event(event);
+    assert.ok([...audio.voices].some(voice => voice.oscillator.buffer));
+    audio.stopVoices();
+    audio.setState('paused'); audio.event(event); assert.equal(audio.voices.size, 0);
+    audio.setState('running');
+  }
+  audio.dispose();
+});
+
+test('disposal disconnects transient filters without waiting for closed-context ended callbacks', async () => {
+  const audio = await setup();
+  audio.update(running); audio.event('flaps');
+  const voices = [...audio.voices];
+  assert.ok(voices.some(voice => voice.filter));
+  audio.dispose();
+  assert.ok(voices.every(voice => !voice.oscillator.connections.length && !voice.gain.connections.length && !voice.filter?.connections.length));
+  assert.equal(audio.voices.size, 0);
+});
 
 test('leaving flight cancels pending audio activation and disposal is idempotent', async () => {
   let contexts = 0;
@@ -53,7 +149,7 @@ const flightFrame = flight => ({ status: flight.status, speed: flight.speed, air
 test('steady audio frames retain automation while changed power and warning ducking still respond', async () => {
   const audio = await setup(), frame = { ...flightFrame(createAircraftFlight('j90', true)), stalling: false };
   audio.update(frame);
-  const params = [audio.engine.frequency, audio.filter.frequency, audio.engineGain.gain, audio.music.gain];
+  const params = [audio.engine.frequency, audio.filter.frequency, audio.engineGain.gain, audio.music.gain, audio.wind.gain.gain, audio.engineNoise.gain.gain, audio.runway.gain.gain, audio.gearMotor.gain.gain, audio.exteriorFilter.frequency, audio.exterior.gain];
   const counts = params.map(param => param.cancellations);
   for (let i = 0; i < 120; i++) { audio.context.currentTime += 1 / 120; audio.update(frame); }
   assert.deepEqual(params.map(param => param.cancellations), counts);
@@ -284,7 +380,7 @@ test('concurrent unlock requests share one audio graph', async () => {
   const results = await Promise.all([audio.unlock(), audio.unlock(), audio.unlock()]);
   assert.deepEqual(results, [true, true, true]);
   assert.equal(created, 1);
-  assert.equal(audio.context.oscillators.length, 1);
+  assert.equal(audio.context.oscillators.length, 2, 'one engine oscillator and one shared looping noise source');
 });
 
 test('music plays after activation and has an independent bus from sound effects', async () => {
