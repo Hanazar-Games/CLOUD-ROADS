@@ -1,5 +1,46 @@
 import { expect, test } from '@playwright/test';
 
+test('backgrounding the ready panel silences music even after the game loop stops', async ({ page }) => {
+  await page.addInitScript(() => {
+    const Native = AudioContext;
+    window.AudioContext = class extends Native {
+      createDynamicsCompressor() {
+        const limiter = super.createDynamicsCompressor(), meter = this.createAnalyser();
+        limiter.connect(meter); Reflect.set(window, 'readyAudioMeter', meter); return limiter;
+      }
+    };
+  });
+  await page.goto('/?seed=CLOUD-READY-AUDIO');
+  await page.locator('#aircraft-toggle').click();
+  await page.locator('#airport-board').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await page.locator('[data-action="pause"]').click();
+  await page.locator('[data-action="hangar"]').click();
+  await page.locator('[data-action="sound"]').click();
+  await page.locator('.av-audio-settings summary').click();
+  await page.locator('[data-volume="music"]').fill('100');
+  await page.locator('[data-volume="sfx"]').fill('0');
+  const level = () => page.evaluate(() => {
+    const meter = Reflect.get(window, 'readyAudioMeter') as AnalyserNode, samples = new Float32Array(meter.fftSize);
+    meter.getFloatTimeDomainData(samples);
+    return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+  });
+  await expect.poll(level).toBeGreaterThan(.001);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(200);
+  expect(await level()).toBeLessThan(.00001);
+  await page.evaluate(() => {
+    Reflect.deleteProperty(document, 'hidden'); document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(level).toBeGreaterThan(.001);
+  await expect(page.locator('.av-panel')).toBeVisible();
+  await page.locator('[data-action="exit"]').click();
+  await expect(page.locator('#airport-board')).toBeEnabled();
+});
+
 test('flight mixer emits sound, isolates layers, pauses and releases its continuous sources', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {

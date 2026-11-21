@@ -178,6 +178,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   let accumulator = 0, uiTime = 0, dirty = true, stickPointer = null, stickPitch = 0, stickRoll = 0, noticeTimer;
   let frameLimit = 60, lastExterior = 0;
   let pendingDeparture = null;
+  let initialBoarding = !!host.departure?.apron && !document.hidden && document.hasFocus();
   let cameraDrag = null, suppressCockpitClick = false;
   const listen = (target, event, callback, options = {}) => target.addEventListener(event, callback, { ...options, signal: listeners.signal });
   const disable = (element, disabled) => { if (element.disabled !== disabled) element.disabled = disabled; };
@@ -476,7 +477,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     if (!panel.hidden) syncPerformance();
     if (!panel.hidden) { clearTimeout(noticeTimer); $('.av-notice').classList.remove('visible'); }
     $('.av-aircraft-list').hidden = !ready; for (const choice of root.querySelectorAll('.av-runway-choice')) choice.hidden = !ready; values.specs.hidden = !ready; preload.hidden = !ready;
-    action('cancel-departure').hidden = !ready || !pendingDeparture;
+    action('cancel-departure').hidden = !ready || !(pendingDeparture || initialBoarding);
     action('resume').hidden = !paused;
     action('runway').hidden = !ready; action('airborne').hidden = !ready; action('apron').hidden = !ready;
     action('hangar').hidden = ready || graphicsLost;
@@ -525,6 +526,11 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       loadProgress.value = 0;
       action('retry').hidden = false; dirty = true;
     }
+  }
+
+  function cancelDeparture() {
+    pendingDeparture = null; initialBoarding = false;
+    action('cancel-departure').hidden = true; dirty = true;
   }
 
   function start(airborne, apron = false) {
@@ -692,7 +698,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       case 'speed-brake': speedBrake(); break;
       case 'navigation': returning = !returning; updateUI(); break;
       case 'retry': selectAircraft(flight.aircraft.id); break;
-      case 'cancel-departure': pendingDeparture = null; action('cancel-departure').hidden = true; $('#av-panel-title').focus({ preventScroll: true }); dirty = true; notify('已取消自动出发 · 地图继续准备，可稍后选择出发位置'); break;
+      case 'cancel-departure': cancelDeparture(); $('#av-panel-title').focus({ preventScroll: true }); notify('已取消自动出发 · 地图继续准备，可稍后选择出发位置'); break;
       case 'hangar': flight = createFlight(flight.aircraft.id, false, { airport: flight.airport.id, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings }); audio.setState('menu'); world.setCameraMode(0); lastExterior = 0; showPanel(); break;
       case 'systems': setSystemPanel(systemPanel.hidden);break;
       case 'systems-close': setSystemPanel(false);break;
@@ -805,14 +811,14 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   listen($('[data-setting="cloud-steps"]'), 'change', event => { world.setEnvironment({ cloudSteps: Number(event.target.value) });dirty = true; });
   listen($('[data-setting="runway"]'), 'change', event => {
     if (flight.status !== 'ready') return;
-    pendingDeparture = null; initialBoarding = false;
+    cancelDeparture();
     const preflight = flight;
     flight = createFlight(flight.aircraft.id, false, { airport: flight.airport.id, runwayDirection: event.target.value, physics: physicsSettings, systems: systemSettings });
     restoreAircraftPreflight(flight, preflight);world.resetCamera = true;dirty = true;
   });
   listen($('[data-setting="airport"]'), 'change', event => {
     if (flight.status !== 'ready') return;
-    pendingDeparture = null; initialBoarding = false;
+    cancelDeparture();
     const preflight = flight;
     world.setAirport(event.target.value);
     flight = createFlight(flight.aircraft.id, false, { airport: event.target.value, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings });
@@ -820,7 +826,7 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
   });
   listen($('[data-setting="runway-strip"]'), 'change', () => {
     if (flight.status !== 'ready') return;
-    pendingDeparture = null; initialBoarding = false;
+    cancelDeparture();
     const preflight = flight;
     flight = createFlight(flight.aircraft.id, false, { airport: flight.airport.id, runwayDirection: $('[data-setting="runway"]').value, physics: physicsSettings, systems: systemSettings });
     restoreAircraftPreflight(flight, preflight); world.resetCamera = true; dirty = true;
@@ -906,11 +912,12 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     });
     listen(button, 'blur', () => releaseHold(control));
   }
-  listen(window, 'blur', () => pause(true));
-  listen(window, 'pagehide', () => pause(true));
-  listen(document, 'visibilitychange', () => { if (document.hidden) pause(true); accumulator = 0; });
+  const pauseForBackground = () => { cancelDeparture(); audio.setBackground(true); pause(true); clearInput(); };
+  listen(window, 'blur', pauseForBackground);
+  listen(window, 'pagehide', pauseForBackground);
+  listen(document, 'visibilitychange', () => { if (document.hidden) pauseForBackground(); accumulator = 0; });
   listen(window, 'resize', () => { world.resize(); dirty = true; clearInput(); });
-  listen(window, 'orientationchange', () => pause(true));
+  listen(window, 'orientationchange', pauseForBackground);
   listen(world.renderer.domElement, 'webglcontextlost', event => {
     event.preventDefault(); graphicsLost = true; loaded = false; world.loadController?.abort();
     if (flight.status === 'running') toggleAircraftPause(flight);
@@ -973,7 +980,6 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
       dirty = false;
     }
   }
-  let initialBoarding = !!host.departure?.apron;
   if (host.departure?.airport) { $('[data-setting="airport"]').value = host.departure.airport; world.setAirport(host.departure.airport); }
   syncControlHelp(); syncViewSettings(); syncEnvironmentSettings(); selectAircraft(host.departure?.aircraft ?? host.world.airports.aircraftId);
   return { dispose, update };

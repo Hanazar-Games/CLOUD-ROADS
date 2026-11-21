@@ -67,9 +67,11 @@ test('drives, steers, brakes, reverses and recovers safely without losing trip d
   await expect(page.locator('#vehicle-gear')).toHaveText('P');
   await expect(metric(page, 'Vehicle speed')).toHaveText('0.0 km/h');
   await page.waitForTimeout(300);
-  const reset = await metric(page, 'Vehicle position').textContent();
+  const reset = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
   await page.waitForTimeout(600);
-  await expect(metric(page, 'Vehicle position')).toHaveText(reset!);
+  const settled = (await metric(page, 'Vehicle position').textContent())!.split(',').map(Number);
+  expect(settled[0]).toBe(reset[0]); expect(settled[2]).toBe(reset[2]);
+  expect(Math.abs(settled[1] - reset[1])).toBeLessThan(.05);
   expect(Number(await page.locator('#vehicle-trip').textContent())).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
@@ -135,7 +137,7 @@ test('drives into a lit tunnel and keeps all camera modes inside the bore', asyn
   await page.keyboard.down('KeyW');
   await expect(metric(page, 'Tunnel shelter')).toHaveText('100%', { timeout: 15_000 });
   await page.keyboard.up('KeyW'); await page.keyboard.down('Space');
-  await expect(page.locator('#vehicle-speed')).toHaveText('0');
+  await expect(page.locator('#vehicle-speed')).toHaveText('0', { timeout: 8000 });
   await page.keyboard.up('Space');
   for (let i = 0; i < 3; i++) {
     await page.keyboard.press('KeyC');

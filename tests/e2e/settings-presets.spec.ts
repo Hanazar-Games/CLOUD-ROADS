@@ -140,7 +140,8 @@ test('applies factory speed and parked equipment preferences after leaving a mov
   await page.locator('#vehicle-kind').selectOption('crane'); await expect(page.locator('#vehicle-max-speed')).toHaveValue('79');
 });
 
-test('provides all vehicle panels, HUD styles and a reachable menu in a narrow window', async ({ page }, info) => {
+test('provides matching specification and equipment panels for every vehicle', async ({ page }) => {
+  test.setTimeout(120000);
   await page.goto('/?seed=FLEET-FLAT'); await category(page, 'driving');
   const vehicles = await page.locator('#vehicle-kind option').evaluateAll(options => options.map(o => ({ value: (o as HTMLOptionElement).value, name: o.textContent! })));
   for (const vehicle of vehicles) {
@@ -152,8 +153,12 @@ test('provides all vehicle panels, HUD styles and a reachable menu in a narrow w
     if (vehicle.value === 'motorcycle') await expect(page.locator('#vehicle-panel-equipment')).toContainText('无车窗与雨刮');
     await page.locator('#panel-driving').click(); await expect(page.locator('#vehicle-kind')).toBeInViewport();
   }
-  await page.locator('#vehicle-kind').selectOption('roadster');
-  await closeSettings(page); await page.locator('#drive-toggle').click(); await ignite(page);
+});
+
+test('keeps all HUD styles and vehicle menus reachable in a narrow window', async ({ page }, info) => {
+  await page.goto('/?seed=FLEET-FLAT');
+  await expect(page.locator('#drive-toggle')).toBeEnabled({ timeout: 25000 });
+  await page.locator('#drive-toggle').click(); await ignite(page);
   await page.setViewportSize({ width: 390, height: 450 });
   for (const style of ['digital', 'dial', 'minimal']) {
     await category(page, 'driving'); await page.locator('#hud-style').selectOption(style); await closeSettings(page);

@@ -455,7 +455,11 @@ input[type=checkbox] { width: 16px; height: 16px; margin: 4px 6px 4px 0; vertica
   .beginner .hud-actions { margin-top: 6px; }
   .beginner .hud-actions button { padding: 7px 5px; }
   #hud-cabin-details { margin: 2px 0; }
-  .beginner .header-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .header-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+}
+@media (max-width: 620px) and (max-height: 500px) {
+  .masthead { top: 8px; }
+  .masthead .brand { display: none; }
 }
 #signal-guidance { border-left: 3px solid #5ee1aa; padding-left: 8px; color: #95f0c1; }
 #signal-guidance[data-signal="red"] { border-color: #ff735c; color: #ffb4a5; }

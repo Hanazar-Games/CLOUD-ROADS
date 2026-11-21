@@ -49,6 +49,7 @@ test('can cancel automatic boarding while the map prepares without stopping prep
   await page.goto('/?seed=CLOUD-STREAMING-CANCEL');
   await page.locator('#aircraft-toggle').click();
   await page.locator('#airport-board').click();
+  await expect(page.locator('.av-load-status')).toHaveAttribute('data-stage', 'terrain');
   await expect(page.locator('[data-action="cancel-departure"]')).toBeVisible();
   await page.locator('[data-action="cancel-departure"]').click();
   await expect(page.locator('[data-action="cancel-departure"]')).toBeHidden();
@@ -84,10 +85,41 @@ test('changing the departure during preparation waits for the player to launch a
   await page.locator('#airport-board').click();
   await expect(page.locator('.av-load-status')).toContainText('预加载地图');
   await page.locator('[data-setting="airport"]').selectOption('alpine');
+  await expect(page.locator('[data-action="cancel-departure"]')).toBeHidden();
   await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready', { timeout: 20000 });
   await expect(page.locator('.av-panel')).toBeVisible();
   await page.locator('[data-action="runway"]').click();
   await expect(page.locator('.av-panel')).toBeHidden();
   await page.locator('[data-action="exit"]').click();
   await expect(page.locator('#airport-dock')).toBeVisible();
+});
+
+for (const stage of ['graphics', 'terrain']) test(`losing focus during ${stage} preparation cancels automatic departure`, async ({ page }) => {
+  if (stage === 'graphics') await page.addInitScript(() => {
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('.av-load-status')?.getAttribute('data-stage') !== 'graphics') return;
+      Reflect.set(window, 'blurredDuringGraphics', true); observer.disconnect();
+      window.dispatchEvent(new Event('blur'));
+    });
+    observer.observe(document, { subtree: true, attributes: true, attributeFilter: ['data-stage'] });
+  });
+  else await page.route('**/FlightHorizonWorker-*.js', async route => {
+    await new Promise(resolve => setTimeout(resolve, 2000)); await route.continue();
+  });
+  await page.goto(`/?seed=CLOUD-FOCUS-${stage}`);
+  await page.locator('#aircraft-toggle').click();
+  await page.locator('#airport-board').click();
+  if (stage === 'graphics') await expect.poll(() => page.evaluate(() => Reflect.get(window, 'blurredDuringGraphics'))).toBe(true);
+  else {
+    await expect(page.locator('.av-load-status')).toHaveAttribute('data-stage', 'terrain');
+    await expect(page.locator('[data-action="cancel-departure"]')).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  }
+  await expect(page.locator('.av-load-status')).toHaveAttribute('data-state', 'ready', { timeout: 20000 });
+  await expect(page.locator('.av-panel')).toBeVisible();
+  await expect(page.locator('[data-action="cancel-departure"]')).toBeHidden();
+  await page.locator('[data-action="apron"]').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  await page.locator('[data-action="exit"]').click();
+  await expect(page.locator('#airport-board')).toBeEnabled();
 });
