@@ -12,3 +12,8 @@ export const FLIGHT_MUSIC = {
   j90: { music: { root: 54, bpm: 106, mode: 'major', voice: 'sine' } },
   l440: { music: { root: 47, bpm: 96, mode: 'major', voice: 'sine' } },
 };
+
+export const FLIGHT_MUSIC_STYLES = {
+  calm: { music: { root: 53, bpm: 84, mode: 'major', voice: 'sine', rhythm: false } },
+  pulse: { music: { root: 47, bpm: 128, mode: 'minor', voice: 'triangle' } },
+};

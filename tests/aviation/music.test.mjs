@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { composeBeat } from '../../src/aviation/music.js';
-import { FLIGHT_MUSIC } from '../../src/aviation/aircraft-music.js';
+import { FLIGHT_MUSIC, FLIGHT_MUSIC_STYLES } from '../../src/aviation/aircraft-music.js';
 const MISSIONS = Object.values(FLIGHT_MUSIC);
 
 test('aircraft scores are deterministic, bounded and have distinct keys', () => {
@@ -34,4 +34,11 @@ test('flight scores soften percussion at taxi speed and keep phrases in time wit
   assert.ok(composeBeat(0, { ...theme, bpm: 140 }, 0).find(n => n.kind === 'pad').duration < slow.find(n => n.kind === 'pad').duration);
   assert.ok(MISSIONS.some(m => m.music.mode === 'major'));
   assert.ok(MISSIONS.some(m => m.music.voice === 'triangle'));
+});
+
+test('calm cruise stays percussion-free at full speed while pulse retains its rhythm', () => {
+  const notes = style => Array.from({ length: 32 }, (_, step) => composeBeat(step, FLIGHT_MUSIC_STYLES[style].music, 1)).flat();
+  assert.ok(notes('calm').some(note => note.kind === 'pad'));
+  assert.ok(notes('calm').every(note => !['kick', 'snare', 'hat'].includes(note.kind)));
+  assert.ok(notes('pulse').some(note => note.kind === 'kick'));
 });

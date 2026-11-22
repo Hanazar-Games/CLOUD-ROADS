@@ -66,7 +66,9 @@ test('flight mixer emits sound, isolates layers, pauses and releases its continu
   await page.locator('[data-action="sound"]').click();
   await expect(page.locator('[data-action="sound"]')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('[data-action="pause"]').click(); await page.locator('[data-action="hangar"]').click();
-  await page.locator('.av-audio-settings summary').click();
+  await page.locator('[data-settings-section="av-audio"]').click();
+  await expect(page.locator('.av-audio-settings summary')).toBeFocused();
+  await page.locator('[data-setting="music-style"]').selectOption('calm');
   for (const [key, value] of [['music', '0'], ['sfx', '100']]) await page.locator(`[data-volume="${key}"]`).fill(value);
   for (const key of ['engine', 'wind', 'runway', 'mechanical']) {
     await page.locator(`[data-sound="${key}"]`).fill('100');
@@ -89,7 +91,9 @@ test('flight mixer emits sound, isolates layers, pauses and releases its continu
   await expect(page.locator('.av-panel')).toBeHidden();
   await page.waitForTimeout(300); expect(await level()).toBeLessThan(.00001);
   await page.locator('[data-action="pause"]').click();
+  await expect(page.locator('[data-setting="music-style"]')).toHaveValue('calm');
   await page.locator('[data-volume="music"]').fill('100');
+  await page.evaluate(() => (Reflect.get(window, 'flightAudioContexts') as AudioContext[])[0].suspend());
   await page.locator('[data-action="pause"]').click();
   await expect.poll(level).toBeGreaterThan(.001);
   expect(await loops()).toBe(1);

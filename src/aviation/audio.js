@@ -11,8 +11,9 @@ const layerKeys = ['engineNoise', 'wind', 'runway', 'gearMotor'];
 const bounded = (value, max = 1) => Number.isFinite(value) ? Math.max(0, Math.min(max, value)) : 0;
 
 export class AudioEngine {
-  constructor(createContext = () => new AudioContext()) {
+  constructor(createContext = () => new AudioContext(), resumeTimeout = 4000) {
     this.createContext = createContext;
+    this.resumeTimeout = resumeTimeout;
     this.disposed = false;
     this.enabled = true;
     this.masterVolume = 1;
@@ -33,6 +34,7 @@ export class AudioEngine {
 
   async unlock() {
     if (this.disposed) return false;
+    if (this.ready && this.context?.state === 'running') return true;
     if (this.unlocking) return this.unlocking;
     this.unlocking = (async () => {
       let context;
@@ -95,7 +97,24 @@ export class AudioEngine {
           this.ready = true;
         }
         context = this.context;
-        await context.resume();
+        if (context.state !== 'running') {
+          let timer;
+          try {
+            const deadline = new Promise(resolve => {
+              this.cancelResume = () => resolve(false);
+              timer = setTimeout(this.cancelResume, this.resumeTimeout);
+            });
+            const resumed = await Promise.race([context.resume().then(() => context.state === 'running'), deadline]);
+            if (!resumed && this.context === context) {
+              context.close().catch(() => {});
+              this.releaseGraph(); this.ready = false;
+              this.nextBeat = this.alertUntil = this.nextStall = 0;
+            }
+          } finally {
+            clearTimeout(timer);
+            this.cancelResume = null;
+          }
+        }
         return !this.disposed && this.context === context && context.state === 'running';
       } catch {
         if (context && this.context === context && (!this.ready || context.state === 'closed')) {
@@ -117,6 +136,7 @@ export class AudioEngine {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.cancelResume?.();
     this.background = true; this.mix();
     this.context?.close().catch(() => {}); this.releaseGraph(); this.ready = false;
   }
@@ -176,6 +196,7 @@ export class AudioEngine {
   }
 
   setBackground(background) {
+    if (this.background === background) return;
     this.background = background;
     if (background) {
       this.stopVoices();
@@ -269,7 +290,12 @@ export class AudioEngine {
       this.tone(900, .12 + strength * .16, .02, 'sine', 'sfx', .05 + strength * .1, 'mechanical', 'runway');
     }
     if (type === 'ap-disconnect') { this.tone(880, .12, 0, 'triangle', 'sfx', .16, 'alert');this.tone(660, .16, .15, 'triangle', 'sfx', .16, 'alert'); }
+    if (type === 'ap-engage' && mechanical) {
+      this.tone(523, .09, 0, 'sine', 'sfx', .1, 'tone', 'mechanical');
+      this.tone(784, .12, .08, 'sine', 'sfx', .09, 'tone', 'mechanical');
+    }
     const alertTone = (frequency, duration, offset = 0, wave = 'triangle') => this.tone(frequency, duration, offset, wave, 'sfx', .3, 'alert');
+    if (type === 'recovery') { alertTone(392, .15); alertTone(294, .18, .16); }
     if (type === 'powerup') {
       const notes = { shield: [392, 523, 784], magnet: [523, 659, 988], repair: [440, 554, 659], battery: [660, 1320], overdrive: [220, 440, 660, 880] }[kind];
       if (notes) notes.forEach((note, i) => this.tone(note, .18, i * .07, kind === 'magnet' ? 'sine' : 'triangle'));
@@ -303,9 +329,10 @@ export class AudioEngine {
     this.setState(game.status);
     const theme = game.mission?.music ?? { root: 45, bpm: 124 };
     const mode = theme.mode ?? 'minor', voice = theme.voice ?? 'sine';
-    if (this.theme?.root !== theme.root || this.theme.bpm !== theme.bpm || this.theme.mode !== mode || this.theme.voice !== voice) {
+    const rhythm = theme.rhythm !== false;
+    if (this.theme?.root !== theme.root || this.theme.bpm !== theme.bpm || this.theme.mode !== mode || this.theme.voice !== voice || this.theme.rhythm !== rhythm) {
       this.stopVoices('music');
-      this.theme = { root: theme.root, bpm: theme.bpm, mode, voice };
+      this.theme = { root: theme.root, bpm: theme.bpm, mode, voice, rhythm };
       this.beat = 0;
     }
     if (!this.engine || this.context.state !== 'running' || this.background) return;

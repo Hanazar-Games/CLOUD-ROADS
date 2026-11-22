@@ -105,6 +105,69 @@ test('airborne cockpit controls, precision input and pause remain isolated from 
   expect(errors).toEqual([]);
 });
 
+test('mouse aim steers the flight path, hides the cursor and releases it for settings', async ({ page }, info) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/?seed=CLOUD-MOUSE-AIM');
+  await openFlightSettings(page);
+  await page.locator('[data-aircraft="su30"]').click();
+  await page.locator('[data-action="airborne"]').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  const aim = page.locator('.av-aim'), canvas = page.locator('#aviation #world');
+  const heading = page.locator('[data-value="heading"]'), vertical = page.locator('[data-value="vertical"]');
+  await page.mouse.move(700, 480);
+  await expect(aim).toBeVisible();
+  await expect(canvas).toHaveCSS('cursor', 'none');
+  await expect(page.locator('[data-value="keyhint"]')).toContainText('移动鼠标瞄准');
+  const before = (await page.locator('.av-aim-target').boundingBox())!;
+  await page.mouse.move(870, 400, { steps: 6 });
+  await expect.poll(async () => (await page.locator('.av-aim-target').boundingBox())!.x).toBeGreaterThan(before.x + 50);
+  await expect.poll(async () => Number(await heading.textContent()), { timeout: 10000 }).toBeGreaterThan(5);
+  await expect.poll(async () => Number(await vertical.textContent())).toBeGreaterThan(2);
+  await page.screenshot({ path: info.outputPath('flight-mouse-aim.png') });
+
+  await page.mouse.click(870, 400);
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('world');
+  await expect(page.locator('[data-value="keyhint"]')).toContainText('Esc 释放鼠标');
+  await page.keyboard.press('KeyP');
+  await expect(page.locator('.av-panel')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
+  await expect(aim).toBeHidden();
+  await expect(canvas).not.toHaveCSS('cursor', 'none');
+
+  await page.locator('[data-setting="flight-mode"]').selectOption('limited');
+  await expect(page.locator('[data-physics="bankLimit"]')).toBeEnabled();
+  await expect(page.locator('[data-value="physics-help"]')).toContainText('限角机动');
+  await page.getByText(/^气动与失速 ·/).click();
+  await page.locator('[data-physics-number="stallRecovery"]').fill('150');
+  await expect(page.locator('[data-physics="stallRecovery"]')).toHaveValue('150');
+  await expect(page.locator('[data-value="aero-snapshot"]')).toContainText('气流分离');
+  await page.locator('[data-setting="flight-mode"]').selectOption('maneuver');
+  await expect(page.locator('[data-physics="bankLimit"]')).toBeDisabled();
+
+  await page.locator('.av-help summary').filter({ hasText: /^操作与键位$/ }).click();
+  await page.locator('[data-setting="mouse-aim"]').selectOption('off');
+  await page.locator('[data-action="resume"]').click();
+  await page.mouse.move(700, 480);
+  await expect(aim).toBeHidden();
+  await expect(canvas).not.toHaveCSS('cursor', 'none');
+  await page.locator('[data-action="exit"]').click();
+  expect(errors).toEqual([]);
+});
+
+test('high-altitude tuning displays true and equivalent airspeed separately', async ({ page }) => {
+  await page.goto('/?seed=CLOUD-AIRSPEED');
+  await openFlightSettings(page);
+  await page.locator('[data-aircraft="su30"]').click();
+  await page.locator('[data-flight-preset="altitude"]').click();
+  await page.locator('[data-action="airborne"]').click();
+  await expect(page.locator('.av-panel')).toBeHidden();
+  const eas = page.locator('[data-value="equivalent-speed"]');
+  await expect(eas).toBeVisible();
+  const equivalent = Number((await eas.textContent())?.match(/EAS (\d+)/)?.[1]);
+  expect(equivalent).toBeGreaterThan(0);
+  expect(equivalent).toBeLessThan(Number(await page.locator('[data-value="speed"]').textContent()));
+});
+
 test('touch flight fits a phone and keeps the exit and throttle reachable', async ({ browser }) => {
   const context = await browser.newContext({ baseURL: test.info().project.use.baseURL, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();

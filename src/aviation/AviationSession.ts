@@ -23,7 +23,11 @@ export function createAviationSession(host: AviationHost) {
   sound.setVolume('music', audio.musicVolume); sound.setVolume('sfx', audio.sfxVolume);
   const saved = { radius: world.chunks.viewRadius, detail: world.detailDistance };
   let distance = 30000, cloudSteps = 12, highDetail = false, disposed = false, worldTime = .1;
-  const unlock = () => { sound.setBackground(document.hidden || !document.hasFocus()); void sound.unlock(); };
+  let highAltitude = false;
+  const unlock = () => {
+    sound.setBackground(document.hidden || !document.hasFocus());
+    if (sound.enabled && !sound.background) void sound.unlock();
+  };
   const session = mountAviation({
     audio: sound, unlockAudio: unlock, onToggleAudio: () => { sound.toggle(); unlock(); },
     host: {
@@ -43,13 +47,18 @@ export function createAviationSession(host: AviationHost) {
       updateWorld(flight: Flight, dt: number) {
         navigateAirport(flight, world.airports.sites);
         const x = flight.airport.worldX + flight.x, z = flight.airport.worldZ + flight.z;
-        world.chunks.setFlightStreaming(flight.y - airportHeight(flight.x, flight.z, flight.airport), flight.speed, highDetail);
+        const clearance = flight.y - airportHeight(flight.x, flight.z, flight.airport);
+        const speed = Math.sqrt(Math.max(0, flight.speed ** 2 - flight.verticalSpeed ** 2));
+        highAltitude = !flight.onGround && clearance > (highAltitude ? 1250 : 1700);
+        world.chunks.setFlightStreaming(clearance, speed, highDetail, flight.trackTurnRate);
         worldTime += dt;
         const streamOnly = worldTime < .1;
         if (!streamOnly) worldTime = 0;
-        world.update(host.camera, false, flight.heading, { x, y: flight.y, z }, streamOnly);
-        horizon.update(x, z, distance);
+        world.update(host.camera, false, flight.trackHeading, { x, y: flight.y, z }, streamOnly, speed, highAltitude);
+        const lead = flight.status === 'running' ? Math.min(speed * .55, 384) : 0;
+        horizon.update(x + Math.sin(flight.trackHeading) * lead, z - Math.cos(flight.trackHeading) * lead, distance);
       },
+      pumpTerrain() { world.chunks.pump(); },
       renderWorld(dt: number, flight: Flight, cameraMode: number) {
         host.render(dt, flight.status === 'running', distance, cameraMode === 8, cloudSteps);
         horizon.confirmRendered();

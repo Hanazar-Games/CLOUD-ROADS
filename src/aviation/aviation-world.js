@@ -225,7 +225,7 @@ export class AviationWorld {
       offset.applyAxisAngle(RIGHT, view.orbitTilt);
       offset.y *= view.chaseHeight;
       offset.multiplyScalar(length * view.chaseDistance).applyAxisAngle(UP, view.orbitAngle * Math.PI / 180).clampLength(clearance, Infinity);
-      if (flight.physics.mode === 'maneuver') offset.applyQuaternion(this.aircraftRoot.quaternion);
+      if (flight.physics.mode === 'maneuver' && !this.mouseAiming) offset.applyQuaternion(this.aircraftRoot.quaternion);
       else offset.applyAxisAngle(UP, -flight.heading);
     }
     if (this.cockpit) this.cockpit.visible = inside;
@@ -269,7 +269,7 @@ export class AviationWorld {
       const floor = Math.max(-12, airportHeight(this.camera.position.x - dx, this.camera.position.z - dz, flight.airport)) + 4;
       if (this.camera.position.y < floor) this.camera.position.y = Math.max(floor, this.aircraftRoot.position.y + Math.sqrt(Math.max(0, clearance ** 2 - offset.x ** 2 - offset.z ** 2)));
       this.camera.up.set(0, 1, 0);
-      if (!this.cameraLocked && flight.status !== 'ready' && flight.physics.mode === 'maneuver') this.camera.up.applyQuaternion(this.aircraftRoot.quaternion);
+      if (!this.cameraLocked && flight.status !== 'ready' && flight.physics.mode === 'maneuver' && !this.mouseAiming) this.camera.up.applyQuaternion(this.aircraftRoot.quaternion);
       this.camera.lookAt(target);
     }
     const fov = inside ? view.cockpitFov : view.exteriorFov + (view.speedFov ? Math.min(view.speedFovAmount, flight.speed / flight.performance.maxSpeed * view.speedFovAmount) : 0);

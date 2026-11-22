@@ -1,4 +1,4 @@
-import { aircraftEnvelope, aircraftAirflow } from './aircraft-envelope.js';
+import { aircraftEnvelope, aircraftAirflow, aircraftDensity, equivalentAirspeed, availableAcceleration } from './aircraft-envelope.js';
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const axis = value => Number.isFinite(value) ? clamp(value, -1, 1) : 0;
@@ -82,9 +82,9 @@ export function setAutobrake(flight, mode) {
   flight.systems.autoBrake = mode;flight.systems.autoBrakeActive = false;return true;
 }
 
-export function autothrottleAvailability(flight) {
-  const envelope = aircraftEnvelope(flight), minimum = envelope.stall * 1.3, maximum = envelope.maxSpeed;
-  const reason = !editable(flight) ? 'status' : flight.onGround ? 'ground' : !aircraftElectrical(flight).avionics ? 'electrical' : !flight.systems.engineOn ? 'engine' : flight.performance.acceleration <= .01 ? 'power' : minimum > maximum ? 'envelope' : flight.speedBrake ? 'brake' : flight.speed < envelope.stall * 1.1 ? 'stall' : aircraftAirflow(flight).highAngle ? 'aoa' : '';
+export function autothrottleAvailability(flight, density = aircraftDensity(flight)) {
+  const envelope = aircraftEnvelope(flight), minimum = envelope.stall * 1.3, maximum = envelope.maxSpeed * Math.sqrt(density);
+  const reason = !editable(flight) ? 'status' : flight.onGround ? 'ground' : !aircraftElectrical(flight).avionics ? 'electrical' : !flight.systems.engineOn ? 'engine' : availableAcceleration(flight, density) <= .01 ? 'power' : minimum > maximum ? 'envelope' : flight.speedBrake ? 'brake' : equivalentAirspeed(flight, density) < envelope.stall * 1.1 ? 'stall' : aircraftAirflow(flight).highAngle ? 'aoa' : '';
   return { reason, minimum, maximum };
 }
 
@@ -93,7 +93,7 @@ export function setAutothrottle(flight, enabled) {
   const control = flight.systems.autothrottle;
   if (enabled) {
     const { minimum, maximum } = autothrottleAvailability(flight);
-    control.target = clamp(flight.speed, minimum, maximum);control.integral = 0;
+    control.target = clamp(equivalentAirspeed(flight), minimum, maximum);control.integral = 0;
   }
   control.enabled = enabled;control.reason = '';return true;
 }
@@ -127,7 +127,7 @@ export function deployArmedSpoilers(flight) {
   }
 }
 
-function updatePowerSystems(flight, input, dt) {
+function updatePowerSystems(flight, input, dt, density) {
   const systems = flight.systems, control = systems.autothrottle;
   deployArmedSpoilers(flight);
   if (!flight.onGround) systems.reverse = false;
@@ -135,14 +135,15 @@ function updatePowerSystems(flight, input, dt) {
   systems.autoBrakeActive = systems.autoBrake !== 'off' && flight.onGround && flight.hasFlown && flight.speed > 1 && (systems.reverse || (flight.throttle < .15 && axis(input.throttle) <= 0)) && !systems.parkingBrake;
   systems.controls.wheelBrake = systems.controls.brake ? 1 : systems.autoBrakeActive ? Math.min(1, (systems.autoBrake === 'high' ? .8 : .35) * systems.settings.autoBrakeStrength) : 0;
   if (!control.enabled) return;
-  const availability = autothrottleAvailability(flight);
+  const availability = autothrottleAvailability(flight, density);
   const reason = axis(input.throttle) ? 'manual' : input.brake ? 'brake' : availability.reason;
   if (reason) { disconnectAutothrottle(flight, reason);return; }
   control.target = clamp(control.target, availability.minimum, availability.maximum);
-  const error = control.target - flight.speed, response = systems.settings.speedResponse;
+  const airspeed = equivalentAirspeed(flight, density);
+  const error = control.target - airspeed, response = systems.settings.speedResponse;
   const gravity = 9.81 * flight.physics.gravity * clamp(flight.verticalSpeed / Math.max(1, flight.speed), -1, 1);
-  const drag = flight.performance.drag * (1 + flight.gearPosition * .55) * (1 + flight.flaps * .35) * flight.speed ** 2;
-  const demand = (drag + gravity) / flight.performance.acceleration + error * .025 * response + control.integral;
+  const drag = flight.performance.drag * (1 + flight.gearPosition * .55) * (1 + flight.flaps * .35) * airspeed ** 2;
+  const demand = (drag + gravity) / availableAcceleration(flight, density) + error * .025 * response + control.integral;
   if ((demand > 0 && demand < 1) || (demand >= 1 && error < 0) || (demand <= 0 && error > 0)) control.integral = clamp(control.integral + error * .002 * response * dt, -.3, .3);
   flight.throttle += clamp(clamp(demand, 0, 1) - flight.throttle, -.4 * dt, .4 * dt);
 }
@@ -172,7 +173,7 @@ export function toggleParkingBrake(flight) {
 
 export function autopilotAvailability(flight) {
   const minimumSpeed = aircraftEnvelope(flight).stall * 1.15;
-  const reason = !editable(flight) ? 'status' : flight.onGround ? 'ground' : flight.physics.mode !== 'assisted' ? 'mode' : !aircraftElectrical(flight).avionics ? 'electrical' : !flight.systems.engineOn ? 'engine' : flight.speed < minimumSpeed ? 'stall' : Math.abs(flight.roll) > Math.PI / 3 || Math.abs(flight.pitch) > .45 ? 'attitude' : aircraftAirflow(flight).highAngle ? 'aoa' : '';
+  const reason = !editable(flight) ? 'status' : flight.onGround ? 'ground' : flight.physics.mode !== 'assisted' ? 'mode' : !aircraftElectrical(flight).avionics ? 'electrical' : !flight.systems.engineOn ? 'engine' : equivalentAirspeed(flight) < minimumSpeed ? 'stall' : Math.abs(flight.roll) > Math.PI / 3 || Math.abs(flight.pitch) > .45 ? 'attitude' : aircraftAirflow(flight).highAngle ? 'aoa' : '';
   return { reason, minimumSpeed };
 }
 
@@ -192,7 +193,7 @@ export function setAutopilotTarget(flight, key, value) {
   return true;
 }
 
-export function updateAircraftSystems(flight, input, dt, stall) {
+export function updateAircraftSystems(flight, input, dt, stall, aimOverride = 0, density = aircraftDensity(flight)) {
   updateAircraftElectrical(flight, dt);
   const { trim, settings, autopilot, controls } = flight.systems;
   for (const key in trim) {
@@ -200,10 +201,10 @@ export function updateAircraftSystems(flight, input, dt, stall) {
     controls[key] = axis(axis(input[key]) + trim[key] * settings.trimAuthority);
   }
   controls.brake = !!input.brake || flight.systems.parkingBrake;
-  updatePowerSystems(flight, input, dt);
+  updatePowerSystems(flight, input, dt, density);
   if (autopilot.mode === 'off') return controls;
   const override = Number.isFinite(input.pilotOverride) ? Math.abs(axis(input.pilotOverride)) : Math.max(Math.abs(axis(input.pitch)), Math.abs(axis(input.roll)), Math.abs(axis(input.yaw)));
-  const reason = flight.onGround ? 'ground' : flight.physics.mode !== 'assisted' ? 'mode' : !aircraftElectrical(flight).avionics ? 'electrical' : !flight.systems.engineOn ? 'engine' : flight.speed < stall * 1.1 ? 'stall' : Math.abs(flight.roll) > Math.PI / 3 || Math.abs(flight.pitch) > .55 ? 'attitude' : aircraftAirflow(flight).highAngle ? 'aoa' : override >= settings.overrideThreshold ? 'manual' : '';
+  const reason = flight.onGround ? 'ground' : flight.physics.mode !== 'assisted' ? 'mode' : !aircraftElectrical(flight).avionics ? 'electrical' : !flight.systems.engineOn ? 'engine' : equivalentAirspeed(flight, density) < stall * 1.1 ? 'stall' : Math.abs(flight.roll) > Math.PI / 3 || Math.abs(flight.pitch) > .55 ? 'attitude' : aircraftAirflow(flight).highAngle ? 'aoa' : Math.max(override, aimOverride) >= settings.overrideThreshold ? 'manual' : '';
   if (reason) {
     autopilot.mode = 'off';autopilot.reason = reason;flight.events.push('ap-disconnect');return controls;
   }
@@ -213,7 +214,7 @@ export function updateAircraftSystems(flight, input, dt, stall) {
     const bank = clamp(error * 1.6 * settings.apResponse, -settings.bankLimit * radians, settings.bankLimit * radians);
     controls.roll = clamp(bank / flight.performance.bankLimit, -.9, .9);
     const vertical = clamp((autopilot.altitude - flight.y) * .04 * settings.apResponse, -settings.climbRate, settings.climbRate);
-    const compensation = 9.81 * flight.physics.gravity * (1 - Math.cos(flight.roll)) / flight.performance.flightPath;
+    const compensation = 9.81 * flight.physics.gravity * (1 - Math.cos(flight.roll)) / (flight.performance.flightPath * density);
     const pitch = Math.asin(clamp((vertical + (vertical - flight.verticalSpeed) * .4 + compensation) / Math.max(1, flight.speed), -.2, .2));
     controls.pitch = clamp((pitch - .018) / flight.performance.pitchLimit, -.8, .8);
     controls.yaw = 0;

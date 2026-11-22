@@ -61,7 +61,7 @@ export class Game {
   private readonly debug = new DebugUI();
   private readonly releaseNotes = element<HTMLDialogElement>('release-notes');
   private readonly events = new AbortController();
-  private readonly loop = new GameLoop((dt) => this.update(dt));
+  private readonly loop = new GameLoop(dt => this.update(dt), () => this.aviation ? .1 : .05);
   private world: World;
   private readonly driving: DrivingSystem;
   private readonly walking: WalkingSystem;

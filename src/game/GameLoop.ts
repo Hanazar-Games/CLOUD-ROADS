@@ -11,7 +11,7 @@ export class GameLoop {
     this.next = 0;
   }
 
-  constructor(private readonly update: (dt: number) => void) {}
+  constructor(private readonly update: (dt: number) => void, private readonly maxDelta = () => .05) {}
 
   start(): void {
     if (this.running) return;
@@ -30,7 +30,7 @@ export class GameLoop {
   private readonly tick = (time: number): void => {
     if (!this.running) return;
     if (time + 0.1 < this.next) { this.frame = requestAnimationFrame(this.tick); return; }
-    const dt = this.previous === undefined ? 0 : Math.min(Math.max((time - this.previous) / 1000, 0), 0.05);
+    const dt = this.previous === undefined ? 0 : Math.min(Math.max((time - this.previous) / 1000, 0), this.maxDelta());
     this.previous = time;
     this.next = this.interval ? time + this.interval - (this.next ? Math.max(0, time - this.next) % this.interval : 0) : 0;
     this.update(dt);

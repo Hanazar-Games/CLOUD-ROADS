@@ -6,7 +6,7 @@ const presets = {
 const yawKeys = { KeyA: ['yaw', -1], KeyD: ['yaw', 1], KeyQ: ['roll', -1], KeyE: ['roll', 1] };
 const clamp = value => Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
 const axisBits = { pitch: 1, roll: 2, yaw: 4, throttle: 8 };
-export const AIRCRAFT_CONTROL_DEFAULTS = Object.freeze({ preset: 'flight', lateral: 'roll', invertPitch: false, pitchSensitivity: 1, rollSensitivity: 1, yawSensitivity: 1, precisionAuthority: .4, deadzone: .07, curve: 1, throttleRate: .3, inputRiseTime: .16, inputReturnTime: .1 });
+export const AIRCRAFT_CONTROL_DEFAULTS = Object.freeze({ preset: 'flight', lateral: 'roll', invertPitch: false, mouseSensitivity: 1, pitchSensitivity: 1, rollSensitivity: 1, yawSensitivity: 1, precisionAuthority: .4, deadzone: .07, curve: 1, throttleRate: .3, inputRiseTime: .16, inputReturnTime: .1 });
 const controlLimits = { pitchSensitivity: [.2, 2], rollSensitivity: [.2, 2], yawSensitivity: [.2, 2], precisionAuthority: [.1, .8], deadzone: [0, .25], curve: [1, 3], throttleRate: [.05, 1], inputRiseTime: [0, .8], inputReturnTime: [0, .6] };
 const trimBindings = { BracketLeft: ['trimPitch', -1], BracketRight: ['trimPitch', 1], Comma: ['trimRoll', -1], Period: ['trimRoll', 1], Semicolon: ['trimYaw', -1], Quote: ['trimYaw', 1] };
 const throttleShortcuts = { Digit1: 0, Numpad1: 0, Digit2: .65, Numpad2: .65, Digit3: 1, Numpad3: 1 };

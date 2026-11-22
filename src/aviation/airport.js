@@ -36,6 +36,7 @@ export function navigateAirport(flight, sites) {
 }
 
 export function airportSurfaceHeight(x, z, airport) {
+  if (Math.abs(x) > airport.bounds.x || Math.abs(z) > airport.bounds.z) return airportHeight(x, z, airport);
   for (const runway of airport.runways) if (Math.abs(x - runway.x) <= runway.width / 2 && z >= runway.end && z <= runway.start) return airport.elevation + runway.surfaceHeight;
   let height = airportHeight(x, z, airport);
   for (const pavement of airport.pavements) if (Math.abs(x - pavement.x) <= pavement.width / 2 && Math.abs(z - pavement.z) <= pavement.depth / 2) height = Math.max(height, airport.elevation + pavement.surfaceHeight);

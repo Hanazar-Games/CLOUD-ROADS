@@ -2,6 +2,7 @@ import { Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { HeightFunction } from '../terrain/HeightFunction';
 import { TerrainWorkers } from '../terrain/TerrainWorkers';
 import { ChunkManager } from './ChunkManager';
+import { CHUNK_SIZE, FAST_FLIGHT_SPEED } from './ChunkPlanner';
 import { FloatingOrigin } from './FloatingOrigin';
 import { RoadSpine } from '../road/RoadSpine';
 import { RoadNetwork } from '../road/RoadNetwork';
@@ -173,7 +174,7 @@ export class World {
     camera.position.set(128, this.height.sample(128, 128) + 450, 128);
   }
 
-  update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }, streamOnly = false): void {
+  update(camera: PerspectiveCamera, explore = true, travelHeading?: number, travelPosition?: { x: number; y: number; z: number }, streamOnly = false, flightSpeed?: number, highAltitude = false): void {
     const rebased = this.origin.rebase(camera.position);
     if (rebased) this.chunks.setOrigin(this.origin.x, this.origin.z);
     this.airports.update(this.origin, this.detailDistance, { x: camera.position.x + this.origin.x, y: camera.position.y, z: camera.position.z + this.origin.z });
@@ -186,8 +187,9 @@ export class World {
       this.chunks.update(position.x, position.z, this.forward, this.corridor);
       return;
     }
-    this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
-    if (this.roadReady && !this.garageEntrance && this.garagePlacementVersion !== this.network.version) {
+    const fastFlight = (flightSpeed ?? 0) >= FAST_FLIGHT_SPEED;
+    if (!highAltitude) this.roadReady = this.network.update(position.x, position.z, travelPosition?.y, Math.max(4000, (this.chunks.viewRadius + 2) * 256 + 1600));
+    if (!highAltitude && this.roadReady && !this.garageEntrance && this.garagePlacementVersion !== this.network.version) {
       this.garagePlacementVersion = this.network.version;
       for (const route of [this.network.active, ...this.network.routes.filter(route => route !== this.network.active && route.ready)]) {
         const crossings = this.crossingPlanner.plan([route.road.samples], RoadCorridor.fromSamples(route.road.samples, route.bridges, this.options, route.tunnels));
@@ -196,7 +198,9 @@ export class World {
       }
       if (this.garageEntrance) this.networkVersion = -1;
     }
-    if (this.roadReady && (this.networkVersion !== this.network.version || Math.hypot(position.x - this.renderX, position.z - this.renderZ) > 128)) {
+    const routeRefreshDistance = fastFlight ? Math.max(384, (flightSpeed ?? 0) * .9) : 128;
+    const roadChanged = this.networkVersion !== this.network.version;
+    if (!highAltitude && this.roadReady && ((!fastFlight && roadChanged) || Math.hypot(position.x - this.renderX, position.z - this.renderZ) > routeRefreshDistance)) {
       const entrance = this.garageEntrance;
       if (entrance?.accessWindows) {
         const route = this.network.routes.find(r => r.id === (entrance.sample.routeId ?? 'root'));
@@ -223,7 +227,7 @@ export class World {
     }
     this.chunks.update(position.x, position.z, this.forward, travelPosition || this.roadReady ? this.corridor : null);
     this.roadSample = this.road.nearest(position.x, position.z);
-    const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < this.chunks.viewRadius * 256 + 1500;
+    const nearRoute = !!this.roadSample && Math.hypot(this.roadSample.position.x - x, this.roadSample.position.z - z) < this.chunks.viewRadius * CHUNK_SIZE + 1500;
     this.roadDebug.update({ version: this.corridorVersion, segments: this.road.segments, samples: this.road.samples }, this.origin.x, this.origin.z, nearRoute);
     for (const [i, route] of this.renderRoutes.entries()) {
       let mesh = i === 0 ? this.roadMesh : this.extraRoads.get(route.id);
@@ -246,7 +250,7 @@ export class World {
     this.interchangeMesh.update(this.network.junctions.flatMap(j => j.interchange ? [j.interchange] : []), this.origin, this.corridor, this.height, this.detailLevel);
     for (const details of [this.bridgeMesh.jointDetails, this.bridgeMesh.drainDetails, this.tunnelMesh.cabinetDetails,
       this.crossingMesh.tunnels.cabinetDetails, this.serviceMesh.chargerDetails, this.serviceMesh.picnicDetails])
-      details.update({ x, y: camera.position.y, z }, this.origin.x, this.origin.z, this.detailLevel, nearRoute, this.detailDistance);
+      details.update({ x, y: camera.position.y, z }, this.origin.x, this.origin.z, this.detailLevel, nearRoute && !highAltitude, this.detailDistance);
     this.signs.update(this.road.samples, this.tunnels, this.services, this.corridorVersion, this.origin.x, this.origin.z, this.passes, this.network.junctions.filter(j => j.interchange || j.route === this.network.active.id));
     this.shelter = this.tunnelShelter(x, camera.position.y, z);
     if (explore && this.scout) this.advanceServiceView(camera);

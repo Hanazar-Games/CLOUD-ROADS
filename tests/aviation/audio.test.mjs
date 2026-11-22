@@ -412,6 +412,30 @@ test('concurrent unlock requests share one audio graph', async () => {
   assert.equal(audio.context.oscillators.length, 2, 'one engine oscillator and one shared looping noise source');
 });
 
+test('a stalled audio resume releases the old graph and allows a fresh retry', async () => {
+  const blocked = new Context();
+  blocked.resume = () => new Promise(() => {});
+  let attempts = 0;
+  const audio = new AudioEngine(() => attempts++ === 0 ? blocked : new Context(), 15);
+  assert.equal(await audio.unlock(), false);
+  assert.equal(blocked.state, 'closed');
+  assert.ok(blocked.oscillators.every(source => source.connections.length === 0));
+  assert.equal(await audio.unlock(), true);
+  audio.dispose();
+});
+
+test('recovery warnings remain audible with mechanical volume off and duck the selected music', async () => {
+  const audio = await setup();
+  audio.setLayerVolume('mechanical', 0);
+  audio.update(running);
+  audio.event('ap-engage');
+  assert.equal([...audio.voices].filter(voice => voice.bus === 'sfx').length, 0);
+  audio.event('recovery');
+  assert.equal([...audio.voices].filter(voice => voice.bus === 'sfx').length, 2);
+  assert.equal(audio.music.gain.value, audio.volumes.music * .4);
+  audio.dispose();
+});
+
 test('music plays after activation and has an independent bus from sound effects', async () => {
   const audio = await setup();
   audio.update(running);

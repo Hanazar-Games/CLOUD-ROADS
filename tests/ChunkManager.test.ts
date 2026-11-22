@@ -69,6 +69,22 @@ describe('ChunkManager lifecycle', () => {
     manager.dispose();
   });
 
+  it('prefetches into a sustained turn and keeps the lookahead bounded', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.setViewRadius(3); manager.uploadBudget = Infinity;
+    const requests: ChunkRequest[] = [];
+    manager.setFlightStreaming(1600, 400, false, .12);
+    for (let frame = 0; frame < 86; frame++) {
+      manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+      requests.push(...backend.jobs.map(job => job.request));
+      await backend.complete();
+    }
+    expect(requests.some(({ x, z }) => x >= 3 && z <= -8)).toBe(true);
+    expect(requests.every(({ x, z }) => Math.hypot(x, z) * 256 <= 4352)).toBe(true);
+    expect(manager.stats.prefetched).toBeLessThanOrEqual(128);
+    manager.dispose();
+  });
+
   it('uploads the highest priority result first even when workers complete out of order', async () => {
     const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
     manager.uploadLimit = 1; manager.uploadBudget = Infinity;
