@@ -96,10 +96,13 @@ it('preserves momentum without tire contact and limits tire forces even with ste
   expect(airborne.heading).toBe(heading); expect(airborne.motionSpeed).toBeCloseTo(speed, 2);
 });
 
-it('uses rear contact for the handbrake and stops rear wheel rotation when locked', () => {
+it('shares straight-line braking across grounded wheels and uses rear grip for a drift', () => {
   const car = create(), rearIce = (_x: number, z: number) => ({ height: 0, grip: z > 0 ? 0 : 1 });
-  car.update(1 / 120, { ...coast, handbrake: true }, rearIce);
-  expect(car.speed).toBe(20);
+  const straight = create();
+  straight.update(1 / 120, { ...coast, handbrake: true }, rearIce);
+  expect(straight.speed).toBeLessThan(20);
+  car.update(1 / 120, { ...coast, steer: 0.8, handbrake: true }, rearIce);
+  expect(car.speed).toBeCloseTo(20, 4);
   run(car, 0.7, { ...coast, steer: 0.8, handbrake: true }); const wheel = car.rearWheelAngle, front = car.wheelAngle;
   run(car, 0.1, { ...coast, handbrake: true });
   expect(car.rearWheelAngle).toBe(wheel); expect(car.wheelAngle).not.toBe(front);

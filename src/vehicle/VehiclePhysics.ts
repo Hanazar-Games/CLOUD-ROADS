@@ -304,7 +304,7 @@ export class VehiclePhysics {
     this.rearLock = approach(this.rearLock, deliberate ? this.handbrake : 0, STEP * (deliberate ? 5 : 3));
     const rearLoad = clamp(this.frontAxle / this.wheelbase + this.longitudinalAcceleration * Math.sign(this.speed || 1) * config.cg / (this.gravity * this.wheelbase), 0.18, 0.8);
     const parking = this.parked || input.handbrake && this.motionSpeed < 1;
-    const rearOnly = this.driftEnabled && this.handbrake > 0 && !parking && throttle * this.speed >= 0;
+    const rearOnly = this.driftEnabled && (startDrift || holdDrift) && this.handbrake > 0 && !parking && throttle * this.speed >= 0;
     this.regenerating = this.powertrain === 'ev' && this.ignition === 'running' && !parking && Math.abs(throttle) < 0.01
       && this.motionSpeed > 0.1 && this.regeneration > 0 && grip > 0;
     this.braking = this.regenerating || this.trailerBrake || input.handbrake || this.handbrake > 0.01 || throttle * this.speed < 0;
@@ -314,9 +314,10 @@ export class VehiclePhysics {
       const regeneration = this.regenerating ? Math.min(0.65 * clamp(this.regeneration, 0, 3), this.gravity * 0.35 * grip) : 0;
       const trailerService = this.trailerBrake && this.trailers.length ? Math.min(config.brake * 0.45, this.gravity * 0.45) * trailerGrip : 0;
       const rearProjection = Math.abs(this.speed) / Math.max(0.1, Math.hypot(this.speed, this.lateralSpeed + this.yawRate * this.rearAxle));
+      const handbrakeGrip = rearOnly ? this.axleGrip(contacts, false) * rearLoad * rearProjection : brakingGrip;
       const deceleration = parking ? Math.min(config.brake * 1.2, this.gravity * 0.94) * brakingGrip
         : Math.max(Math.min(this.gravity * 0.94, config.brake * clamp(this.brakeScale, 0.5, 1.5)) * brakingGrip * service,
-          this.gravity * 0.78 * this.axleGrip(contacts, false) * rearLoad * this.handbrake * rearProjection, regeneration, trailerService);
+          this.gravity * 0.78 * handbrakeGrip * this.handbrake, regeneration, trailerService);
       this.speed = approach(this.speed - slopeForce * STEP, 0, deceleration * STEP);
     } else {
       const engine = Math.min(config.force, config.power / Math.max(2, Math.abs(this.speed))) * clamp(this.powerScale, 0.5, 1.5) / config.mass;
