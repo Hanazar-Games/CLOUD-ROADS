@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { DEFAULT_OPTIONS } from '../src/world/WorldOptions';
-import { parsePreset, validatePreset, PresetStore, type SettingRules } from '../src/settings/SettingsPreset';
+import { parsePreset, validatePreset, PresetStore, PRESET_STORAGE_KEY, STARTUP_STORAGE_KEY, type SettingRules } from '../src/settings/SettingsPreset';
 
 const rules: SettingRules = { 'vehicle-kind': { choices: ['roadster', 'crane'] }, 'hud-style': { choices: ['digital', 'dial', 'minimal'] },
   'steering-assist': { boolean: true }, 'vehicle-max-speed': { min: 20, max: 400 } };
@@ -65,4 +65,17 @@ it('keeps earlier preset storage untouched without blocking saves of the current
   expect(store.list()).toEqual([value]);
   expect(data.get('cloud-roads.presets.v2')).toBe(legacy);
   expect(() => parsePreset(JSON.stringify({ ...preset(), version: 2 }), rules)).toThrow();
+});
+
+it('fills newly introduced steering values in existing format 20 presets and startup settings', () => {
+  const legacy = preset(), newRules = { ...rules, 'steering-highSpeedRadius': { min: 50, max: 400, step: 5, defaultIfMissing: 70 } };
+  const raw = JSON.stringify(legacy), named = JSON.stringify([legacy]);
+  const storage = new Map([[PRESET_STORAGE_KEY, named], [STARTUP_STORAGE_KEY, raw]]);
+  const store = new PresetStore({ getItem: key => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); } }, newRules);
+  const expected = { ...legacy, settings: { ...legacy.settings, 'steering-highSpeedRadius': 70 } };
+  expect(parsePreset(raw, newRules)).toEqual(expected);
+  expect(store.list()).toEqual([expected]);
+  expect(store.startup()).toEqual(expected);
+  expect(storage.get(PRESET_STORAGE_KEY)).toEqual(named);
+  expect(() => parsePreset(JSON.stringify({ ...expected, settings: { ...expected.settings, 'steering-highSpeedRadius': 10 } }), newRules)).toThrow();
 });

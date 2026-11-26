@@ -16,9 +16,11 @@ const angle = (value: number) => Math.atan2(Math.sin(value), Math.cos(value));
 const wheel = (): WheelState => ({ height: 0, compression: 0, grounded: true });
 export const steeringTuning = {
   directness: [0, 0, 1], returnSpeed: [1.2, 0.25, 3], reversalSpeed: [1.25, 0.5, 2.5],
+  highSpeedRadius: [70, 50, 400], assistStart: [40, 20, 80],
   leanResponse: [1, 0.5, 2], leanLimit: [40, 20, 50], countersteer: [0.65, 0, 1],
 } as const;
 export type SteeringTuning = { -readonly [K in keyof typeof steeringTuning]: number };
+export const driftDefaults = { driftMinSpeed: 40 / 3.6, driftDelay: 0.35, stabilityAssist: 0.8 } as const;
 
 export class VehiclePhysics {
   readonly profile: Readonly<VehicleProfile>;
@@ -43,7 +45,7 @@ export class VehiclePhysics {
   damping = 1;
   powerScale = 1; brakeScale = 1; steeringScale = 1;
   gripScale = 1; handbrakeStrength = 1; countersteerAssist = 0.6;
-  driftMinSpeed = 30 / 3.6; driftDelay = 0.25; stabilityAssist = 0.65;
+  driftMinSpeed: number = driftDefaults.driftMinSpeed; driftDelay: number = driftDefaults.driftDelay; stabilityAssist: number = driftDefaults.stabilityAssist;
   rearLock = 0;
   private handbrakeTime = 0;
   private allowDrift = true;
@@ -120,12 +122,15 @@ export class VehiclePhysics {
     }
   }
   get steeringLock(): number {
+    if (!this.steeringAssist) return this.mechanicalLock;
     const config = this.profile, stability = this.profile.shape === 'motorcycle' ? 8 : Math.min(8, this.gravity * config.width / (2 * config.cg) * 0.7);
-    const speed = this.motionSpeed * Math.sqrt(clamp(this.steeringAssistStrength, 0.25, 2));
-    const blend = clamp((speed - 12) / 16, 0, 1), smooth = blend * blend * (3 - 2 * blend);
-    const low = this.mechanicalLock / (1 + speed / 28);
-    const high = Math.min(low, Math.atan(this.wheelbase * stability * 1.15 / Math.max(1, speed * speed)));
-    return this.steeringAssist ? low + (high - low) * smooth : this.mechanicalLock;
+    const speed = this.motionSpeed, kmh = speed * 3.6, strength = clamp(this.steeringAssistStrength, 0.25, 2);
+    const { assistStart, highSpeedRadius } = this.steeringTuning;
+    const low = this.mechanicalLock / (1 + speed * Math.sqrt(strength) / 28);
+    const blend = clamp((kmh - assistStart) / (100 - assistStart), 0, 1);
+    const radius = highSpeedRadius * (kmh / 100) ** 2 * strength;
+    const high = Math.min(low, Math.atan(this.wheelbase * (stability / 8) / Math.max(1, radius)));
+    return low + (high - low) * blend * blend * (3 - 2 * blend);
   }
   setSpeedLimit(kmh?: number): void {
     if (kmh !== undefined && !Number.isFinite(kmh)) return;
@@ -293,8 +298,9 @@ export class VehiclePhysics {
     const slopeForce = this.gravity * (grade / Math.hypot(1, grade) * tractorShare + trailerGrade * (1 - tractorShare));
     this.handbrake = approach(this.handbrake, input.handbrake ? clamp(this.handbrakeStrength, 0.4, 1) : 0, STEP * (input.handbrake ? 6 : 3));
     this.handbrakeTime = input.handbrake ? this.handbrakeTime + STEP : 0;
-    const deliberate = this.driftEnabled && input.handbrake && this.handbrakeTime >= clamp(this.driftDelay, 0, 0.8)
-      && (this.motionSpeed >= clamp(this.driftMinSpeed, 0, 80 / 3.6) || this.rearLock > 0.05 && this.motionSpeed > 2);
+    const startDrift = Math.abs(input.steer) >= 0.15 && this.motionSpeed >= clamp(this.driftMinSpeed, 0, 80 / 3.6);
+    const holdDrift = this.rearLock > 0.05 && this.motionSpeed > 2;
+    const deliberate = this.driftEnabled && input.handbrake && this.handbrakeTime >= clamp(this.driftDelay, 0, 0.8) && (startDrift || holdDrift);
     this.rearLock = approach(this.rearLock, deliberate ? this.handbrake : 0, STEP * (deliberate ? 5 : 3));
     const rearLoad = clamp(this.frontAxle / this.wheelbase + this.longitudinalAcceleration * Math.sign(this.speed || 1) * config.cg / (this.gravity * this.wheelbase), 0.18, 0.8);
     const parking = this.parked || input.handbrake && this.motionSpeed < 1;
@@ -329,7 +335,8 @@ export class VehiclePhysics {
     const bike = this.profile.shape === 'motorcycle';
     let targetSteer = clamp(clamp(input.steer, -1, 1) * (countersteering && !bike ? mechanicalLock : steeringLock) + (bike ? 0 : correction), -mechanicalLock, mechanicalLock);
     if (!bike && !countersteering && this.motionSpeed > 3) {
-      const stableLock = Math.atan(this.gravity * grip * 0.72 * this.wheelbase / Math.max(1, this.speed ** 2));
+      const lateralBudget = Math.sqrt(Math.max(0, (this.gravity * grip * 0.85) ** 2 - this.longitudinalAcceleration ** 2));
+      const stableLock = Math.atan(lateralBudget * this.wheelbase / Math.max(1, this.speed ** 2));
       const assist = clamp(this.stabilityAssist, 0, 1) * (1 - this.rearLock);
       targetSteer += (clamp(targetSteer, -stableLock, stableLock) - targetSteer) * assist;
     }

@@ -37,7 +37,10 @@ export class PresetPanel {
       const node = element<HTMLInputElement | HTMLSelectElement | HTMLFieldSetElement>(id);
       this.rules[id] = node instanceof HTMLFieldSetElement ? { choices: [...node.querySelectorAll<HTMLInputElement>('input[type=radio]')].map(o => o.value) }
         : node instanceof HTMLSelectElement ? { choices: [...node.options].filter(o => !o.disabled).map(o => o.value) }
-        : node.type === 'checkbox' ? { boolean: true } : { min: Number(node.min), max: Number(node.max), step: Number(node.step || 1) };
+        : node.type === 'checkbox' ? { boolean: true } : {
+          min: Number(node.min), max: Number(node.max), step: Number(node.step || 1),
+          ...(['steering-highSpeedRadius', 'steering-assistStart'].includes(id) ? { defaultIfMissing: Number(node.defaultValue) } : {}),
+        };
     }
     for (const id of toggles) this.rules[id] = { boolean: true };
     this.store = new PresetStore({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) }, this.rules);

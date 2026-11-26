@@ -1,7 +1,7 @@
 import { airportHeight } from '../../src/aviation/airport.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AIRCRAFT, AIR_GATES, createAircraftFlight, updateAircraftFlight, toggleAircraftGear, toggleAircraftPause, crossesAirGate, runwayContact, aircraftEnvelope, setAircraftFlaps, toggleAircraftSpeedBrake, setAircraftPhysics } from '../../src/aviation/aircraft-flight.js';
+import { AIRCRAFT, AIRCRAFT_STEP, AIR_GATES, createAircraftFlight, updateAircraftFlight, toggleAircraftGear, toggleAircraftPause, crossesAirGate, runwayContact, aircraftEnvelope, setAircraftFlaps, toggleAircraftSpeedBrake, setAircraftPhysics } from '../../src/aviation/aircraft-flight.js';
 import { AIRPORT_BUILDINGS, RUNWAY } from '../../src/aviation/airport.js';
 import { Quaternion, Euler, Vector3 } from 'three';
 
@@ -10,6 +10,26 @@ function advance(flight, input, seconds, step = 1 / 60) {
 }
 
 const attitude = flight => new Quaternion().setFromEuler(new Euler(flight.pitch, -flight.heading, -flight.roll, 'YXZ'));
+
+test('manual roll completes successive turns with partial input and stability enabled', () => {
+  for (const mode of ['assisted', 'maneuver']) for (const direction of [-1, 1]) {
+    const flight = createAircraftFlight('su30', true, { physics: { mode, bankLimit: .4 } });
+    flight.y = 4000;
+    let rotation = 0;
+    for (let i = 0; i < 20 / AIRCRAFT_STEP && direction * rotation < 4 * Math.PI + 2; i++) {
+      const previous = flight.roll;
+      updateAircraftFlight(flight, { roll: direction * .5 }, AIRCRAFT_STEP);
+      const change = flight.roll - previous;
+      const delta = Math.atan2(Math.sin(change), Math.cos(change));
+      assert.ok(direction * delta > 0 && Math.abs(delta) < .03);
+      rotation += delta;
+    }
+    assert.ok(direction * rotation >= 4 * Math.PI + 2);
+    assert.equal(flight.status, 'running');
+    advance(flight, {}, 6);
+    assert.ok(Math.abs(flight.roll) < .05);
+  }
+});
 
 test('maneuver mode completes rolls and loops without discontinuities at vertical or inverted attitudes', () => {
   for (const aircraft of AIRCRAFT) for (const axis of ['roll', 'pitch']) {
@@ -97,9 +117,10 @@ test('all aircraft accelerate on the runway and need speed plus rotation to take
 
 test('the fighter is faster and more agile than the airliner', () => {
   const flights = AIRCRAFT.map(aircraft => createAircraftFlight(aircraft.id, true));
-  for (const flight of flights) { flight.throttle = 1; advance(flight, { roll: .6 }, 15); }
+  for (const flight of flights) { flight.throttle = 1; advance(flight, { roll: .6 }, .6); }
+  assert.ok(flights[1].rollRate > flights[0].rollRate * 2);
+  for (const flight of flights) advance(flight, {}, 15);
   assert.ok(flights[1].speed > flights[0].speed * 1.4);
-  assert.ok(flights[1].roll > flights[0].roll);
   assert.ok(flights.every(flight => flight.x > 0 && flight.status === 'running'));
 });
 

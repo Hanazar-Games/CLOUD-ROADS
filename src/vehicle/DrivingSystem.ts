@@ -6,7 +6,7 @@ import type { World } from '../world/World';
 import { DrivingSurface } from './DrivingSurface';
 import { surfaceGravity } from '../world/WorldOptions';
 import { VehicleMesh } from './VehicleMesh';
-import { VehiclePhysics, steeringTuning, type SteeringTuning } from './VehiclePhysics';
+import { driftDefaults, VehiclePhysics, steeringTuning, type SteeringTuning } from './VehiclePhysics';
 import { vehicleProfiles, suspensionLevels, suspensionNames, suspensionTuning, type Suspension, type VehicleKind } from './VehicleConfig';
 import { VehicleSystems, lightNames, wiperNames, signalNames, type LightMode, type WiperMode, type SignalMode } from './VehicleSystems';
 import { CabinState } from './CabinState';
@@ -23,9 +23,10 @@ import type { InstrumentStyle } from './VehicleDisplay';
 
 const driftTuning = [
   ['road-grip', 'gripScale', 1, 100, '%'], ['handbrake-strength', 'handbrakeStrength', 1, 100, '%'],
-  ['countersteer-assist', 'countersteerAssist', 0.6, 100, '%'], ['stability-assist', 'stabilityAssist', 0.65, 100, '%'],
-  ['drift-min-speed', 'driftMinSpeed', 30 / 3.6, 3.6, ' km/h'], ['drift-delay', 'driftDelay', 0.25, 1000, ' ms'],
+  ['countersteer-assist', 'countersteerAssist', 0.6, 100, '%'], ['stability-assist', 'stabilityAssist', driftDefaults.stabilityAssist, 100, '%'],
+  ['drift-min-speed', 'driftMinSpeed', driftDefaults.driftMinSpeed, 3.6, ' km/h'], ['drift-delay', 'driftDelay', driftDefaults.driftDelay, 1000, ' ms'],
 ] as const;
+const steeringUnits: Partial<Record<keyof SteeringTuning, string>> = { leanLimit: '°', highSpeedRadius: ' m', assistStart: ' km/h' };
 
 export class DrivingSystem {
   car = new VehiclePhysics();
@@ -170,7 +171,7 @@ export class DrivingSystem {
       this.car.steeringResponse = Number(element<HTMLInputElement>('steering-response').value) / 100; this.describeTuning();
     }, options);
     for (const key of Object.keys(steeringTuning) as (keyof SteeringTuning)[]) element(`steering-${key}`).addEventListener('input', () => {
-      this.car.configureSteering({ [key]: Number(element<HTMLInputElement>(`steering-${key}`).value) / (key === 'leanLimit' ? 1 : 100) });
+      this.car.configureSteering({ [key]: Number(element<HTMLInputElement>(`steering-${key}`).value) / (steeringUnits[key] ? 1 : 100) });
       this.describeTuning();
     }, options);
     const resetSteering = () => {
@@ -795,10 +796,11 @@ export class DrivingSystem {
     element<HTMLInputElement>('steering-response').value = String(Math.round(this.car.steeringResponse * 100));
     element('steering-response-value').textContent = `${Math.round(this.car.steeringResponse * 100)}%`;
     for (const key of Object.keys(steeringTuning) as (keyof SteeringTuning)[]) {
-      const input = element<HTMLInputElement>(`steering-${key}`), degrees = key === 'leanLimit';
-      input.value = String(Math.round(this.car.steeringTuning[key] * (degrees ? 1 : 100)));
-      element(`steering-${key}-value`).textContent = `${input.value}${degrees ? '°' : '%'}`;
-      input.disabled = ['leanResponse', 'leanLimit', 'countersteer'].includes(key) ? this.car.profile.shape !== 'motorcycle'
+      const input = element<HTMLInputElement>(`steering-${key}`), unit = steeringUnits[key];
+      input.value = String(Math.round(this.car.steeringTuning[key] * (unit ? 1 : 100)));
+      element(`steering-${key}-value`).textContent = `${input.value}${unit ?? '%'}`;
+      input.disabled = key === 'highSpeedRadius' || key === 'assistStart' ? !this.car.steeringAssist
+        : ['leanResponse', 'leanLimit', 'countersteer'].includes(key) ? this.car.profile.shape !== 'motorcycle'
         : key !== 'directness' && this.car.steeringTuning.directness === 1;
     }
     element<HTMLInputElement>('steering-response').disabled = this.car.steeringTuning.directness === 1;

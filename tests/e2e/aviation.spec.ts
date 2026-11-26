@@ -125,6 +125,16 @@ test('mouse aim steers the flight path, hides the cursor and releases it for set
   await expect.poll(async () => Number(await vertical.textContent())).toBeGreaterThan(2);
   await page.screenshot({ path: info.outputPath('flight-mouse-aim.png') });
 
+  const bank = page.locator('[data-value="bank"]');
+  const rollDegrees = async () => Number((await bank.textContent())?.match(/滚转 (-?\d+)°/)?.[1]);
+  await page.keyboard.down('ArrowRight');
+  try {
+    await expect.poll(async () => Math.abs(await rollDegrees()), { timeout: 10000 }).toBeGreaterThan(120);
+  } finally {
+    await page.keyboard.up('ArrowRight');
+  }
+  await expect.poll(async () => Math.abs(await rollDegrees()), { timeout: 10000 }).toBeLessThan(5);
+
   await page.mouse.click(870, 400);
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('world');
   await expect(page.locator('[data-value="keyhint"]')).toContainText('Esc 释放鼠标');

@@ -1,6 +1,6 @@
 import { validWorldOptions, type WorldOptions } from '../world/WorldOptions';
 
-export type SettingRule = { boolean: true } | { choices: readonly string[] } | { min: number; max: number; step?: number };
+export type SettingRule = { boolean: true } | { choices: readonly string[] } | { min: number; max: number; step?: number; defaultIfMissing?: number };
 export type SettingRules = Record<string, SettingRule>;
 export interface SettingsPreset {
   format: 'cloud-roads-preset'; version: 20; name: string; seed: string; world: WorldOptions;
@@ -10,6 +10,15 @@ export const PRESET_STORAGE_KEY = 'cloud-roads.presets.v20';
 export const STARTUP_STORAGE_KEY = 'cloud-roads.startup.v20';
 export const PRESET_MAX_BYTES = 65536;
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+function fillPresetDefaults(value: unknown, rules: SettingRules): unknown {
+  if (!record(value) || !record(value.settings)) return value;
+  const settings = { ...value.settings };
+  for (const [key, rule] of Object.entries(rules)) {
+    if ('defaultIfMissing' in rule && !Object.hasOwn(settings, key)) settings[key] = rule.defaultIfMissing;
+  }
+  return { ...value, settings };
+}
 
 export function validatePreset(value: unknown, rules: SettingRules): value is SettingsPreset {
   if (!record(value) || Object.keys(value).sort().join() !== 'factorySpeed,format,name,seed,settings,version,world'
@@ -33,6 +42,7 @@ export function parsePreset(text: string, rules: SettingRules): SettingsPreset {
   if (text.length > PRESET_MAX_BYTES) throw new Error('预设文件不能超过 64 KB。');
   let data: unknown;
   try { data = JSON.parse(text); } catch { throw new Error('文件不是有效的 JSON。'); }
+  data = fillPresetDefaults(data, rules);
   if (!validatePreset(data, rules)) throw new Error('预设格式或参数范围不正确，请使用本版（格式 20）导出的 JSON。当前设置未改变。');
   return data;
 }
@@ -52,8 +62,9 @@ export class PresetStore {
     const raw = this.storage.getItem(PRESET_STORAGE_KEY);
     if (raw === null) return [];
     if (raw.length > PRESET_MAX_BYTES * 32) throw new Error('本机预设数据过大，请先导出或清理。');
-    const data: unknown = JSON.parse(raw);
-    if (!Array.isArray(data) || data.length > 32 || !data.every(p => validatePreset(p, this.rules))
+    const saved: unknown = JSON.parse(raw);
+    const data = Array.isArray(saved) && saved.length <= 32 ? saved.map(p => fillPresetDefaults(p, this.rules)) : [];
+    if (!Array.isArray(saved) || saved.length > 32 || !data.every(p => validatePreset(p, this.rules))
       || new Set(data.map(p => p.name)).size !== data.length) throw new Error('本机预设数据不完整，原数据已保留。');
     return data;
   }

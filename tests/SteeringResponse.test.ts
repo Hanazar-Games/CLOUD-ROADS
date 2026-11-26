@@ -82,3 +82,20 @@ it('bounds malformed steering configuration without overwriting valid settings',
   expect(car.steeringTuning.directness).toBe(1); expect(car.steeringTuning.returnSpeed).toBe(0.25);
   expect(car.steeringTuning.leanLimit).toBe(50); expect(car.steeringTuning.leanResponse).toBe(1);
 });
+
+it('uses the custom highway radius and onset without changing the low-speed full lock', () => {
+  const tight = create(false, 100 / 3.6), wide = create(false, 100 / 3.6);
+  tight.configureSteering({ highSpeedRadius: 70, assistStart: 80 });
+  wide.configureSteering({ highSpeedRadius: 150, assistStart: 20 });
+  for (const [car, radius] of [[tight, 70], [wide, 150]] as const) {
+    expect(car.wheelbase / Math.tan(car.steeringLock)).toBeCloseTo(radius);
+    run(car, 1, 1);
+  }
+  expect(tight.motionSpeed / tight.yawRate).toBeLessThan(wide.motionSpeed / wide.yawRate);
+  wide.configureSteering({ highSpeedRadius: 70 });
+  tight.speed = wide.speed = 50 / 3.6;
+  tight.lateralSpeed = wide.lateralSpeed = 0;
+  expect(tight.steeringLock).toBeGreaterThan(wide.steeringLock);
+  tight.speed = wide.speed = 0;
+  expect(tight.steeringLock).toEqual(wide.steeringLock);
+});

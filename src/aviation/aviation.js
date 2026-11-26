@@ -38,7 +38,7 @@ const powerFields = [['thrust', '发动机推力'], ['engineResponse', '发动�
 const aeroFields = [['lift', '升力系数'], ['stallAngle', '正临界迎角倍率'], ['negativeStall', '负临界迎角倍率'], ['stallLiftLoss', '完全分离升力损失'], ['stallAuthority', '完全分离剩余舵效'], ['stallRecovery', '气流恢复速度'], ['stallDrag', '分离阻力倍率'], ['inducedDrag', '机动与失速阻力倍率'], ['loadLimit', '气动过载上限'], ['airDensity', '空气密度随海拔变化'], ['thrustLapse', '稀薄空气推力衰减']];
 const physicsFields = [...maneuverFields, ...powerFields, ...aeroFields];
 const flightModeHelp = {
-  assisted: '稳定飞行把操纵输入转换为目标俯仰和坡度，适合起降与巡航。',
+  assisted: '稳定飞行辅助俯仰。按住滚转键或持续推杆可整周滚转，松手后按回正辅助强度调平。鼠标瞄准和自动驾驶按目标坡度转向。',
   limited: '限角机动按输入控制旋转速率，在设定的俯仰和坡度边界停止。偏航仍可转过整周。',
   maneuver: '自由机动支持整周滚转、倒飞和筋斗。用方向键或触屏摇杆接管后可连续旋转。',
 };
@@ -489,7 +489,10 @@ export function mountAviation({ audio, unlockAudio, onToggleAudio, onExit, host 
     const density = aircraftDensity(flight);
     text(values['aero-snapshot'], `空气密度 ${Math.round(density * 100)}% · EAS ${speedText(equivalentAirspeed(flight, density))} · 迎角 ${degrees(flight.angleOfAttack)}° · 临界范围 ${stallRange(performance)} · 气流分离 ${Math.round(flight.flowSeparation * 100)}%`);
     text(values['tune-load'], `±${performance.loadLimit.toFixed(1)} G`);
-    text(values['tune-limits'], physicsSettings.mode === 'maneuver' ? '自由机动 · 不限角度' : `${Math.round(performance.pitchLimit * 180 / Math.PI)}° / ${Math.round(performance.bankLimit * 180 / Math.PI)}°`);
+    const pitchDegrees = Math.round(performance.pitchLimit * 180 / Math.PI);
+    const bankDegrees = Math.round(performance.bankLimit * 180 / Math.PI);
+    const bankSummary = physicsSettings.mode === 'limited' ? `${bankDegrees}°` : `手动不限 · 辅助 ${bankDegrees}°`;
+    text(values['tune-limits'], `${physicsSettings.mode === 'maneuver' ? '手动不限' : `${pitchDegrees}°`} / ${bankSummary}`);
     text(values['performance-note'], physicsSettings.thrust === 0 ? '发动机推力为零，可空中试飞练习滑翔；跑道起飞需要增加推力。' : envelope.takeoff > envelope.maxSpeed * Math.sqrt(density) ? '当前起飞参考超过速度上限，请提高上限或升力，或降低质量 / 重力。' : '低速参考已计入襟翼与坡度；高于参考速度仍可能大迎角失速。过载以当前重力为基准。加速参考未扣空气阻力，实际极速取决于推力与阻力。');
     text(values.specs, `${aircraft.subtitle} · 翼展 ${aircraft.span} m · 起飞参考 ≥ ${speedText(envelope.takeoff)} · 速度上限 ${speedText(envelope.maxSpeed)}`);
   }

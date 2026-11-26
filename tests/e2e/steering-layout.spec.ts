@@ -37,9 +37,11 @@ test('persists steering weights and motorcycle tuning through vehicle changes, r
   await page.locator('#steering-directness').fill('35'); await page.locator('#steering-returnSpeed').fill('180');
   await page.locator('#steering-reversalSpeed').fill('150'); await page.locator('#steering-leanLimit').fill('30');
   await page.locator('#steering-countersteer').fill('80');
+  await page.locator('#steering-highSpeedRadius').fill('110'); await page.locator('#steering-assistStart').fill('55');
   await page.locator('#vehicle-kind').selectOption('sedan');
   await expect(page.locator('#steering-leanLimit')).toBeDisabled();
   await expect(page.locator('#steering-directness')).toHaveValue('35');
+  await expect(page.locator('#steering-highSpeedRadius-value')).toHaveText('110 m');
   await page.locator('#vehicle-kind').selectOption('motorcycle'); await expect(page.locator('#steering-leanLimit')).toHaveValue('30');
   await (await control(page, page.locator('#preset-save'))).click();
   const download = page.waitForEvent('download'); await page.locator('#preset-export').click();
@@ -47,8 +49,10 @@ test('persists steering weights and motorcycle tuning through vehicle changes, r
   for await (const chunk of stream!) chunks.push(chunk);
   const data = Buffer.concat(chunks).toString(), preset = JSON.parse(data);
   expect(preset.version).toBe(20); expect(preset.settings['steering-directness']).toBe(35); expect(preset.settings['steering-leanLimit']).toBe(30);
+  expect(preset.settings['steering-highSpeedRadius']).toBe(110); expect(preset.settings['steering-assistStart']).toBe(55);
   await (await control(page, page.locator('#steering-reset'))).click();
   await expect(page.locator('#steering-directness')).toHaveValue('0'); await expect(page.locator('#steering-leanLimit')).toHaveValue('40');
+  await expect(page.locator('#steering-highSpeedRadius')).toHaveValue('70'); await expect(page.locator('#steering-assistStart')).toHaveValue('40');
   await control(page, page.locator('#preset-import-open'));
   await page.locator('#preset-import').setInputFiles({ name: 'steering.json', mimeType: 'application/json', buffer: Buffer.from(data) });
   await page.locator('#preset-apply').click(); await expect(page.locator('#preset-status')).toContainText('已应用');
@@ -56,6 +60,7 @@ test('persists steering weights and motorcycle tuning through vehicle changes, r
   await (await control(page, page.locator('#startup-save'))).click(); await page.reload();
   await expect(page.locator('#startup-status')).toContainText('已恢复');
   await expect(page.locator('#steering-directness')).toHaveValue('35'); await expect(page.locator('#steering-leanLimit')).toHaveValue('30');
+  await expect(page.locator('#steering-highSpeedRadius')).toHaveValue('110'); await expect(page.locator('#steering-assistStart')).toHaveValue('55');
 });
 
 test('reveals an invalid road parameter even when its subgroup is collapsed', async ({ page }) => {

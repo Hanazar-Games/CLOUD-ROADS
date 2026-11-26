@@ -71,7 +71,7 @@ test('actual touchdown uses the customized landing speed instead of the factory 
   }
 });
 
-test('flight path response, rotational inertia and assisted limits change actual maneuvers', () => {
+test('flight path response, rotational inertia and configurable limits change actual maneuvers', () => {
   const paths = [.4, 1.8].map(flightPath => {
     const flight = airborne({ mode: 'maneuver', stability: 0, flightPath });
     flight.pitch = .35; advance(flight, {}, 1);
@@ -83,9 +83,9 @@ test('flight path response, rotational inertia and assisted limits change actual
     advance(flight, { roll: 1 }, .1); return flight;
   });
   assert.ok(inertia[0].roll > inertia[1].roll * 2);
-  for (const [key, axis] of [['pitchLimit', 'pitch'], ['bankLimit', 'roll']]) {
+  for (const [key, axis, mode] of [['pitchLimit', 'pitch', 'assisted'], ['bankLimit', 'roll', 'limited']]) {
     const flights = [.4, 1.25].map(value => {
-      const flight = airborne({ [key]: value });
+      const flight = airborne({ mode, [key]: value });
       advance(flight, { [axis]: 1 }, 4); return flight;
     });
     assert.ok(flights[1][axis] > flights[0][axis] * 2, key);

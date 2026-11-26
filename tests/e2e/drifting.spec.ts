@@ -48,8 +48,8 @@ test('retains drift tuning across vehicles, resets it independently and supports
   await page.locator('#vehicle-tuning-reset').click(); await expect(page.locator('#road-grip')).toHaveValue('40');
   await page.locator('#drift-reset').click(); await expect(page.locator('#road-grip')).toHaveValue('100');
   await expect(page.locator('#handbrake-strength')).toHaveValue('100'); await expect(page.locator('#countersteer-assist')).toHaveValue('60');
-  await expect(page.locator('#drift-min-speed')).toHaveValue('30'); await expect(page.locator('#drift-delay')).toHaveValue('250');
-  await expect(page.locator('#stability-assist')).toHaveValue('65');
+  await expect(page.locator('#drift-min-speed')).toHaveValue('40'); await expect(page.locator('#drift-delay')).toHaveValue('350');
+  await expect(page.locator('#stability-assist')).toHaveValue('80');
   await page.locator('#drift-enabled').uncheck(); await expect(page.locator('#drift-delay')).toBeDisabled();
   await page.locator('#drift-enabled').check();
   await page.locator('#vehicle-kind').selectOption('sedan');

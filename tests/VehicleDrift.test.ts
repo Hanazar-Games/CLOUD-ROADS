@@ -36,17 +36,19 @@ it('keeps straight-line braking and parked handbrakes free of artificial sideway
   expect(car.motionSpeed).toBe(0); expect(car.yawRate).toBe(0); expect(car.heading).toBe(0);
 });
 
-it('requires a deliberate sustained handbrake above the configured drift speed', () => {
-  const tap = create(), held = create(), slow = create();
+it('requires steering and a sustained handbrake above the configured drift speed', () => {
+  const tap = create(), held = create(), slow = create(), straight = create();
   slow.speed = 4;
-  run(tap, 0.12, { ...coast, steer: 0.8, handbrake: true });
+  run(tap, 0.3, { ...coast, steer: 0.8, handbrake: true });
   expect(tap.rearLock).toBe(0); expect(tap.speed).toBeLessThan(20);
+  run(straight, 0.8, { ...coast, handbrake: true });
+  expect(straight.rearLock).toBe(0); expect(straight.speed).toBeLessThan(20);
   run(slow, 0.8, { ...coast, steer: 0.8, handbrake: true });
   expect(slow.rearLock).toBe(0);
   run(held, 0.7, { ...coast, steer: 0.8, handbrake: true });
   expect(held.rearLock).toBeGreaterThan(0.9);
   tap.driftDelay = 0; tap.driftMinSpeed = 0;
-  run(tap, 0.25, { ...coast, handbrake: true }); expect(tap.rearLock).toBeGreaterThan(0);
+  run(tap, 0.25, { ...coast, steer: 0.8, handbrake: true }); expect(tap.rearLock).toBeGreaterThan(0);
   tap.reset(0, 0, 0, flat); expect(tap.rearLock).toBe(0);
 });
 
@@ -98,7 +100,7 @@ it('uses rear contact for the handbrake and stops rear wheel rotation when locke
   const car = create(), rearIce = (_x: number, z: number) => ({ height: 0, grip: z > 0 ? 0 : 1 });
   car.update(1 / 120, { ...coast, handbrake: true }, rearIce);
   expect(car.speed).toBe(20);
-  run(car, 0.6, { ...coast, handbrake: true }); const wheel = car.rearWheelAngle, front = car.wheelAngle;
+  run(car, 0.7, { ...coast, steer: 0.8, handbrake: true }); const wheel = car.rearWheelAngle, front = car.wheelAngle;
   run(car, 0.1, { ...coast, handbrake: true });
   expect(car.rearWheelAngle).toBe(wheel); expect(car.wheelAngle).not.toBe(front);
   run(car, 0.5, coast); expect(car.rearWheelAngle).not.toBe(wheel);
@@ -108,7 +110,7 @@ it('never creates propulsion from increased grip and supports slides with counte
   const car = create(); car.gripScale = 1.5; car.speed = 0.2;
   run(car, 3, coast); expect(car.motionSpeed).toBe(0);
   const manual = create(); manual.countersteerAssist = 0;
-  run(manual, 0.6, { ...coast, steer: 0.8, handbrake: true });
+  run(manual, 0.85, { ...coast, steer: 0.8, handbrake: true });
   expect(Math.abs(manual.slipAngle)).toBeGreaterThan(0.08);
   manual.park(); expect(manual.yawRate).toBe(0); expect(manual.tireSlip).toBe(0);
 });

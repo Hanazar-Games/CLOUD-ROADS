@@ -250,6 +250,19 @@ test('airbrakes still dissipate energy in a vertical descent', () => {
   assert.ok(flights[1].speed < flights[0].speed - 1);
 });
 
+test('airbrake drag in a steep glide acts along the actual flight path', () => {
+  const path = -.7;
+  const [clean, braked] = [false, true].map(speedBrake => {
+    const flight = createAircraftFlight('su30', true, { physics: { mode: 'maneuver', stability: 0, thrust: 0 } });
+    Object.assign(flight, { y: 3000, speed: 160, pitch: path + .05, verticalSpeed: 160 * Math.sin(path), speedBrake });
+    updateAircraftFlight(flight, {}, 1 / 120);
+    return flight;
+  });
+  assert.ok(braked.speed < clean.speed);
+  assert.ok(braked.verticalSpeed > clean.verticalSpeed);
+  assert.ok(Math.abs((braked.verticalSpeed - clean.verticalSpeed) / (braked.speed - clean.speed) - Math.sin(path)) < .003);
+});
+
 test('a steep established climb is safe at low angle of attack while a negative-angle push stalls', () => {
   for (const { id } of AIRCRAFT) {
     const climb = createAircraftFlight(id, true, { physics: { mode: 'maneuver', stability: 0 } });

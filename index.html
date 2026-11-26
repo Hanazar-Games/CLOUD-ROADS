@@ -107,6 +107,11 @@
             <label for="steering-assist"><input id="steering-assist" type="checkbox" checked /> 随速度增大转弯半径</label>
             <label class="speed-label" for="steering-assist-strength">高速转向辅助强度 <output id="steering-assist-strength-value">100%</output></label>
             <input id="steering-assist-strength" type="range" min="25" max="200" step="5" value="100" aria-describedby="vehicle-tuning-help" />
+            <label class="speed-label" for="steering-highSpeedRadius">高速参考转弯半径（100 km/h） <output id="steering-highSpeedRadius-value">70 m</output></label>
+            <input id="steering-highSpeedRadius" type="range" min="50" max="400" step="5" value="70" aria-describedby="high-speed-steering-help" />
+            <label class="speed-label" for="steering-assistStart">高速转向辅助介入速度 <output id="steering-assistStart-value">40 km/h</output></label>
+            <input id="steering-assistStart" type="range" min="20" max="80" step="5" value="40" aria-describedby="high-speed-steering-help" />
+            <p id="high-speed-steering-help" class="panel-help">数值越小，高速满舵转向越急。介入速度决定半径辅助何时开始平滑过渡。实际半径受车速、抓地力和车型影响。</p>
             <p id="vehicle-tuning-help" class="panel-help">辅助默认开启；强度越高，高速转向越缓。关闭后允许更大转角，轮胎侧向力仍受抓地力限制。漂移时反打方向允许更快回转，帮助接住车身。恢复默认同时重置限速与转向辅助。</p>
             <button id="steering-reset" type="button">恢复默认转向</button>
           </details>
@@ -130,13 +135,13 @@
             <input id="handbrake-strength" type="range" min="40" max="100" step="5" value="100" aria-describedby="drift-help" />
             <label class="speed-label" for="countersteer-assist">漂移反打辅助 <output id="countersteer-assist-value">60%</output></label>
             <input id="countersteer-assist" type="range" min="0" max="100" step="5" value="60" aria-describedby="drift-help" />
-            <label class="speed-label" for="drift-min-speed">主动漂移最低速度 <output id="drift-min-speed-value">30 km/h</output></label>
-            <input id="drift-min-speed" type="range" min="0" max="80" step="5" value="30" />
-            <label class="speed-label" for="drift-delay">手刹漂移确认时间 <output id="drift-delay-value">250 ms</output></label>
-            <input id="drift-delay" type="range" min="0" max="800" step="50" value="250" />
-            <label class="speed-label" for="stability-assist">转向稳定辅助 <output id="stability-assist-value">65%</output></label>
-            <input id="stability-assist" type="range" min="0" max="100" step="5" value="65" />
-            <p id="drift-help" class="panel-help">Space 立即制动；达到最低速度并持续按住后，后轮才逐渐锁止进入漂移。松开手刹、反打方向恢复抓地。稳定辅助按抓地力限制过大的转向请求，主动漂移时逐渐减弱，0% 为手动。雨雪和低抓地力仍会导致自然侧滑；关闭漂移可抑制侧滑。参数随换车保留，静止时 Space 保持驻车。</p>
+            <label class="speed-label" for="drift-min-speed">主动漂移最低速度 <output id="drift-min-speed-value">40 km/h</output></label>
+            <input id="drift-min-speed" type="range" min="0" max="80" step="5" value="40" />
+            <label class="speed-label" for="drift-delay">手刹漂移确认时间 <output id="drift-delay-value">350 ms</output></label>
+            <input id="drift-delay" type="range" min="0" max="800" step="50" value="350" />
+            <label class="speed-label" for="stability-assist">转向稳定辅助 <output id="stability-assist-value">80%</output></label>
+            <input id="stability-assist" type="range" min="0" max="100" step="5" value="80" />
+            <p id="drift-help" class="panel-help">Space 立即制动。达到最低速度、持续按住手刹并给出转向输入后，后轮才逐渐锁止进入漂移。松开手刹、反打方向恢复抓地。稳定辅助按抓地力限制转向，主动漂移时逐渐减弱。雨雪和低抓地力仍会导致自然侧滑。</p>
             <button id="drift-reset" type="button">恢复默认漂移参数</button>
           </details>
         <details class="world-options"><summary>视角与悬挂</summary>

@@ -199,11 +199,22 @@ function stepFlight(flight, input, dt) {
     flight.pitchRate = 0; flight.rollRate = 0; flight.yawRate = 0;
   } else {
     const maneuver = physics.mode !== 'assisted' && !aiming;
+    const bankGuidance = aiming || flight.systems.autopilot.mode !== 'off';
     const pitchLimit = aircraft.pitchRate * physics.pitchRate * authority;
     const rollLimit = aircraft.rollRate * physics.rollRate * authority;
     let pitchTarget = maneuver ? pitchInput * pitchLimit - (1 - Math.abs(pitchInput)) * flight.pitch * physics.stability : (pitchInput * performance.pitchLimit + .018 - flight.pitch) * aircraft.response * (aiming || pitchInput || flight.systems.autopilot.mode === 'hold' ? 1 : physics.stability);
     pitchTarget -= Math.sin(airflow.angle) * airflow.separation * aircraft.pitchRate * .12;
-    const rollTarget = maneuver ? rollInput * rollLimit - (1 - Math.abs(rollInput)) * flight.roll * physics.stability : (rollInput * performance.bankLimit - flight.roll) * aircraft.response * 1.5 * (aiming || rollInput || flight.systems.autopilot.mode !== 'off' ? 1 : physics.stability);
+    const manualRoll = !bankGuidance && physics.mode !== 'limited' && axis(input.roll) !== 0;
+    let rollTarget = rollInput * rollLimit;
+    if (!manualRoll) {
+      if (maneuver) {
+        rollTarget -= (1 - Math.abs(rollInput)) * flight.roll * physics.stability;
+      } else {
+        const bankError = rollInput * performance.bankLimit - flight.roll;
+        const bankCorrection = Math.atan2(Math.sin(bankError), Math.cos(bankError));
+        rollTarget = bankCorrection * aircraft.response * 1.5 * (bankGuidance || rollInput ? 1 : physics.stability);
+      }
+    }
     const response = 1 - Math.exp(-performance.response * 3 * dt);
     flight.pitchRate += (clamp(pitchTarget, -pitchLimit, pitchLimit) - flight.pitchRate) * response;
     flight.rollRate += (clamp(rollTarget, -rollLimit, rollLimit) - flight.rollRate) * response;
@@ -239,10 +250,18 @@ function stepFlight(flight, input, dt) {
   const braking = flight.onGround ? controls.wheelBrake * performance.wheelBrake : (controls.brake || flight.speedBrake ? performance.airBrake * density : 0);
   const bankCos = Math.cos(flight.roll), bankSin = Math.sin(flight.roll);
   const pitchCos = Math.cos(flight.pitch), pitchSin = Math.sin(flight.pitch);
-  const verticalAcceleration = normal * bankCos * pitchCos - gravity;
-  const pathSine = clamp((flight.verticalSpeed + verticalAcceleration * dt * .5) / Math.max(flight.speed, .01), -1, 1);
+  const pathSine = clamp(flight.verticalSpeed / Math.max(flight.speed, .01), -1, 1);
+  const pathCos = Math.sqrt(Math.max(0, 1 - pathSine ** 2));
+  const slipAngle = flight.heading - flight.trackHeading;
+  const slipSin = Math.sin(slipAngle), slipCos = Math.cos(slipAngle);
+  // Project wing lift perpendicular to the actual flight path, including sideslip.
+  const liftAlongTrack = -pitchSin * bankCos * slipCos - bankSin * slipSin;
+  const liftAcrossTrack = bankSin * slipCos - pitchSin * bankCos * slipSin;
   const thrust = availableAcceleration(flight, density) * flight.engineOutput * (flight.systems.reverse ? -aircraft.reverseThrust * flight.systems.settings.reversePower : 1);
-  const acceleration = thrust - drag - (flight.onGround ? .45 : gravity * pathSine) - braking;
+  const tangentialAcceleration = thrust - drag - braking;
+  const verticalAcceleration = normal * pathCos * (pitchCos * bankCos * pathCos - liftAlongTrack * pathSine) - gravity + tangentialAcceleration * pathSine;
+  const gravityPath = clamp((flight.verticalSpeed + verticalAcceleration * dt * .5) / Math.max(flight.speed, .01), -1, 1);
+  const acceleration = tangentialAcceleration - (flight.onGround ? .45 : gravity * gravityPath);
   const ceiling = Math.max(performance.maxSpeed, flight.speed - Math.min(60, Math.max(0, flight.speed - performance.maxSpeed) * 2) * dt);
   const nextSpeed = flight.onGround && flight.systems.parkingBrake ? 0 : clamp(flight.speed + acceleration * dt, 0, ceiling);
   const speed = (flight.speed + nextSpeed) * .5;
@@ -258,7 +277,7 @@ function stepFlight(flight, input, dt) {
   } else {
     // Bank tilts the same lift vector that supports the aircraft vertically.
     const horizontalSpeed = Math.sqrt(Math.max(0, speed ** 2 - flight.verticalSpeed ** 2));
-    const turn = normal * bankSin / Math.max(horizontalSpeed, 35) * dt;
+    const turn = normal * liftAcrossTrack / Math.max(horizontalSpeed, 35) * dt;
     flight.heading += turn;
     flight.trackHeading += turn;
   }
