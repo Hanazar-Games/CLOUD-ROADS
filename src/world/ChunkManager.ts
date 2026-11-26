@@ -65,6 +65,7 @@ export class ChunkManager {
     const fine = altitude === undefined || highDetail ? 2 : 1;
     if (cells !== this.maxCells || ahead !== this.flightAhead || turn !== this.flightTurn || fine !== this.fineRadius) {
       this.maxCells = cells; this.flightAhead = ahead; this.flightTurn = turn; this.fineRadius = fine; this.center = '';
+      this.vegetation.setSuspended(cells < 64);
     }
   }
 
@@ -161,15 +162,18 @@ export class ChunkManager {
       chunk.apply(result.request, result.data, this.originX, this.originZ);
       this.active.set(result.request.key, chunk);
       this.applied.set(result.request.key, result.request);
-      this.vegetation.setChunk(result.request.key, result.request.x, result.request.z, result.data.vegetation);
+      if (result.data.vegetation.length) this.vegetation.setChunk(result.request.key, result.request.x, result.request.z, result.data.vegetation);
+      else this.vegetation.removeChunk(result.request.key);
       this.completed++;
       uploaded++;
     }
     this.vegetation.update(this.originX, this.originZ);
-    const corridor = this.plannedRoad;
+    const corridor = this.plannedRoad, capacity = this.backend.capacity;
     if (this.error || !corridor) return;
+    // Flight streaming can fill worker slots while finished tiles wait to upload.
+    const buffered = this.flightAhead ? capacity * 2 : capacity;
     for (const request of this.queue) {
-      if (this.pending.size + this.ready.length >= this.backend.capacity) break;
+      if (this.pending.size >= capacity || this.pending.size + this.ready.length >= buffered) break;
       if (matches(this.applied.get(request.key), request) || this.pending.has(request.key) || matches(this.prefetched.get(request.key)?.request, request)
         || this.ready.some((result) => result.request.key === request.key)) continue;
       this.pending.set(request.key, request);

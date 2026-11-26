@@ -25,6 +25,21 @@ class DeferredTerrain implements TerrainBackend {
 }
 
 describe('ChunkManager lifecycle', () => {
+  it('keeps flight terrain workers busy without exceeding the upload or result budget', async () => {
+    const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
+    manager.setViewRadius(3); manager.uploadLimit = 1; manager.uploadBudget = Infinity;
+    manager.setFlightStreaming(1500, 220);
+    manager.update(128, 128, { x: 0, z: -1 }, emptyCorridor);
+    for (let frame = 1; frame <= 4; frame++) {
+      await backend.complete();
+      manager.pump();
+      expect(manager.stats.active).toBe(frame);
+      expect(manager.stats.pending).toBeLessThanOrEqual(backend.capacity * 2);
+      expect(backend.jobs).toHaveLength(frame <= 2 ? backend.capacity : backend.capacity - 1);
+    }
+    manager.dispose();
+  });
+
   it('uses inexpensive terrain and no vegetation in cruise, with hysteresis before descent', async () => {
     const backend = new DeferredTerrain(), manager = new ChunkManager(new Scene(), 'test', backend);
     manager.setViewRadius(3); manager.uploadBudget = Infinity;

@@ -56,6 +56,24 @@ it('changes cached near vegetation detail live and returns to the same plants wi
   vegetation.dispose(); expect(scene.children).toHaveLength(0);
 });
 
+it('hides terrain vegetation during cruise and resumes at the current origin on descent', () => {
+  const scene = new Scene(), vegetation = new VegetationMesh(scene);
+  const plants = new Float32Array([6, 0, 6, 1, 0, 0, 1]);
+  vegetation.setChunk('0,0', 0, 0, plants);
+  vegetation.update(0, 0);
+  expect(scene.children.some(mesh => mesh.visible)).toBe(true);
+  vegetation.setSuspended(true);
+  vegetation.setChunk('1,0', 1, 0, plants);
+  vegetation.update(256, 0);
+  expect(scene.children.every(mesh => !mesh.visible)).toBe(true);
+  expect(vegetation.pending).toBe(1);
+  vegetation.setSuspended(false);
+  vegetation.update(256, 0);
+  expect(vegetation.pending).toBe(0);
+  expect(scene.children.every(mesh => mesh.visible && mesh.position.x === -256)).toBe(true);
+  vegetation.dispose();
+});
+
 it('independently thins tree, grass, flower and rock instances with stable subsets and no terrain regeneration', () => {
   const scene = new Scene(), vegetation = new VegetationMesh(scene);
   const plants = new Float32Array(Array.from({ length: 60 }, (_, i) => [0, 5, 6, 7, 8, 9].flatMap(kind =>

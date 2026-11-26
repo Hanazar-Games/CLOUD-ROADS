@@ -34,6 +34,7 @@ export class VegetationMesh {
   private readonly color = new Color();
   private centerX = 0; private centerZ = 0;
   enabled = true;
+  private suspended = false;
   private detailSetting = 1;
   private settings: VegetationSettings = { distance: 1, density: 1, shadows: 2, budget: Infinity, trees: 1, ground: 1, flowers: 1, rocks: 1 };
   get pending(): number { return this.dirty.size; }
@@ -80,7 +81,13 @@ export class VegetationMesh {
     return (this.season?.kind === 'winter' ? this.bare[layer] : this.season?.kind === 'spring' ? this.blossom[layer] : null) ?? this.geometries[layer];
   }
 
-  private visible(layer: number): boolean { return this.enabled && !(this.season?.kind === 'winter' && (layer === 10 || layer === 11)); }
+  private visible(layer: number): boolean { return this.enabled && !this.suspended && !(this.season?.kind === 'winter' && (layer === 10 || layer === 11)); }
+
+  setSuspended(suspended: boolean): void {
+    if (this.suspended === suspended) return;
+    this.suspended = suspended;
+    if (suspended) for (const batch of this.batches.values()) batch.mesh.visible = false;
+  }
 
   get count(): number { return this.countLayers(() => true); }
   get distantCount(): number { return this.countLayers(distantLayer); }
@@ -170,6 +177,7 @@ export class VegetationMesh {
   }
 
   update(originX: number, originZ: number): void {
+    if (this.suspended) return;
     if (this.orderDirty) {
       const distance = (chunk: PlantChunk) => (chunk.x - this.centerX) ** 2 + (chunk.z - this.centerZ) ** 2;
       this.pendingOrder = [...this.dirty].sort((a, b) => distance(a) - distance(b)).reverse(); this.orderDirty = false;
